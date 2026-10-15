@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Clippy's configuration for the domain and shipped crates: every crate but
+# sdm-testkit, which has its own. Clippy reads the nearest file and merges
+# none, so bindings/sdm-py/clippy.toml repeats the bans below, and
+# scripts/rust_core/l0_scan.py holds each file to them (T1.10c).
+#
+# The core does no I/O and holds no global state: what varies by machine,
+# run or moment comes from the host, as data (design, "Data access" and
+# "HostFacts"). So the core reads no clock, no environment and no file, and
+# no zone database but the one the host names; it iterates no randomly
+# seeded hash table, since an order that reaches an output must be the same
+# on every run (indexmap or the B-tree collections instead); and it draws
+# from no random generator but the registered streams.
+#
+# A use the core needs is allowed at its site with one reasoned #[allow],
+# and l0_scan.py pins each such site to its statement; today the only one
+# is sdm-host's reading of the host's zone lookup roots (decision E24).
+# Tests are not the core: a test file that reads its vectors allows the ban
+# once, at its top, with its reason.
+#
+# What clippy cannot see, and what covers it:
+# - Arrow's field and schema metadata are std HashMaps, built and returned
+#   by Arrow's own API, so a value of that type never names HashMap in our
+#   code. Today's code only compares or clones those maps; iterating one
+#   into an output would need an ordered copy first, and review holds that.
+# - A Zoned parsed from text (`str::parse::<Zoned>`, `Zoned::from_str`)
+#   looks its zone up in the global database through a trait clippy cannot
+#   ban; l0_scan.py's bans check refuses those spellings in shipped code.
+#   It is a lexical scan: a parse whose target type is only inferred, such
+#   as `s.parse()` returned as `Result<Zoned, _>` or `Option<Zoned>`, is
+#   not seen, and review covers it.
+# - The rand entries are marked allow-invalid: rand is not a workspace
+#   dependency, so they are inert until something adds it, and then they
+#   apply. selftest.py's clippy fixture uses every other entry.
+msrv = "1.97"
+
+disallowed-types = [
+    { path = "std::collections::HashMap", reason = "iteration order varies by run; use indexmap::IndexMap or BTreeMap" },
+    { path = "std::collections::HashSet", reason = "iteration order varies by run; use indexmap::IndexSet or BTreeSet" },
+    { path = "std::hash::RandomState", reason = "seeded per process; an order or hash that reaches an output must not vary" },
+    { path = "std::time::SystemTime", reason = "the clock is a host fact (HostFacts.now)" },
+    { path = "std::time::Instant", reason = "the core reads no clock" },
+    { path = "std::fs::File", reason = "the core does no I/O" },
+    { path = "std::fs::OpenOptions", reason = "the core does no I/O" },
+    { path = "std::fs::DirEntry", reason = "the core does no I/O" },
+    { path = "rand::rngs::StdRng", reason = "random draws come only from the registered streams", allow-invalid = true },
+    { path = "rand::rngs::ThreadRng", reason = "random draws come only from the registered streams", allow-invalid = true },
+]
+
+disallowed-methods = [
+    # Clocks: the host's clock arrives as HostFacts.now.
+    { path = "std::time::SystemTime::now", reason = "the clock is a host fact (HostFacts.now)" },
+    { path = "std::time::Instant::now", reason = "the core reads no clock" },
+    { path = "std::time::SystemTime::elapsed", reason = "reads the clock; the clock is a host fact (HostFacts.now)" },
+    { path = "jiff::Timestamp::now", reason = "the clock is a host fact (HostFacts.now)" },
+    { path = "jiff::Zoned::now", reason = "the clock and the local zone are host facts" },
+    # The environment: what the core needs from it is a host fact.
+    { path = "std::env::var", reason = "the core reads no environment; host facts carry what it needs" },
+    { path = "std::env::var_os", reason = "the core reads no environment; host facts carry what it needs" },
+    { path = "std::env::vars", reason = "the core reads no environment; host facts carry what it needs" },
+    { path = "std::env::vars_os", reason = "the core reads no environment; host facts carry what it needs" },
+    { path = "std::env::args", reason = "the core reads no environment" },
+    { path = "std::env::args_os", reason = "the core reads no environment" },
+    { path = "std::env::current_dir", reason = "the core reads no environment" },
+    { path = "std::env::set_current_dir", reason = "the core changes no process state" },
+    { path = "std::env::current_exe", reason = "the core reads no environment" },
+    { path = "std::env::temp_dir", reason = "the core reads no environment" },
+    { path = "std::env::home_dir", reason = "the core reads no environment" },
+    { path = "std::env::set_var", reason = "the core changes no process state" },
+    { path = "std::env::remove_var", reason = "the core changes no process state" },
+    # The file system.
+    { path = "std::fs::read", reason = "the core does no I/O" },
+    { path = "std::fs::read_to_string", reason = "the core does no I/O" },
+    { path = "std::fs::write", reason = "the core does no I/O" },
+    { path = "std::fs::read_dir", reason = "the core does no I/O" },
+    { path = "std::fs::metadata", reason = "the core does no I/O" },
+    { path = "std::fs::symlink_metadata", reason = "the core does no I/O" },
+    { path = "std::fs::canonicalize", reason = "the core does no I/O" },
+    { path = "std::fs::read_link", reason = "the core does no I/O" },
+    { path = "std::fs::exists", reason = "the core does no I/O" },
+    { path = "std::fs::copy", reason = "the core does no I/O" },
+    { path = "std::fs::rename", reason = "the core does no I/O" },
+    { path = "std::fs::hard_link", reason = "the core does no I/O" },
+    { path = "std::fs::create_dir", reason = "the core does no I/O" },
+    { path = "std::fs::create_dir_all", reason = "the core does no I/O" },
+    { path = "std::fs::remove_file", reason = "the core does no I/O" },
+    { path = "std::fs::remove_dir", reason = "the core does no I/O" },
+    { path = "std::fs::remove_dir_all", reason = "the core does no I/O" },
+    { path = "std::fs::set_permissions", reason = "the core does no I/O" },
+    { path = "std::path::Path::exists", reason = "the core does no I/O" },
+    { path = "std::path::Path::try_exists", reason = "the core does no I/O" },
+    { path = "std::path::Path::is_file", reason = "the core does no I/O" },
+    { path = "std::path::Path::is_dir", reason = "the core does no I/O" },
+    { path = "std::path::Path::is_symlink", reason = "the core does no I/O" },
+    { path = "std::path::Path::metadata", reason = "the core does no I/O" },
+    { path = "std::path::Path::symlink_metadata", reason = "the core does no I/O" },
+    { path = "std::path::Path::read_dir", reason = "the core does no I/O" },
+    { path = "std::path::Path::read_link", reason = "the core does no I/O" },
+    { path = "std::path::Path::canonicalize", reason = "the core does no I/O" },
+    # Zone databases: zones come from the host's lookup roots, passed in,
+    # then the bundled copy (decision A7), never from the global database,
+    # which reads TZDIR and the system's directory.
+    { path = "jiff::tz::db", reason = "the global zone database reads the environment; zones come through the host's lookup roots" },
+    { path = "jiff::tz::TimeZoneDatabase::from_env", reason = "reads the environment; zones come through the host's lookup roots" },
+    { path = "jiff::tz::TimeZoneDatabase::from_dir", reason = "reads the file system; only sdm-host reads the host's lookup roots (E24)" },
+    { path = "jiff::tz::TimeZoneDatabase::from_concatenated_path", reason = "reads the file system; zones come through the host's lookup roots" },
+    { path = "jiff::tz::TimeZone::get", reason = "looks the name up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::tz::TimeZone::system", reason = "the local zone is a host fact (HostFacts.local_zone)" },
+    { path = "jiff::tz::TimeZone::try_system", reason = "the local zone is a host fact (HostFacts.local_zone)" },
+    { path = "jiff::Timestamp::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
+    { path = "jiff::Zoned::in_tz", reason = "looks the name up in the global database; use with_time_zone with a resolved zone" },
+    { path = "jiff::civil::DateTime::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
+    { path = "jiff::civil::Date::in_tz", reason = "looks the name up in the global database; use to_zoned with a resolved zone" },
+    { path = "jiff::fmt::temporal::DateTimeParser::parse_zoned", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::Zoned::strptime", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    { path = "jiff::fmt::strtime::BrokenDownTime::to_zoned", reason = "looks the zone up in the global database; resolve zones through the host's lookup roots" },
+    # Random generators other than the registered streams.
+    { path = "rand::thread_rng", reason = "random draws come only from the registered streams", allow-invalid = true },
+    { path = "rand::rng", reason = "random draws come only from the registered streams", allow-invalid = true },
+    { path = "rand::random", reason = "random draws come only from the registered streams", allow-invalid = true },
+]

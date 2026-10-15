@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "empty.fact-table",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "seam": "empty-null",
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DELETE FROM orders"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "RuntimeError",
+    "code": null,
+    "message": "Table 'orders' is empty"
+  },
+  "register": "An unnamed RuntimeError for an empty table",
+  "why": "A table with no rows at all, refused before any query",
+  "source": "plan (empty and all-null data)"
+}

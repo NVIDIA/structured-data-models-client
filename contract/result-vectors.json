@@ -1,0 +1,1067 @@
+{
+  "format": "sdm-result-vectors/1",
+  "vectors": [
+    {
+      "name": "integers",
+      "sql": "SELECT (-128)::TINYINT AS a, (-2)::SMALLINT AS b, 2147483647::INTEGER AS c, (-9223372036854775807 - 1)::BIGINT AS d, 255::UTINYINT AS e, 18446744073709551615::UBIGINT AS f",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "int8"
+        },
+        {
+          "name": "b",
+          "type": "int16"
+        },
+        {
+          "name": "c",
+          "type": "int32"
+        },
+        {
+          "name": "d",
+          "type": "int64"
+        },
+        {
+          "name": "e",
+          "type": "uint8"
+        },
+        {
+          "name": "f",
+          "type": "uint64"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "types": [
+          "TINYINT",
+          "SMALLINT",
+          "INTEGER",
+          "BIGINT",
+          "UTINYINT",
+          "UBIGINT"
+        ],
+        "ordered": "343ae4b8b12cfbf0a5d1586f53313114e673d8a9d5a8f7fa50c84a331e71f374",
+        "unordered": "343ae4b8b12cfbf0a5d1586f53313114e673d8a9d5a8f7fa50c84a331e71f374",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "i",
+            "-128"
+          ],
+          [
+            "i",
+            "-2"
+          ],
+          [
+            "i",
+            "2147483647"
+          ],
+          [
+            "i",
+            "-9223372036854775808"
+          ],
+          [
+            "i",
+            "255"
+          ],
+          [
+            "i",
+            "18446744073709551615"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "floats",
+      "sql": "SELECT 1.5::DOUBLE AS a, 0.1::FLOAT AS b, 'NaN'::DOUBLE AS c, '-0.0'::DOUBLE AS d, 'inf'::DOUBLE AS e, 0.1::DOUBLE AS f",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "double"
+        },
+        {
+          "name": "b",
+          "type": "float"
+        },
+        {
+          "name": "c",
+          "type": "double"
+        },
+        {
+          "name": "d",
+          "type": "double"
+        },
+        {
+          "name": "e",
+          "type": "double"
+        },
+        {
+          "name": "f",
+          "type": "double"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "types": [
+          "DOUBLE",
+          "FLOAT",
+          "DOUBLE",
+          "DOUBLE",
+          "DOUBLE",
+          "DOUBLE"
+        ],
+        "ordered": "0c135517677bee884ca0b98e390e0cb00fbc3737d69fd78c839903af0832d754",
+        "unordered": "0c135517677bee884ca0b98e390e0cb00fbc3737d69fd78c839903af0832d754",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "f",
+            "3ff8000000000000"
+          ],
+          [
+            "f",
+            "3fb99999a0000000"
+          ],
+          [
+            "f",
+            "7ff8000000000000"
+          ],
+          [
+            "f",
+            "8000000000000000"
+          ],
+          [
+            "f",
+            "7ff0000000000000"
+          ],
+          [
+            "f",
+            "3fb999999999999a"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "text, booleans and nulls",
+      "sql": "SELECT 'plain' AS a, 'caf' || chr(233) || ' ' || chr(9731) || ' ' || chr(128512) AS b, chr(1) || chr(10) || '\"' || chr(92) || chr(127) AS c, NULL::VARCHAR AS d, true AS e, false AS f, NULL::INTEGER AS g",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "string"
+        },
+        {
+          "name": "b",
+          "type": "string"
+        },
+        {
+          "name": "c",
+          "type": "string"
+        },
+        {
+          "name": "d",
+          "type": "string"
+        },
+        {
+          "name": "e",
+          "type": "bool"
+        },
+        {
+          "name": "f",
+          "type": "bool"
+        },
+        {
+          "name": "g",
+          "type": "int32"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f",
+          "g"
+        ],
+        "types": [
+          "VARCHAR",
+          "VARCHAR",
+          "VARCHAR",
+          "VARCHAR",
+          "BOOLEAN",
+          "BOOLEAN",
+          "INTEGER"
+        ],
+        "ordered": "9aafd2537837ac76feacb305958a40e2530dac7dee75bb3e0b41cb8fee464dcb",
+        "unordered": "9aafd2537837ac76feacb305958a40e2530dac7dee75bb3e0b41cb8fee464dcb",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "s",
+            "plain"
+          ],
+          [
+            "s",
+            "café ☃ 😀"
+          ],
+          [
+            "s",
+            "\u0001\n\"\\"
+          ],
+          null,
+          true,
+          false,
+          null
+        ]
+      ]
+    },
+    {
+      "name": "decimals",
+      "sql": "SELECT 1.50::DECIMAL(10,2) AS a, (-0.000000000000000001)::DECIMAL(38,18) AS b, 12345678901234567890123456789012345678::DECIMAL(38,0) AS c, 0::DECIMAL(4,2) AS d, (-1.5)::DECIMAL(4,1) AS e",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "decimal128(10, 2)"
+        },
+        {
+          "name": "b",
+          "type": "decimal128(38, 18)"
+        },
+        {
+          "name": "c",
+          "type": "decimal128(38, 0)"
+        },
+        {
+          "name": "d",
+          "type": "decimal128(4, 2)"
+        },
+        {
+          "name": "e",
+          "type": "decimal128(4, 1)"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e"
+        ],
+        "types": [
+          "DECIMAL(10,2)",
+          "DECIMAL(38,18)",
+          "DECIMAL(38,0)",
+          "DECIMAL(4,2)",
+          "DECIMAL(4,1)"
+        ],
+        "ordered": "5254dbc36c716c6d699dc83f75d7f5f9be6f937fda437f5b761358ef9cfbd646",
+        "unordered": "5254dbc36c716c6d699dc83f75d7f5f9be6f937fda437f5b761358ef9cfbd646",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "d",
+            "150",
+            2
+          ],
+          [
+            "d",
+            "-1",
+            18
+          ],
+          [
+            "d",
+            "12345678901234567890123456789012345678",
+            0
+          ],
+          [
+            "d",
+            "0",
+            2
+          ],
+          [
+            "d",
+            "-15",
+            1
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "dates and times",
+      "sql": "SELECT DATE '2020-02-29' AS a, DATE '1960-01-01' AS b, TIMESTAMP '2020-01-01 01:02:03.123456' AS c, TIMESTAMP '1960-12-31 23:59:59.999999' AS d, TIME '01:02:03.5' AS e, CAST(TIMESTAMP '2024-03-10 02:30:00' AS TIMESTAMP) AS f",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "date32[day]"
+        },
+        {
+          "name": "b",
+          "type": "date32[day]"
+        },
+        {
+          "name": "c",
+          "type": "timestamp[us]"
+        },
+        {
+          "name": "d",
+          "type": "timestamp[us]"
+        },
+        {
+          "name": "e",
+          "type": "time64[us]"
+        },
+        {
+          "name": "f",
+          "type": "timestamp[us]"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e",
+          "f"
+        ],
+        "types": [
+          "DATE",
+          "DATE",
+          "TIMESTAMP",
+          "TIMESTAMP",
+          "TIME",
+          "TIMESTAMP"
+        ],
+        "ordered": "bc1283fea415aad9fc43d1bae5f59d0e695069e93b9c22696f19d69f04a5c6b3",
+        "unordered": "bc1283fea415aad9fc43d1bae5f59d0e695069e93b9c22696f19d69f04a5c6b3",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "date",
+            18321
+          ],
+          [
+            "date",
+            -3653
+          ],
+          [
+            "ts",
+            "1577840523123456000"
+          ],
+          [
+            "ts",
+            "-283996800000001000"
+          ],
+          [
+            "time",
+            "3723500000000"
+          ],
+          [
+            "ts",
+            "1710037800000000000"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "nested",
+      "sql": "SELECT [1, 2, NULL] AS a, ['x', 'y'] AS b, {'k': 1, 'v': 'w'} AS c, []::INTEGER[] AS d, [[1], []] AS e",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "list<l: int32>"
+        },
+        {
+          "name": "b",
+          "type": "list<l: string>"
+        },
+        {
+          "name": "c",
+          "type": "struct<k: int32, v: string>"
+        },
+        {
+          "name": "d",
+          "type": "list<l: int32>"
+        },
+        {
+          "name": "e",
+          "type": "list<l: list<l: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d",
+          "e"
+        ],
+        "types": [
+          "INTEGER[]",
+          "VARCHAR[]",
+          "STRUCT(k INTEGER, v VARCHAR)",
+          "INTEGER[]",
+          "INTEGER[][]"
+        ],
+        "ordered": "9f77b713736f66b611d5b433cd4d2107771967ae0941b2c90284c52a543f5155",
+        "unordered": "9f77b713736f66b611d5b433cd4d2107771967ae0941b2c90284c52a543f5155",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "list",
+            [
+              [
+                "i",
+                "1"
+              ],
+              [
+                "i",
+                "2"
+              ],
+              null
+            ]
+          ],
+          [
+            "list",
+            [
+              [
+                "s",
+                "x"
+              ],
+              [
+                "s",
+                "y"
+              ]
+            ]
+          ],
+          [
+            "struct",
+            [
+              [
+                "k",
+                [
+                  "i",
+                  "1"
+                ]
+              ],
+              [
+                "v",
+                [
+                  "s",
+                  "w"
+                ]
+              ]
+            ]
+          ],
+          [
+            "list",
+            []
+          ],
+          [
+            "list",
+            [
+              [
+                "list",
+                [
+                  [
+                    "i",
+                    "1"
+                  ]
+                ]
+              ],
+              [
+                "list",
+                []
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "binary",
+      "sql": "SELECT '\\xAA\\x00\\xBB'::BLOB AS a",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "binary"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "BLOB"
+        ],
+        "ordered": "f239dc699bded85e5c1997178e866fd5f10ef3103ad70a89fc5c29d3502d16de",
+        "unordered": "f239dc699bded85e5c1997178e866fd5f10ef3103ad70a89fc5c29d3502d16de",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "b",
+            "aa00bb"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "rows in an order, with a duplicate",
+      "sql": "SELECT x, y FROM (VALUES (2, 'b'), (1, 'a'), (2, 'b'), (3, NULL)) AS t(x, y) ORDER BY x DESC NULLS LAST, y",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "x",
+          "type": "int32"
+        },
+        {
+          "name": "y",
+          "type": "string"
+        }
+      ],
+      "values": {
+        "columns": [
+          "x",
+          "y"
+        ],
+        "types": [
+          "INTEGER",
+          "VARCHAR"
+        ],
+        "ordered": "600ef7388605bd5e39434acab7260a6f48a3fe998fcf99afe128265e484438d4",
+        "unordered": "ca0c1af9ea8d2a647c6954e5162252118b45e870045944566eae64ce5250baa1",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "i",
+            "3"
+          ],
+          null
+        ],
+        [
+          [
+            "i",
+            "2"
+          ],
+          [
+            "s",
+            "b"
+          ]
+        ],
+        [
+          [
+            "i",
+            "2"
+          ],
+          [
+            "s",
+            "b"
+          ]
+        ],
+        [
+          [
+            "i",
+            "1"
+          ],
+          [
+            "s",
+            "a"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "no rows",
+      "sql": "SELECT 1 AS a WHERE false",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "int32"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "INTEGER"
+        ],
+        "ordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unordered": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unencodable": []
+      },
+      "rows": []
+    },
+    {
+      "name": "nanosecond times and timestamps, a microsecond apart from none",
+      "sql": "SELECT TIME_NS '00:00:00.000000001' AS a, TIME_NS '00:00:00.000000002' AS b, TIMESTAMP_NS '2020-01-01 00:00:00.000000001' AS c, [TIME_NS '23:59:59.999999999'] AS d",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "time64[ns]"
+        },
+        {
+          "name": "b",
+          "type": "time64[ns]"
+        },
+        {
+          "name": "c",
+          "type": "timestamp[ns]"
+        },
+        {
+          "name": "d",
+          "type": "list<l: time64[ns]>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c",
+          "d"
+        ],
+        "types": [
+          "TIME_NS",
+          "TIME_NS",
+          "TIMESTAMP_NS",
+          "TIME_NS[]"
+        ],
+        "ordered": "896b2f0211138e25454fa09a5be5e54087125d9bf7887dadea1d19704db44864",
+        "unordered": "896b2f0211138e25454fa09a5be5e54087125d9bf7887dadea1d19704db44864",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "time",
+            "1"
+          ],
+          [
+            "time",
+            "2"
+          ],
+          [
+            "ts",
+            "1577836800000000001"
+          ],
+          [
+            "list",
+            [
+              [
+                "time",
+                "86399999999999"
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "an interval",
+      "sql": "SELECT INTERVAL 1 MONTH AS a, INTERVAL 30 DAY AS b",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "month_day_nano_interval"
+        },
+        {
+          "name": "b",
+          "type": "month_day_nano_interval"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "INTERVAL",
+          "INTERVAL"
+        ],
+        "ordered": "450398dae7552df88a791a97ee0ab408ffd358789989033b83700606f1fd32a4",
+        "unordered": "450398dae7552df88a791a97ee0ab408ffd358789989033b83700606f1fd32a4",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "interval",
+            1,
+            0,
+            "0"
+          ],
+          [
+            "interval",
+            0,
+            30,
+            "0"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a timestamp with a zone",
+      "setup": "SET GLOBAL TimeZone = 'UTC'",
+      "sql": "SELECT TIMESTAMPTZ '2020-01-01 00:00:00.000001+00' AS a, TIMESTAMP_MS '2020-01-01 00:00:00.001' AS b, TIMESTAMP_S '2020-01-01 00:00:01' AS c",
+      "fetchall": "not read",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "timestamp[us, tz=UTC]"
+        },
+        {
+          "name": "b",
+          "type": "timestamp[ms]"
+        },
+        {
+          "name": "c",
+          "type": "timestamp[s]"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c"
+        ],
+        "types": [
+          "TIMESTAMP WITH TIME ZONE",
+          "TIMESTAMP_MS",
+          "TIMESTAMP_S"
+        ],
+        "ordered": "8fcf845a4f79a805c81690f7c1527f0a883cc1cdf46e1f0fe9bea7325d5ebd85",
+        "unordered": "8fcf845a4f79a805c81690f7c1527f0a883cc1cdf46e1f0fe9bea7325d5ebd85",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "tstz",
+            "1577836800000001000"
+          ],
+          [
+            "ts",
+            "1577836800001000000"
+          ],
+          [
+            "ts",
+            "1577836801000000000"
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "struct fields named like types",
+      "sql": "SELECT struct_pack(INTERVAL_COUNT := 1) AS a, struct_pack(TIMESTAMP_NS_VALID := true, \"UNION\" := 'u') AS b",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<INTERVAL_COUNT: int32>"
+        },
+        {
+          "name": "b",
+          "type": "struct<TIMESTAMP_NS_VALID: bool, UNION: string>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "STRUCT(INTERVAL_COUNT INTEGER)",
+          "STRUCT(TIMESTAMP_NS_VALID BOOLEAN, \"UNION\" VARCHAR)"
+        ],
+        "ordered": "f8fb88049236e0a42baed3ac1ba7a0bc49e6165e69b3e369b97a2d4c71b6e7ee",
+        "unordered": "f8fb88049236e0a42baed3ac1ba7a0bc49e6165e69b3e369b97a2d4c71b6e7ee",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "INTERVAL_COUNT",
+                [
+                  "i",
+                  "1"
+                ]
+              ]
+            ]
+          ],
+          [
+            "struct",
+            [
+              [
+                "TIMESTAMP_NS_VALID",
+                true
+              ],
+              [
+                "UNION",
+                [
+                  "s",
+                  "u"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "nested nanoseconds and intervals",
+      "sql": "SELECT struct_pack(t := TIME_NS '00:00:00.000000001') AS a, [TIMESTAMP_NS '2020-01-01 00:00:00.000000001'] AS b, struct_pack(i := INTERVAL 1 DAY) AS c",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<t: time64[ns]>"
+        },
+        {
+          "name": "b",
+          "type": "list<l: timestamp[ns]>"
+        },
+        {
+          "name": "c",
+          "type": "struct<i: month_day_nano_interval>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b",
+          "c"
+        ],
+        "types": [
+          "STRUCT(t TIME_NS)",
+          "TIMESTAMP_NS[]",
+          "STRUCT(i INTERVAL)"
+        ],
+        "ordered": "ddfd0b518e34b1e5680831c6f6df9362aa8c9c18bd480f9baf46f201a19a8613",
+        "unordered": "ddfd0b518e34b1e5680831c6f6df9362aa8c9c18bd480f9baf46f201a19a8613",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "t",
+                [
+                  "time",
+                  "1"
+                ]
+              ]
+            ]
+          ],
+          [
+            "list",
+            [
+              [
+                "ts",
+                "1577836800000000001"
+              ]
+            ]
+          ],
+          [
+            "struct",
+            [
+              [
+                "i",
+                [
+                  "interval",
+                  0,
+                  1,
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "an enum",
+      "setup": "CREATE TYPE mood AS ENUM ('calm', 'cross')",
+      "sql": "SELECT 'cross'::mood AS a, ['calm'::mood, NULL] AS b",
+      "fetchall": "same",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "dictionary<values=string, indices=uint8, ordered=0>"
+        },
+        {
+          "name": "b",
+          "type": "list<l: dictionary<values=string, indices=uint8, ordered=0>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "ENUM('calm', 'cross')",
+          "ENUM('calm', 'cross')[]"
+        ],
+        "ordered": "e63acc69c4ffafce0cc6142e6946cac77e710bafcc3c8639b621fd064253d5e5",
+        "unordered": "e63acc69c4ffafce0cc6142e6946cac77e710bafcc3c8639b621fd064253d5e5",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "s",
+            "cross"
+          ],
+          [
+            "list",
+            [
+              [
+                "s",
+                "calm"
+              ],
+              null
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a map",
+      "sql": "SELECT MAP {'k': 1} AS a",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "map<string, int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "MAP(VARCHAR, INTEGER)"
+        ],
+        "ordered": "d279b6f7deae37f49f16932a41de093cfc359ec4788b3a8e282c218911ab5707",
+        "unordered": "d279b6f7deae37f49f16932a41de093cfc359ec4788b3a8e282c218911ab5707",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "map",
+            [
+              [
+                [
+                  "s",
+                  "k"
+                ],
+                [
+                  "i",
+                  "1"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "unions of one value under two tags",
+      "sql": "SELECT union_value(i := 1)::UNION(i INTEGER, j INTEGER) AS a, union_value(j := 1)::UNION(i INTEGER, j INTEGER) AS b",
+      "fetchall": "unencodable",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "sparse_union<i: int32=0, j: int32=1>"
+        },
+        {
+          "name": "b",
+          "type": "sparse_union<i: int32=0, j: int32=1>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a",
+          "b"
+        ],
+        "types": [
+          "UNION(i INTEGER, j INTEGER)",
+          "UNION(i INTEGER, j INTEGER)"
+        ],
+        "ordered": "54170436603fdcacf82aa51cea689118d4b5878c5af27770970a29799b478a55",
+        "unordered": "54170436603fdcacf82aa51cea689118d4b5878c5af27770970a29799b478a55",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "union",
+            0,
+            "i",
+            [
+              "i",
+              "1"
+            ]
+          ],
+          [
+            "union",
+            1,
+            "j",
+            [
+              "i",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    }
+  ]
+}

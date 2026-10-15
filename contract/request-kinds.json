@@ -1,0 +1,2446 @@
+{
+ "about": "Every data request kind, on each base of contract/bases.yaml (T1.23): each fetch is planned by the core's data layer for DuckDB, answered by the host's DuckDB provider, admitted by the core and echoed back by the test-only fetch (or keyed fetch, with the seeds given as keys, an int64 key and its batch position), and held to its Arrow schema (each field's name and type, as pyarrow spells it) and its rows (each cell: null, a boolean, text, an integer as its decimal text, a float as its hexadecimal form, a timestamp or date as its count; compared in sorted order, since a sample, a scan and the neighbors are unordered). The client's tests_test_ops/test_the_duckdb_provider.py holds the Python host to it and sdm-testkit's tests/duckdb_provider.rs the pure-Rust host, so CI gates that the same fetch gives the same admitted Arrow on both hosts for every base. Recorded through the Python host and held on both; regenerated, never edited, when a rendering or a base changes.",
+ "fetches": [
+  {
+   "base": "shop",
+   "name": "describe the tables",
+   "request": {
+    "request": "describe",
+    "tables": [],
+    "part": "tables"
+   },
+   "schema": [
+    [
+     "table_name",
+     "string"
+    ]
+   ],
+   "rows": [
+    [
+     "orders"
+    ],
+    [
+     "users"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "describe the columns",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "orders"
+    ],
+    "part": "columns"
+   },
+   "schema": [
+    [
+     "cid",
+     "int32"
+    ],
+    [
+     "name",
+     "string"
+    ],
+    [
+     "type",
+     "string"
+    ],
+    [
+     "notnull",
+     "bool"
+    ],
+    [
+     "dflt_value",
+     "string"
+    ],
+    [
+     "pk",
+     "bool"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "order_id",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "1",
+     "user_id",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "2",
+     "price",
+     "DOUBLE",
+     false,
+     null,
+     false
+    ],
+    [
+     "3",
+     "ts",
+     "TIMESTAMP",
+     false,
+     null,
+     false
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "describe the keys",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "orders"
+    ],
+    "part": "keys"
+   },
+   "schema": [
+    [
+     "constraint_type",
+     "string"
+    ],
+    [
+     "constraint_column_names",
+     "list<l: string>"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "shop",
+   "name": "describe the foreign keys",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "orders"
+    ],
+    "part": "foreign_keys"
+   },
+   "schema": [
+    [
+     "constraint_index",
+     "int64"
+    ],
+    [
+     "referenced_table",
+     "string"
+    ],
+    [
+     "constraint_column_names",
+     "list<l: string>"
+    ],
+    [
+     "referenced_column_names",
+     "list<l: string>"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "shop",
+   "name": "describe the indexes",
+   "request": {
+    "request": "describe",
+    "tables": [],
+    "part": "indexes"
+   },
+   "schema": [
+    [
+     "table_name",
+     "string"
+    ],
+    [
+     "expressions",
+     "string"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "shop",
+   "name": "scan",
+   "request": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   },
+   "schema": [
+    [
+     "user_id",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0"
+    ],
+    [
+     "1"
+    ],
+    [
+     "2"
+    ],
+    [
+     "3"
+    ],
+    [
+     "4"
+    ],
+    [
+     "5"
+    ],
+    [
+     "6"
+    ],
+    [
+     "7"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "scan with a filter and a limit",
+   "request": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "user_id",
+     "user_id"
+    ],
+    "filters": [
+     {
+      "column": "user_id",
+      "filter": "not_null"
+     }
+    ],
+    "limit": 5
+   },
+   "schema": [
+    [
+     "user_id",
+     "int64"
+    ],
+    [
+     "user_id",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "0"
+    ],
+    [
+     "1",
+     "1"
+    ],
+    [
+     "2",
+     "2"
+    ],
+    [
+     "3",
+     "3"
+    ],
+    [
+     "4",
+     "4"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "count the rows a filter keeps",
+   "request": {
+    "request": "count_rows",
+    "table": "users",
+    "filters": [
+     {
+      "column": "user_id",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "8"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "preview",
+   "request": {
+    "request": "preview",
+    "table": "orders",
+    "columns": [
+     "order_id",
+     "price",
+     "ts"
+    ],
+    "limit": 3
+   },
+   "schema": [
+    [
+     "order_id",
+     "int64"
+    ],
+    [
+     "price",
+     "double"
+    ],
+    [
+     "ts",
+     "timestamp[us]"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "0x1.4000000000000p+3",
+     "1672531200000000"
+    ],
+    [
+     "1",
+     "0x1.7000000000000p+3",
+     "1673136000000000"
+    ],
+    [
+     "2",
+     "0x1.a000000000000p+3",
+     "1673740800000000"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "count the rows",
+   "request": {
+    "request": "count_rows",
+    "table": "orders",
+    "filters": []
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "80"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "count the keys",
+   "request": {
+    "request": "key_counts",
+    "keys": [
+     {
+      "table": "users",
+      "columns": [
+       "user_id"
+      ]
+     },
+     {
+      "table": "orders",
+      "columns": [
+       "order_id"
+      ]
+     }
+    ]
+   },
+   "schema": [
+    [
+     "k",
+     "int32"
+    ],
+    [
+     "n",
+     "int64"
+    ],
+    [
+     "d",
+     "int64"
+    ],
+    [
+     "z",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "8",
+     "8",
+     "0"
+    ],
+    [
+     "1",
+     "80",
+     "80",
+     "0"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "the time bounds",
+   "request": {
+    "request": "time_bounds",
+    "columns": [
+     {
+      "table": "orders",
+      "column": "ts"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "table_index",
+     "int32"
+    ],
+    [
+     "min_date",
+     "timestamp[us]"
+    ],
+    [
+     "max_date",
+     "timestamp[us]"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1672531200000000",
+     "1720310400000000"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "sample entities",
+   "request": {
+    "request": "sample_entities",
+    "table": "users",
+    "key": [
+     "user_id"
+    ],
+    "n": 3,
+    "seed": {
+     "t": "u64",
+     "v": "42"
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [
+     {
+      "column": "user_id",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "user_id",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "2"
+    ],
+    [
+     "4"
+    ],
+    [
+     "7"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "neighbors",
+   "request": {
+    "request": "neighbors",
+    "table": "orders",
+    "key": "user_id",
+    "columns": [
+     "order_id"
+    ],
+    "window": null,
+    "per_seed": null,
+    "order": null
+   },
+   "keys": [
+    1,
+    2
+   ],
+   "schema": [
+    [
+     "__kumo_batch__",
+     "int64"
+    ],
+    [
+     "order_id",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1"
+    ],
+    [
+     "0",
+     "17"
+    ],
+    [
+     "0",
+     "25"
+    ],
+    [
+     "0",
+     "33"
+    ],
+    [
+     "0",
+     "41"
+    ],
+    [
+     "0",
+     "49"
+    ],
+    [
+     "0",
+     "57"
+    ],
+    [
+     "0",
+     "65"
+    ],
+    [
+     "0",
+     "73"
+    ],
+    [
+     "0",
+     "9"
+    ],
+    [
+     "1",
+     "10"
+    ],
+    [
+     "1",
+     "18"
+    ],
+    [
+     "1",
+     "2"
+    ],
+    [
+     "1",
+     "26"
+    ],
+    [
+     "1",
+     "34"
+    ],
+    [
+     "1",
+     "42"
+    ],
+    [
+     "1",
+     "50"
+    ],
+    [
+     "1",
+     "58"
+    ],
+    [
+     "1",
+     "66"
+    ],
+    [
+     "1",
+     "74"
+    ]
+   ]
+  },
+  {
+   "base": "shop",
+   "name": "lookup",
+   "request": {
+    "request": "lookup",
+    "table": "users",
+    "key": "user_id",
+    "columns": [
+     "user_id"
+    ]
+   },
+   "keys": [
+    3,
+    99
+   ],
+   "schema": [
+    [
+     "__kumo_batch__",
+     "int64"
+    ],
+    [
+     "__kumo_matches__",
+     "int64"
+    ],
+    [
+     "user_id",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "3"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "describe the tables",
+   "request": {
+    "request": "describe",
+    "tables": [],
+    "part": "tables"
+   },
+   "schema": [
+    [
+     "table_name",
+     "string"
+    ]
+   ],
+   "rows": [
+    [
+     "orders"
+    ],
+    [
+     "users"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "describe the columns",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "orders"
+    ],
+    "part": "columns"
+   },
+   "schema": [
+    [
+     "cid",
+     "int32"
+    ],
+    [
+     "name",
+     "string"
+    ],
+    [
+     "type",
+     "string"
+    ],
+    [
+     "notnull",
+     "bool"
+    ],
+    [
+     "dflt_value",
+     "string"
+    ],
+    [
+     "pk",
+     "bool"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "oid",
+     "BIGINT",
+     true,
+     null,
+     true
+    ],
+    [
+     "1",
+     "buyer",
+     "INTEGER",
+     false,
+     null,
+     false
+    ],
+    [
+     "2",
+     "price",
+     "DOUBLE",
+     false,
+     null,
+     false
+    ],
+    [
+     "3",
+     "ts",
+     "TIMESTAMP",
+     false,
+     null,
+     false
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "describe the keys",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "orders"
+    ],
+    "part": "keys"
+   },
+   "schema": [
+    [
+     "constraint_type",
+     "string"
+    ],
+    [
+     "constraint_column_names",
+     "list<l: string>"
+    ]
+   ],
+   "rows": [
+    [
+     "FOREIGN KEY",
+     [
+      "buyer"
+     ]
+    ],
+    [
+     "NOT NULL",
+     [
+      "oid"
+     ]
+    ],
+    [
+     "PRIMARY KEY",
+     [
+      "oid"
+     ]
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "describe the foreign keys",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "orders"
+    ],
+    "part": "foreign_keys"
+   },
+   "schema": [
+    [
+     "constraint_index",
+     "int64"
+    ],
+    [
+     "referenced_table",
+     "string"
+    ],
+    [
+     "constraint_column_names",
+     "list<l: string>"
+    ],
+    [
+     "referenced_column_names",
+     "list<l: string>"
+    ]
+   ],
+   "rows": [
+    [
+     "1",
+     "users",
+     [
+      "buyer"
+     ],
+     [
+      "uid"
+     ]
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "describe the indexes",
+   "request": {
+    "request": "describe",
+    "tables": [],
+    "part": "indexes"
+   },
+   "schema": [
+    [
+     "table_name",
+     "string"
+    ],
+    [
+     "expressions",
+     "string"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "declared",
+   "name": "scan",
+   "request": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "uid"
+    ],
+    "filters": [],
+    "limit": null
+   },
+   "schema": [
+    [
+     "uid",
+     "int32"
+    ]
+   ],
+   "rows": [
+    [
+     "0"
+    ],
+    [
+     "1"
+    ],
+    [
+     "2"
+    ],
+    [
+     "3"
+    ],
+    [
+     "4"
+    ],
+    [
+     "5"
+    ],
+    [
+     "6"
+    ],
+    [
+     "7"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "scan with a filter and a limit",
+   "request": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "uid",
+     "uid"
+    ],
+    "filters": [
+     {
+      "column": "uid",
+      "filter": "not_null"
+     }
+    ],
+    "limit": 5
+   },
+   "schema": [
+    [
+     "uid",
+     "int32"
+    ],
+    [
+     "uid",
+     "int32"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "0"
+    ],
+    [
+     "1",
+     "1"
+    ],
+    [
+     "2",
+     "2"
+    ],
+    [
+     "3",
+     "3"
+    ],
+    [
+     "4",
+     "4"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "count the rows a filter keeps",
+   "request": {
+    "request": "count_rows",
+    "table": "users",
+    "filters": [
+     {
+      "column": "uid",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "8"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "preview",
+   "request": {
+    "request": "preview",
+    "table": "orders",
+    "columns": [
+     "oid",
+     "price",
+     "ts"
+    ],
+    "limit": 3
+   },
+   "schema": [
+    [
+     "oid",
+     "int64"
+    ],
+    [
+     "price",
+     "double"
+    ],
+    [
+     "ts",
+     "timestamp[us]"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "0x1.4000000000000p+3",
+     "1672531200000000"
+    ],
+    [
+     "1",
+     "0x1.7000000000000p+3",
+     "1673136000000000"
+    ],
+    [
+     "2",
+     "0x1.a000000000000p+3",
+     "1673740800000000"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "count the rows",
+   "request": {
+    "request": "count_rows",
+    "table": "orders",
+    "filters": []
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "80"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "count the keys",
+   "request": {
+    "request": "key_counts",
+    "keys": [
+     {
+      "table": "users",
+      "columns": [
+       "uid"
+      ]
+     },
+     {
+      "table": "orders",
+      "columns": [
+       "oid"
+      ]
+     }
+    ]
+   },
+   "schema": [
+    [
+     "k",
+     "int32"
+    ],
+    [
+     "n",
+     "int64"
+    ],
+    [
+     "d",
+     "int64"
+    ],
+    [
+     "z",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "8",
+     "8",
+     "0"
+    ],
+    [
+     "1",
+     "80",
+     "80",
+     "0"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "the time bounds",
+   "request": {
+    "request": "time_bounds",
+    "columns": [
+     {
+      "table": "orders",
+      "column": "ts"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "table_index",
+     "int32"
+    ],
+    [
+     "min_date",
+     "timestamp[us]"
+    ],
+    [
+     "max_date",
+     "timestamp[us]"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1672531200000000",
+     "1720310400000000"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "sample entities",
+   "request": {
+    "request": "sample_entities",
+    "table": "users",
+    "key": [
+     "uid"
+    ],
+    "n": 3,
+    "seed": {
+     "t": "u64",
+     "v": "42"
+    },
+    "columns": [
+     "uid"
+    ],
+    "filters": [
+     {
+      "column": "uid",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "uid",
+     "int32"
+    ]
+   ],
+   "rows": [
+    [
+     "2"
+    ],
+    [
+     "4"
+    ],
+    [
+     "7"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "neighbors",
+   "request": {
+    "request": "neighbors",
+    "table": "orders",
+    "key": "buyer",
+    "columns": [
+     "oid"
+    ],
+    "window": null,
+    "per_seed": null,
+    "order": null
+   },
+   "keys": [
+    1,
+    2
+   ],
+   "schema": [
+    [
+     "__kumo_batch__",
+     "int64"
+    ],
+    [
+     "oid",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1"
+    ],
+    [
+     "0",
+     "17"
+    ],
+    [
+     "0",
+     "25"
+    ],
+    [
+     "0",
+     "33"
+    ],
+    [
+     "0",
+     "41"
+    ],
+    [
+     "0",
+     "49"
+    ],
+    [
+     "0",
+     "57"
+    ],
+    [
+     "0",
+     "65"
+    ],
+    [
+     "0",
+     "73"
+    ],
+    [
+     "0",
+     "9"
+    ],
+    [
+     "1",
+     "10"
+    ],
+    [
+     "1",
+     "18"
+    ],
+    [
+     "1",
+     "2"
+    ],
+    [
+     "1",
+     "26"
+    ],
+    [
+     "1",
+     "34"
+    ],
+    [
+     "1",
+     "42"
+    ],
+    [
+     "1",
+     "50"
+    ],
+    [
+     "1",
+     "58"
+    ],
+    [
+     "1",
+     "66"
+    ],
+    [
+     "1",
+     "74"
+    ]
+   ]
+  },
+  {
+   "base": "declared",
+   "name": "lookup",
+   "request": {
+    "request": "lookup",
+    "table": "users",
+    "key": "uid",
+    "columns": [
+     "uid"
+    ]
+   },
+   "keys": [
+    3,
+    99
+   ],
+   "schema": [
+    [
+     "__kumo_batch__",
+     "int64"
+    ],
+    [
+     "__kumo_matches__",
+     "int64"
+    ],
+    [
+     "uid",
+     "int32"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "3"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "describe the tables",
+   "request": {
+    "request": "describe",
+    "tables": [],
+    "part": "tables"
+   },
+   "schema": [
+    [
+     "table_name",
+     "string"
+    ]
+   ],
+   "rows": [
+    [
+     "adventureworks_customers"
+    ],
+    [
+     "adventureworks_products"
+    ],
+    [
+     "adventureworks_sales_order_details"
+    ],
+    [
+     "adventureworks_sales_order_headers"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "describe the columns",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "adventureworks_sales_order_headers"
+    ],
+    "part": "columns"
+   },
+   "schema": [
+    [
+     "cid",
+     "int32"
+    ],
+    [
+     "name",
+     "string"
+    ],
+    [
+     "type",
+     "string"
+    ],
+    [
+     "notnull",
+     "bool"
+    ],
+    [
+     "dflt_value",
+     "string"
+    ],
+    [
+     "pk",
+     "bool"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "SalesOrderID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "1",
+     "RevisionNumber",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "10",
+     "CustomerID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "11",
+     "SalesPersonID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "12",
+     "TerritoryID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "13",
+     "BillToAddressID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "14",
+     "ShipToAddressID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "15",
+     "ShipMethodID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "16",
+     "CreditCardID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "17",
+     "CreditCardApprovalCode",
+     "VARCHAR",
+     false,
+     null,
+     false
+    ],
+    [
+     "18",
+     "CurrencyRateID",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "19",
+     "SubTotal",
+     "DOUBLE",
+     false,
+     null,
+     false
+    ],
+    [
+     "2",
+     "OrderDate",
+     "TIMESTAMP",
+     false,
+     null,
+     false
+    ],
+    [
+     "20",
+     "TaxAmt",
+     "DOUBLE",
+     false,
+     null,
+     false
+    ],
+    [
+     "21",
+     "Freight",
+     "DOUBLE",
+     false,
+     null,
+     false
+    ],
+    [
+     "22",
+     "TotalDue",
+     "DOUBLE",
+     false,
+     null,
+     false
+    ],
+    [
+     "23",
+     "Comment",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "24",
+     "rowguid",
+     "VARCHAR",
+     false,
+     null,
+     false
+    ],
+    [
+     "25",
+     "ModifiedDate",
+     "TIMESTAMP",
+     false,
+     null,
+     false
+    ],
+    [
+     "3",
+     "DueDate",
+     "TIMESTAMP",
+     false,
+     null,
+     false
+    ],
+    [
+     "4",
+     "ShipDate",
+     "TIMESTAMP",
+     false,
+     null,
+     false
+    ],
+    [
+     "5",
+     "Status",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "6",
+     "OnlineOrderFlag",
+     "BIGINT",
+     false,
+     null,
+     false
+    ],
+    [
+     "7",
+     "SalesOrderNumber",
+     "VARCHAR",
+     false,
+     null,
+     false
+    ],
+    [
+     "8",
+     "PurchaseOrderNumber",
+     "VARCHAR",
+     false,
+     null,
+     false
+    ],
+    [
+     "9",
+     "AccountNumber",
+     "VARCHAR",
+     false,
+     null,
+     false
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "describe the keys",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "adventureworks_sales_order_headers"
+    ],
+    "part": "keys"
+   },
+   "schema": [
+    [
+     "constraint_type",
+     "string"
+    ],
+    [
+     "constraint_column_names",
+     "list<l: string>"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "adventureworks",
+   "name": "describe the foreign keys",
+   "request": {
+    "request": "describe",
+    "tables": [
+     "adventureworks_sales_order_headers"
+    ],
+    "part": "foreign_keys"
+   },
+   "schema": [
+    [
+     "constraint_index",
+     "int64"
+    ],
+    [
+     "referenced_table",
+     "string"
+    ],
+    [
+     "constraint_column_names",
+     "list<l: string>"
+    ],
+    [
+     "referenced_column_names",
+     "list<l: string>"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "adventureworks",
+   "name": "describe the indexes",
+   "request": {
+    "request": "describe",
+    "tables": [],
+    "part": "indexes"
+   },
+   "schema": [
+    [
+     "table_name",
+     "string"
+    ],
+    [
+     "expressions",
+     "string"
+    ]
+   ],
+   "rows": []
+  },
+  {
+   "base": "adventureworks",
+   "name": "scan",
+   "request": {
+    "request": "scan",
+    "table": "adventureworks_customers",
+    "columns": [
+     "CustomerID"
+    ],
+    "filters": [],
+    "limit": null
+   },
+   "schema": [
+    [
+     "CustomerID",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "11205"
+    ],
+    [
+     "11327"
+    ],
+    [
+     "11348"
+    ],
+    [
+     "11610"
+    ],
+    [
+     "11683"
+    ],
+    [
+     "11860"
+    ],
+    [
+     "11980"
+    ],
+    [
+     "12039"
+    ],
+    [
+     "12196"
+    ],
+    [
+     "12221"
+    ],
+    [
+     "12223"
+    ],
+    [
+     "12362"
+    ],
+    [
+     "12498"
+    ],
+    [
+     "12514"
+    ],
+    [
+     "12557"
+    ],
+    [
+     "12558"
+    ],
+    [
+     "12563"
+    ],
+    [
+     "12771"
+    ],
+    [
+     "12880"
+    ],
+    [
+     "12959"
+    ],
+    [
+     "12962"
+    ],
+    [
+     "12977"
+    ],
+    [
+     "13013"
+    ],
+    [
+     "13032"
+    ],
+    [
+     "13405"
+    ],
+    [
+     "13512"
+    ],
+    [
+     "13762"
+    ],
+    [
+     "13791"
+    ],
+    [
+     "13968"
+    ],
+    [
+     "14107"
+    ],
+    [
+     "14157"
+    ],
+    [
+     "14368"
+    ],
+    [
+     "14821"
+    ],
+    [
+     "14896"
+    ],
+    [
+     "14911"
+    ],
+    [
+     "14916"
+    ],
+    [
+     "14927"
+    ],
+    [
+     "15399"
+    ],
+    [
+     "16032"
+    ],
+    [
+     "16034"
+    ],
+    [
+     "16039"
+    ],
+    [
+     "16097"
+    ],
+    [
+     "16122"
+    ],
+    [
+     "16312"
+    ],
+    [
+     "16321"
+    ],
+    [
+     "16715"
+    ],
+    [
+     "16774"
+    ],
+    [
+     "16901"
+    ],
+    [
+     "17195"
+    ],
+    [
+     "17273"
+    ],
+    [
+     "17382"
+    ],
+    [
+     "17412"
+    ],
+    [
+     "17425"
+    ],
+    [
+     "17591"
+    ],
+    [
+     "17637"
+    ],
+    [
+     "17684"
+    ],
+    [
+     "17758"
+    ],
+    [
+     "17793"
+    ],
+    [
+     "17867"
+    ],
+    [
+     "18160"
+    ],
+    [
+     "18213"
+    ],
+    [
+     "18251"
+    ],
+    [
+     "18363"
+    ],
+    [
+     "18516"
+    ],
+    [
+     "18829"
+    ],
+    [
+     "18883"
+    ],
+    [
+     "18970"
+    ],
+    [
+     "19284"
+    ],
+    [
+     "19295"
+    ],
+    [
+     "19469"
+    ],
+    [
+     "20074"
+    ],
+    [
+     "20435"
+    ],
+    [
+     "20515"
+    ],
+    [
+     "20521"
+    ],
+    [
+     "20863"
+    ],
+    [
+     "21062"
+    ],
+    [
+     "21063"
+    ],
+    [
+     "21234"
+    ],
+    [
+     "21388"
+    ],
+    [
+     "21421"
+    ],
+    [
+     "21461"
+    ],
+    [
+     "21469"
+    ],
+    [
+     "21510"
+    ],
+    [
+     "21577"
+    ],
+    [
+     "21691"
+    ],
+    [
+     "21765"
+    ],
+    [
+     "21774"
+    ],
+    [
+     "21820"
+    ],
+    [
+     "21827"
+    ],
+    [
+     "21886"
+    ],
+    [
+     "21927"
+    ],
+    [
+     "21929"
+    ],
+    [
+     "22005"
+    ],
+    [
+     "22086"
+    ],
+    [
+     "22227"
+    ],
+    [
+     "22278"
+    ],
+    [
+     "22468"
+    ],
+    [
+     "22552"
+    ],
+    [
+     "22665"
+    ],
+    [
+     "22746"
+    ],
+    [
+     "23084"
+    ],
+    [
+     "23166"
+    ],
+    [
+     "23907"
+    ],
+    [
+     "23982"
+    ],
+    [
+     "24001"
+    ],
+    [
+     "24805"
+    ],
+    [
+     "25131"
+    ],
+    [
+     "25404"
+    ],
+    [
+     "25426"
+    ],
+    [
+     "25431"
+    ],
+    [
+     "25576"
+    ],
+    [
+     "25593"
+    ],
+    [
+     "25630"
+    ],
+    [
+     "25659"
+    ],
+    [
+     "25995"
+    ],
+    [
+     "26063"
+    ],
+    [
+     "26084"
+    ],
+    [
+     "26170"
+    ],
+    [
+     "26556"
+    ],
+    [
+     "26622"
+    ],
+    [
+     "26690"
+    ],
+    [
+     "26801"
+    ],
+    [
+     "26831"
+    ],
+    [
+     "26948"
+    ],
+    [
+     "26995"
+    ],
+    [
+     "27120"
+    ],
+    [
+     "27269"
+    ],
+    [
+     "27414"
+    ],
+    [
+     "27459"
+    ],
+    [
+     "27559"
+    ],
+    [
+     "27624"
+    ],
+    [
+     "28056"
+    ],
+    [
+     "28423"
+    ],
+    [
+     "28429"
+    ],
+    [
+     "28462"
+    ],
+    [
+     "28677"
+    ],
+    [
+     "28793"
+    ],
+    [
+     "28997"
+    ],
+    [
+     "29125"
+    ],
+    [
+     "29350"
+    ],
+    [
+     "29504"
+    ],
+    [
+     "29945"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "scan with a filter and a limit",
+   "request": {
+    "request": "scan",
+    "table": "adventureworks_customers",
+    "columns": [
+     "CustomerID",
+     "StoreID"
+    ],
+    "filters": [
+     {
+      "column": "StoreID",
+      "filter": "not_null"
+     }
+    ],
+    "limit": 1000
+   },
+   "schema": [
+    [
+     "CustomerID",
+     "int64"
+    ],
+    [
+     "StoreID",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "29504",
+     "334"
+    ],
+    [
+     "29945",
+     "1310"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "count the rows a filter keeps",
+   "request": {
+    "request": "count_rows",
+    "table": "adventureworks_customers",
+    "filters": [
+     {
+      "column": "StoreID",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "2"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "preview",
+   "request": {
+    "request": "preview",
+    "table": "adventureworks_sales_order_headers",
+    "columns": [
+     "SalesOrderID",
+     "TotalDue",
+     "OrderDate"
+    ],
+    "limit": 3
+   },
+   "schema": [
+    [
+     "SalesOrderID",
+     "int64"
+    ],
+    [
+     "TotalDue",
+     "double"
+    ],
+    [
+     "OrderDate",
+     "timestamp[us]"
+    ]
+   ],
+   "rows": [
+    [
+     "43862",
+     "0x1.10d4b86c22681p+15",
+     "1656547200000000"
+    ],
+    [
+     "44098",
+     "0x1.1ffdd6872b021p+14",
+     "1659225600000000"
+    ],
+    [
+     "44140",
+     "0x1.ee3fa0f9096bcp+11",
+     "1659312000000000"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "count the rows",
+   "request": {
+    "request": "count_rows",
+    "table": "adventureworks_sales_order_headers",
+    "filters": []
+   },
+   "schema": [
+    [
+     "rows",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "215"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "count the keys",
+   "request": {
+    "request": "key_counts",
+    "keys": [
+     {
+      "table": "adventureworks_customers",
+      "columns": [
+       "CustomerID"
+      ]
+     },
+     {
+      "table": "adventureworks_sales_order_headers",
+      "columns": [
+       "SalesOrderID"
+      ]
+     }
+    ]
+   },
+   "schema": [
+    [
+     "k",
+     "int32"
+    ],
+    [
+     "n",
+     "int64"
+    ],
+    [
+     "d",
+     "int64"
+    ],
+    [
+     "z",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "142",
+     "142",
+     "0"
+    ],
+    [
+     "1",
+     "215",
+     "215",
+     "0"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "the time bounds",
+   "request": {
+    "request": "time_bounds",
+    "columns": [
+     {
+      "table": "adventureworks_sales_order_headers",
+      "column": "OrderDate"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "table_index",
+     "int32"
+    ],
+    [
+     "min_date",
+     "timestamp[us]"
+    ],
+    [
+     "max_date",
+     "timestamp[us]"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1656547200000000",
+     "1749945600000000"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "sample entities",
+   "request": {
+    "request": "sample_entities",
+    "table": "adventureworks_customers",
+    "key": [
+     "CustomerID"
+    ],
+    "n": 3,
+    "seed": {
+     "t": "u64",
+     "v": "42"
+    },
+    "columns": [
+     "CustomerID"
+    ],
+    "filters": [
+     {
+      "column": "CustomerID",
+      "filter": "not_null"
+     }
+    ]
+   },
+   "schema": [
+    [
+     "CustomerID",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "16034"
+    ],
+    [
+     "18251"
+    ],
+    [
+     "28793"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "neighbors",
+   "request": {
+    "request": "neighbors",
+    "table": "adventureworks_sales_order_headers",
+    "key": "CustomerID",
+    "columns": [
+     "SalesOrderID"
+    ],
+    "window": null,
+    "per_seed": null,
+    "order": null
+   },
+   "keys": [
+    12196,
+    12880
+   ],
+   "schema": [
+    [
+     "__kumo_batch__",
+     "int64"
+    ],
+    [
+     "SalesOrderID",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "55987"
+    ],
+    [
+     "0",
+     "57499"
+    ],
+    [
+     "0",
+     "62040"
+    ],
+    [
+     "0",
+     "74647"
+    ],
+    [
+     "1",
+     "57914"
+    ],
+    [
+     "1",
+     "64814"
+    ],
+    [
+     "1",
+     "65466"
+    ],
+    [
+     "1",
+     "68654"
+    ]
+   ]
+  },
+  {
+   "base": "adventureworks",
+   "name": "lookup",
+   "request": {
+    "request": "lookup",
+    "table": "adventureworks_customers",
+    "key": "CustomerID",
+    "columns": [
+     "CustomerID"
+    ]
+   },
+   "keys": [
+    11205,
+    1
+   ],
+   "schema": [
+    [
+     "__kumo_batch__",
+     "int64"
+    ],
+    [
+     "__kumo_matches__",
+     "int64"
+    ],
+    [
+     "CustomerID",
+     "int64"
+    ]
+   ],
+   "rows": [
+    [
+     "0",
+     "1",
+     "11205"
+    ]
+   ]
+  }
+ ]
+}

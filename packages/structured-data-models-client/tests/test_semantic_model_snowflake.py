@@ -25,6 +25,9 @@ pytest.importorskip('yaml')
 
 from sdm_connectors import SemanticModel, SnowflakeSource  # noqa: E402
 from sdm_relational_engine.rfm.backend.snow import Connection  # noqa: E402
+from sdm_relational_engine.rfm.backend.snow.binding import (  # noqa: E402
+    paramstyle_attribute,
+)
 
 from sdm_client import Relationship, Schema, SourceTable  # noqa: E402
 from sdm_client.materializers import RelationalMaterializer  # noqa: E402
@@ -196,7 +199,7 @@ class _FakeConnection(Connection):
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.closed = False
-        self._paramstyle = 'pyformat'
+        setattr(self, paramstyle_attribute(self), 'pyformat')
 
     def cursor(self) -> _FakeCursor:  # type: ignore[override]
         return _FakeCursor(self.error)

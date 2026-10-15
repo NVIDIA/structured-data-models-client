@@ -1,0 +1,16 @@
+{
+ "about": "T1.36's acceptance tests for sdm-contract-run --pre-given-specs (a case written before contract 23, its describe_source spec in contract 22's shape, read and rewritten as Given), written by the independent test author before the implementation, in rust/crates/sdm-testkit/tests/t136_pre_given_specs.rs. 'authored' lists the checks that failed when they were written (the flag was unknown, the binary printed its usage); 'preflight-without-flag' passed then and is not listed. Each check in 'pending' must still fail (strict); the implementer takes a check out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": {
+  "rust-host": []
+ },
+ "authored": {
+  "rust-host": [
+   "case-without-describe-source-unchanged",
+   "composite-key-as-given-twin",
+   "corpus-round-trip",
+   "given-spec-refused-under-flag",
+   "single-key-as-given-twin",
+   "time-columns-as-given-twin"
+  ]
+ }
+}

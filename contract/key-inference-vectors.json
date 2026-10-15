@@ -1,0 +1,4309 @@
+{
+ "format": "sdm-key-inference-vectors/1",
+ "recorded_by": "contract/tools/key_inference_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "pql": "PREDICT SUM(payments.amount, 0, 30, days) FOR EACH accounts.account_id",
+ "anchor": "2024-03-01",
+ "preview_rows": 1000,
+ "register_ref": "contract/key-inference-vectors.json#",
+ "vectors": [
+  {
+   "id": "share-100.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 1000 THEN i - 1000 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-99.5.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 5
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 995 THEN i - 995 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 995
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 995
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 5
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-99.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 10
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 990 THEN i - 990 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 990
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 990
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 10
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-98.9.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 11
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 989 THEN i - 989 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 989
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 989
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-50.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 500
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 500 THEN i - 500 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 500
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 500
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-100.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 5000 THEN i - 5000 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 5000
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-99.5.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 25
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 4975 THEN i - 4975 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 4975
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 25
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-99.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 50
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 4950 THEN i - 4950 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 4950
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 50
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-98.9.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 55
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 4945 THEN i - 4945 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 4945
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-50.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 2500
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 2500 THEN i - 2500 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 2500
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "share-100.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 200 THEN NULL ELSE CASE WHEN i >= 200 THEN i - 200 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 200,
+     "distinct": 200
+    },
+    "preview": {
+     "rows": 200,
+     "held": 200,
+     "distinct": 200
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-clean.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 200 THEN NULL ELSE CASE WHEN i >= 200 THEN i - 200 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 200,
+     "distinct": 200
+    },
+    "preview": {
+     "rows": 200,
+     "held": 200,
+     "distinct": 200
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-1.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 199 THEN NULL ELSE CASE WHEN i >= 199 THEN i - 199 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-2.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 2,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 198 THEN NULL ELSE CASE WHEN i >= 198 THEN i - 198 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 198,
+     "distinct": 198
+    },
+    "preview": {
+     "rows": 200,
+     "held": 198,
+     "distinct": 198
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-10.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 10,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 190 THEN NULL ELSE CASE WHEN i >= 190 THEN i - 190 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 190,
+     "distinct": 190
+    },
+    "preview": {
+     "rows": 200,
+     "held": 190,
+     "distinct": 190
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-1.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE CASE WHEN i >= 4999 THEN i - 4999 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-2.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 2,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4998 THEN NULL ELSE CASE WHEN i >= 4998 THEN i - 4998 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4998,
+     "distinct": 4998
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-10.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 10,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4990 THEN NULL ELSE CASE WHEN i >= 4990 THEN i - 4990 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4990,
+     "distinct": 4990
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "all-null.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 200,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT NULL::BIGINT AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 0,
+     "distinct": 0
+    },
+    "preview": {
+     "rows": 200,
+     "held": 0,
+     "distinct": 0
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "all-null.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 5000,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT NULL::BIGINT AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 0,
+     "distinct": 0
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 0,
+     "distinct": 0
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "text-unique.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "text",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE 'k' || (CASE WHEN i >= 1000 THEN i - 1000 ELSE i END)::VARCHAR END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "VARCHAR"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "decimal-unique.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "decimal",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE (CASE WHEN i >= 1000 THEN i - 1000 ELSE i END)::DECIMAL(18, 0) END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "DECIMAL(18,0)"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-1-text.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "text",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 199 THEN NULL ELSE 'k' || (CASE WHEN i >= 199 THEN i - 199 ELSE i END)::VARCHAR END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "VARCHAR"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-1-text.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "text",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE 'k' || (CASE WHEN i >= 4999 THEN i - 4999 ELSE i END)::VARCHAR END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "VARCHAR"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "nulls-1-decimal.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "decimal",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 199 THEN NULL ELSE (CASE WHEN i >= 199 THEN i - 199 ELSE i END)::DECIMAL(18, 0) END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "DECIMAL(18,0)"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INTERNAL_ERROR"
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference fails with INTERNAL_ERROR at materialize (E66(b): a named refusal or a success in its place is a change to register)"
+    ]
+   }
+  },
+  {
+   "id": "nulls-1-decimal.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "decimal",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE (CASE WHEN i >= 4999 THEN i - 4999 ELSE i END)::DECIMAL(18, 0) END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "DECIMAL(18,0)"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-nulls-1.200",
+   "table": "accounts",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT CASE WHEN i >= 199 THEN NULL ELSE CASE WHEN i >= 199 THEN i - 199 ELSE i END::BIGINT END AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, i % 200::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-nulls-1.5000",
+   "table": "accounts",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE CASE WHEN i >= 4999 THEN i - 4999 ELSE i END::BIGINT END AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(5000) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, i % 5000::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-all-null.200",
+   "table": "accounts",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 200,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT NULL::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, i % 200::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 0,
+     "distinct": 0
+    },
+    "preview": {
+     "rows": 200,
+     "held": 0,
+     "distinct": 0
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-nulls-1-text.200",
+   "table": "accounts",
+   "rows": 200,
+   "key": {
+    "kind": "text",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT CASE WHEN i >= 199 THEN NULL ELSE 'k' || (CASE WHEN i >= 199 THEN i - 199 ELSE i END)::VARCHAR END AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(200) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, 'k' || (i % 200)::VARCHAR AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "text",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "VARCHAR"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning",
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-share-95.1000",
+   "table": "accounts",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 50
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 950 THEN i - 950 ELSE i END::BIGINT END AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(1000) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, i % 1000::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 950
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 950
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "warnings": [
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-share-95.5000",
+   "table": "accounts",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 250
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 4750 THEN i - 4750 ELSE i END::BIGINT END AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(5000) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, i % 5000::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 4750
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "warnings": [
+     "SDMWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "entity-share-50.1000",
+   "table": "accounts",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 500
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 500 THEN i - 500 ELSE i END::BIGINT END AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(1000) t(i)",
+    "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, i % 1000::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(400) t(i)"
+   ],
+   "primary_keys": null,
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 500
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 500
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": null,
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-clean.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 1000 THEN i - 1000 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-clean.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 5000 THEN i - 5000 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 5000
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-null-1.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "int",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 199 THEN NULL ELSE CASE WHEN i >= 199 THEN i - 199 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-null-1.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE CASE WHEN i >= 4999 THEN i - 4999 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-repeats-0.5.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 5
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 995 THEN i - 995 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 995
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 995
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 5
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-repeats-0.5.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 25
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 4975 THEN i - 4975 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 4975
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "accounts",
+       "columns": [
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "region",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "account_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "payments",
+       "columns": [
+        {
+         "name": "payment_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "account_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "paid_at",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "amount",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "payment_id",
+       "time_column": "paid_at",
+       "duplicate_keys": 25
+      }
+     ],
+     "links": [
+      [
+       "payments",
+       "account_id",
+       "accounts",
+       "account_id"
+      ]
+     ]
+    },
+    "warnings": [
+     "SDMWarning",
+     "UserWarning"
+    ]
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-repeats-1.1.1000",
+   "table": "payments",
+   "rows": 1000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 11
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 1000 THEN NULL ELSE CASE WHEN i >= 989 THEN i - 989 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(1000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 989
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 989
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-repeats-1.1.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "int",
+    "nulls": 0,
+    "repeats": 55
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 5000 THEN NULL ELSE CASE WHEN i >= 4945 THEN i - 4945 ELSE i END::BIGINT END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 5000,
+     "distinct": 4945
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "BIGINT"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-null-1-text.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "text",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 199 THEN NULL ELSE 'k' || (CASE WHEN i >= 199 THEN i - 199 ELSE i END)::VARCHAR END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "VARCHAR"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-null-1-text.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "text",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE 'k' || (CASE WHEN i >= 4999 THEN i - 4999 ELSE i END)::VARCHAR END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "VARCHAR"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-null-1-decimal.200",
+   "table": "payments",
+   "rows": 200,
+   "key": {
+    "kind": "decimal",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 199 THEN NULL ELSE (CASE WHEN i >= 199 THEN i - 199 ELSE i END)::DECIMAL(18, 0) END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(200) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "preview": {
+     "rows": 200,
+     "held": 199,
+     "distinct": 199
+    },
+    "type": "DECIMAL(18,0)"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  },
+  {
+   "id": "named-null-1-decimal.5000",
+   "table": "payments",
+   "rows": 5000,
+   "key": {
+    "kind": "decimal",
+    "nulls": 1,
+    "repeats": 0
+   },
+   "setup": [
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, ['north', 'south', 'east'][1 + i % 3] AS region FROM range(50) t(i)",
+    "CREATE TABLE payments AS SELECT CASE WHEN i >= 4999 THEN NULL ELSE (CASE WHEN i >= 4999 THEN i - 4999 ELSE i END)::DECIMAL(18, 0) END AS payment_id, i % 50::BIGINT AS account_id, TIMESTAMP '2023-06-01 00:00:00' + to_minutes((i * 90)::INTEGER) AS paid_at, (i % 13)::DOUBLE AS amount FROM range(5000) t(i)"
+   ],
+   "primary_keys": {
+    "payments": "payment_id"
+   },
+   "account_kind": "int",
+   "until": "materialize",
+   "duckdb": {
+    "whole": {
+     "rows": 5000,
+     "held": 4999,
+     "distinct": 4999
+    },
+    "preview": {
+     "rows": 1000,
+     "held": 1000,
+     "distinct": 1000
+    },
+    "type": "DECIMAL(18,0)"
+   },
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "schema": null,
+    "warnings": []
+   },
+   "register": {
+    "required": false,
+    "why": []
+   }
+  }
+ ]
+}

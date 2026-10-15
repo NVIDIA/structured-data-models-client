@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: the core route's branch of materialize, deleted in Phase 5
+# with the old engine; the old route's rules here, which the core route no
+# longer runs (T1.28a moved them into the core: design, "Host-held
+# semantics"), go with it.
 
 r"""Gather and encode relational requests with the relational engine."""
 
@@ -100,6 +104,9 @@ class RelationalMaterializer:
     def __init__(self, schema: Schema) -> None:
         self.schema = schema
         self._model: KumoRelational | None = None
+        # On the core route (T1.26b, E52): the sampler state the core's last
+        # run left, which its next run is handed back.
+        self._core_sampler_state: dict[str, Any] = {}
 
     _RESERVED = ('instance_id', '__kumo_anchor_time')
 
@@ -125,37 +132,54 @@ class RelationalMaterializer:
                 'the client derives what the endpoint needs',
                 code='INVALID_REQUEST',
             )
-
-        if len(indices) == 0:
-            raise StructuredDataError(
-                'indices names no entity, and gathering a relational request '
-                'means sampling a neighbourhood around each one, so there is '
-                'nothing here to gather. An empty batch is still answered: '
-                'build it as Request(predict=<no rows>) and predict() returns '
-                'the empty result without sending',
-                code='INVALID_REQUEST',
-            )
-
-        statistic = _statistic_asked_for(options)
-        self._refuse_a_name_the_wire_reserves()
-        self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
-        _warn_the_filter_chose_only_the_examples(query, indices)
-        _warn_of_relationships_that_join_nothing(self.schema)
-        payloads = self._gather(query, indices, num_context_samples, options)
-        if statistic is not None:
-            _record_the_statistic(payloads, statistic)
-        sent = _tables_sent(payloads, self.schema)
-        _warn_of_tables_left_out(
-            self.schema, sent, table_name(query.entity_column)
-        )
-        _warn_of_columns_the_model_does_not_read(
-            self.schema, _columns_to_leave_out(query, options), sent
-        )
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
-        _drop_context_that_answers_the_question(payloads, windowed=windowed)
-        return Request.materialized(
+        # Over a DuckDB source on the core route (T1.11c), the core gathers
+        # and lays out the request, the rules around the gathering the
+        # core's (T1.28a); the old route holds its own.
+        from sdm_client import _routing
+
+        core = (
+            getattr(self.schema.source, 'backend', None) == 'duckdb'
+            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+        )
+        if core:
+            from sdm_client._rust import materialize as on_the_core
+
+            payloads, core_state = on_the_core.gather(
+                self, query, indices, num_context_samples, options
+            )
+        else:
+            if len(indices) == 0:
+                raise StructuredDataError(
+                    'indices names no entity, and gathering a relational '
+                    'request means sampling a neighbourhood around each one, '
+                    'so there is nothing here to gather. An empty batch is '
+                    'still answered: build it as Request(predict=<no rows>) '
+                    'and predict() returns the empty result without sending',
+                    code='INVALID_REQUEST',
+                )
+
+            statistic = _statistic_asked_for(options)
+            self._refuse_a_name_the_wire_reserves()
+            self._warn_two_whole_numbers_are_being_asked_as_quantities(query)
+            _warn_the_filter_chose_only_the_examples(query, indices)
+            _warn_of_relationships_that_join_nothing(self.schema)
+            payloads, core_state = self._gather(
+                query, indices, num_context_samples, options
+            )
+            if statistic is not None:
+                _record_the_statistic(payloads, statistic)
+            sent = _tables_sent(payloads, self.schema)
+            _warn_of_tables_left_out(
+                self.schema, sent, table_name(query.entity_column)
+            )
+            _warn_of_columns_the_model_does_not_read(
+                self.schema, _columns_to_leave_out(query, options), sent
+            )
+            _drop_context_that_answers_the_question(payloads, windowed=windowed)
+        request = Request.materialized(
             payloads=payloads,
             windowed=windowed,
             schema=self.schema.snapshot(),
@@ -166,6 +190,11 @@ class RelationalMaterializer:
                 'inference_config': options.get('inference_config') or {}
             },
         )
+        if core_state is not None:
+            # Gathered on the core (T1.11d): the request state's version,
+            # which predict on the core hands back with the payload.
+            request._core_state = core_state
+        return request
 
     def _gather(
         self,
@@ -173,8 +202,10 @@ class RelationalMaterializer:
         indices: Sequence[Any],
         num_context_samples: int | None,
         options: dict[str, Any],
-    ) -> tuple[dict[str, Any], ...]:
-        r"""Sample and encode using the engine's own materializer."""
+    ) -> tuple[tuple[dict[str, Any], ...], dict[str, Any] | None]:
+        r"""Sample and encode using the engine's own materializer: the
+        payloads, and no request state (the core route's, from T1.11d, is
+        its own, :func:`sdm_client._rust.materialize.materialize`)."""
         run_mode = self._run_mode_for(num_context_samples)
         self._check_entity_count(indices)
         self._check_shape(options, RELATIONAL_LIMITS)
@@ -237,7 +268,7 @@ class RelationalMaterializer:
             )
         for part in parts:
             self._check_limits(part, RELATIONAL_LIMITS)
-        return tuple(part.payload for part in parts)
+        return tuple(part.payload for part in parts), None
 
     def _get_model(self) -> KumoRelational:
         if self._model is None:

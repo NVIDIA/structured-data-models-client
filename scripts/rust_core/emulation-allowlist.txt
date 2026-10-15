@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# The modules allowed to emulate Python behavior, one path per line, relative
+# to the repository root (Phase 1 design, "PQL parser"; decisions A4
+# and E9).
+# Emulation is banned everywhere else; each addition needs an owner-approved
+# decisions row (H21), and the list is permanent, with no expiry (E18). The
+# vocabulary scan (T1.10c) reads it.
+#
+# The line: emulation is copying a library's incidental behavior, such as a
+# codec or a repr. Porting an algorithm the reference itself defines is a
+# port, with a row in docs/design/rust-core/phase-1/dependencies.md, not an
+# entry here: DateOffset arithmetic in sdm-pql's dor.rs, str.isspace
+# in syntax.rs, the query[:-1] quirk in visitor.rs, and T1.25's
+# sdm-engine::time::text_shapes.
+
+# Python's 4,300-digit limit on reading an integer, which decides validity.
+rust/crates/sdm-pql/src/pyint.rs
+# The text Python's repr gives a float.
+rust/crates/sdm-pql/src/float_repr.rs
+# How the reference reads a string literal's escapes, which decides validity
+# (Phase 1 decisions, E9).
+rust/crates/sdm-pql/src/escapes.rs

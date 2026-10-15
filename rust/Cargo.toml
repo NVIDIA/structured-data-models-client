@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The Rust core of sdm-client: the contract, the core and the host layer, the
+# dev-only test host, and the Python binding over them. The layout and rules
+# are in docs/design/rust-core/phase-1/design.md.
+[workspace]
+resolver = "2"
+members = ["crates/*", "bindings/sdm-py"]
+
+[workspace.package]
+# Released with the client at its version; a guard holds sdm-py's version
+# equal to the other four distributions.
+version = "1.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/NVIDIA/structured-data-models-client"
+publish = false
+
+# One Arrow major across the workspace: duckdb =1.10506.0 (DuckDB 1.5.6, the
+# reference's version) uses Arrow 58, and arrow-pyarrow 58 needs pyo3 0.28.
+# The three move together, only at slice gates (decision B-D2).
+[workspace.dependencies]
+arrow-array = { version = "58", default-features = false }
+arrow-buffer = "58"
+arrow-data = "58"
+arrow-ipc = { version = "58", default-features = false }
+arrow-pyarrow = "58"
+arrow-schema = "58"
+arrow-select = "58"
+base64 = "0.22"
+duckdb = { version = "=1.10506.0", features = ["bundled"] }
+half = "2"
+indexmap = { version = "2", features = ["serde"] }
+# The one calendar and zone library (decision A7). Zones come from the host's
+# lookup roots, passed in, then the bundled copy; never from the environment,
+# so `tz-system` stays off.
+jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-zoneinfo", "tzdb-bundle-always"] }
+jiff-tzdb = "0.1.9"
+proptest = { version = "1", default-features = false, features = ["std"] }
+pyo3 = { version = "0.28", features = ["abi3-py310"] }
+# Bridges the `log` records tracing emits to Python's logging, in sdm-py
+# alone (decision H8).
+pyo3-log = "0.13"
+schemars = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
+serde_stacker = "0.1"
+regex = "1"
+sha2 = "0.10"
+stacker = "0.1"
+thiserror = "2"
+# Logging in Rust. The `log` feature sends each event to the `log` facade
+# when no subscriber is set, which is how pyo3-log hears it (decision H8).
+tracing = { version = "0.1.44", default-features = false, features = ["std", "log"] }
+anyhow = "1"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.dev]
+# Stated, not assumed: sdm-host contains panics with catch_unwind.
+panic = "unwind"
+
+# No debug info for dependencies: the bundled DuckDB's debug build otherwise
+# fills a CI runner's disk, and nobody steps through it. And dependencies
+# optimized (decision E131): the bundled DuckDB and Arrow unoptimized made
+# the DuckDB-backed test files take minutes, t132a_key_cast 94 s locally
+# (2,173 s on one CI runner) against 12 s here at opt-level 1, with no
+# slower build and a smaller target directory. The workspace's own crates
+# stay unoptimized, with their debug assertions.
+[profile.dev.package."*"]
+debug = false
+opt-level = 1
+
+[profile.release]
+panic = "unwind"
+lto = "thin"
+codegen-units = 1

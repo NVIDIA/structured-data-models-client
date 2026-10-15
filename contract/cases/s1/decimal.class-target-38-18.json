@@ -1,0 +1,81 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.class-target-38-18",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-multiclass/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
+  "seam": "decimal",
+  "cells": [
+    "decimal128/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, (0.1 + (user_id % 3) * 0.1)::DECIMAL(38, 18) AS tier FROM users"
+    ],
+    "pql": "PREDICT users.tier FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "message": "unsupported data type 'decimal128(38, 18)[pyarrow]' for column 'TARGET'",
+    "today": "Schema.from_source reports tier as float64 / categorical"
+  },
+  "register": "Engine failure on a decimal static target",
+  "why": "DECIMAL(38,18) classes collided to 0.1 in the first attempt",
+  "source": "DV133"
+}

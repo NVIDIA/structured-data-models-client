@@ -1,0 +1,38 @@
+# core.inputs differences: format-only check (owner item 49)
+
+Per flagged (case, runner), each call the case names: `match`, `match after contract-22 rewrite` (pre_given.rs's
+rewrite: each key list and time column wrapped as {"value": ...}), `not reached` (the run stopped before it), or `DIFFERS`.
+Format-only means: no call DIFFERS, and at least one matches only after the rewrite or every gap is a call not reached.
+
+- h11.decimal.target-sum-past-precision: python-core [refusal INVALID_REQUEST at materialize; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.decimal.target-sum-past-precision: rust-host [refusal INVALID_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.edit.clear-time-column-window: python-core [refusal INVALID_REQUEST at materialize; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.edit.clear-time-column-window: rust-host [refusal INVALID_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.edit.drop-target-column: python-core [refusal INVALID_REQUEST at materialize; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.edit.drop-target-column: rust-host [refusal INVALID_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.empty.entity-table: python-core [refusal INVALID_REQUEST at from_source; reference refusal RuntimeError at from_source]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.empty.entity-table: rust-host [refusal INVALID_REQUEST at None; reference refusal RuntimeError at from_source]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.key.composite-primary-key: python-core [refusal UNSUPPORTED_REQUEST at from_source; reference refusal INVALID_REQUEST at materialize]: describe_source match after contract-22 rewrite -> format-only
+- h11.key.composite-primary-key: rust-host [refusal UNSUPPORTED_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match after contract-22 rewrite -> format-only
+- h11.key.duplicate-primary-values: python-core [refusal INVALID_REQUEST at materialize; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.key.duplicate-primary-values: rust-host [refusal INVALID_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.key.explicit-tables-and-link: python-core [refusal AttributeError at from_source; reference refusal AttributeError at from_source]: describe_source not reached, materialize not reached, predict not reached -> not reached only
+- h11.key.explicit-tables-and-link: rust-host [success; reference refusal AttributeError at from_source]: describe_source match after contract-22 rewrite, materialize match, predict match -> format-only
+- h11.key.uint32-binary: python-core [success; reference success]: describe_source match, materialize DIFFERS, predict match -> DIFFERS
+- h11.key.width-mismatch: python-core [success; reference success]: describe_source match, materialize DIFFERS, predict match -> DIFFERS
+- h11.nested.list-of-list: python-core [refusal UNSUPPORTED_REQUEST at from_source; reference refusal ValueError at from_source]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.nested.list-of-list: rust-host [refusal UNSUPPORTED_REQUEST at None; reference refusal ValueError at from_source]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.nested.struct-on-fact-table: python-core [refusal UNSUPPORTED_REQUEST at from_source; reference refusal RuntimeError at from_source]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.nested.struct-on-fact-table: rust-host [refusal UNSUPPORTED_REQUEST at None; reference refusal RuntimeError at from_source]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.null.nan-and-infinity-target: python-core [refusal UNSUPPORTED_REQUEST at from_source; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.null.nan-and-infinity-target: rust-host [refusal UNSUPPORTED_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.null.time-column-all-null: python-core [refusal INVALID_REQUEST at materialize; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.null.time-column-all-null: rust-host [refusal INVALID_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.task.forecast-sum: python-core [success; reference success]: describe_source match, materialize DIFFERS, predict match -> DIFFERS
+- h11.task.forecast-sum: rust-host [refusal UNSUPPORTED_REQUEST at None; reference success]: describe_source match, materialize match, predict not reached -> not reached only
+- h11.task.ranking-without-candidates: python-core [refusal INVALID_REQUEST at materialize; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize not reached, predict not reached -> not reached only
+- h11.task.ranking-without-candidates: rust-host [refusal UNSUPPORTED_REQUEST at None; reference refusal INVALID_REQUEST at materialize]: describe_source match, materialize match, predict not reached -> not reached only
+
+format-only (contract-22 spec converted under owner item 49): 3 [('h11.key.composite-primary-key', 'python-core'), ('h11.key.composite-primary-key', 'rust-host'), ('h11.key.explicit-tables-and-link', 'rust-host')]
+calls not reached only (the run stopped earlier; its outcome is judged by the outcome rule): 22
+a call that DIFFERS: 3 [('h11.key.uint32-binary', 'python-core'), ('h11.key.width-mismatch', 'python-core'), ('h11.task.forecast-sum', 'python-core')]

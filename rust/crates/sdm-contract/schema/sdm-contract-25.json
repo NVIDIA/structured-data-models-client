@@ -1,0 +1,4769 @@
+{
+  "$id": "sdm-contract/25",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ControlMessage",
+  "description": "Every control message that crosses between a host and the core.",
+  "oneOf": [
+    {
+      "description": "Starts a run.",
+      "type": "object",
+      "properties": {
+        "contract": {
+          "description": "The contract version the host speaks; see `CONTRACT_VERSION`.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "facts": {
+          "$ref": "#/$defs/HostFacts"
+        },
+        "operation": {
+          "$ref": "#/$defs/Operation"
+        },
+        "message": {
+          "type": "string",
+          "const": "start"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "contract",
+        "facts",
+        "operation"
+      ]
+    },
+    {
+      "description": "The host's answer to one fetch.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "outcome": {
+          "$ref": "#/$defs/FetchOutcome"
+        },
+        "message": {
+          "type": "string",
+          "const": "fetch_reply"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "id",
+        "outcome"
+      ]
+    },
+    {
+      "description": "The host's answer to one model call.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ModelOutcome"
+        },
+        "message": {
+          "type": "string",
+          "const": "model_reply"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "id",
+        "outcome"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "const": "cancel"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ]
+    },
+    {
+      "description": "What a run asks of its host next.",
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "const": "step"
+        }
+      },
+      "oneOf": [
+        {
+          "description": "Answer every one of these before asking for the next step.",
+          "type": "object",
+          "properties": {
+            "requests": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/FetchStep"
+              }
+            },
+            "step": {
+              "type": "string",
+              "const": "fetch"
+            }
+          },
+          "required": [
+            "step",
+            "requests"
+          ]
+        },
+        {
+          "description": "A call to the model; the host sends the body's bytes as they are.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/ReplyId"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/Endpoint"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "body": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "step": {
+              "type": "string",
+              "const": "call_model"
+            }
+          },
+          "required": [
+            "step",
+            "id",
+            "endpoint",
+            "content_type",
+            "body"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "result": {
+              "$ref": "#/$defs/OperationResult"
+            },
+            "step": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "step",
+            "result"
+          ]
+        }
+      ],
+      "required": [
+        "message"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/CoreError"
+        },
+        "message": {
+          "type": "string",
+          "const": "error"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "error"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoreWarning"
+          }
+        },
+        "message": {
+          "type": "string",
+          "const": "warnings"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "warnings"
+      ]
+    },
+    {
+      "description": "The sampler state a `materialize` run left, which the host takes\nonce the run has ended, done or failed, and hands back with the\nmaterializer's next `materialize` (decision E52).",
+      "type": "object",
+      "properties": {
+        "state": {
+          "$ref": "#/$defs/SamplerState"
+        },
+        "message": {
+          "type": "string",
+          "const": "sampler_state"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "state"
+      ]
+    },
+    {
+      "description": "A message the core wrote whose encoding would pass the control cap:\nit travels whole as a bytes attachment of its UTF-8 JSON, named here\n(decision H7). Nothing the core writes is truncated, refused or\ndropped for size.",
+      "type": "object",
+      "properties": {
+        "attachment": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "message": {
+          "type": "string",
+          "const": "attached"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "attachment"
+      ]
+    }
+  ],
+  "x-attachments": {
+    "$ref": "#/$defs/Attachments"
+  },
+  "$defs": {
+    "Attachments": {
+      "description": "What each bytes attachment holds that a control message names and the\ncore reads or writes as JSON, by `<type>.<field>` of the field naming\nit: part of the locked schema (`$defs/Attachments`, put there by\n[`crate::schema_json`]), so a change to an attachment's shape needs a\nversion bump as a change to a control message's does. A model call's\nbody and the endpoint's answer are the endpoint's bytes, and an Arrow\nattachment carries its own schema; neither is listed.",
+      "type": "object",
+      "properties": {
+        "ValidateQuery.query": {
+          "type": "string"
+        },
+        "ValidateQuery.schema": {
+          "$ref": "#/$defs/QuerySchema"
+        },
+        "DescribeSource.source": {
+          "$ref": "#/$defs/SourceSpec"
+        },
+        "DescribedSource.description": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "EditSchema.schema": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "EditSchema.held": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "EditSchema.edit": {
+          "$ref": "#/$defs/SchemaEdit"
+        },
+        "SchemaEdited.schema": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "Materialize.schema": {
+          "$ref": "#/$defs/SourceDescription"
+        },
+        "Materialize.held": {
+          "$ref": "#/$defs/HeldSchema"
+        },
+        "Materialize.query": {
+          "type": "string"
+        },
+        "Materialize.values": {
+          "$ref": "#/$defs/CallValues"
+        },
+        "SamplerState.memo": {
+          "$ref": "#/$defs/SamplerMemo"
+        },
+        "RequestState.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "RequestState.query": {
+          "type": "string"
+        },
+        "ForecastStep.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "ForecastStep.query": {
+          "type": "string"
+        },
+        "Predicted.metadata": {
+          "$ref": "#/$defs/EndpointMetadata"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "ValidateQuery.query",
+        "ValidateQuery.schema",
+        "DescribeSource.source",
+        "DescribedSource.description",
+        "EditSchema.schema",
+        "EditSchema.held",
+        "EditSchema.edit",
+        "SchemaEdited.schema",
+        "Materialize.schema",
+        "Materialize.held",
+        "Materialize.query",
+        "Materialize.values",
+        "SamplerState.memo",
+        "RequestState.payload",
+        "RequestState.query",
+        "ForecastStep.payload",
+        "ForecastStep.query",
+        "Predicted.metadata"
+      ]
+    },
+    "QuerySchema": {
+      "description": "The schema a query is resolved against: names and types, no rows.",
+      "type": "object",
+      "properties": {
+        "tables": {
+          "description": "The tables, in order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QueryTable"
+          }
+        },
+        "links": {
+          "description": "Groups of linked columns, such as a primary key and its foreign keys.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ColumnRef"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tables",
+        "links"
+      ]
+    },
+    "QueryTable": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/QueryColumn"
+          }
+        },
+        "primary_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time_column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "end_time_column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "columns"
+      ]
+    },
+    "QueryColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype"
+        },
+        "stype": {
+          "$ref": "#/$defs/Stype"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "stype"
+      ]
+    },
+    "Dtype": {
+      "description": "PQL's data types.",
+      "type": "string",
+      "enum": [
+        "bool",
+        "int",
+        "byte",
+        "int16",
+        "int32",
+        "int64",
+        "float",
+        "float32",
+        "float64",
+        "string",
+        "binary",
+        "date",
+        "time",
+        "timedelta",
+        "floatlist",
+        "intlist",
+        "stringlist",
+        "unsupported"
+      ]
+    },
+    "Stype": {
+      "description": "PQL's semantic types.",
+      "type": "string",
+      "enum": [
+        "numerical",
+        "categorical",
+        "multicategorical",
+        "ID",
+        "text",
+        "timestamp",
+        "sequence",
+        "image",
+        "unsupported"
+      ]
+    },
+    "ColumnRef": {
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
+    },
+    "SourceSpec": {
+      "description": "The tables a source is described by, and what the caller declared of\nthem.",
+      "type": "object",
+      "properties": {
+        "tables": {
+          "description": "The tables to describe, in order, each by the name the schema gives\nit and the name the source holds it under; empty, every table the\nsource lists, each under its own name (decision E59).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NamedTable"
+          }
+        },
+        "primary_keys": {
+          "description": "Declared primary keys, by the schema's name of the table: each its\ncolumns in order, `null` naming none (refused as an empty key), or\n`unreadable` for a value the host could not write as an ordered\nsequence of names (the conformance rule on [`Given`]), which the\ncore refuses (decision E101).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Given"
+          }
+        },
+        "time_columns": {
+          "description": "Declared time columns, by the schema's name of the table: a name,\n`null` saying the table has none, as the caller's `None` does\n(decision E61), or `unreadable` for a value that is not a name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Given2"
+          }
+        },
+        "relationships": {
+          "description": "The relationships given, each `[foreign key, referenced key]` by the\nschema's names, in place of the declared and inferred ones; an empty\nlist says there are none. Left out, they are the source's declared\nforeign keys and the links inferred by name (decision E59).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ColumnRef"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tables",
+        "primary_keys",
+        "time_columns"
+      ]
+    },
+    "NamedTable": {
+      "description": "A table named for the schema: the name a query uses, and the source's\nname of the table it reads.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source"
+      ]
+    },
+    "Given": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Given2": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "SourceDescription": {
+      "description": "The described schema.",
+      "type": "object",
+      "properties": {
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DescribedTable"
+          }
+        },
+        "links": {
+          "description": "The relationships, each `[foreign key, referenced key]`, once: in a\ndescription `describe_source` answers, the declared foreign keys and\nthe links inferred by name that can join, in that order (decision\nE55); in `materialize`'s schema, the host's.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ColumnRef"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tables",
+        "links"
+      ]
+    },
+    "DescribedTable": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "description": "The source's name of the table this one reads: its own name unless\nthe caller named it otherwise (decision E59).",
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DescribedColumn"
+          }
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "time_column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time_column_inferred": {
+          "description": "The column inference took as the time column, when the table's\ntime column is now another or none: a lone stamp of the last edit a\nlink then refused (decision E55), or the column inference took where\nthe caller named another (decision E59). `None` when the time column\nis inference's, or inference took none. The host's schema was\nordered by it first, as the reference's was; `materialize` does not\nread it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duplicate_keys": {
+          "description": "Rows sharing a key value, when keys were checked: a `u64` scalar.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Scalar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "columns",
+        "primary_key"
+      ]
+    },
+    "DescribedColumn": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "received": {
+          "description": "The type the provider handed over, after admission.",
+          "$ref": "#/$defs/ColumnType"
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype"
+        },
+        "stype": {
+          "description": "What the column means in the schema as it stands: `ID` for a column\nthe schema joins on, its primary key or a link's foreign key\n(decision E55).",
+          "$ref": "#/$defs/Stype"
+        },
+        "stype_before_key": {
+          "description": "What the column meant before the schema's joining on it made it an\nidentifier, given back when the schema stops joining on it; `None`\nwhen joining on it changed nothing, or it is not joined on. In a\ndescription `describe_source` answers, the core's; in `materialize`'s\nschema, what the host holds, from which the core marks the columns\njoined on again (decision E55).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stype"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "nullable": {
+          "description": "Whether the column may hold no value, as the catalog declares it:\nneither declared `NOT NULL` nor part of the declared primary key.",
+          "type": "boolean"
+        },
+        "unique": {
+          "description": "Whether the catalog declares a primary or unique key of this one\ncolumn, which the source refuses to repeat.",
+          "type": "boolean"
+        },
+        "declared_type": {
+          "description": "The column's type as the source's catalog declares it (`describe`\ncolumns' `type`, as the source spells it), kept only for a\nbig-integer column the host layer read from an opaque extension type\n(a HUGEINT, UHUGEINT or VARINT, marked [`crate::data::BIG_INTEGER_MARKER`]):\na key the data layer joins a `decimal128(38, 0)` seed to in the key's\nown type, so `materialize` asks the source nothing more (register\nP1B-43). `None` for every other column, which joins as before part\n3, and absent from the JSON.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "received",
+        "dtype",
+        "stype",
+        "nullable",
+        "unique"
+      ]
+    },
+    "ColumnType": {
+      "description": "A type of the closed set.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int8"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int16"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "int64"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint8"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint16"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "uint64"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "float32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "float64"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "precision": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "scale": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "type": {
+              "type": "string",
+              "const": "decimal128"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "precision",
+            "scale"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "precision": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "scale": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "type": {
+              "type": "string",
+              "const": "decimal256"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "precision",
+            "scale"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "utf8"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "binary"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "date32"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "timestamp"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "type": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "type": {
+              "type": "string",
+              "const": "time64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/Field"
+            },
+            "type": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "item"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Field"
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "struct"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "fields"
+          ]
+        },
+        {
+          "description": "`entries` is the name of Arrow's entries struct, kept so the type\nleaves exactly as it came.",
+          "type": "object",
+          "properties": {
+            "entries": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Field"
+            },
+            "value": {
+              "$ref": "#/$defs/Field"
+            },
+            "sorted": {
+              "type": "boolean"
+            },
+            "type": {
+              "type": "string",
+              "const": "map"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "entries",
+            "key",
+            "value",
+            "sorted"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "index": {
+              "$ref": "#/$defs/IndexType"
+            },
+            "type": {
+              "type": "string",
+              "const": "dictionary_utf8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "index"
+          ]
+        }
+      ]
+    },
+    "Unit": {
+      "description": "The unit of a timestamp, duration or time of day.",
+      "type": "string",
+      "enum": [
+        "ns",
+        "us"
+      ]
+    },
+    "Field": {
+      "description": "A named, typed column or child of a nested type.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ColumnType"
+        },
+        "nullable": {
+          "type": "boolean"
+        },
+        "metadata": {
+          "description": "Arrow field metadata, kept as it came.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "nullable"
+      ]
+    },
+    "IndexType": {
+      "description": "The index type of a dictionary.",
+      "type": "string",
+      "enum": [
+        "int8",
+        "int16",
+        "int32",
+        "int64",
+        "uint8",
+        "uint16",
+        "uint32",
+        "uint64"
+      ]
+    },
+    "Scalar": {
+      "description": "The encoded form: what crosses the boundary, field for field.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "t": {
+              "type": "string",
+              "const": "null"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "boolean"
+            },
+            "t": {
+              "type": "string",
+              "const": "bool"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i16"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "i64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u16"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "u64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/FloatText"
+            },
+            "t": {
+              "type": "string",
+              "const": "f32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/FloatText"
+            },
+            "t": {
+              "type": "string",
+              "const": "f64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "description": "The unscaled integer: the value is `v * 10^-s`.",
+          "type": "object",
+          "properties": {
+            "p": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "s": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "d128"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "p",
+            "s",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "p": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "s": {
+              "type": "integer",
+              "format": "int8",
+              "minimum": -128,
+              "maximum": 127
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "d256"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "p",
+            "s",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "const": "utf8"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "description": "Standard base64 with padding.",
+          "type": "object",
+          "properties": {
+            "v": {
+              "type": "string"
+            },
+            "t": {
+              "type": "string",
+              "const": "binary"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "date32"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "zone": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "ts"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "duration"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "unit": {
+              "$ref": "#/$defs/Unit"
+            },
+            "v": {
+              "$ref": "#/$defs/Digits"
+            },
+            "t": {
+              "type": "string",
+              "const": "time64"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "t",
+            "unit",
+            "v"
+          ]
+        }
+      ]
+    },
+    "Digits": {
+      "type": "string",
+      "pattern": "^(0|-?[1-9][0-9]*)$"
+    },
+    "FloatText": {
+      "type": "string",
+      "pattern": "^(NaN|inf|-inf|-?[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)$"
+    },
+    "HeldSchema": {
+      "description": "A schema as a host holds it, beside the description the core last\nanswered of it (decision E67): the host's schema may have been changed\nsince in ways no edit the core takes says (a table or column added, a\ncolumn retyped, a table mapped to another source table, a table or\ncolumn dropped from its dictionary). `edit_schema` and `materialize`\nread the description as the host holds it: its tables, columns,\nmeanings, keys, time columns and links the host's, what the source said\nof each column the description's; a table or column the description\nlacks, a column of another data type, or a table of another source is\nrefused by name (`schema_edited`).",
+      "type": "object",
+      "properties": {
+        "tables": {
+          "description": "The host's tables as they stand, in its order, each by the name the\nschema gives it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldTable"
+          }
+        },
+        "links": {
+          "description": "The host's relationships as they stand, each\n`[foreign key, referenced key]`.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ColumnRef"
+            }
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tables",
+        "links"
+      ]
+    },
+    "HeldTable": {
+      "description": "One table as the host holds it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "description": "The source's name of the table it reads, as the host holds it.",
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldColumn"
+          }
+        },
+        "primary_key": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "time_column": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "columns",
+        "primary_key"
+      ]
+    },
+    "HeldColumn": {
+      "description": "One column as the host holds it.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dtype": {
+          "description": "The column's data type as the host names it, on the client's wire\n([`Dtype::wire_name`]).",
+          "type": "string"
+        },
+        "stype": {
+          "$ref": "#/$defs/Stype"
+        },
+        "stype_before_key": {
+          "description": "What the column meant before the schema joined on it, as the host\nholds it ([`DescribedColumn::stype_before_key`]).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Stype"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "dtype",
+        "stype"
+      ]
+    },
+    "SchemaEdit": {
+      "description": "One edit to a schema, as the caller made it to the host's schema, each\nvalue as the contract writes it or [`Given::Unreadable`]: the host\npasses every edit it is given, and the core takes or refuses it.",
+      "oneOf": [
+        {
+          "description": "A table's primary key set (`schema[table].primary_key = key`), its\ncolumns in order, or cleared (`null`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "$ref": "#/$defs/Given"
+            },
+            "edit": {
+              "type": "string",
+              "const": "primary_key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "key"
+          ]
+        },
+        {
+          "description": "A table's time column set (`schema[table].time_column = column`),\nor cleared (`null`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "$ref": "#/$defs/Given2"
+            },
+            "edit": {
+              "type": "string",
+              "const": "time_column"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "column"
+          ]
+        },
+        {
+          "description": "A column's meaning set (`schema[table][column].stype = stype`), as\nthe text the caller gave.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "type": "string"
+            },
+            "stype": {
+              "$ref": "#/$defs/Given3"
+            },
+            "edit": {
+              "type": "string",
+              "const": "stype"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "column",
+            "stype"
+          ]
+        },
+        {
+          "description": "A column left out (`del schema[table][column]`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "column": {
+              "$ref": "#/$defs/Given3"
+            },
+            "edit": {
+              "type": "string",
+              "const": "leave_out"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "table",
+            "column"
+          ]
+        },
+        {
+          "description": "The relationships replaced (`schema.relationships = links`), or\nedited as a list, as the list stands after the edit; each\n`[foreign key, referenced key]`.",
+          "type": "object",
+          "properties": {
+            "links": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Given4"
+              }
+            },
+            "edit": {
+              "type": "string",
+              "const": "relationships"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "edit",
+            "links"
+          ]
+        }
+      ]
+    },
+    "Given3": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Given4": {
+      "description": "A value a caller gave an edit or `describe_source`: the value, as the\ncontract writes it, or a value of the host's own no contract type holds\n(a key named by a number, a set of names, a relationship that is not\none), which the core refuses as the reference refuses it.\n\nThe conformance rule every host holds to (decision E101): the host's\nnull or none is `{\"value\": null}`; text is the value; a finite, ordered\ncollection read once without error, every member non-null text, is a\nlist of those texts; a collection with a null, non-text or nested\nmember, a collection with no order, a mapping, binary data, a number, a\nboolean, a temporal value or anything else is `unreadable`. Text the\nhost cannot encode as UTF-8 is the host's encoding refusal, and an\nerror raised while reading a collection is the caller's, never\n`unreadable`. Whether a value is valid (an empty key, a column the\ntable lacks) is the core's call, never the host's.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ColumnRef"
+              }
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CallValues": {
+      "type": "object"
+    },
+    "SamplerMemo": {
+      "description": "[`SamplerState`]'s memo: what the runs read, and of what.",
+      "type": "object",
+      "properties": {
+        "source": {
+          "description": "A fingerprint of the provider and source description the memo was\nmade under; a memo of another is not read.",
+          "type": "string"
+        },
+        "indexes_checked": {
+          "description": "Whether the sampler's check of the indexes its reads would use was\nmade (and its warning given, if any).",
+          "type": "boolean"
+        },
+        "bounds": {
+          "description": "The time bounds read, at most one entry per table.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemoBounds"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "indexes_checked",
+        "bounds"
+      ]
+    },
+    "MemoBounds": {
+      "description": "The smallest and largest time of one table's time column, as read, in\nnanoseconds since the epoch; none where no row holds a time.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "description": "The table, as the schema names it.",
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        },
+        "min": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        },
+        "max": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
+    },
+    "StatePayload": {
+      "title": "StatePayload",
+      "description": "The payload of one prediction request: a regression's by default, a\nclassification's with [`ClassTarget`] and [`ClassificationConfig`].",
+      "type": "object",
+      "properties": {
+        "model": {
+          "description": "The model the request was laid out for.",
+          "type": "string"
+        },
+        "task": {
+          "description": "What is predicted, of which entity: a task of each kind, its kind's\nname and its target. The schema of [`Task`] of each target, for the\nschema only.",
+          "anyOf": [
+            {
+              "description": "A regression's task, for the schema only.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "regression"
+                  ]
+                },
+                "target": {
+                  "description": "The label column of the instance table: a regression's.",
+                  "type": "object",
+                  "properties": {
+                    "column_name": {
+                      "type": "string"
+                    },
+                    "dtype": {
+                      "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                      "type": "string",
+                      "enum": [
+                        "int64",
+                        "float32",
+                        "float64",
+                        "string",
+                        "stringlist",
+                        "bool",
+                        "timestamp[us]"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "column_name",
+                    "dtype"
+                  ]
+                },
+                "entity_table_names": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "anchor_time_column": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "target",
+                "entity_table_names"
+              ]
+            },
+            {
+              "description": "A binary task, for the schema only.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "binary_classification"
+                  ]
+                },
+                "target": {
+                  "description": "A binary task's label column: its classes and positive class.",
+                  "type": "object",
+                  "properties": {
+                    "column_name": {
+                      "type": "string"
+                    },
+                    "dtype": {
+                      "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                      "type": "string",
+                      "enum": [
+                        "int64",
+                        "float32",
+                        "float64",
+                        "string",
+                        "stringlist",
+                        "bool",
+                        "timestamp[us]"
+                      ]
+                    },
+                    "classes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "positive_class": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "column_name",
+                    "dtype",
+                    "classes",
+                    "positive_class"
+                  ]
+                },
+                "entity_table_names": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "anchor_time_column": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "target",
+                "entity_table_names"
+              ]
+            },
+            {
+              "description": "A multiclass task, for the schema only.",
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "multiclass_classification"
+                  ]
+                },
+                "target": {
+                  "description": "A multiclass task's label column: its classes, no positive class.",
+                  "type": "object",
+                  "properties": {
+                    "column_name": {
+                      "type": "string"
+                    },
+                    "dtype": {
+                      "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                      "type": "string",
+                      "enum": [
+                        "int64",
+                        "float32",
+                        "float64",
+                        "string",
+                        "stringlist",
+                        "bool",
+                        "timestamp[us]"
+                      ]
+                    },
+                    "classes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "column_name",
+                    "dtype",
+                    "classes"
+                  ]
+                },
+                "entity_table_names": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "anchor_time_column": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "target",
+                "entity_table_names"
+              ]
+            }
+          ]
+        },
+        "schema": {
+          "description": "The schema of the request's tables and the links between them.",
+          "type": "object",
+          "properties": {
+            "instance_table": {
+              "description": "One table's schema: its columns, in order, and its key.",
+              "type": "object",
+              "properties": {
+                "columns": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "description": "One column's spec.",
+                    "type": "object",
+                    "properties": {
+                      "dtype": {
+                        "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                        "type": "string",
+                        "enum": [
+                          "int64",
+                          "float32",
+                          "float64",
+                          "string",
+                          "stringlist",
+                          "bool",
+                          "timestamp[us]"
+                        ]
+                      },
+                      "stype": {
+                        "description": "The column's semantic type, where the schema gives one.",
+                        "type": "string",
+                        "enum": [
+                          "numerical",
+                          "categorical",
+                          "multicategorical",
+                          "ID",
+                          "text",
+                          "timestamp",
+                          "sequence",
+                          "image",
+                          "unsupported"
+                        ]
+                      },
+                      "nullable": {
+                        "description": "`false` for a column of the key; never written otherwise.",
+                        "type": "boolean"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "dtype"
+                    ]
+                  }
+                },
+                "primary_key": {
+                  "description": "A table's key: one column, or several.",
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "columns",
+                "primary_key"
+              ]
+            },
+            "related_tables": {
+              "type": "object",
+              "additionalProperties": {
+                "description": "One table's schema: its columns, in order, and its key.",
+                "type": "object",
+                "properties": {
+                  "columns": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "description": "One column's spec.",
+                      "type": "object",
+                      "properties": {
+                        "dtype": {
+                          "description": "A column's type on the wire, as the reference's engine names it\n(`_dtype_name`, `_list_dtype_name`).",
+                          "type": "string",
+                          "enum": [
+                            "int64",
+                            "float32",
+                            "float64",
+                            "string",
+                            "stringlist",
+                            "bool",
+                            "timestamp[us]"
+                          ]
+                        },
+                        "stype": {
+                          "description": "The column's semantic type, where the schema gives one.",
+                          "type": "string",
+                          "enum": [
+                            "numerical",
+                            "categorical",
+                            "multicategorical",
+                            "ID",
+                            "text",
+                            "timestamp",
+                            "sequence",
+                            "image",
+                            "unsupported"
+                          ]
+                        },
+                        "nullable": {
+                          "description": "`false` for a column of the key; never written otherwise.",
+                          "type": "boolean"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "dtype"
+                      ]
+                    }
+                  },
+                  "primary_key": {
+                    "description": "A table's key: one column, or several.",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "columns",
+                  "primary_key"
+                ]
+              }
+            },
+            "relationships": {
+              "type": "array",
+              "items": {
+                "description": "A link from columns of one table to columns of another; the link from\nthe instance table names no source table.",
+                "type": "object",
+                "properties": {
+                  "source_table": {
+                    "type": "string"
+                  },
+                  "source_columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "target_table": {
+                    "type": "string"
+                  },
+                  "target_columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "source_columns",
+                  "target_table",
+                  "target_columns"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "instance_table",
+            "related_tables",
+            "relationships"
+          ]
+        },
+        "context": {
+          "description": "The examples with a label, and the rows sampled for them.",
+          "type": "object",
+          "properties": {
+            "instance_table": {
+              "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
+              "type": "object",
+              "properties": {
+                "format": {
+                  "description": "How rows are written: `arrays` alone.",
+                  "type": "string",
+                  "enum": [
+                    "arrays"
+                  ]
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": true
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "format",
+                "columns",
+                "rows"
+              ]
+            },
+            "related_tables": {
+              "type": "object",
+              "additionalProperties": {
+                "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "description": "How rows are written: `arrays` alone.",
+                    "type": "string",
+                    "enum": [
+                      "arrays"
+                    ]
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": true
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "format",
+                  "columns",
+                  "rows"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "instance_table",
+            "related_tables"
+          ]
+        },
+        "predict": {
+          "description": "The examples to predict, and the rows sampled for them.",
+          "type": "object",
+          "properties": {
+            "instance_table": {
+              "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
+              "type": "object",
+              "properties": {
+                "format": {
+                  "description": "How rows are written: `arrays` alone.",
+                  "type": "string",
+                  "enum": [
+                    "arrays"
+                  ]
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "rows": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": true
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "format",
+                "columns",
+                "rows"
+              ]
+            },
+            "related_tables": {
+              "type": "object",
+              "additionalProperties": {
+                "description": "A table's rows as `arrays` JSON: its columns, then one array of cells\nper row, each cell any JSON value its column's dtype gives.",
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "description": "How rows are written: `arrays` alone.",
+                    "type": "string",
+                    "enum": [
+                      "arrays"
+                    ]
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": true
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "format",
+                  "columns",
+                  "rows"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "instance_table",
+            "related_tables"
+          ]
+        },
+        "output": {
+          "description": "The outputs asked for.",
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "prediction_statistic": {
+              "description": "A regression's statistic, where the caller chose one (T1.28a).",
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "fields"
+          ]
+        },
+        "inference": {
+          "description": "How the model is run.",
+          "type": "object",
+          "properties": {
+            "run_mode": {
+              "type": "string"
+            },
+            "use_prediction_time": {
+              "type": "boolean"
+            },
+            "inference_config": {
+              "description": "The engine's inference options, a regression's or a classification's,\neach its own type, told apart by its kind: the schema of both, for the\nschema only.",
+              "anyOf": [
+                {
+                  "description": "A regression's inference options, as the engine writes them\n(`_inference_config_to_json`).",
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "description": "`regression`, the schema holds.",
+                      "type": "string",
+                      "enum": [
+                        "regression"
+                      ]
+                    },
+                    "num_estimators": {
+                      "type": "integer",
+                      "format": "uint64",
+                      "minimum": 0
+                    },
+                    "column_shuffle": {
+                      "type": "boolean"
+                    },
+                    "category_shuffle": {
+                      "type": "boolean"
+                    },
+                    "hop_shuffle": {
+                      "type": "boolean"
+                    },
+                    "class_shuffle": {
+                      "description": "The reader's, not the writer's: a regression's options hold none.",
+                      "type": "boolean"
+                    },
+                    "target_transforms": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "output_type": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "num_estimators",
+                    "column_shuffle",
+                    "category_shuffle",
+                    "hop_shuffle",
+                    "target_transforms",
+                    "output_type"
+                  ]
+                },
+                {
+                  "description": "A classification's inference options, as the engine writes them.",
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "description": "`classification`, the schema holds.",
+                      "type": "string",
+                      "enum": [
+                        "classification"
+                      ]
+                    },
+                    "num_estimators": {
+                      "type": "integer",
+                      "format": "uint64",
+                      "minimum": 0
+                    },
+                    "column_shuffle": {
+                      "type": "boolean"
+                    },
+                    "category_shuffle": {
+                      "type": "boolean"
+                    },
+                    "hop_shuffle": {
+                      "type": "boolean"
+                    },
+                    "class_shuffle": {
+                      "description": "Always written; a reader may meet a state without it.",
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "num_estimators",
+                    "column_shuffle",
+                    "category_shuffle",
+                    "hop_shuffle"
+                  ]
+                }
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "run_mode",
+            "use_prediction_time",
+            "inference_config"
+          ]
+        },
+        "metadata": {
+          "description": "What the request was made from.",
+          "type": "object",
+          "properties": {
+            "source_query": {
+              "description": "The query, as the reference writes it back; none when it is empty.",
+              "type": "string"
+            },
+            "num_context_examples": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "num_prediction_examples": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "num_context_examples",
+            "num_prediction_examples"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "task",
+        "schema",
+        "context",
+        "predict",
+        "output",
+        "inference",
+        "metadata"
+      ],
+      "x-request-state-version": 1
+    },
+    "EndpointMetadata": {
+      "type": "object"
+    },
+    "HostFacts": {
+      "description": "The facts a host passes with every operation.",
+      "type": "object",
+      "properties": {
+        "now": {
+          "description": "The clock: a `ts` scalar in UTC. Two-digit years and \"now\" read it.",
+          "$ref": "#/$defs/Scalar"
+        },
+        "local_zone": {
+          "description": "The host's local zone, if it knows one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalZone"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "zone_roots": {
+          "description": "The zone lookup roots, in the order the host's own zone library\nsearches them; the core falls back to its bundled database.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ZoneRootFact"
+          }
+        },
+        "platform": {
+          "$ref": "#/$defs/PlatformFacts"
+        },
+        "date_literal_range": {
+          "description": "The instants the host can hold a PQL date literal as, when it holds\nfewer than the core reads (years 0 to 9999); none when it holds them\nall. A literal outside them is refused as one that cannot be read\n(`PQL_VALUE_INVALID_LITERAL`), as the reference refuses it on such a\nhost: pandas 2 holds a literal as a nanosecond `Timestamp`.\n\nA bridge fact: it is needed only because the Python host's S0\nshadow check runs the old pandas validator on every query the core\naccepts. It is deleted with that check in Phase 5, and the core then\nreads years 0 to 9999 on every host.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InstantRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "now",
+        "zone_roots",
+        "platform"
+      ]
+    },
+    "LocalZone": {
+      "description": "The host's local zone, as the host's own platform names it: an IANA\nname, or a POSIX `TZ` string where the platform has no IANA name for it.",
+      "oneOf": [
+        {
+          "description": "An IANA zone name, such as `Europe/Berlin`.",
+          "type": "object",
+          "properties": {
+            "iana": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "iana"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A POSIX `TZ` string, such as `EST5EDT,M3.2.0,M11.1.0`.",
+          "type": "object",
+          "properties": {
+            "posix": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "posix"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ZoneRootFact": {
+      "description": "One zone lookup root, with the database version the host read there.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "PlatformFacts": {
+      "description": "Platform behavior the reference depends on.",
+      "type": "object",
+      "properties": {
+        "os": {
+          "description": "The operating system, as the host names it (`linux`, `darwin`,\n`windows`).",
+          "type": "string"
+        },
+        "strftime_pads_year": {
+          "description": "Whether the platform's `strftime` pads years below 1000 to four\ndigits (`date-rules.md`).",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "strftime_pads_year"
+      ]
+    },
+    "InstantRange": {
+      "description": "Instants, inclusive at both ends, as nanoseconds from the Unix epoch on\na literal's own wall clock.",
+      "type": "object",
+      "properties": {
+        "min_ns": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "max_ns": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "min_ns",
+        "max_ns"
+      ]
+    },
+    "Operation": {
+      "description": "One operation's request.",
+      "oneOf": [
+        {
+          "description": "Validate a predictive query against a schema, for a profile.",
+          "type": "object",
+          "properties": {
+            "query": {
+              "description": "The query text: a bytes attachment of a JSON string.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "schema": {
+              "description": "A bytes attachment of a [`QuerySchema`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "profile": {
+              "$ref": "#/$defs/ProfileSpec"
+            },
+            "op": {
+              "type": "string",
+              "const": "validate_query"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "query",
+            "schema",
+            "profile"
+          ]
+        },
+        {
+          "description": "Describe the tables of a source: types, keys and time columns.",
+          "type": "object",
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/ProviderChoice"
+            },
+            "source": {
+              "description": "A bytes attachment of a [`SourceSpec`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "check_keys": {
+              "description": "Whether to count duplicate keys.",
+              "type": "boolean"
+            },
+            "op": {
+              "type": "string",
+              "const": "describe_source"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "provider",
+            "source",
+            "check_keys"
+          ]
+        },
+        {
+          "description": "Check one edit to a schema the core described and make it, as the\nreference client's setters check and make it (decision E67): the\nschema the host holds, and the edit; the result is the schema with the\nedit made, or the refusal the reference gives at the assignment.",
+          "type": "object",
+          "properties": {
+            "schema": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the\ndescription the core last answered of the schema,\n`describe_source`'s or the last `edit_schema`'s.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "held": {
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands; left out, the host holds `schema` as it is.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "edit": {
+              "description": "A bytes attachment of a [`SchemaEdit`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "edit_schema"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "schema",
+            "edit"
+          ]
+        },
+        {
+          "description": "Build a request for a query over a described source.",
+          "type": "object",
+          "properties": {
+            "provider": {
+              "$ref": "#/$defs/ProviderChoice"
+            },
+            "schema": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the\ndescription the core last answered of the schema, or the schema to\nsample.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "held": {
+              "description": "A bytes attachment of a [`HeldSchema`] as JSON: the host's schema as\nit stands, which the core reads beside `schema` (decision E67); left\nout, the host holds `schema` as it is.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "query": {
+              "description": "The query text: a bytes attachment of a JSON string.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "indices": {
+              "description": "The entities to predict for: an Arrow attachment of one column.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "anchor_time": {
+              "description": "The anchor time, a `ts` scalar.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Scalar"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "seed": {
+              "description": "The sampling seed, an integer of any size.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Seed"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "unseeded": {
+              "description": "Whether the caller asked for an unseeded sample, a new one each\ncall (`random_seed=None`), with `seed` left out; the core samples\nunder a seed and refuses it by name, `unseeded` (decision E61).",
+              "type": "boolean"
+            },
+            "anchor_entity": {
+              "description": "Whether the caller anchored each entity at its own time\n(`anchor_time='entity'`), with `anchor_time` left out; refused by\nname, `anchor_entity`, until the core takes it (decision E61).",
+              "type": "boolean"
+            },
+            "values": {
+              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample). The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "options": {
+              "description": "The names of the call's other sampling options, which this message\ncarries no value of (the reference's `context_anchor_time`,\n`exclude_cols_dict`, `lag_timesteps`,\n`max_pq_iterations`, `num_hops`, `num_neighbors`,\n`return_embeddings`, `top_k` and `use_prediction_time`): the core\ntakes none of them yet and refuses the first in name order by its\nname, and another name as `INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "most_parts": {
+              "description": "The most steps a forecast is asked as, one call each, which the host\nlets its caller set (the client's `decompose.MOST_PARTS`); 200 where\nit names none. A forecast of more is refused, `INVALID_REQUEST`, rule\n`too_many_parts` (T1.36 fix 21).",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "sampler_state": {
+              "description": "The sampler state the materializer's last run left, which the host\nhands back as it took it (decision E52); none for a materializer's\nfirst run.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SamplerState"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "const": "materialize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "provider",
+            "schema",
+            "query"
+          ]
+        },
+        {
+          "description": "Send a materialized request to the model and lay out its answer.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "$ref": "#/$defs/RequestState"
+            },
+            "model": {
+              "description": "The model id the request is sent to, as the wire names it.",
+              "type": "string"
+            },
+            "request_id": {
+              "description": "The id the request carries in its `metadata.request_id`. The host\ndraws it, as the reference's client draws one for every request; the\ncore draws nothing at random but under a seed.",
+              "type": "string"
+            },
+            "outputs": {
+              "description": "The outputs the caller asked for, by the wire's names, in order,\nas given (a name repeated, kept), which the core checks against the\nmodel as the client's `_prepare` does: an empty list refused\n(`INVALID_REQUEST`), a name the model does not produce refused\n(`UNSUPPORTED_REQUEST`). Empty when [`Predict::default_outputs`].",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "default_outputs": {
+              "description": "The caller named no outputs: the core asks the task's default ones\n(a regression's `prediction`, a classification's `prediction` and\n`probabilities`), and gives no notice of one the answer leaves out,\nwhich it gives only for outputs the caller named (T1.28b).",
+              "type": "boolean"
+            },
+            "inference_asked": {
+              "description": "The inference-config keys the caller set at `materialize`, rather\nthan left to their defaults, as the host holds them: a key the model\ndoes not read among them is refused before the call is made, the\nothers' defaults left out of it silently (T1.28a).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "op": {
+              "type": "string",
+              "const": "predict"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "state",
+            "model",
+            "request_id",
+            "outputs"
+          ]
+        }
+      ]
+    },
+    "AttachmentId": {
+      "description": "Names an attachment that travels beside a control message: Arrow data\n(a fetch's result, a key set, a predict result) or bytes (a model\nrequest or response body).",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "ProfileSpec": {
+      "description": "A named profile, optionally naming the model in diagnostics and\nchanging named capabilities, as the language's `Profile.named` and\n`Capabilities.also` do. The profiles themselves are the core's.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/ProfileName"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "counterfactuals": {
+              "type": "boolean"
+            },
+            "derived_targets": {
+              "type": "boolean"
+            },
+            "entity_filters": {
+              "type": "boolean"
+            },
+            "forecasting": {
+              "type": "boolean"
+            },
+            "key_columns_in_filters": {
+              "type": "boolean"
+            },
+            "link_prediction": {
+              "type": "boolean"
+            },
+            "multiple_tables": {
+              "type": "boolean"
+            },
+            "relationships": {
+              "type": "boolean"
+            },
+            "static": {
+              "type": "boolean"
+            },
+            "temporal": {
+              "type": "boolean"
+            },
+            "timestamp_columns_in_filters": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ]
+    },
+    "ProfileName": {
+      "type": "string",
+      "enum": [
+        "FINE_TUNING",
+        "RELATIONAL",
+        "TABULAR",
+        "TIMESERIES",
+        "ANOMALY"
+      ]
+    },
+    "ProviderChoice": {
+      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "dialect": {
+              "$ref": "#/$defs/Dialect"
+            },
+            "provider": {
+              "type": "string",
+              "const": "sql"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "dialect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "capabilities": {
+              "$ref": "#/$defs/ProviderCapabilities"
+            },
+            "provider": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "provider",
+            "capabilities"
+          ]
+        }
+      ]
+    },
+    "Dialect": {
+      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none (decision E54): which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
+      "type": "string"
+    },
+    "ProviderCapabilities": {
+      "description": "What a provider answers: a host provider declares it, and the data\nlayer gives it for each SQL dialect it renders.",
+      "type": "object",
+      "properties": {
+        "optional": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/OptionalRequest"
+          }
+        },
+        "max_keys_per_request": {
+          "description": "The most keys one request may carry; `None` is no limit.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sampling": {
+          "$ref": "#/$defs/Determinism"
+        },
+        "max_seed": {
+          "description": "The largest seed the provider samples with (register entry RS-7);\n`None` takes any non-negative integer. The core refuses a sample\nwith a larger seed, `INVALID_REQUEST` naming the seed, before the\nsample is planned; which seeds a provider takes is the provider's\nto declare, never a name the core matches.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "text_times": {
+          "description": "How the source reads a time it stores as text (register DT-7);\n`None` declares no reading, and the core refuses to read text times\nfrom it (`UNSUPPORTED_REQUEST`, rule `text_times`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextTimes"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "null_order": {
+          "description": "Where the source puts a null when it orders (`NullOrder`); `None`\ndeclares none, and the core refuses to ask it for rows in an order\n(`UNSUPPORTED_REQUEST`, rule `null_order`).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NullOrder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index_advice": {
+          "description": "Which indexes serve the sampler's reads (`IndexAdvice`); `None`\ndeclares no meaningful index advice: the core neither reads the\nsource's indexes nor warns of missing ones.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IndexAdvice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "optional",
+        "sampling"
+      ]
+    },
+    "OptionalRequest": {
+      "description": "The optional requests a provider may declare.",
+      "type": "string",
+      "enum": [
+        "preview",
+        "count_rows",
+        "key_counts",
+        "time_bounds",
+        "column_ranges",
+        "repeated_key",
+        "sample_entities",
+        "neighbors",
+        "lookup"
+      ]
+    },
+    "Determinism": {
+      "description": "Whether a provider's seeded sampling repeats.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "unseeded"
+          ]
+        },
+        {
+          "description": "The same seed gives the same rows on this provider.",
+          "type": "string",
+          "const": "seeded_stable"
+        }
+      ]
+    },
+    "TextTimes": {
+      "description": "How a provider's source reads a time it stores as text: which of the\nreference's two readings the core applies to the text it fetches from\nthe provider (register DT-7). The provider declares it; the core picks\nits reader by it, never by a dialect.",
+      "oneOf": [
+        {
+          "description": "Each value on its own, as the reference's engine reads a SQL\nsource's text time column (`to_datetime(values, unit='ns')`).",
+          "type": "string",
+          "const": "value_by_value"
+        },
+        {
+          "description": "The column by the client's rules (`date-rules.md`, \"The client\nrules\"), as the reference reads a frame's time column.",
+          "type": "string",
+          "const": "client_rules"
+        }
+      ]
+    },
+    "NullOrder": {
+      "description": "Where a provider's source puts a null among the values it orders, in\neither direction: the order the reference's neighbor reads get from the\nsource, which writes no null order of its own (`_neighbor_order_by`).\nThe provider declares it; the core writes it into the tie-break it asks\nfor ([`TieTerm::nulls_last`]), never by a dialect. A source whose order\ndepends on the direction is not declarable yet: the dialect that needs\none adds it under a new contract version.",
+      "oneOf": [
+        {
+          "description": "Nulls first, ascending or descending.",
+          "type": "string",
+          "const": "first"
+        },
+        {
+          "description": "Nulls last, ascending or descending.",
+          "type": "string",
+          "const": "last"
+        }
+      ]
+    },
+    "IndexAdvice": {
+      "description": "Which of the source's indexes the reference's sampler counts as serving\na read on a key or foreign key, for its warning of the indexes it would\nuse and finds missing. The provider declares it; the core reads the\nsource's indexes, and warns, only when it is declared.",
+      "oneOf": [
+        {
+          "description": "An index over exactly that one column, its coverage resolved; one\nover several columns, or one the reader cannot resolve, serves none.",
+          "type": "string",
+          "const": "single_column"
+        }
+      ]
+    },
+    "Seed": {
+      "type": "string",
+      "pattern": "^(0x0|-?0x[1-9a-f][0-9a-f]*)$"
+    },
+    "SamplerState": {
+      "description": "What a materializer's runs have read of its source, so a later run\nskips a read the reference's sampler makes once (decision E52): the\ncore holds no state across runs. A `materialize` run leaves it, done or\nfailed, and the host takes it after the run ends (a `sampler_state`\nmessage), keeps it on its materializer as it is, opaque, and hands it\nback with that materializer's next `materialize`.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of this state's format, independent of the contract's.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "memo": {
+          "description": "A bytes attachment of a [`SamplerMemo`] as JSON.",
+          "$ref": "#/$defs/AttachmentId"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "memo"
+      ]
+    },
+    "RequestState": {
+      "description": "What `predict` needs of a materialized request: state that outlives the\nrun that made it. `materialize` answers it; the host takes its\nattachments when that run finishes, holds them, and attaches them again\nto the `start` of the `predict` run, under ids it picks for that\nmessage. A version other than [`REQUEST_STATE_VERSION`] is refused by\nname before anything of the state is read.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version of this state's format, independent of the contract's.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "payload": {
+          "description": "A bytes attachment of the request's payload as JSON, as\n`materialize` wrote it or as the host holds it since.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "The query text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "forecast": {
+          "description": "A forecast (`FORECAST n TIMEFRAMES`), which the core asks as one\nregression per step, the window moved a span along at each (T1.36\nfix 21): `payload` and `query` are step 1's, and this holds every\nlater step's, in order, empty for a forecast of one step. Absent for\nany other request. `predict` sends each step's payload and gives the\nanswers back as one, each row carrying its step.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ForecastStep"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "payload",
+        "query"
+      ]
+    },
+    "ForecastStep": {
+      "description": "One later step of a forecast's request state: its number, from 2, and\nits payload and query, as [`RequestState`]'s.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "payload": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this step's call carries in its `metadata.request_id`, which\nthe host draws for each step as it draws [`Predict::request_id`] for\nstep 1's, one per call as the reference's client draws them (T1.36\nfix 24). `materialize` writes none; `predict` refuses a later step\nwithout one (`INVALID_REQUEST`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "step",
+        "payload",
+        "query"
+      ]
+    },
+    "ReplyId": {
+      "description": "Names one fetch or model call within a run, so its reply can be matched.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "FetchOutcome": {
+      "oneOf": [
+        {
+          "description": "The rows, as an Arrow attachment.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "data"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/ProviderError"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "error"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "error"
+          ]
+        }
+      ]
+    },
+    "ProviderError": {
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE and vendor code. The driver's message and\nfree-text codes stay in the host, since drivers quote values there;\nnothing is matched on text.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "sqlstate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vendor_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "retryable"
+      ]
+    },
+    "ErrorKind": {
+      "description": "What kind of problem an error is.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "invalid_request"
+        },
+        {
+          "description": "A valid request the core does not support, such as a type outside\nthe closed set.",
+          "type": "string",
+          "const": "unsupported"
+        },
+        {
+          "description": "Something the request names does not exist.",
+          "type": "string",
+          "const": "not_found"
+        },
+        {
+          "description": "The data source or its driver failed.",
+          "type": "string",
+          "const": "data_source"
+        },
+        {
+          "description": "The model endpoint or its transport failed.",
+          "type": "string",
+          "const": "model_endpoint"
+        },
+        {
+          "description": "The run was cancelled.",
+          "type": "string",
+          "const": "cancelled"
+        },
+        {
+          "description": "The host broke the run protocol: a call in the wrong state, a reply\nthe run did not ask for, a malformed control message.",
+          "type": "string",
+          "const": "protocol"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "internal"
+        }
+      ]
+    },
+    "ModelOutcome": {
+      "oneOf": [
+        {
+          "description": "The endpoint answered, with any HTTP status; the body is an\nattachment of the bytes received.",
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "body": {
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "response"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "status",
+            "content_type",
+            "body"
+          ]
+        },
+        {
+          "description": "The transport failed before an answer: its kind and whether trying\nagain may succeed; the transport's message stays in the host.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/ErrorKind"
+            },
+            "retryable": {
+              "type": "boolean"
+            },
+            "outcome": {
+              "type": "string",
+              "const": "transport_error"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "outcome",
+            "kind",
+            "retryable"
+          ]
+        }
+      ]
+    },
+    "FetchStep": {
+      "description": "One data request of a fetch step, with how the run's provider answers\nit: the SQL statements its data layer planned, or the request passed to\na host provider, and the schema the answer must have.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/ReplyId"
+        },
+        "request": {
+          "$ref": "#/$defs/DataRequest"
+        },
+        "plan": {
+          "$ref": "#/$defs/FetchPlan"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "request",
+        "plan"
+      ]
+    },
+    "DataRequest": {
+      "description": "A typed request for data.",
+      "oneOf": [
+        {
+          "description": "One part of the catalog for the tables named (all when empty): what\nthe provider returns is in the shape its plan expects, which the\ndata layer reads into a [`CatalogAnswer`].",
+          "type": "object",
+          "properties": {
+            "tables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "part": {
+              "$ref": "#/$defs/DescribePart"
+            },
+            "request": {
+              "type": "string",
+              "const": "describe"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "tables",
+            "part"
+          ]
+        },
+        {
+          "description": "Every matching row of `table`, `columns` in order, paged through to\nthe end; `limit` asks for any `limit` rows instead.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "limit": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": {
+              "type": "string",
+              "const": "scan"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "columns",
+            "filters"
+          ]
+        },
+        {
+          "description": "The first rows of `table`, for inference.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "limit": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": {
+              "type": "string",
+              "const": "preview"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "columns",
+            "limit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "count_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "filters"
+          ]
+        },
+        {
+          "description": "For each key, in order, one row: its position, the table's rows, the\nkey's distinct values among rows holding all of it, and the rows\nmissing any part of it, as the reference's single `UNION ALL` reads\nthem.",
+          "type": "object",
+          "properties": {
+            "keys": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TableKey"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "key_counts"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "keys"
+          ]
+        },
+        {
+          "description": "For each time column, in order, one row: its position and the\nsmallest and largest `CAST(column AS TIMESTAMP)`, as the reference's\nsingle `UNION ALL` reads them.",
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/TableColumn"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "time_bounds"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "columns"
+          ]
+        },
+        {
+          "description": "One row: the rows of `table`, then, for each of `columns` in order,\nits smallest and largest value, each of the column's own type and\nnull when no row holds one, and the rows holding a value, read over\nevery row in one statement, as the reference's time column choice\nreads a table its preview may not hold whole (`_full_range`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "column_ranges"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "columns"
+          ]
+        },
+        {
+          "description": "At most one row: a value of `key` that more than one row of `table`\nholds, among the rows holding every part of it, as the reference\nreads one to show a repeated key (`_repeated_key_sql`).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "repeated_key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key"
+          ]
+        },
+        {
+          "description": "A seeded sample of `n` entities of `table` by `key`: `columns` in\norder, from the rows meeting every filter.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "n": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "seed": {
+              "$ref": "#/$defs/Scalar"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "request": {
+              "type": "string",
+              "const": "sample_entities"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "n",
+            "seed",
+            "columns",
+            "filters"
+          ]
+        },
+        {
+          "description": "The rows of `table` whose `key` equals a seed's key, `columns` in\norder after the seed's batch position (decision H15). `seeds` holds\nthe columns `key` and `batch` and the seed time columns `window`\nnames. With `per_seed`, at most that many rows per seed, first in\n`order`, and the result is ordered by `(batch, order)`; without it,\nthere is no `order` and the result is unordered.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "seeds": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "window": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Window"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "per_seed": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "order": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TieBreak"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "request": {
+              "type": "string",
+              "const": "neighbors"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "columns",
+            "seeds"
+          ]
+        },
+        {
+          "description": "One row per seed whose key `table` holds, `columns` in order after\nthe seed's batch position and the count of rows holding its key;\nwhich row of a key several rows hold is not defined.",
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "key": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "seeds": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "request": {
+              "type": "string",
+              "const": "lookup"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "columns",
+            "seeds"
+          ]
+        }
+      ]
+    },
+    "DescribePart": {
+      "description": "Which part of the catalog a `describe` reads.",
+      "oneOf": [
+        {
+          "description": "The source's table names: one row per table. With tables named,\nthe relations, tables or views, the source would read under any of\nthose names written unqualified, by its own resolution of such a\nname (on DuckDB, through its search path): none when it would read\nnone, which is how the core learns a name the caller gave is not\nthe source's, never by matching names itself (T1.23, decision\nE59).",
+          "type": "string",
+          "const": "tables"
+        },
+        {
+          "description": "Each table's columns, with their declared types, nullability and\nprimary-key flags.",
+          "type": "string",
+          "const": "columns"
+        },
+        {
+          "description": "Each table's declared primary and unique keys.",
+          "type": "string",
+          "const": "keys"
+        },
+        {
+          "description": "Each table's declared foreign keys.",
+          "type": "string",
+          "const": "foreign_keys"
+        },
+        {
+          "description": "The tables' indexes, which feed the reference's \"Missing N indices\"\nwarning.",
+          "type": "string",
+          "const": "indexes"
+        }
+      ]
+    },
+    "Filter": {
+      "description": "A condition on the rows a request reads; a request's filters are a\nconjunction.",
+      "oneOf": [
+        {
+          "description": "The row's `columns` equal one of the key set's rows.",
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "keys": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "filter": {
+              "type": "string",
+              "const": "key_in"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "columns",
+            "keys"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "lower": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Bound"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "upper": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Bound"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "filter": {
+              "type": "string",
+              "const": "time_range"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "string",
+              "const": "not_null"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column"
+          ]
+        }
+      ]
+    },
+    "KeySet": {
+      "description": "A set of keys: an Arrow attachment, and the columns it holds.",
+      "type": "object",
+      "properties": {
+        "attachment": {
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Field"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "attachment",
+        "columns"
+      ]
+    },
+    "Bound": {
+      "description": "One bound of a time range.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/Scalar"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "inclusive"
+      ]
+    },
+    "TableKey": {
+      "description": "Columns of a table that together make a key.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "columns"
+      ]
+    },
+    "TableColumn": {
+      "description": "A column of a table.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "string"
+        },
+        "column": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table",
+        "column"
+      ]
+    },
+    "Window": {
+      "description": "The rows of a `neighbors` request in time: the window column between\nthe bounds a seed gives. A row whose window column is NULL is not\nreturned when a window is set.",
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string"
+        },
+        "lower": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SeedBound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SeedBound"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "column"
+      ]
+    },
+    "SeedBound": {
+      "description": "One bound of a `neighbors` window: a seed time column, compared with the\nwindow column in the source's own `CAST(column AS TIMESTAMP)` wall clock.",
+      "type": "object",
+      "properties": {
+        "seed_column": {
+          "description": "A zone-less `timestamp[ns]` column of the seed key set.",
+          "type": "string"
+        },
+        "inclusive": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "seed_column",
+        "inclusive"
+      ]
+    },
+    "TieBreak": {
+      "description": "The total order a `neighbors` request keeps per seed, built by the core\nfrom the reference's rule (design, \"Data access\").",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TieTerm"
+      }
+    },
+    "TieTerm": {
+      "description": "One term of a [`TieBreak`].",
+      "type": "object",
+      "properties": {
+        "column": {
+          "type": "string"
+        },
+        "as_timestamp": {
+          "description": "Order by `CAST(column AS TIMESTAMP)`, the source's wall clock,\nrather than the column's own values.",
+          "type": "boolean"
+        },
+        "descending": {
+          "type": "boolean"
+        },
+        "nulls_last": {
+          "description": "Nulls after every value; the core writes the order the provider\ndeclares (`ProviderCapabilities::null_order`).",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "column",
+        "as_timestamp",
+        "descending",
+        "nulls_last"
+      ]
+    },
+    "FetchPlan": {
+      "description": "How a provider answers one request (decision H14): SQL statements run\nin order on one session, the last one's rows the answer, or the typed\nrequest itself, passed to a host provider that answers it; either way\nwith the Arrow schema the whole plan returns, and answered with one\nattachment holding every row.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "statements": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SqlStatement"
+              }
+            },
+            "expect": {
+              "$ref": "#/$defs/ExpectedSchema"
+            },
+            "plan": {
+              "type": "string",
+              "const": "sql"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "plan",
+            "statements",
+            "expect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expect": {
+              "$ref": "#/$defs/ExpectedSchema"
+            },
+            "plan": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "plan",
+            "expect"
+          ]
+        }
+      ]
+    },
+    "SqlStatement": {
+      "description": "One statement a SQL provider runs.",
+      "type": "object",
+      "properties": {
+        "dialect": {
+          "$ref": "#/$defs/Dialect"
+        },
+        "text": {
+          "type": "string"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SqlParam"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "dialect",
+        "text",
+        "params"
+      ]
+    },
+    "SqlParam": {
+      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/Scalar"
+            },
+            "param": {
+              "type": "string",
+              "const": "value"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "param",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "keys": {
+              "$ref": "#/$defs/KeySet"
+            },
+            "relation": {
+              "type": "string"
+            },
+            "param": {
+              "type": "string",
+              "const": "key_set"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "param",
+            "keys",
+            "relation"
+          ]
+        }
+      ]
+    },
+    "ExpectedSchema": {
+      "description": "The Arrow schema a request expects back, or that the answer discovers\nit (a preview, a scan).",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "expect": {
+              "type": "string",
+              "const": "discover"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "expect"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Field"
+              }
+            },
+            "expect": {
+              "type": "string",
+              "const": "schema"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "expect",
+            "fields"
+          ]
+        }
+      ]
+    },
+    "Endpoint": {
+      "description": "Which model endpoint a call goes to.",
+      "type": "string",
+      "enum": [
+        "predict"
+      ]
+    },
+    "OperationResult": {
+      "description": "One operation's result, the payload of the run's last step.",
+      "oneOf": [
+        {
+          "description": "A query's validation: accepted, or refused with PQL's diagnostics.",
+          "type": "object",
+          "properties": {
+            "accepted": {
+              "type": "boolean"
+            },
+            "diagnostics": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PqlDiagnostic"
+              }
+            },
+            "op": {
+              "type": "string",
+              "const": "validate_query"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "accepted",
+            "diagnostics"
+          ]
+        },
+        {
+          "description": "`describe_source`'s result.",
+          "type": "object",
+          "properties": {
+            "description": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "op": {
+              "type": "string",
+              "const": "describe_source"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "description"
+          ]
+        },
+        {
+          "description": "`edit_schema`'s result.",
+          "type": "object",
+          "properties": {
+            "schema": {
+              "description": "A bytes attachment of a [`SourceDescription`] as JSON: the schema\nwith the edit made, which the host holds from now on as the\ndescription the core last answered.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "declared": {
+              "description": "The column the edit gave a meaning the caller chose (the reference's\n`Column.stype_declared`): the column whose meaning was assigned, or\nthe time column named, which is assigned `timestamp`; none for any\nother edit.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ColumnRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "op": {
+              "type": "string",
+              "const": "edit_schema"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "schema"
+          ]
+        },
+        {
+          "description": "A materialized request, held by the host and handed back to `predict`.",
+          "type": "object",
+          "properties": {
+            "state": {
+              "$ref": "#/$defs/RequestState"
+            },
+            "op": {
+              "type": "string",
+              "const": "materialize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "state"
+          ]
+        },
+        {
+          "description": "The prediction. Nothing inline grows with the result's width or the\nendpoint's answer (decision H5).",
+          "type": "object",
+          "properties": {
+            "result": {
+              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `id_as_written` where\nthe ids are not all integers or all text (utf8: the JSON text of the\nreference's item value, null where there was none), `forecast_step`\nwhere an answer given as written carries one, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "model": {
+              "description": "The model that answered, as the endpoint names it.",
+              "type": "string"
+            },
+            "request_id": {
+              "description": "The endpoint's id for the call; empty for a request with no row to\nscore, answered without a call.",
+              "type": "string"
+            },
+            "metadata": {
+              "description": "A bytes attachment of the endpoint's `metadata` object as JSON.",
+              "$ref": "#/$defs/AttachmentId"
+            },
+            "outputs": {
+              "description": "The outputs the call asked for, the task's default ones where the\ncaller named none.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "op": {
+              "type": "string",
+              "const": "predict"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "op",
+            "result",
+            "model",
+            "request_id",
+            "metadata",
+            "outputs"
+          ]
+        }
+      ]
+    },
+    "PqlDiagnostic": {
+      "description": "One PQL diagnostic: its code and where in the query text it points.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Span"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "severity"
+      ]
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
+    "Span": {
+      "description": "Where in the query text a diagnostic or node is, as PQL counts it: rows\nfrom 1, columns from 0 in code points, from the first character of the\nfirst token to the first character of the last.",
+      "type": "object",
+      "properties": {
+        "start_row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "start_col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "end_row": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 1
+        },
+        "end_col": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start_row",
+        "start_col",
+        "end_row",
+        "end_col"
+      ]
+    },
+    "CoreError": {
+      "description": "An error the core reports.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ErrorKind"
+        },
+        "code": {
+          "description": "Stable across releases and languages.",
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "message": {
+          "description": "For a person to read; not promised, and never holding an input value.",
+          "type": "string"
+        },
+        "fields": {
+          "description": "What callers branch on, by name.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        },
+        "cause": {
+          "description": "The error this one was raised from.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CoreError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "retryable": {
+          "description": "Whether the same call may succeed if tried again; carried from\nprovider and transport errors, false otherwise.",
+          "type": "boolean",
+          "default": false
+        },
+        "drop_held": {
+          "description": "The states the host handed this run that it must drop rather than\nhand back again: the core refused them, so a later run given them\nwould be refused the same way (decision E74). The host follows this\nalone, never reading which field an error names; empty for any\nother error.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/HeldState"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "code",
+        "message"
+      ]
+    },
+    "ErrorCode": {
+      "description": "The codes the core gives: one closed list, so each host's mapping\nmatches every code with no catch-all arm (decision H6). Host and core\nship together, so the list is exhaustive; a new code is a contract\nversion bump. PQL's own diagnostic codes stay strings inside\n`PqlDiagnostic`.",
+      "oneOf": [
+        {
+          "description": "The caller's request is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_REQUEST"
+        },
+        {
+          "description": "A valid request this core does not support.",
+          "type": "string",
+          "const": "UNSUPPORTED_REQUEST"
+        },
+        {
+          "description": "The model endpoint answered with something the core cannot read.",
+          "type": "string",
+          "const": "INVALID_RESPONSE"
+        },
+        {
+          "description": "The host's configuration of a run is not one the core accepts.",
+          "type": "string",
+          "const": "INVALID_CONFIGURATION"
+        },
+        {
+          "description": "The transport to the model endpoint failed: it could not reach the\nendpoint, or could not read its answer.",
+          "type": "string",
+          "const": "TRANSPORT_ERROR"
+        },
+        {
+          "description": "A defect in the core, a contained panic included.",
+          "type": "string",
+          "const": "INTERNAL_ERROR"
+        },
+        {
+          "description": "The model a request names does not exist.",
+          "type": "string",
+          "const": "UNKNOWN_MODEL"
+        },
+        {
+          "description": "An optional dependency of the host is not installed.",
+          "type": "string",
+          "const": "MISSING_EXTRA"
+        },
+        {
+          "description": "A schema the core cannot work with.",
+          "type": "string",
+          "const": "INVALID_SCHEMA"
+        },
+        {
+          "description": "The endpoint does not support sessions.",
+          "type": "string",
+          "const": "SESSIONS_UNSUPPORTED"
+        },
+        {
+          "description": "An Arrow type outside the closed set.",
+          "type": "string",
+          "const": "UNSUPPORTED_TYPE"
+        },
+        {
+          "description": "A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.",
+          "type": "string",
+          "const": "VALUE_OUT_OF_RANGE"
+        },
+        {
+          "description": "A provider answered with a schema other than the one asked for.",
+          "type": "string",
+          "const": "PROVIDER_SCHEMA_MISMATCH"
+        },
+        {
+          "description": "A provider's query failed.",
+          "type": "string",
+          "const": "PROVIDER_ERROR"
+        },
+        {
+          "description": "A reply for an id the run is not waiting on: unknown, stale or already answered.",
+          "type": "string",
+          "const": "UNKNOWN_REPLY"
+        },
+        {
+          "description": "`next` was called before every reply the run asked for arrived.",
+          "type": "string",
+          "const": "REPLY_MISSING"
+        },
+        {
+          "description": "A reply of the wrong kind: a model answer for a fetch, or the other way round.",
+          "type": "string",
+          "const": "WRONG_REPLY"
+        },
+        {
+          "description": "The run was used after it finished.",
+          "type": "string",
+          "const": "RUN_FINISHED"
+        },
+        {
+          "description": "The run was used after it was cancelled.",
+          "type": "string",
+          "const": "RUN_CANCELLED"
+        },
+        {
+          "description": "The run was used after a panic poisoned it.",
+          "type": "string",
+          "const": "RUN_POISONED"
+        },
+        {
+          "description": "A second call reached a run while one was in progress.",
+          "type": "string",
+          "const": "RUN_BUSY"
+        },
+        {
+          "description": "A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.",
+          "type": "string",
+          "const": "INVALID_MESSAGE"
+        }
+      ]
+    },
+    "Detail": {
+      "description": "A value under an error's or a warning's `fields`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Scalar"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Scalar"
+          }
+        }
+      ]
+    },
+    "HeldState": {
+      "description": "A state a host holds between runs and hands back to the core with a\nlater run's start, opaque to it.",
+      "oneOf": [
+        {
+          "description": "The sampler state a materializer's last run left\n(`Materialize.sampler_state`, decision E52).",
+          "type": "string",
+          "const": "sampler_state"
+        }
+      ]
+    },
+    "CoreWarning": {
+      "description": "A warning a run gives, kept in the order given.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Detail"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ]
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "format": "sdm-bridge-changes/1",
+  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
+  "changes": {
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
+      "moved": "T1.32a: the entities' cast to the key's type moved into the core (sdm_engine::keys::cast); the bridge's table of the key types it cast to (_ARROW_TYPES) and its key_type refusal (_not_taken) are deleted, and it imports math for the host's own missing values"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
+      "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_missing": {
+      "moved": "T1.32a: the host's half of the moved cast: which of its own values are missing when it writes them as text (None, pd.NA, pd.NaT, a float NaN), the core reading a null"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_not_taken": {
+      "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
+      "moved": "T1.36 fix 21: a forecast's split moved into the core: the core's later steps (number, payload, query) and step 1's query are kept from the request state, and the caller's decompose.MOST_PARTS passed as Materialize.most_parts, which the core holds a forecast to"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
+      "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
+      "moved": "T1.32h (P1B-12): the boundary conversion the owner authorized on 2026-10-13 (owner decisions item 18, decision E101): the bridge writes each key and time column as the contract's Given, and the refusals of a value that is not a name or a sequence of names (_as_key_tuple's, a time column's) are the core's (sdm-schema apply_keys_and_times); with D4 (P1B-74, the owner's), the host refuses a table named by anything but a str before the run, as JSON would write it as its text"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
+      "moved": "T1.36 fix 8: the module gains _id, the host's half of the entity reading moved into the core (sdm-request's predict::layout and entity, as the reference's _named_entities and as_declared): the bridge reads the id the core gives, as the JSON text of the reference's item value where the core's column cannot hold it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
+      "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
+      "moved": "T1.36 fix 21: a forecast's steps predicted and merged by the core in one run: each step's payload and query passed as RequestState.forecast, the endpoint's refusal noted with the call (the step) it answered, and the answer marked as naming its step; fix 24: each later step's call given its own request id, drawn with _request_id as the adapter draws one per call"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
+      "moved": "T1.36 fix 21: a forecast the core gathered is predicted by the core in one run, its refusal said of the step the core names (about_the_part), as each part's was"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
+      "moved": "T1.36 fix 21: imports dataclasses and FORECAST, and adds _in_steps_on_the_core, which keeps the core's steps as the parts _in_parts kept, now that the core splits a forecast"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
+      "moved": "T1.36 fix 21: on the core route a forecast goes to the core, which splits it into its steps, rather than to _in_parts"
+    },
+    "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
+      "moved": "T1.36 fix 21: parts_of's new on_the_core keyword, the core splitting a forecast on its route"
+    },
+    "packages/structured-data-models-client/src/sdm_client/decompose.py::parts_of": {
+      "moved": "T1.36 fix 21: on the core route a forecast is not split here, the core splitting it; the refusals before anything is gathered (top_k, more steps than MOST_PARTS) stay the client's, worded as before"
+    }
+  }
+}

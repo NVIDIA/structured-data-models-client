@@ -1,0 +1,1047 @@
+{
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships).",
+  "case": "contract/cases/s1/base.adventureworks.json",
+  "refused": [
+    {
+      "why": "an edit that is not an object",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": 7
+    },
+    {
+      "why": "an edit with an op the format does not have",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "rename_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "an edit without its op",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "table": "products"
+      }
+    },
+    {
+      "why": "an edit that is a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": [
+        "clear_time_column",
+        "products"
+      ]
+    },
+    {
+      "why": "a delete_column edit without its column",
+      "path": [
+        "input",
+        "edits",
+        1
+      ],
+      "value": {
+        "op": "delete_column",
+        "table": "customers"
+      }
+    },
+    {
+      "why": "a clear_time_column edit with a key it does not take",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": "products",
+        "column": "SellStartDate"
+      }
+    },
+    {
+      "why": "an edit naming an empty table",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": ""
+      }
+    },
+    {
+      "why": "an edit's table that is not text",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": 7
+      }
+    },
+    {
+      "why": "no edits",
+      "path": [
+        "input",
+        "edits"
+      ],
+      "value": []
+    },
+    {
+      "why": "edits that are not a list",
+      "path": [
+        "input",
+        "edits"
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "a relationship with only an unknown key",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "unexpected": "value"
+      }
+    },
+    {
+      "why": "a relationship with a key beside its four",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "CustomerID",
+        "target_table": "customers",
+        "target_column": "CustomerID",
+        "kind": "many_to_one"
+      }
+    },
+    {
+      "why": "a relationship without its target column",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "CustomerID",
+        "target_table": "customers"
+      }
+    },
+    {
+      "why": "a relationship with an empty column",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "",
+        "target_table": "customers",
+        "target_column": "CustomerID"
+      }
+    },
+    {
+      "why": "a relationship whose table is not text",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": 7,
+        "source_column": "CustomerID",
+        "target_table": "customers",
+        "target_column": "CustomerID"
+      }
+    },
+    {
+      "why": "a relationship that is a list",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": [
+        "sales_order_headers",
+        "CustomerID",
+        "customers",
+        "CustomerID"
+      ]
+    },
+    {
+      "why": "relationships that are not a list",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "CustomerID",
+        "target_table": "customers",
+        "target_column": "CustomerID"
+      }
+    },
+    {
+      "why": "an empty inference_config",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": {}
+    },
+    {
+      "why": "an inference_config that is a list",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": [
+        [
+          "num_estimators",
+          4
+        ]
+      ]
+    },
+    {
+      "why": "seam null, which the schema does not let it be",
+      "path": [
+        "seam"
+      ],
+      "value": null
+    },
+    {
+      "why": "core null, which the schema does not let it be",
+      "path": [
+        "core"
+      ],
+      "value": null
+    },
+    {
+      "why": "register null, which the schema does not let it be",
+      "path": [
+        "register"
+      ],
+      "value": null
+    },
+    {
+      "why": "setup null, which the schema does not let it be",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.tables null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "tables"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.primary_keys null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "primary_keys"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.time_columns null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "time_columns"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.relationships null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ],
+      "value": null
+    },
+    {
+      "why": "edits null, which the schema does not let it be",
+      "path": [
+        "input",
+        "edits"
+      ],
+      "value": null
+    },
+    {
+      "why": "materialize.indices_as null, which the schema does not let it be",
+      "path": [
+        "input",
+        "materialize",
+        "indices_as"
+      ],
+      "value": null
+    },
+    {
+      "why": "materialize.anchor_time null, which the schema does not let it be",
+      "path": [
+        "input",
+        "materialize",
+        "anchor_time"
+      ],
+      "value": null
+    },
+    {
+      "why": "materialize.inference_config null, which the schema does not let it be",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.validate_query null, which the schema does not let it be",
+      "path": [
+        "core",
+        "validate_query"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.describe_source null, which the schema does not let it be",
+      "path": [
+        "core",
+        "describe_source"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.materialize null, which the schema does not let it be",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.predict null, which the schema does not let it be",
+      "path": [
+        "core",
+        "predict"
+      ],
+      "value": null
+    },
+    {
+      "why": "expect.error null, which the schema does not let it be",
+      "path": [
+        "expect",
+        "error"
+      ],
+      "value": null
+    },
+    {
+      "why": "expect.message null, which the schema does not let it be",
+      "path": [
+        "expect",
+        "message"
+      ],
+      "value": null
+    },
+    {
+      "why": "expect.today null, which the schema does not let it be",
+      "path": [
+        "expect",
+        "today"
+      ],
+      "value": null
+    },
+    {
+      "why": "core naming no operation (minProperties)",
+      "path": [
+        "core"
+      ],
+      "value": {}
+    },
+    {
+      "why": "from_source naming no argument (minProperties)",
+      "path": [
+        "input",
+        "from_source"
+      ],
+      "value": {}
+    },
+    {
+      "why": "no setup statements (minItems)",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": []
+    },
+    {
+      "why": "an empty setup statement (minLength)",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": [
+        ""
+      ]
+    },
+    {
+      "why": "core.materialize without its seed, which is required and may be null",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [
+          {}
+        ],
+        "anchor_time": null
+      }
+    },
+    {
+      "why": "core.materialize naming the schema it samples, which each host builds from its own description and the case's edits (the rust-host journey guard, T1.21d)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "schema": {
+          "tables": [],
+          "links": []
+        },
+        "indices": [
+          {}
+        ],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "an empty query (minLength)",
+      "path": [
+        "input",
+        "pql"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty why (minLength)",
+      "path": [
+        "why"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty source (minLength)",
+      "path": [
+        "source"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty register entry (minLength)",
+      "path": [
+        "register"
+      ],
+      "value": ""
+    },
+    {
+      "why": "a success naming an error",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "why": "a success naming a code, null",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "code": null
+      }
+    },
+    {
+      "why": "a success naming a message",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "message": "m"
+      }
+    },
+    {
+      "why": "a refusal without its code",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "why": "a refusal without its error",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "code": "INVALID_REQUEST"
+      }
+    },
+    {
+      "why": "a set_primary_key edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers"
+      }
+    },
+    {
+      "why": "a set_primary_key edit naming an empty column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": ""
+      }
+    },
+    {
+      "why": "a set_primary_key edit naming its key as a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": [
+          "CustomerID"
+        ]
+      }
+    },
+    {
+      "why": "a set_primary_key edit with a key it does not take",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": "CustomerID",
+        "stype": "ID"
+      }
+    },
+    {
+      "why": "a set_time_column edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "a set_time_column edit naming a null column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products",
+        "column": null
+      }
+    },
+    {
+      "why": "a set_stype edit without its stype",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color"
+      }
+    },
+    {
+      "why": "a set_stype edit with an empty stype",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": ""
+      }
+    },
+    {
+      "why": "a set_stype edit with a stype that is not text",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": 7
+      }
+    },
+    {
+      "why": "a set_stype edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "stype": "categorical"
+      }
+    },
+    {
+      "why": "a set_relationships edit without its relationships",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships"
+      }
+    },
+    {
+      "why": "a set_relationships edit whose relationships are not a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        }
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship missing a key",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship with a key beside its four",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID",
+            "kind": "many_to_one"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship that is a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          [
+            "sales_order_headers",
+            "CustomerID",
+            "customers",
+            "CustomerID"
+          ]
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship naming an empty column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a table key",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "table": "customers",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    }
+  ],
+  "accepted": [
+    {
+      "why": "inference_config is free-form, nested values included",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": {
+        "num_estimators": 4,
+        "nested": {
+          "list": [
+            1,
+            {
+              "x": null
+            }
+          ],
+          "text": "t"
+        }
+      }
+    },
+    {
+      "why": "no relationships passed",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ],
+      "value": []
+    },
+    {
+      "why": "core.materialize with its seed null, the default",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [
+          {}
+        ],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "a refusal naming its error and a null code",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "error": "RuntimeError",
+        "code": null
+      }
+    },
+    {
+      "why": "a success with only what it is today",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "today": "t"
+      }
+    },
+    {
+      "why": "a set_primary_key edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": "CustomerID"
+      }
+    },
+    {
+      "why": "a set_time_column edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products",
+        "column": "SellStartDate"
+      }
+    },
+    {
+      "why": "a set_stype edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": "categorical"
+      }
+    },
+    {
+      "why": "a set_stype edit with a stype the reference refuses, which the call refuses",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": "banana"
+      }
+    },
+    {
+      "why": "a set_relationships edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with no relationships",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": []
+      }
+    },
+    {
+      "why": "core.materialize with no entities, a call the core refuses as the reference does (empty.indices, T1.32d)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [],
+        "anchor_time": null,
+        "seed": null
+      }
+    }
+  ],
+  "omitted": [
+    {
+      "why": "no relationships passed",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ]
+    },
+    {
+      "why": "no edits",
+      "path": [
+        "input",
+        "edits"
+      ]
+    },
+    {
+      "why": "no inference_config",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ]
+    },
+    {
+      "why": "no keys given",
+      "path": [
+        "input",
+        "from_source",
+        "primary_keys"
+      ]
+    },
+    {
+      "why": "no seam",
+      "path": [
+        "seam"
+      ]
+    },
+    {
+      "why": "no tables named",
+      "path": [
+        "input",
+        "from_source",
+        "tables"
+      ]
+    },
+    {
+      "why": "no time columns given",
+      "path": [
+        "input",
+        "from_source",
+        "time_columns"
+      ]
+    }
+  ]
+}

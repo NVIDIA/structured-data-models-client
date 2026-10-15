@@ -1,0 +1,372 @@
+{
+  "format": "sdm-refusal-map/1",
+  "family": "refusal",
+  "cases": [
+    "nested.union",
+    "refuse.unknown-column"
+  ],
+  "reading": "The first refusal of each probe; each case of the refusal family probed as it is, and nested.union without its column, which reaches predict's result on both runners. The union is refused by name, as the plan asks; the unknown column is refused as the reference refuses it.",
+  "gaps": [],
+  "entries": [
+    {
+      "id": "admission/union",
+      "operation": "admission (the host layer, before inference)",
+      "rule": "UNSUPPORTED_TYPE: a union, outside the type set",
+      "owner": "T1.32c",
+      "register": "P1B-7",
+      "where": "rust/crates/sdm-host/src/admission.rs:87",
+      "holds": "ErrorCode::UnsupportedType,",
+      "why": "The named refusal the plan asks for in place of the reference's unnamed RuntimeError, which names the wrong type: register P1B-7, approved by the owner, under which T1.32g admits nested.union. The probe without the column reaches predict's result on both runners",
+      "observed": {
+        "rust-host": {
+          "code": "UNSUPPORTED_TYPE",
+          "operation": null,
+          "rule": null
+        },
+        "python-core": {
+          "stage": "from_source",
+          "error": "StructuredDataError",
+          "code": "UNSUPPORTED_TYPE",
+          "operation": null,
+          "rule": null
+        }
+      }
+    },
+    {
+      "id": "materialize/unknown_column",
+      "operation": "materialize (the query's validation)",
+      "rule": "INVALID_REQUEST: a column the schema does not have",
+      "owner": "T1.32d",
+      "register": "none",
+      "reference": "same",
+      "where": "packages/structured-data-models-client/src/sdm_client/query.py:529-532",
+      "holds": "raise self._refusal(",
+      "why": "The reference's own refusal: python-core validates the query before the core's materialize, by the core's validate_query, and rust-host runs validate_query after describe_source as the case carries it, its refusal INVALID_REQUEST; T1.32g admits the case with it",
+      "observed": {
+        "rust-host": {
+          "code": "INVALID_REQUEST",
+          "operation": null,
+          "rule": null
+        },
+        "python-core": {
+          "stage": "materialize",
+          "error": "StructuredDataError",
+          "code": "INVALID_REQUEST",
+          "operation": null,
+          "rule": null
+        }
+      }
+    }
+  ],
+  "probes": [
+    {
+      "id": "nested.union",
+      "case": "nested.union",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "admission/union"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          }
+        },
+        "until": "from_source",
+        "expect": "admission/union"
+      }
+    },
+    {
+      "id": "nested.union/no-f",
+      "case": "nested.union",
+      "removes": "the union feature users.f, from the probe before",
+      "python-core": {
+        "derive": {
+          "from": "nested.union",
+          "steps": [
+            {
+              "drop_columns": [
+                [
+                  "users",
+                  "f"
+                ]
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users",
+            "ALTER TABLE users DROP COLUMN \"f\""
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "nested.union",
+          "steps": []
+        },
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users",
+          "ALTER TABLE users DROP COLUMN \"f\""
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      }
+    },
+    {
+      "id": "refuse.unknown-column",
+      "case": "refuse.unknown-column",
+      "removes": "nothing: the case as the inventory has it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "pql": "PREDICT SUM(orders.cost, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        },
+        "expect": "materialize/unknown_column"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "setup": null,
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "validate_query": {
+            "profile": {
+              "model": null,
+              "name": "RELATIONAL"
+            },
+            "schema": {
+              "links": [
+                [
+                  {
+                    "column": "user_id",
+                    "table": "orders"
+                  },
+                  {
+                    "column": "user_id",
+                    "table": "users"
+                  }
+                ]
+              ],
+              "tables": [
+                {
+                  "columns": [
+                    {
+                      "dtype": "int",
+                      "name": "order_id",
+                      "stype": "ID"
+                    },
+                    {
+                      "dtype": "int",
+                      "name": "user_id",
+                      "stype": "ID"
+                    },
+                    {
+                      "dtype": "float",
+                      "name": "price",
+                      "stype": "numerical"
+                    },
+                    {
+                      "dtype": "time",
+                      "name": "ts",
+                      "stype": "timestamp"
+                    }
+                  ],
+                  "end_time_column": null,
+                  "name": "orders",
+                  "primary_key": "order_id",
+                  "time_column": "ts"
+                },
+                {
+                  "columns": [
+                    {
+                      "dtype": "int",
+                      "name": "user_id",
+                      "stype": "ID"
+                    },
+                    {
+                      "dtype": "int",
+                      "name": "age",
+                      "stype": "numerical"
+                    },
+                    {
+                      "dtype": "string",
+                      "name": "country",
+                      "stype": "categorical"
+                    }
+                  ],
+                  "end_time_column": null,
+                  "name": "users",
+                  "primary_key": "user_id",
+                  "time_column": null
+                }
+              ]
+            }
+          }
+        },
+        "until": "materialize",
+        "expect": "materialize/unknown_column"
+      }
+    }
+  ]
+}

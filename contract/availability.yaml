@@ -1,0 +1,59 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Which fields of an observation each runner gives (design, "Observations and
+# comparator"; decisions H2 and H13), read at the checkpoint by
+# scripts/rust_core/ratchet.py from T1.14:
+#
+#   available    the runner records the field in every observation that has
+#                it: the stage always, the exception class on a refusal, the
+#                driver capture where the case's calls read data (every case
+#                on a Python runner, which builds its source through the
+#                public calls; on rust-host a case naming describe_source,
+#                materialize or predict); missing there, it fails;
+#   unavailable  the runner cannot observe it: it is null in every
+#                observation, never fabricated, and never compared as equal.
+#
+# Lowering a field from available, dropping it, or adding one as unavailable
+# is a relaxation: it passes only when `relaxations` lists it, word for word
+# as the ratchet prints it, under a row of the checkpoint's decisions.md whose
+# status reads "approved by owner <date>" and which names this file. A field
+# a locked check requires that is unavailable fails that check (H13); the
+# locked checks are gate.sh's from T1.19.
+
+format: sdm-availability/1
+
+runners:
+  python-ref:
+    outcome.stage: available
+    outcome.error: available
+    host: available
+    public: available
+    driver.capture: available
+    core: unavailable
+  python-core:
+    outcome.stage: available
+    outcome.error: available
+    host: available
+    public: available
+    driver.capture: available
+    core: available
+  python-old:
+    outcome.stage: available
+    outcome.error: available
+    host: available
+    public: available
+    driver.capture: available
+    core: unavailable
+  # The pure-Rust host makes no public call: no stage, no exception class,
+  # no host or public section (compare.py's UNOBSERVED_BY_RUST_HOST).
+  rust-host:
+    outcome.stage: unavailable
+    outcome.error: unavailable
+    host: unavailable
+    public: unavailable
+    driver.capture: available
+    core: available
+
+relaxations: []

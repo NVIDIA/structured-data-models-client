@@ -22,6 +22,7 @@ pytest.importorskip('snowflake.connector')
 pytest.importorskip('yaml')
 
 import sdm_relational_engine.rfm as rfm
+from sdm_relational_engine.rfm.backend.snow.binding import paramstyle_attribute
 from sdm_relational_engine.rfm.backend.snow.table import SnowTable
 from snowflake.connector import SnowflakeConnection
 
@@ -30,6 +31,10 @@ _BACKSLASH_INJECTION = (
     "x\\' UNION ALL SELECT CURRENT_USER() FROM INFORMATION_SCHEMA.TABLES --"
 )
 _SEMANTIC_VIEW_YAML = 'tables: []\n'
+
+
+def _style(connection: SnowflakeConnection) -> Any:
+    return getattr(connection, paramstyle_attribute(connection))
 
 
 class _Cursor:
@@ -44,7 +49,7 @@ class _Cursor:
 
     def execute(self, sql: str, parameters: Any = None) -> None:
         self._connection.calls.append(
-            (sql, parameters, self._connection._paramstyle)
+            (sql, parameters, str(_style(self._connection)))
         )
 
     def fetchone(self) -> tuple:
@@ -58,7 +63,7 @@ class _Connection(SnowflakeConnection):
     def __init__(self, scalar: Any = None, row: tuple | None = None) -> None:
         self.calls: list[tuple[str, Any, str]] = []
         self.row = row if row is not None else (scalar,)
-        self._paramstyle = 'pyformat'
+        setattr(self, paramstyle_attribute(self), 'pyformat')
 
     def cursor(self) -> _Cursor:  # type: ignore[override]
         return _Cursor(self)
@@ -135,7 +140,7 @@ def test_from_snowflake_restores_the_drivers_paramstyle() -> None:
             connection, database='MY_DB', schema='MY_SCHEMA', verbose=False
         )
 
-    assert connection._paramstyle == 'pyformat'
+    assert _style(connection) == 'pyformat'
 
 
 @pytest.mark.parametrize(
@@ -162,7 +167,7 @@ def test_from_snowflake_semantic_view_binds_the_view_name(name: str) -> None:
     assert sql == 'SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)'
     assert parameters == (name,)
     assert style == 'qmark'
-    assert connection._paramstyle == 'pyformat'
+    assert _style(connection) == 'pyformat'
 
 
 class _NumRowsTable:

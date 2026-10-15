@@ -1,0 +1,3979 @@
+{
+ "recorded_by": "labels_reference_record.py",
+ "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "cases": [
+  {
+   "name": "sum-month-leap",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: SUM windows, nulls, empty windows",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      6.0
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-month-common",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: SUM windows in a common year",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2023-02-28 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2023-02-28 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2023-03-28 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2023-03-28 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2023-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2023-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2023-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2023-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2023-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2023-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2023-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2023-01-10 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2023-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2023-02-28T00:00:00.000000Z",
+      6.0
+     ],
+     [
+      2,
+      2,
+      "2023-02-28T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      3,
+      3,
+      "2023-02-28T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      4,
+      4,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2023-01-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2023-01-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2023-01-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      8,
+      1,
+      "2023-01-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      9,
+      5,
+      "2023-01-28T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-int-month",
+   "covers": "exit: base.regression's labels, compared exactly; probe: SUM over an integer column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.qty, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      6.0
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      5.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-decimal",
+   "covers": "exit: base.regression's labels, compared exactly; probe: SUM over DECIMAL(38,18)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(0.1 AS DOUBLE), 1, CAST('0.100000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(0.2 AS DOUBLE), 1, CAST('0.200000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (3, 2, CAST(1.0 AS DOUBLE), 1, CAST('1000000000000000.1' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 2, CAST(1.0 AS DOUBLE), 1, CAST('-1000000000000000' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (5, 3, CAST(1.0 AS DOUBLE), 1, CAST('123456789.123456789123456789' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (6, 4, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (7, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (8, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (9, 5, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-05 00:00:00'), (10, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      -0.6666666865348816
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      0.30000001192092896
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      0.10000000149011612
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      123456792.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      1.000000045813705e-18
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-kahan",
+   "covers": "exit: base.regression's labels, compared exactly; probe: float32 Kahan sums",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      7.000000953674316
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      33554440.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      1.0000000150474662e+30
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      0.30000001192092896
+     ]
+    ]
+   }
+  },
+  {
+   "name": "count-month-leap",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: COUNT windows, nulls, empty windows",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "count-month-common",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: COUNT windows in a common year",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2023-02-28 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2023-02-28 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2023-03-28 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2023-03-28 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2023-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2023-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2023-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2023-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2023-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2023-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2023-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2023-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2023-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2023-02-28T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      2,
+      2,
+      "2023-02-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      3,
+      3,
+      "2023-02-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      4,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2023-01-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2023-01-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2023-01-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      8,
+      1,
+      "2023-01-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      9,
+      5,
+      "2023-01-28T00:00:00.000000Z",
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "count-int-month",
+   "covers": "exit: base.regression's labels, compared exactly; probe: COUNT over an integer column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.qty, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "count-decimal",
+   "covers": "exit: base.regression's labels, compared exactly; probe: COUNT over DECIMAL(38,18)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(0.1 AS DOUBLE), 1, CAST('0.100000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(0.2 AS DOUBLE), 1, CAST('0.200000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (3, 2, CAST(1.0 AS DOUBLE), 1, CAST('1000000000000000.1' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 2, CAST(1.0 AS DOUBLE), 1, CAST('-1000000000000000' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (5, 3, CAST(1.0 AS DOUBLE), 1, CAST('123456789.123456789123456789' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (6, 4, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (7, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (8, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (9, 5, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-05 00:00:00'), (10, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.amount, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      3.0
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      1.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "count-kahan",
+   "covers": "exit: base.regression's labels, compared exactly; probe: float32 Kahan sums",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      7.0
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      10.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      20.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      7.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      2.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "avg-month-leap",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: AVG windows, nulls, empty windows",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      3.0
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "avg-month-common",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: AVG windows in a common year",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2023-02-28 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2023-02-28 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2023-03-28 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2023-03-28 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2023-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2023-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2023-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2023-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2023-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2023-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2023-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2023-01-10 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2023-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2023-02-28T00:00:00.000000Z",
+      3.0
+     ],
+     [
+      1,
+      2,
+      "2023-02-28T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2023-02-28T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2023-01-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2023-01-28T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "avg-int-month",
+   "covers": "exit: base.regression's labels, compared exactly; probe: AVG over an integer column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.qty, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      3.0
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      5.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "avg-decimal",
+   "covers": "exit: base.regression's labels, compared exactly; probe: AVG over DECIMAL(38,18)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(0.1 AS DOUBLE), 1, CAST('0.100000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(0.2 AS DOUBLE), 1, CAST('0.200000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (3, 2, CAST(1.0 AS DOUBLE), 1, CAST('1000000000000000.1' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 2, CAST(1.0 AS DOUBLE), 1, CAST('-1000000000000000' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (5, 3, CAST(1.0 AS DOUBLE), 1, CAST('123456789.123456789123456789' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (6, 4, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (7, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (8, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (9, 5, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-05 00:00:00'), (10, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.amount, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      -0.2222222238779068
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      0.15000000596046448
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      0.05000000074505806
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      123456792.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      1.000000045813705e-18
+     ]
+    ]
+   }
+  },
+  {
+   "name": "avg-kahan",
+   "covers": "exit: base.regression's labels, compared exactly; probe: float32 Kahan sums",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      1.0000001192092896
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      3355444.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      0.10000000149011612
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      1.4285714905452359e+29
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      0.15000000596046448
+     ]
+    ]
+   }
+  },
+  {
+   "name": "min-month-leap",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: MIN windows, nulls, empty windows",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MIN(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "min-month-common",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: MIN windows in a common year",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2023-02-28 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2023-02-28 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2023-03-28 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2023-03-28 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2023-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2023-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2023-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2023-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2023-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2023-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2023-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2023-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MIN(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2023-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2023-02-28T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      1,
+      2,
+      "2023-02-28T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2023-02-28T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2023-01-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2023-01-28T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "min-int-month",
+   "covers": "exit: base.regression's labels, compared exactly; probe: MIN over an integer column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MIN(orders.qty, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      5.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "min-decimal",
+   "covers": "exit: base.regression's labels, compared exactly; probe: MIN over DECIMAL(38,18)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(0.1 AS DOUBLE), 1, CAST('0.100000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(0.2 AS DOUBLE), 1, CAST('0.200000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (3, 2, CAST(1.0 AS DOUBLE), 1, CAST('1000000000000000.1' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 2, CAST(1.0 AS DOUBLE), 1, CAST('-1000000000000000' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (5, 3, CAST(1.0 AS DOUBLE), 1, CAST('123456789.123456789123456789' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (6, 4, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (7, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (8, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (9, 5, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-05 00:00:00'), (10, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT MIN(orders.amount, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      -0.3333333432674408
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      0.10000000149011612
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      -999999986991104.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      123456792.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      1.000000045813705e-18
+     ]
+    ]
+   }
+  },
+  {
+   "name": "min-kahan",
+   "covers": "exit: base.regression's labels, compared exactly; probe: float32 Kahan sums",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT MIN(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      1.0000001192092896
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      0.10000000149011612
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      3.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      0.10000000149011612
+     ]
+    ]
+   }
+  },
+  {
+   "name": "max-month-leap",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: MAX windows, nulls, empty windows",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      4.0
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "max-month-common",
+   "covers": "exit: DateOffset window ends at month ends and leap days; probe: MAX windows in a common year",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2023-02-28 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2023-02-28 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2023-03-28 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2023-03-28 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2023-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2023-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2023-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2023-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2023-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2023-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2023-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2023-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2023-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2023-02-28T00:00:00.000000Z",
+      4.0
+     ],
+     [
+      1,
+      2,
+      "2023-02-28T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2023-02-28T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2023-01-28T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2023-01-28T00:00:00.000000Z",
+      0.5
+     ]
+    ]
+   }
+  },
+  {
+   "name": "max-int-month",
+   "covers": "exit: base.regression's labels, compared exactly; probe: MAX over an integer column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.qty, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      4.0
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      64.0
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      5.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "max-decimal",
+   "covers": "exit: base.regression's labels, compared exactly; probe: MAX over DECIMAL(38,18)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(0.1 AS DOUBLE), 1, CAST('0.100000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(0.2 AS DOUBLE), 1, CAST('0.200000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (3, 2, CAST(1.0 AS DOUBLE), 1, CAST('1000000000000000.1' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 2, CAST(1.0 AS DOUBLE), 1, CAST('-1000000000000000' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (5, 3, CAST(1.0 AS DOUBLE), 1, CAST('123456789.123456789123456789' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (6, 4, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (7, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (8, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (9, 5, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-05 00:00:00'), (10, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.amount, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      2.00000009162741e-18
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      0.20000000298023224
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      999999986991104.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      123456792.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      1.000000045813705e-18
+     ]
+    ]
+   }
+  },
+  {
+   "name": "max-kahan",
+   "covers": "exit: base.regression's labels, compared exactly; probe: float32 Kahan sums",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      1.0000001192092896
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      16777216.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      0.10000000149011612
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      1.0000000150474662e+30
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      0.20000000298023224
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-offset-window-months",
+   "covers": "exit: DateOffset window ends at month ends and leap days; a window that starts after the anchor",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00'), (13, 1, CAST(256.0 AS DOUBLE), 1, TIMESTAMP '2024-04-29 00:00:00'), (14, 2, CAST(512.0 AS DOUBLE), 1, TIMESTAMP '2024-04-30 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 1, 2, months) FOR EACH users.user_id",
+   "anchor": "2024-05-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-31T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-03-31T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-31T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-31T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-31T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-03-03T00:00:00.000000Z",
+      512.0
+     ],
+     [
+      6,
+      4,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      8,
+      1,
+      "2024-03-03T00:00:00.000000Z",
+      256.0
+     ],
+     [
+      9,
+      5,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      10,
+      1,
+      "2024-02-04T00:00:00.000000Z",
+      28.0
+     ],
+     [
+      11,
+      5,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      12,
+      4,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      13,
+      3,
+      "2024-02-04T00:00:00.000000Z",
+      128.0
+     ],
+     [
+      14,
+      2,
+      "2024-02-04T00:00:00.000000Z",
+      32.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-twelve-months-leap-anchor",
+   "covers": "exit: DateOffset window ends at month ends and leap days; twelve months back from a leap day",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2023-02-28 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2023-03-01 00:00:00'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-02-28 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-02-28 00:00:00.000001'), (5, 2, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-02-29 00:00:00'), (6, 3, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2023-06-30 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 12, months) FOR EACH users.user_id",
+   "anchor": "2025-02-28",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-02-28T00:00:00.000000Z",
+      8.0
+     ],
+     [
+      2,
+      2,
+      "2024-02-28T00:00:00.000000Z",
+      16.0
+     ],
+     [
+      3,
+      3,
+      "2024-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2023-02-28T00:00:00.000000Z",
+      32.0
+     ],
+     [
+      8,
+      1,
+      "2023-02-28T00:00:00.000000Z",
+      6.0
+     ],
+     [
+      9,
+      5,
+      "2023-02-28T00:00:00.000000Z",
+      0.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-month-from-jan-31",
+   "covers": "exit: DateOffset window ends at month ends and leap days; Jan 31 + 1 month",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 2, CAST(4.0 AS DOUBLE), 1, TIMESTAMP '2024-03-01 00:00:00'), (4, 3, CAST(8.0 AS DOUBLE), 1, TIMESTAMP '2024-01-31 00:00:00'), (5, 4, CAST(16.0 AS DOUBLE), 1, TIMESTAMP '2024-01-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-02-29",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      2,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      3,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      8.0
+     ],
+     [
+      4,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "count-star-weeks",
+   "covers": "exit: base.regression's labels, compared exactly; COUNT(*) over weeks",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.*, 0, 2, weeks) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-17T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-03-17T00:00:00.000000Z",
+      3.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-17T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-17T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-17T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-03-03T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      6,
+      4,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      8,
+      1,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      9,
+      5,
+      "2024-03-03T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      10,
+      1,
+      "2024-02-18T00:00:00.000000Z",
+      2.0
+     ],
+     [
+      11,
+      5,
+      "2024-02-18T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      12,
+      4,
+      "2024-02-18T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      13,
+      3,
+      "2024-02-18T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      14,
+      2,
+      "2024-02-18T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      15,
+      1,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      16,
+      5,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      17,
+      4,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      18,
+      2,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      19,
+      3,
+      "2024-02-04T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      20,
+      4,
+      "2024-01-21T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      21,
+      3,
+      "2024-01-21T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      22,
+      5,
+      "2024-01-21T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      23,
+      1,
+      "2024-01-21T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      24,
+      2,
+      "2024-01-21T00:00:00.000000Z",
+      0.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sum-all-null",
+   "covers": "exit: base.regression's labels, compared exactly; probe: an all-null target column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, NULL, NULL, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, NULL, NULL, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, NULL, NULL, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, NULL, NULL, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, NULL, NULL, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, NULL, NULL, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, NULL, NULL, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, NULL, NULL, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, NULL, NULL, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, NULL, NULL, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      0.0
+     ]
+    ]
+   }
+  },
+  {
+   "name": "avg-all-null",
+   "covers": "exit: base.regression's labels, compared exactly; probe: an all-null target column, no label",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, NULL, NULL, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, NULL, NULL, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, NULL, NULL, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, NULL, NULL, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, NULL, NULL, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, NULL, NULL, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, NULL, NULL, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, NULL, NULL, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, NULL, NULL, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, NULL, NULL, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.price, 0, 1, months) FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   }
+  },
+  {
+   "name": "binary-count-gt-0",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (COUNT(orders.*, 0, 1, months) > 0)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.*, 0, 1, months) > 0 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-count-ge-2",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (COUNT(orders.*, 0, 1, months) >= 2)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.*, 0, 1, months) >= 2 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-count-eq-1",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (COUNT(orders.price, 0, 1, months) = 1)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.price, 0, 1, months) = 1 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-count-ne-1",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (COUNT(orders.*, 0, 1, months) != 1)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.*, 0, 1, months) != 1 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-count-lt-1",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (COUNT(orders.*, 0, 1, months) < 1)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.*, 0, 1, months) < 1 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-count-le-1",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (COUNT(orders.*, 0, 1, months) <= 1)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT COUNT(orders.*, 0, 1, months) <= 1 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      1,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      3,
+      3,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      4,
+      4,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      5,
+      2,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      6,
+      4,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      7,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      8,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      9,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-sum-eq-float",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (SUM(orders.price, 0, 30, days) = 0.3)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 30, days) = 0.3 FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      true
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-max-eq-float",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (MAX(orders.price, 0, 30, days) = 0.1)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.price, 0, 30, days) = 0.1 FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-sum-gt-float",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (SUM(orders.price, 0, 30, days) > 16777224)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 30, days) > 16777224 FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      true
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      true
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-max-int-gt-float",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (MAX(orders.qty, 0, 1, months) > 7.5)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT MAX(orders.qty, 0, 1, months) > 7.5 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      1,
+      "2024-02-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      2,
+      "2024-02-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      2,
+      3,
+      "2024-01-29T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      1,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      5,
+      "2024-01-29T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-avg-eq-float",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (AVG(orders.price, 0, 30, days) = 1.0000001)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(16777216.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (3, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (4, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (5, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (6, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (7, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (8, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (9, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (10, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (11, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (12, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (13, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (14, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (15, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (16, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (17, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (18, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-10 00:00:00'), (19, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-11 00:00:00'), (20, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-12 00:00:00'), (21, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-13 00:00:00'), (22, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-14 00:00:00'), (23, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-15 00:00:00'), (24, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-16 00:00:00'), (25, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-17 00:00:00'), (26, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-18 00:00:00'), (27, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-19 00:00:00'), (28, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-20 00:00:00'), (29, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-21 00:00:00'), (30, 2, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-22 00:00:00'), (31, 3, CAST(1e+30 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (32, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (33, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (34, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (35, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (36, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (37, 3, CAST(3.0 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (38, 4, CAST(0.1 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (39, 4, CAST(0.2 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (40, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-03 00:00:00'), (41, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-04 00:00:00'), (42, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-05 00:00:00'), (43, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-06 00:00:00'), (44, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-07 00:00:00'), (45, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-08 00:00:00'), (46, 5, CAST(1.0000001 AS DOUBLE), 1, TIMESTAMP '2024-03-09 00:00:00'), (47, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT AVG(orders.price, 0, 30, days) = 1.0000001 FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      true
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-sum-decimal-gt",
+   "covers": "exit: binary and multiclass labels match the reference; probe: conditions (SUM(orders.amount, 0, 30, days) > 0.3)",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(0.1 AS DOUBLE), 1, CAST('0.100000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 1, CAST(0.2 AS DOUBLE), 1, CAST('0.200000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (3, 2, CAST(1.0 AS DOUBLE), 1, CAST('1000000000000000.1' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 2, CAST(1.0 AS DOUBLE), 1, CAST('-1000000000000000' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (5, 3, CAST(1.0 AS DOUBLE), 1, CAST('123456789.123456789123456789' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (6, 4, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000001' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (7, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (8, 5, CAST(1.0 AS DOUBLE), 1, CAST('-0.333333333333333333' AS DECIMAL(38,18)), TIMESTAMP '2024-03-04 00:00:00'), (9, 5, CAST(1.0 AS DOUBLE), 1, CAST('0.000000000000000002' AS DECIMAL(38,18)), TIMESTAMP '2024-03-05 00:00:00'), (10, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.amount, 0, 30, days) > 0.3 FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      true
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  },
+  {
+   "name": "multiclass-static-varchar",
+   "covers": "exit: binary and multiclass labels match the reference; probe: a static multiclass target",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, segment VARCHAR)",
+    "INSERT INTO users VALUES (1, 'b'), (2, 'a'), (3, 'c'), (4, 'a'), (5, 'B'), (6, '10'), (7, '2'), (8, 'b'), (9, 'z'), (10, 'a'), (11, '\u00e9'), (12, '')",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT users.segment FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "multiclass_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "string",
+      "classes": [
+       "a",
+       "B",
+       "\u00e9",
+       "c",
+       "b",
+       "2",
+       "",
+       "z",
+       "10"
+      ]
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      10,
+      "2024-03-31T00:00:00.000000Z",
+      "a"
+     ],
+     [
+      1,
+      5,
+      "2024-03-31T00:00:00.000000Z",
+      "B"
+     ],
+     [
+      2,
+      11,
+      "2024-03-31T00:00:00.000000Z",
+      "\u00e9"
+     ],
+     [
+      3,
+      4,
+      "2024-03-31T00:00:00.000000Z",
+      "a"
+     ],
+     [
+      4,
+      3,
+      "2024-03-31T00:00:00.000000Z",
+      "c"
+     ],
+     [
+      6,
+      8,
+      "2024-03-31T00:00:00.000000Z",
+      "b"
+     ],
+     [
+      7,
+      7,
+      "2024-03-31T00:00:00.000000Z",
+      "2"
+     ],
+     [
+      8,
+      12,
+      "2024-03-31T00:00:00.000000Z",
+      ""
+     ],
+     [
+      9,
+      9,
+      "2024-03-31T00:00:00.000000Z",
+      "z"
+     ],
+     [
+      10,
+      6,
+      "2024-03-31T00:00:00.000000Z",
+      "10"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-static-boolean",
+   "covers": "exit: binary and multiclass labels match the reference; probe: a static binary target",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, active BOOLEAN)",
+    "INSERT INTO users VALUES (1, true), (2, false), (3, NULL), (4, true), (5, false), (6, true)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT users.active FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "multiclass_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "string",
+      "classes": [
+       "False",
+       "True"
+      ]
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      2,
+      6,
+      "2024-03-31T00:00:00.000000Z",
+      "True"
+     ],
+     [
+      3,
+      4,
+      "2024-03-31T00:00:00.000000Z",
+      "True"
+     ],
+     [
+      4,
+      5,
+      "2024-03-31T00:00:00.000000Z",
+      "False"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "multiclass-static-decimal",
+   "covers": "the map's decimal.class-target-38-18 static target",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, tier DECIMAL(38,18))",
+    "INSERT INTO users VALUES (1, CAST('1.5' AS DECIMAL(38,18))), (2, CAST('2' AS DECIMAL(38,18))), (3, NULL), (4, CAST('1.500000000000000001' AS DECIMAL(38,18))), (5, CAST('2' AS DECIMAL(38,18))), (6, CAST('-3' AS DECIMAL(38,18)))",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT users.tier FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2
+   ],
+   "expected": {
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INTERNAL_ERROR"
+   }
+  },
+  {
+   "name": "regression-static-double",
+   "covers": "the map's materialize static_target",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, score DOUBLE)",
+    "INSERT INTO users VALUES (1, 0.1), (2, 16777217.0), (3, NULL), (4, -0.0), (5, 1e-40), (6, 3.4e38)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT users.score FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      2,
+      6,
+      "2024-03-31T00:00:00.000000Z",
+      3.3999999521443642e+38
+     ],
+     [
+      3,
+      4,
+      "2024-03-31T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      4,
+      5,
+      "2024-03-31T00:00:00.000000Z",
+      9.99994610111476e-41
+     ]
+    ]
+   }
+  },
+  {
+   "name": "binary-static-condition",
+   "covers": "exit: binary and multiclass labels match the reference; a condition on a static column",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY, score DOUBLE)",
+    "INSERT INTO users VALUES (1, 0.1), (2, 0.2), (3, NULL), (4, 0.1000001), (5, 0.0999999), (6, 1)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, TIMESTAMP '2024-02-29 00:00:00'), (2, 1, CAST(2.0 AS DOUBLE), 2, TIMESTAMP '2024-02-29 00:00:00.000001'), (3, 1, CAST(4.0 AS DOUBLE), 4, TIMESTAMP '2024-03-29 00:00:00'), (4, 1, CAST(8.0 AS DOUBLE), 8, TIMESTAMP '2024-03-29 00:00:00.000001'), (5, 1, CAST(16.0 AS DOUBLE), 16, TIMESTAMP '2024-03-31 00:00:00'), (6, 2, CAST(32.0 AS DOUBLE), 32, TIMESTAMP '2024-03-15 00:00:00'), (7, 2, NULL, NULL, TIMESTAMP '2024-03-16 00:00:00'), (8, 3, CAST(64.0 AS DOUBLE), 64, TIMESTAMP '2024-02-28 23:59:59'), (9, 3, CAST(128.0 AS DOUBLE), 128, TIMESTAMP '2024-03-30 00:00:00'), (10, 4, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00'), (11, 5, CAST(0.5 AS DOUBLE), 5, TIMESTAMP '2024-01-31 00:00:00'), (12, 5, CAST(0.25 AS DOUBLE), 6, TIMESTAMP '2024-01-10 00:00:00')"
+   ],
+   "query": "PREDICT users.score > 0.1 FOR EACH users.user_id",
+   "anchor": "2024-03-31",
+   "indices": [
+    1,
+    2
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "binary_classification",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "bool",
+      "classes": [
+       "false",
+       "true"
+      ],
+      "positive_class": "true"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      2,
+      6,
+      "2024-03-31T00:00:00.000000Z",
+      true
+     ],
+     [
+      3,
+      4,
+      "2024-03-31T00:00:00.000000Z",
+      true
+     ],
+     [
+      4,
+      5,
+      "2024-03-31T00:00:00.000000Z",
+      false
+     ]
+    ]
+   }
+  }
+ ]
+}

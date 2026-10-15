@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-host"
+description = "Control codecs, the control cap, Arrow admission, panic containment and run ownership"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Operations only tests reach; a shipped build leaves it off.
+test-ops = ["sdm-core/test-ops"]
+
+[dependencies]
+arrow-array.workspace = true
+arrow-buffer.workspace = true
+arrow-schema.workspace = true
+arrow-select.workspace = true
+sdm-contract = { path = "../sdm-contract" }
+sdm-core = { path = "../sdm-core" }
+sdm-data = { path = "../sdm-data" }
+jiff.workspace = true
+jiff-tzdb.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+half.workspace = true
+sdm-core = { path = "../sdm-core", features = ["test-ops"] }
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,1129 @@
+{
+  "format": "sdm-result-vectors/1",
+  "about": "T1.36 P3 C3's vectors, written by the independent test author before the fix: a struct with a null row holding a union, which run_python's arrow_values must read without aborting (StructArray.flatten() folds the struct's validity into a union child, which has none, and Arrow C++ aborts). The form is contract/t132g-p2c-vectors.json's: a null struct row is null; a non-null one [\"struct\", [[name, cell], ...]]; a union [\"union\", type code, member name, the member's cell], a null union DuckDB writes a null under its first member. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by contract/tests/test_t136_struct_null_union.py (DuckDB writes no dense union): built lists hold their structs at a non-zero offset, so a read that drops a struct's offset gives other cells. A value under a null struct row is hidden: no cell shows it, so it names nothing unencodable (the second set, built, each hides a date64 the form does not hold: as a child, as a union's chosen member, in a list's struct at an offset, in a map value, in a struct in a struct); a control's visible date64 still names arrow:date64[ms]. Read by the Python runner's test only.",
+  "vectors": [
+    {
+      "name": "a struct with a null row holding a sparse union",
+      "sql": "SELECT * FROM (VALUES (struct_pack(u := union_value(i := 1)::UNION(i INTEGER, s VARCHAR))), (NULL)) t(a)",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<u: sparse_union<i: int32=0, s: string=1>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "STRUCT(u UNION(i INTEGER, s VARCHAR))"
+        ],
+        "ordered": "678e88819b24dd57869e789645d3add46f464d75ff8019971b249c9fa9d3806e",
+        "unordered": "678e88819b24dd57869e789645d3add46f464d75ff8019971b249c9fa9d3806e",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  0,
+                  "i",
+                  [
+                    "i",
+                    "1"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a struct's null rows beside its members: a union, a null union, an integer",
+      "sql": "SELECT * FROM (VALUES (struct_pack(n := 1, u := union_value(i := 1)::UNION(i INTEGER, s VARCHAR))), (NULL), (struct_pack(n := 2, u := union_value(s := 'x')::UNION(i INTEGER, s VARCHAR))), (struct_pack(n := NULL::INTEGER, u := NULL::UNION(i INTEGER, s VARCHAR))), (NULL)) t(a)",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<n: int32, u: sparse_union<i: int32=0, s: string=1>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "STRUCT(n INTEGER, u UNION(i INTEGER, s VARCHAR))"
+        ],
+        "ordered": "9b0ffd3752d633052d0e33e4ca1a84d857716d1193061ab520eb144f687c918b",
+        "unordered": "29bb6a35c536b23dfa7c42654f5089fef5a21085d90f3a515dacedb00378d4d7",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "n",
+                [
+                  "i",
+                  "1"
+                ]
+              ],
+              [
+                "u",
+                [
+                  "union",
+                  0,
+                  "i",
+                  [
+                    "i",
+                    "1"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          [
+            "struct",
+            [
+              [
+                "n",
+                [
+                  "i",
+                  "2"
+                ]
+              ],
+              [
+                "u",
+                [
+                  "union",
+                  1,
+                  "s",
+                  [
+                    "s",
+                    "x"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "struct",
+            [
+              [
+                "n",
+                null
+              ],
+              [
+                "u",
+                [
+                  "union",
+                  0,
+                  "i",
+                  null
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "lists of structs holding a union, null structs among them",
+      "sql": "SELECT * FROM (VALUES ([struct_pack(u := union_value(i := 1)::UNION(i INTEGER, s VARCHAR)), NULL, struct_pack(u := union_value(s := 'y')::UNION(i INTEGER, s VARCHAR))]), (NULL), ([NULL, struct_pack(u := union_value(i := 2)::UNION(i INTEGER, s VARCHAR)), struct_pack(u := union_value(s := 'z')::UNION(i INTEGER, s VARCHAR))])) t(l)",
+      "arrow": [
+        {
+          "name": "l",
+          "type": "list<l: struct<u: sparse_union<i: int32=0, s: string=1>>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "l"
+        ],
+        "types": [
+          "STRUCT(u UNION(i INTEGER, s VARCHAR))[]"
+        ],
+        "ordered": "20e2b3cb1b2181000decc5c5b884428b04de5db6572ae916a55310217900fed0",
+        "unordered": "b43572e4db2cbd23935e6eb1c9703cf906f16e84acd84457630c5abc2e4f40c6",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      0,
+                      "i",
+                      [
+                        "i",
+                        "1"
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      1,
+                      "s",
+                      [
+                        "s",
+                        "y"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          [
+            "list",
+            [
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      0,
+                      "i",
+                      [
+                        "i",
+                        "2"
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      1,
+                      "s",
+                      [
+                        "s",
+                        "z"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a struct holding a struct holding a union, the outer struct null",
+      "sql": "SELECT * FROM (VALUES (struct_pack(o := struct_pack(u := union_value(i := 1)::UNION(i INTEGER, s VARCHAR)))), (NULL), (struct_pack(o := NULL::STRUCT(u UNION(i INTEGER, s VARCHAR)))), (struct_pack(o := struct_pack(u := union_value(s := 'w')::UNION(i INTEGER, s VARCHAR))))) t(a)",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<o: struct<u: sparse_union<i: int32=0, s: string=1>>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": [
+          "STRUCT(o STRUCT(u UNION(i INTEGER, s VARCHAR)))"
+        ],
+        "ordered": "afa6faf4aececcddb1c0e2965232e3c5522fdb727713d129bfc026f64e2c2cd5",
+        "unordered": "0c773e519f7847f6e8e9a3bfae798c01e973a450819a710dbb81dc088aae9899",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "o",
+                [
+                  "struct",
+                  [
+                    [
+                      "u",
+                      [
+                        "union",
+                        0,
+                        "i",
+                        [
+                          "i",
+                          "1"
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          [
+            "struct",
+            [
+              [
+                "o",
+                null
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "struct",
+            [
+              [
+                "o",
+                [
+                  "struct",
+                  [
+                    [
+                      "u",
+                      [
+                        "union",
+                        1,
+                        "s",
+                        [
+                          "s",
+                          "w"
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a map whose values are structs holding a union, one null",
+      "sql": "SELECT * FROM (VALUES (MAP {'k': struct_pack(u := union_value(i := 3)::UNION(i INTEGER, s VARCHAR)), 'j': NULL, 'h': struct_pack(u := union_value(s := 'v')::UNION(i INTEGER, s VARCHAR))}), (NULL)) t(m)",
+      "arrow": [
+        {
+          "name": "m",
+          "type": "map<string, struct<u: sparse_union<i: int32=0, s: string=1>>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "m"
+        ],
+        "types": [
+          "MAP(VARCHAR, STRUCT(u UNION(i INTEGER, s VARCHAR)))"
+        ],
+        "ordered": "6e9a042658a6bd4490b074d4761a885e6173dc7e016e5d2eff385eb91120f9e7",
+        "unordered": "6e9a042658a6bd4490b074d4761a885e6173dc7e016e5d2eff385eb91120f9e7",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "map",
+            [
+              [
+                [
+                  "s",
+                  "k"
+                ],
+                [
+                  "struct",
+                  [
+                    [
+                      "u",
+                      [
+                        "union",
+                        0,
+                        "i",
+                        [
+                          "i",
+                          "3"
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "s",
+                  "j"
+                ],
+                null
+              ],
+              [
+                [
+                  "s",
+                  "h"
+                ],
+                [
+                  "struct",
+                  [
+                    [
+                      "u",
+                      [
+                        "union",
+                        1,
+                        "s",
+                        [
+                          "s",
+                          "v"
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a built struct with a null row holding a dense union",
+      "build": "a built struct with a null row holding a dense union",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<u: dense_union<i: int32=3, s: string=7>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "52e950720aa0c28854ce78350aaa5ad8c26e46b29e3705edd88288c0a726039f",
+        "unordered": "149baa73052c086eb877c3508f3901e4c30b765a4e485aa88ab8583e01fdcbdb",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  7,
+                  "s",
+                  [
+                    "s",
+                    "x"
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ],
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  3,
+                  "i",
+                  [
+                    "i",
+                    "6"
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "2"
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "built lists of structs holding a dense union, null structs among them",
+      "build": "built lists of structs holding a dense union, null structs among them",
+      "arrow": [
+        {
+          "name": "l",
+          "type": "list<item: struct<u: dense_union<i: int32=3, s: string=7>, n: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "l"
+        ],
+        "types": null,
+        "ordered": "1e642f22529c476bf874d7822316d5c5003547b0c622c80456788aaf26c4c075",
+        "unordered": "56fccde62c91a238f8bab2864ca75ea41f5cb90592535da411a9206f54ca1db8",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      7,
+                      "s",
+                      [
+                        "s",
+                        "a"
+                      ]
+                    ]
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "0"
+                    ]
+                  ]
+                ]
+              ],
+              null
+            ]
+          ]
+        ],
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      3,
+                      "i",
+                      [
+                        "i",
+                        "11"
+                      ]
+                    ]
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "2"
+                    ]
+                  ]
+                ]
+              ],
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      7,
+                      "s",
+                      [
+                        "s",
+                        "c"
+                      ]
+                    ]
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "4"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "built lists of structs holding a sparse union, null structs among them",
+      "build": "built lists of structs holding a sparse union, null structs among them",
+      "arrow": [
+        {
+          "name": "l",
+          "type": "list<item: struct<u: sparse_union<i: int32=3, s: string=7>, n: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "l"
+        ],
+        "types": null,
+        "ordered": "2d2af27316ccb300f789c84c9ac126772b623223d17fed15c608b3b6b0b9de82",
+        "unordered": "27d610eb234694921bb4c10faeaac21976e27e2e4e35bd443e6018c136088fbc",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "list",
+            [
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      3,
+                      "i",
+                      [
+                        "i",
+                        "21"
+                      ]
+                    ]
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "1"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      7,
+                      "s",
+                      [
+                        "s",
+                        "r"
+                      ]
+                    ]
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "2"
+                    ]
+                  ]
+                ]
+              ],
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "u",
+                    [
+                      "union",
+                      3,
+                      "i",
+                      [
+                        "i",
+                        "24"
+                      ]
+                    ]
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "4"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a null struct row hiding a date64",
+      "build": "a null struct row hiding a date64",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<d: date64[ms], n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "e0eb2911a48d33e256d475cbd6607ad949598f5a0a742d0ea9ffc47e183fb89f",
+        "unordered": "e0eb2911a48d33e256d475cbd6607ad949598f5a0a742d0ea9ffc47e183fb89f",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "d",
+                null
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a null struct row hiding a dense union's chosen date64 member",
+      "build": "a null struct row hiding a dense union's chosen date64 member",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<u: dense_union<i: int32=3, d: date64[ms]=7>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  3,
+                  "i",
+                  [
+                    "i",
+                    "5"
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a null struct row hiding a sparse union's chosen date64 member",
+      "build": "a null struct row hiding a sparse union's chosen date64 member",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<u: sparse_union<i: int32=3, d: date64[ms]=7>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unordered": "0c42f956836c84f7792ef7dad4a9faacd7b9ec682c439e53a4ab9be433745fd3",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "u",
+                [
+                  "union",
+                  3,
+                  "i",
+                  [
+                    "i",
+                    "5"
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "lists of structs at an offset, a null struct hiding a date64",
+      "build": "lists of structs at an offset, a null struct hiding a date64",
+      "arrow": [
+        {
+          "name": "l",
+          "type": "list<item: struct<d: date64[ms], n: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "l"
+        ],
+        "types": null,
+        "ordered": "3549c35212cb93583b0f9284f2c789f0e24a39d284e5d917d3e049ec1d733a54",
+        "unordered": "3549c35212cb93583b0f9284f2c789f0e24a39d284e5d917d3e049ec1d733a54",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "0"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "1"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          [
+            "list",
+            [
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "2"
+                    ]
+                  ]
+                ]
+              ],
+              null,
+              [
+                "struct",
+                [
+                  [
+                    "d",
+                    null
+                  ],
+                  [
+                    "n",
+                    [
+                      "i",
+                      "4"
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a map's value a null struct hiding a date64",
+      "build": "a map's value a null struct hiding a date64",
+      "arrow": [
+        {
+          "name": "m",
+          "type": "map<string, struct<d: date64[ms], n: int32>>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "m"
+        ],
+        "types": null,
+        "ordered": "36dedab5d63429d144a3e57e50a44d3261d6f437811235417ec6a034cd93b377",
+        "unordered": "36dedab5d63429d144a3e57e50a44d3261d6f437811235417ec6a034cd93b377",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "map",
+            [
+              [
+                [
+                  "s",
+                  "k"
+                ],
+                [
+                  "struct",
+                  [
+                    [
+                      "d",
+                      null
+                    ],
+                    [
+                      "n",
+                      [
+                        "i",
+                        "0"
+                      ]
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "s",
+                  "j"
+                ],
+                null
+              ]
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "a struct in a null struct hiding a date64",
+      "build": "a struct in a null struct hiding a date64",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<o: struct<d: date64[ms]>, n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "c5feab137222905770d009c38b7680c876700dccb034f52e0a714a2350324880",
+        "unordered": "c5feab137222905770d009c38b7680c876700dccb034f52e0a714a2350324880",
+        "unencodable": []
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "o",
+                [
+                  "struct",
+                  [
+                    [
+                      "d",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    },
+    {
+      "name": "a visible date64 beside a null struct row hiding one",
+      "build": "a visible date64 beside a null struct row hiding one",
+      "arrow": [
+        {
+          "name": "a",
+          "type": "struct<d: date64[ms], n: int32>"
+        }
+      ],
+      "values": {
+        "columns": [
+          "a"
+        ],
+        "types": null,
+        "ordered": "7e820ecf22d68df25f833592c7dc9d92a4dccdbe5e9d82b7810a12f629ba9287",
+        "unordered": "7e820ecf22d68df25f833592c7dc9d92a4dccdbe5e9d82b7810a12f629ba9287",
+        "unencodable": [
+          "arrow:date64[ms]"
+        ]
+      },
+      "rows": [
+        [
+          [
+            "struct",
+            [
+              [
+                "d",
+                [
+                  "?",
+                  "arrow:date64[ms]"
+                ]
+              ],
+              [
+                "n",
+                [
+                  "i",
+                  "0"
+                ]
+              ]
+            ]
+          ]
+        ],
+        [
+          null
+        ]
+      ]
+    }
+  ]
+}

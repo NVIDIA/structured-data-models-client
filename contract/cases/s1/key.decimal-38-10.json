@@ -1,0 +1,104 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.decimal-38-10",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "decimal128/primary-key",
+    "decimal128/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5",
+      "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        "0.5",
+        "1.5"
+      ],
+      "indices_as": "decimal",
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "d128",
+          "p": 2,
+          "s": 1,
+          "v": "5"
+        },
+        {
+          "t": "d128",
+          "p": 2,
+          "s": 1,
+          "v": "15"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "message": "unsupported data type 'decimal128(38, 10)[pyarrow]' for column 'ENTITY'",
+    "today": "Schema.from_source reports user_id as float64 / ID"
+  },
+  "register": "Engine failure after the schema accepted the key",
+  "why": "A fractional, full-precision decimal key; the case where float keys would collide",
+  "source": "DV131; DV133"
+}

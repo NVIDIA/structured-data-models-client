@@ -1,5 +1,7 @@
 # Asks to the PQL team
 
+Retired, not to be sent: superseded by Phase 1 decision E18 (owner, 2026-10-08), which makes this client's PQL parser permanent. Kept as the Phase 0 record.
+
 Draft for the owner to send; answers are tracked here.
 Agreement is not a Phase 0 exit.
 
@@ -16,7 +18,7 @@ To do that safely we'd like to agree on:
 5. **Safe behavior in a host process:** no aborts, signal handlers or console output from the library, and a recursion limit on nesting.
 6. **One PQL dialect** agreed between your core and our current grammar, and a shared conformance suite (we can contribute 417 cases) run in your CI.
 7. **Packed date literals:** whether the agreed dialect keeps PQL's packed date literals (for example `20240102`); we keep them unless it drops them.
-8. **When the Rust crate will be available,** so we know how long to keep our interim parser.
+8. **When the Rust crate will be available,** so we know how long to keep our interim parser. (Moot since E18: the parser is permanent.)
 
 ## Answers
 

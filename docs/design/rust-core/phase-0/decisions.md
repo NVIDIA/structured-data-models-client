@@ -10,7 +10,7 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 3 | Refusing an input the old Python client accepted is a regression (Java on Snowflake not held to this yet) | Decision 3 |
 | 4 | Quirks follow common sense with a small bias towards today's Python | Decision 4, section 5 |
 | 5 | The reference is `rust-core-reference`: `main` plus only the minimum determinism fixes, pushed to GitHub, compared locally | Decision 5, T0.3 |
-| 6 | PQL comes from the PQL team's C++ core through its Rust crate; the hand-written parser is a stopgap | Decision 6 |
+| 6 | PQL comes from the PQL team's C++ core through its Rust crate; the hand-written parser is a stopgap | Decision 6; superseded by Phase 1 decision E18 (owner, 2026-10-08): the parser is permanent and no PQL-team crate is planned |
 | 7 | The data layer is swappable; a Pyramid provider is not in scope | Decision 7 |
 | 8 | Java's first consumer brings its own data layer; Java loads the core as a native library; no WebAssembly | Decision 8 |
 | 9 | No calendar budget and no time estimates | Decision 9 |
@@ -25,9 +25,9 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 18 | J2: Java's S2 agreement with Python covers 4 of the 6 base questions (no ranking or forecasting) for now | Plan section 4, `scope-java.yaml`, databricks-jobs.md |
 | 19 | J3: the 20 job cells stay the minimum, plus one warehouse-route cell on Databricks Runtime 17.3 or later | databricks-jobs.md, L6 |
 | 20 | G1, G12: the base client becomes a native wheel with no pure-Python fallback, and the client publishes no sdist | Plan sections 2 and 3, [support-matrix.md](support-matrix.md), Phase 1a packaging |
-| 21 | G2 to G6: wheels for Linux x86_64 and aarch64 as `manylinux2014` (glibc 2.17; `manylinux_2_28` only if the PQL C++ forces it, as a new decision), `musllinux_1_2` if the PQL C++ builds there, macOS 10.12 x86_64 and 11.0 arm64, and Windows x86_64; 32-bit, Windows on Arm, Linux i686, armv7, ppc64le and s390x are dropped | Plan section 3, support-matrix.md, [pql-asks.md](pql-asks.md), L8, installation guide and changelog |
+| 21 | G2 to G6: wheels for Linux x86_64 and aarch64 as `manylinux2014` (glibc 2.17; `manylinux_2_28` only if the PQL C++ forces it, as a new decision), `musllinux_1_2` if the PQL C++ builds there, macOS 10.12 x86_64 and 11.0 arm64, and Windows x86_64; 32-bit, Windows on Arm, Linux i686, armv7, ppc64le and s390x are dropped | Plan section 3, support-matrix.md, [pql-asks.md](pql-asks.md), L8, installation guide and changelog; the PQL C++ conditions are superseded by Phase 1 decision E18 (owner, 2026-10-08): no PQL C++ is linked |
 | 22 | G7, G8: CPython only through `abi3` wheels; PyPy, GraalPy and free-threaded CPython are dropped for now | Plan section 3, support-matrix.md, L8 |
-| 23 | G9, G10: `pyarrow>=10.0.1` becomes a base dependency of the client; `pandas>=1.5` stays, with pandas 1.5 tested in L5 | Plan sections 3 and 6, support-matrix.md, client `pyproject.toml` |
+| 23 | G9, G10: `pyarrow>=10.0.1` becomes a base dependency of the client; `pandas>=1.5` stays, with pandas 1.5 tested in L5 | Plan sections 3 and 6, support-matrix.md, client `pyproject.toml`; on the epic branch superseded by Phase 1 decision E16 (owner, 2026-10-08): `pandas>=2.2`, `numpy>=1.26`, `pyarrow>=14.0.1`, PyCapsule only, no pandas 1.5 in L5 |
 | 24 | G11: the `relational` extra name stays; the engine distribution is not published after Phase 5 | Plan section 7, support-matrix.md, Phase 5 |
 | 25 | G13: Java natives for Linux x86_64 and aarch64 plus macOS, to confirm with the Java consumer before Java packaging | Plan sections 3 and 10, support-matrix.md |
 | 26 | G14: only environments the job matrix and L8 test are claimed as supported | support-matrix.md, installation guide, L6, L8 |
@@ -35,9 +35,9 @@ The plan's section 2 holds the standing decisions; this file records how and whe
 | 28 | D2: the new seeded SQLite draw is accepted; it becomes a register entry and a random stream the core must reproduce | determinism-fixes.md, `register.yaml` (T0.8), T0.6 |
 | 29 | The plan's section 5 keep and drop entries (PK-1 to PK-9, PD-1 to PD-6) are approved register entries | register.yaml |
 | 30 | Recommendations accepted: RS-4 (an unseeded in-memory sample uses fresh operating-system randomness), RS-7 (keep refusing seeds of 2**31 and above), DT-1 (zone rules keep applying after 2099), DT-2 (use the host's zone database as today, with a bundled fallback and versions pinned in tests), DT-3 (don't copy the wrap at `Timestamp.min`; handle the no-time marker explicitly), DT-5 (keep packed PQL dates unless the agreed dialect drops them), DT-6 (keep reading free-form text in per-row time columns) | register.yaml |
-| 31 | Phase 0 merges with the PQL asks drafted but not yet sent; sending them is tracked as an open item and does not block Phase 1. | T0.9, [pql-asks.md](pql-asks.md) |
+| 31 | Phase 0 merges with the PQL asks drafted but not yet sent; sending them is tracked as an open item and does not block Phase 1. | T0.9, [pql-asks.md](pql-asks.md); superseded by Phase 1 decision E18 (owner, 2026-10-08): the asks are retired and not sent |
 
 ## Open decisions
 
-- T0.9: the owner sends the PQL asks in [pql-asks.md](pql-asks.md) (decision 31); this does not block Phase 1.
+- T0.9: the owner sends the PQL asks in [pql-asks.md](pql-asks.md) (decision 31); this does not block Phase 1. Closed: superseded by Phase 1 decision E18 (owner, 2026-10-08), the asks are retired and not sent.
 - P1B-1: any Phase 1b case whose new outcome refuses an input Python accepts comes to the owner case by case.

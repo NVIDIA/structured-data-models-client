@@ -1,0 +1,774 @@
+statements per public call: h11.decimal.binary-threshold-10-2: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.binary-threshold-10-2: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.binary-threshold-10-2: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.binary-threshold-10-2: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.feature-18-18-null-heavy: python-ref: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.decimal.feature-18-18-null-heavy: python-core: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.decimal.feature-18-18-null-heavy: python-old: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.decimal.feature-18-18-null-heavy: rust-host: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.decimal.key-38-0-large: python-ref: {'from_source': 10, 'materialize': 4, 'predict': 0}
+statements per public call: h11.decimal.key-38-0-large: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.key-38-0-large: python-old: {'from_source': 10, 'materialize': 4, 'predict': 0}
+statements per public call: h11.decimal.key-38-0-large: rust-host: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.decimal.target-38-37: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.target-38-37: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.target-38-37: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.target-38-37: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.decimal.target-sum-past-precision: python-ref: {'from_source': 10, 'materialize': 4, 'predict': 0}
+statements per public call: h11.decimal.target-sum-past-precision: python-core: {'from_source': 10, 'materialize': 4, 'predict': 0}
+statements per public call: h11.decimal.target-sum-past-precision: python-old: {'from_source': 10, 'materialize': 4, 'predict': 0}
+statements per public call: h11.decimal.target-sum-past-precision: rust-host: {'from_source': 10, 'materialize': 4, 'predict': 0}
+statements per public call: h11.edit.clear-time-column-window: python-ref: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.clear-time-column-window: python-core: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.clear-time-column-window: python-old: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.clear-time-column-window: rust-host: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.drop-target-column: python-ref: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.drop-target-column: python-core: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.drop-target-column: python-old: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.drop-target-column: rust-host: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.edit.set-second-time-column: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.edit.set-second-time-column: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.edit.set-second-time-column: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.edit.set-second-time-column: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.edit.stype-categorical-int-target: python-ref: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.edit.stype-categorical-int-target: python-core: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.edit.stype-categorical-int-target: python-old: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.edit.stype-categorical-int-target: rust-host: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.empty.entity-table: python-ref: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.empty.entity-table: python-core: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.empty.entity-table: python-old: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.empty.entity-table: rust-host: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.empty.single-entity: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.empty.single-entity: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.empty.single-entity: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.empty.single-entity: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.composite-primary-key: python-ref: {'from_source': 10, 'materialize': 1, 'predict': 0}
+statements per public call: h11.key.composite-primary-key: python-core: {'from_source': 9, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.composite-primary-key: python-old: {'from_source': 10, 'materialize': 1, 'predict': 0}
+statements per public call: h11.key.composite-primary-key: rust-host: {'from_source': 9, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.duplicate-primary-values: python-ref: {'from_source': 11, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.duplicate-primary-values: python-core: {'from_source': 11, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.duplicate-primary-values: python-old: {'from_source': 11, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.duplicate-primary-values: rust-host: {'from_source': 11, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.explicit-tables-and-link: python-ref: {'from_source': 0, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.explicit-tables-and-link: python-core: {'from_source': 0, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.explicit-tables-and-link: python-old: {'from_source': 0, 'materialize': 0, 'predict': 0}
+statements per public call: h11.key.explicit-tables-and-link: rust-host: {'from_source': 9, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.int64-near-max: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.int64-near-max: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.int64-near-max: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.int64-near-max: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.negative-multiclass: python-ref: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.key.negative-multiclass: python-core: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.key.negative-multiclass: python-old: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.key.negative-multiclass: rust-host: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.key.uint32-binary: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.uint32-binary: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.uint32-binary: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.uint32-binary: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-leading-zeros: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-leading-zeros: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-leading-zeros: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-leading-zeros: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-unicode-binary: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-unicode-binary: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-unicode-binary: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.varchar-unicode-binary: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.width-mismatch: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.width-mismatch: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.width-mismatch: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.key.width-mismatch: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.json-text: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.json-text: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.json-text: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.json-text: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-of-list: python-ref: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.list-of-list: python-core: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.list-of-list: python-old: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.list-of-list: rust-host: {'from_source': 7, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.list-on-fact-table: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-on-fact-table: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-on-fact-table: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-on-fact-table: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-varchar-null-elements: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-varchar-null-elements: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-varchar-null-elements: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.list-varchar-null-elements: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.nested.struct-on-fact-table: python-ref: {'from_source': 4, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.struct-on-fact-table: python-core: {'from_source': 4, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.struct-on-fact-table: python-old: {'from_source': 4, 'materialize': 0, 'predict': 0}
+statements per public call: h11.nested.struct-on-fact-table: rust-host: {'from_source': 4, 'materialize': 0, 'predict': 0}
+statements per public call: h11.null.all-foreign-keys: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.all-foreign-keys: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.all-foreign-keys: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.all-foreign-keys: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.nan-and-infinity-target: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.nan-and-infinity-target: python-core: {'from_source': 4, 'materialize': 0, 'predict': 0}
+statements per public call: h11.null.nan-and-infinity-target: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.nan-and-infinity-target: rust-host: {'from_source': 4, 'materialize': 0, 'predict': 0}
+statements per public call: h11.null.target-mostly-null-binary: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.target-mostly-null-binary: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.target-mostly-null-binary: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.target-mostly-null-binary: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.null.time-column-all-null: python-ref: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.null.time-column-all-null: python-core: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.null.time-column-all-null: python-old: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.null.time-column-all-null: rust-host: {'from_source': 10, 'materialize': 0, 'predict': 0}
+statements per public call: h11.option.inference-config: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.option.inference-config: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.option.inference-config: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.option.inference-config: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.task.binary-count-equals: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.task.binary-count-equals: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.task.binary-count-equals: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.task.binary-count-equals: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.task.forecast-sum: python-ref: {'from_source': 10, 'materialize': 18, 'predict': 0}
+statements per public call: h11.task.forecast-sum: python-core: {'from_source': 10, 'materialize': 18, 'predict': 0}
+statements per public call: h11.task.forecast-sum: python-old: {'from_source': 10, 'materialize': 18, 'predict': 0}
+statements per public call: h11.task.forecast-sum: rust-host: {'from_source': 10, 'materialize': 1, 'predict': 0}
+statements per public call: h11.task.multiclass-text-with-null-target: python-ref: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.task.multiclass-text-with-null-target: python-core: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.task.multiclass-text-with-null-target: python-old: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.task.multiclass-text-with-null-target: rust-host: {'from_source': 10, 'materialize': 5, 'predict': 0}
+statements per public call: h11.task.ranking-without-candidates: python-ref: {'from_source': 14, 'materialize': 0, 'predict': 0}
+statements per public call: h11.task.ranking-without-candidates: python-core: {'from_source': 14, 'materialize': 0, 'predict': 0}
+statements per public call: h11.task.ranking-without-candidates: python-old: {'from_source': 14, 'materialize': 0, 'predict': 0}
+statements per public call: h11.task.ranking-without-candidates: rust-host: {'from_source': 14, 'materialize': 1, 'predict': 0}
+statements per public call: h11.time.anchor-leap-day-binary: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.anchor-leap-day-binary: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.anchor-leap-day-binary: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.anchor-leap-day-binary: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.date-month-ends: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.date-month-ends: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.date-month-ends: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.date-month-ends: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-fall-back-binary: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-fall-back-binary: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-fall-back-binary: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-fall-back-binary: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-spring-forward-hours: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-spring-forward-hours: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-spring-forward-hours: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.dst-spring-forward-hours: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.month-window-from-month-end: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.month-window-from-month-end: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.month-window-from-month-end: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.month-window-from-month-end: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.pre-epoch: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.pre-epoch: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.pre-epoch: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.pre-epoch: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-offset: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-offset: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-offset: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-offset: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-zulu-fraction: python-ref: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-zulu-fraction: python-core: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-zulu-fraction: python-old: {'from_source': 10, 'materialize': 6, 'predict': 0}
+statements per public call: h11.time.text-iso-zulu-fraction: rust-host: {'from_source': 10, 'materialize': 6, 'predict': 0}
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.decimal.binary-threshold-10-2: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.binary-threshold-10-2: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.binary-threshold-10-2: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.binary-threshold-10-2: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.decimal.binary-threshold-10-2: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.binary-threshold-10-2: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.binary-threshold-10-2: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.decimal.feature-18-18-null-heavy: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.feature-18-18-null-heavy: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.decimal.feature-18-18-null-heavy: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.feature-18-18-null-heavy: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.decimal.feature-18-18-null-heavy: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.feature-18-18-null-heavy: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.feature-18-18-null-heavy: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.feature-18-18-null-heavy: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.decimal.feature-18-18-null-heavy: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.feature-18-18-null-heavy: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.key-38-0-large: python-core against python-ref: materialize: 3 relations bound, the reference 1
+diagnostic rule sql.text: h11.decimal.key-38-0-large: python-old against python-ref: materialize statement 3: text differs
+diagnostic: outcome: h11.decimal.key-38-0-large: python-core: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: h11.decimal.key-38-0-large: python-core against python-ref: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: h11.decimal.key-38-0-large: python-core against python-ref: outcome.stage: expected 'materialize', observed 'predict'
+diagnostic: outcome: h11.decimal.key-38-0-large: python-core against python-ref: outcome.error: expected 'StructuredDataError', observed None
+diagnostic: outcome: h11.decimal.key-38-0-large: python-core against python-ref: outcome.code: expected 'INTERNAL_ERROR', observed None
+diagnostic: result: h11.decimal.key-38-0-large: python-core against python-ref: public.result: differs
+diagnostic: payload: h11.decimal.key-38-0-large: python-core against python-ref: public.payloads: 1 items against 0
+diagnostic: sql.count: h11.decimal.key-38-0-large: python-core against python-ref: materialize: 6 statements, the reference 4
+diagnostic: outcome: h11.decimal.key-38-0-large: rust-host: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: h11.decimal.key-38-0-large: rust-host against python-ref: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: h11.decimal.key-38-0-large: rust-host against python-ref: outcome.code: expected 'INTERNAL_ERROR', observed None
+diagnostic: core: h11.decimal.key-38-0-large: python-core against rust-host: identity.operations: expected ['describe_source', 'materialize', 'predict'], observed ['describe_source']
+diagnostic: core: h11.decimal.key-38-0-large: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.decimal.key-38-0-large: python-core against rust-host: core.fetches: differs
+diagnostic: core: h11.decimal.key-38-0-large: python-core against rust-host: core.materialized: differs
+diagnostic: core: h11.decimal.key-38-0-large: python-core against rust-host: core.predicted: differs
+diagnostic rule sql.text: h11.decimal.target-38-37: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.decimal.target-38-37: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.target-38-37: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.target-38-37: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.decimal.target-38-37: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.decimal.target-38-37: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.decimal.target-38-37: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.target-38-37: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.decimal.target-38-37: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.decimal.target-sum-past-precision: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.bindings: h11.decimal.target-sum-past-precision: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.decimal.target-sum-past-precision: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.decimal.target-sum-past-precision: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.bindings: h11.decimal.target-sum-past-precision: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic: route: h11.decimal.target-sum-past-precision: python-core: route: ['predict'] did not run on the core
+diagnostic: inputs: h11.decimal.target-sum-past-precision: python-core: core.inputs: differs
+diagnostic: route: h11.decimal.target-sum-past-precision: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.decimal.target-sum-past-precision: rust-host: core.inputs: differs
+diagnostic: outcome: h11.edit.clear-time-column-window: python-core: core: not one request state or one error
+diagnostic: route: h11.edit.clear-time-column-window: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.edit.clear-time-column-window: python-core: core.inputs: differs
+diagnostic: route: h11.edit.clear-time-column-window: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.edit.clear-time-column-window: rust-host: core.inputs: differs
+diagnostic: core: h11.edit.clear-time-column-window: python-core against rust-host: identity.operations: expected ['describe_source', 'edit_schema'], observed ['describe_source', 'edit_schema', 'materialize']
+diagnostic: core: h11.edit.clear-time-column-window: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.edit.clear-time-column-window: python-core against rust-host: core.error: expected None, observed {'kind': 'invalid_request', 'code': 'INVALID_REQUEST'}
+diagnostic: outcome: h11.edit.drop-target-column: python-core: core: not one request state or one error
+diagnostic: route: h11.edit.drop-target-column: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.edit.drop-target-column: python-core: core.inputs: differs
+diagnostic: route: h11.edit.drop-target-column: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.edit.drop-target-column: rust-host: core.inputs: differs
+diagnostic: core: h11.edit.drop-target-column: python-core against rust-host: identity.operations: expected ['describe_source', 'edit_schema'], observed ['describe_source', 'edit_schema', 'materialize']
+diagnostic: core: h11.edit.drop-target-column: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.edit.drop-target-column: python-core against rust-host: core.error: expected None, observed {'kind': 'invalid_request', 'code': 'INVALID_REQUEST'}
+diagnostic rule sql.text: h11.edit.set-second-time-column: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.edit.set-second-time-column: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.edit.set-second-time-column: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.edit.set-second-time-column: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.edit.set-second-time-column: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.edit.set-second-time-column: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.edit.set-second-time-column: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.edit.set-second-time-column: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.edit.set-second-time-column: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.edit.stype-categorical-int-target: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.edit.stype-categorical-int-target: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.edit.stype-categorical-int-target: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.edit.stype-categorical-int-target: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.edit.stype-categorical-int-target: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.edit.stype-categorical-int-target: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.edit.stype-categorical-int-target: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.edit.stype-categorical-int-target: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.edit.stype-categorical-int-target: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.edit.stype-categorical-int-target: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic: outcome: h11.empty.entity-table: python-core: outcome.error: expected 'RuntimeError', observed 'StructuredDataError'
+diagnostic: outcome: h11.empty.entity-table: python-core: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: outcome: h11.empty.entity-table: python-core against python-ref: outcome.error: expected 'RuntimeError', observed 'StructuredDataError'
+diagnostic: outcome: h11.empty.entity-table: python-core against python-ref: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: route: h11.empty.entity-table: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.empty.entity-table: python-core: core.inputs: differs
+diagnostic: outcome: h11.empty.entity-table: rust-host: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: outcome: h11.empty.entity-table: rust-host against python-ref: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: route: h11.empty.entity-table: rust-host: route: ['materialize', 'predict'] did not run on the host
+diagnostic: inputs: h11.empty.entity-table: rust-host: core.inputs: differs
+diagnostic rule sql.text: h11.empty.single-entity: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.empty.single-entity: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.empty.single-entity: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.empty.single-entity: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.empty.single-entity: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.empty.single-entity: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.empty.single-entity: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.empty.single-entity: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.empty.single-entity: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.empty.single-entity: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.empty.single-entity: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.empty.single-entity: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.empty.single-entity: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.empty.single-entity: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.empty.single-entity: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic: outcome: h11.key.composite-primary-key: python-core: outcome.stage: expected 'materialize', observed 'from_source'
+diagnostic: outcome: h11.key.composite-primary-key: python-core: outcome.error: expected 'StructuredDataError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.key.composite-primary-key: python-core: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.key.composite-primary-key: python-core against python-ref: outcome.stage: expected 'materialize', observed 'from_source'
+diagnostic: outcome: h11.key.composite-primary-key: python-core against python-ref: outcome.error: expected 'StructuredDataError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.key.composite-primary-key: python-core against python-ref: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: inputs: h11.key.composite-primary-key: python-core: core.inputs: differs
+diagnostic: schema: h11.key.composite-primary-key: python-core against python-ref: public.schema: differs
+diagnostic: warnings: h11.key.composite-primary-key: python-core against python-ref: host.warnings: differ
+diagnostic: sql.count: h11.key.composite-primary-key: python-core against python-ref: from_source: 9 statements, the reference 10
+diagnostic: sql.count: h11.key.composite-primary-key: python-core against python-ref: materialize: 0 statements, the reference 1
+diagnostic: outcome: h11.key.composite-primary-key: rust-host: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.key.composite-primary-key: rust-host against python-ref: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: inputs: h11.key.composite-primary-key: rust-host: core.inputs: differs
+diagnostic: sql.count: h11.key.composite-primary-key: rust-host against python-ref: from_source: 9 statements, the reference 10
+diagnostic: outcome: h11.key.duplicate-primary-values: python-core: core: not one request state or one error
+diagnostic: route: h11.key.duplicate-primary-values: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.key.duplicate-primary-values: python-core: core.inputs: differs
+diagnostic: route: h11.key.duplicate-primary-values: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.key.duplicate-primary-values: rust-host: core.inputs: differs
+diagnostic: core: h11.key.duplicate-primary-values: python-core against rust-host: identity.operations: expected ['describe_source'], observed ['describe_source', 'materialize']
+diagnostic: core: h11.key.duplicate-primary-values: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.key.duplicate-primary-values: python-core against rust-host: core.error: expected None, observed {'kind': 'invalid_request', 'code': 'INVALID_REQUEST'}
+diagnostic rule sql.bindings: h11.key.explicit-tables-and-link: rust-host against python-ref: materialize: 3 relations bound, the reference 0
+diagnostic: outcome: h11.key.explicit-tables-and-link: python-core: core: not one description or one error
+diagnostic: route: h11.key.explicit-tables-and-link: python-core: route: ['describe_source', 'materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.key.explicit-tables-and-link: python-core: core.inputs: differs
+diagnostic: outcome: h11.key.explicit-tables-and-link: rust-host: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: h11.key.explicit-tables-and-link: rust-host against python-ref: outcome.result: expected 'refusal', observed 'success'
+diagnostic: inputs: h11.key.explicit-tables-and-link: rust-host: core.inputs: differs
+diagnostic: payload: h11.key.explicit-tables-and-link: rust-host against python-ref: core.predicted.body: 1 items against 0
+diagnostic: sql.count: h11.key.explicit-tables-and-link: rust-host against python-ref: from_source: 9 statements, the reference 0
+diagnostic: sql.count: h11.key.explicit-tables-and-link: rust-host against python-ref: materialize: 6 statements, the reference 0
+diagnostic: core: h11.key.explicit-tables-and-link: python-core against rust-host: identity.operations: expected [], observed ['describe_source', 'materialize', 'predict']
+diagnostic: core: h11.key.explicit-tables-and-link: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.key.explicit-tables-and-link: python-core against rust-host: core.fetches: differs
+diagnostic: core: h11.key.explicit-tables-and-link: python-core against rust-host: core.described: differs
+diagnostic: core: h11.key.explicit-tables-and-link: python-core against rust-host: core.materialized: differs
+diagnostic: core: h11.key.explicit-tables-and-link: python-core against rust-host: core.predicted: differs
+diagnostic: sql.count: h11.key.explicit-tables-and-link: python-core against rust-host: from_source: 0 statements, against 9
+diagnostic: sql.count: h11.key.explicit-tables-and-link: python-core against rust-host: materialize: 0 statements, against 6
+diagnostic rule sql.text: h11.key.int64-near-max: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.int64-near-max: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.int64-near-max: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.int64-near-max: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.int64-near-max: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.int64-near-max: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.int64-near-max: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.int64-near-max: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.int64-near-max: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.negative-multiclass: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.negative-multiclass: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.key.negative-multiclass: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.negative-multiclass: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.negative-multiclass: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.negative-multiclass: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.negative-multiclass: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.negative-multiclass: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.key.negative-multiclass: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.negative-multiclass: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.uint32-binary: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.uint32-binary: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.uint32-binary: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.uint32-binary: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.uint32-binary: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.uint32-binary: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.uint32-binary: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.uint32-binary: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.uint32-binary: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic: inputs: h11.key.uint32-binary: python-core: core.inputs: differs
+diagnostic: core: h11.key.uint32-binary: python-core against rust-host: core.inputs: differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.varchar-leading-zeros: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-leading-zeros: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-leading-zeros: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.varchar-leading-zeros: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.varchar-leading-zeros: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-leading-zeros: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-leading-zeros: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.varchar-unicode-binary: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-unicode-binary: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-unicode-binary: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.varchar-unicode-binary: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.varchar-unicode-binary: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-unicode-binary: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.varchar-unicode-binary: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.width-mismatch: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.width-mismatch: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.width-mismatch: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.width-mismatch: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.key.width-mismatch: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.key.width-mismatch: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.key.width-mismatch: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.width-mismatch: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.key.width-mismatch: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic: inputs: h11.key.width-mismatch: python-core: core.inputs: differs
+diagnostic: core: h11.key.width-mismatch: python-core against rust-host: core.inputs: differs
+diagnostic rule sql.text: h11.nested.json-text: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.json-text: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.json-text: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.nested.json-text: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.json-text: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.json-text: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.nested.json-text: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.json-text: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.json-text: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.nested.json-text: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.json-text: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.json-text: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.nested.json-text: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.json-text: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.json-text: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic: outcome: h11.nested.list-of-list: python-core: outcome.error: expected 'ValueError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.nested.list-of-list: python-core: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.nested.list-of-list: python-core against python-ref: outcome.error: expected 'ValueError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.nested.list-of-list: python-core against python-ref: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.nested.list-of-list: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.nested.list-of-list: python-core: core.inputs: differs
+diagnostic: outcome: h11.nested.list-of-list: rust-host: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.nested.list-of-list: rust-host against python-ref: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.nested.list-of-list: rust-host: route: ['materialize', 'predict'] did not run on the host
+diagnostic: inputs: h11.nested.list-of-list: rust-host: core.inputs: differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.nested.list-on-fact-table: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-on-fact-table: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-on-fact-table: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.nested.list-on-fact-table: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.list-on-fact-table: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.nested.list-on-fact-table: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-on-fact-table: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-on-fact-table: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.nested.list-varchar-null-elements: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-varchar-null-elements: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-varchar-null-elements: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.nested.list-varchar-null-elements: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.nested.list-varchar-null-elements: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-varchar-null-elements: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.nested.list-varchar-null-elements: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic: outcome: h11.nested.struct-on-fact-table: python-core: outcome.error: expected 'RuntimeError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.nested.struct-on-fact-table: python-core: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.nested.struct-on-fact-table: python-core against python-ref: outcome.error: expected 'RuntimeError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.nested.struct-on-fact-table: python-core against python-ref: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.nested.struct-on-fact-table: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.nested.struct-on-fact-table: python-core: core.inputs: differs
+diagnostic: outcome: h11.nested.struct-on-fact-table: rust-host: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.nested.struct-on-fact-table: rust-host against python-ref: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.nested.struct-on-fact-table: rust-host: route: ['materialize', 'predict'] did not run on the host
+diagnostic: inputs: h11.nested.struct-on-fact-table: rust-host: core.inputs: differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.null.all-foreign-keys: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.all-foreign-keys: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.all-foreign-keys: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.null.all-foreign-keys: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.all-foreign-keys: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.null.all-foreign-keys: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.all-foreign-keys: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.all-foreign-keys: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.nan-and-infinity-target: python-core against python-ref: materialize: 0 relations bound, the reference 3
+diagnostic rule sql.text: h11.null.nan-and-infinity-target: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.nan-and-infinity-target: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.nan-and-infinity-target: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.null.nan-and-infinity-target: rust-host against python-ref: materialize: 0 relations bound, the reference 3
+diagnostic: outcome: h11.null.nan-and-infinity-target: python-core: outcome.stage: expected 'materialize', observed 'from_source'
+diagnostic: outcome: h11.null.nan-and-infinity-target: python-core: outcome.error: expected 'StructuredDataError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.null.nan-and-infinity-target: python-core: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.null.nan-and-infinity-target: python-core against python-ref: outcome.stage: expected 'materialize', observed 'from_source'
+diagnostic: outcome: h11.null.nan-and-infinity-target: python-core against python-ref: outcome.error: expected 'StructuredDataError', observed 'UnsupportedRequestError'
+diagnostic: outcome: h11.null.nan-and-infinity-target: python-core against python-ref: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.null.nan-and-infinity-target: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.null.nan-and-infinity-target: python-core: core.inputs: differs
+diagnostic: schema: h11.null.nan-and-infinity-target: python-core against python-ref: public.schema: differs
+diagnostic: warnings: h11.null.nan-and-infinity-target: python-core against python-ref: host.warnings: differ
+diagnostic: sql.count: h11.null.nan-and-infinity-target: python-core against python-ref: from_source: 4 statements, the reference 10
+diagnostic: sql.count: h11.null.nan-and-infinity-target: python-core against python-ref: materialize: 0 statements, the reference 6
+diagnostic: outcome: h11.null.nan-and-infinity-target: rust-host: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.null.nan-and-infinity-target: rust-host against python-ref: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.null.nan-and-infinity-target: rust-host: route: ['materialize', 'predict'] did not run on the host
+diagnostic: inputs: h11.null.nan-and-infinity-target: rust-host: core.inputs: differs
+diagnostic: sql.count: h11.null.nan-and-infinity-target: rust-host against python-ref: from_source: 4 statements, the reference 10
+diagnostic: sql.count: h11.null.nan-and-infinity-target: rust-host against python-ref: materialize: 0 statements, the reference 6
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.null.target-mostly-null-binary: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.target-mostly-null-binary: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.target-mostly-null-binary: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.null.target-mostly-null-binary: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.null.target-mostly-null-binary: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.target-mostly-null-binary: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.null.target-mostly-null-binary: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic: outcome: h11.null.time-column-all-null: python-core: core: not one request state or one error
+diagnostic: route: h11.null.time-column-all-null: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.null.time-column-all-null: python-core: core.inputs: differs
+diagnostic: route: h11.null.time-column-all-null: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.null.time-column-all-null: rust-host: core.inputs: differs
+diagnostic: core: h11.null.time-column-all-null: python-core against rust-host: identity.operations: expected ['describe_source'], observed ['describe_source', 'materialize']
+diagnostic: core: h11.null.time-column-all-null: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.null.time-column-all-null: python-core against rust-host: core.error: expected None, observed {'kind': 'invalid_request', 'code': 'INVALID_REQUEST'}
+diagnostic rule sql.text: h11.option.inference-config: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.option.inference-config: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.option.inference-config: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.option.inference-config: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.option.inference-config: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.option.inference-config: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.option.inference-config: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.option.inference-config: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.option.inference-config: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.option.inference-config: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.option.inference-config: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.option.inference-config: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.option.inference-config: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.option.inference-config: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.option.inference-config: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.task.binary-count-equals: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.task.binary-count-equals: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.binary-count-equals: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.binary-count-equals: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.task.binary-count-equals: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.task.binary-count-equals: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.task.binary-count-equals: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.binary-count-equals: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.binary-count-equals: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 9: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 10: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 11: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 15: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 16: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-core against python-ref: materialize statement 17: text differs
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 3: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 4: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 5: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 6: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 7: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.forecast-sum: python-core against python-ref: materialize binding 8: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 9: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 10: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 11: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 15: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 16: text differs
+diagnostic rule sql.text: h11.task.forecast-sum: python-old against python-ref: materialize statement 17: text differs
+diagnostic rule sql.bindings: h11.task.forecast-sum: rust-host against python-ref: materialize: 0 relations bound, the reference 9
+diagnostic: inputs: h11.task.forecast-sum: python-core: core.inputs: differs
+diagnostic: payload: h11.task.forecast-sum: python-core: the call against the request received: core.predicted.body: 1 items against 3
+diagnostic: outcome: h11.task.forecast-sum: rust-host: outcome.result: expected 'success', observed 'refusal'
+diagnostic: outcome: h11.task.forecast-sum: rust-host against python-ref: outcome.result: expected 'success', observed 'refusal'
+diagnostic: outcome: h11.task.forecast-sum: rust-host against python-ref: outcome.code: expected None, observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.task.forecast-sum: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.task.forecast-sum: rust-host: core.inputs: differs
+diagnostic: sql.count: h11.task.forecast-sum: rust-host against python-ref: materialize: 1 statements, the reference 18
+diagnostic: core: h11.task.forecast-sum: python-core against rust-host: identity.operations: expected ['describe_source', 'materialize', 'materialize', 'materialize', 'predict', 'predict', 'predict'], observed ['describe_source', 'materialize']
+diagnostic: core: h11.task.forecast-sum: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.task.forecast-sum: python-core against rust-host: core.fetches: differs
+diagnostic: core: h11.task.forecast-sum: python-core against rust-host: core.materialized: differs
+diagnostic: core: h11.task.forecast-sum: python-core against rust-host: core.predicted: differs
+diagnostic: core: h11.task.forecast-sum: python-core against rust-host: core.error: expected None, observed {'kind': 'unsupported', 'code': 'UNSUPPORTED_REQUEST'}
+diagnostic: sql.count: h11.task.forecast-sum: python-core against rust-host: materialize: 18 statements, against 1
+diagnostic rule sql.text: h11.task.multiclass-text-with-null-target: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.multiclass-text-with-null-target: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.task.multiclass-text-with-null-target: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.multiclass-text-with-null-target: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.task.multiclass-text-with-null-target: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.multiclass-text-with-null-target: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.task.multiclass-text-with-null-target: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.task.multiclass-text-with-null-target: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.bindings: h11.task.multiclass-text-with-null-target: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.task.multiclass-text-with-null-target: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic: outcome: h11.task.ranking-without-candidates: python-core: core: not one request state or one error
+diagnostic: route: h11.task.ranking-without-candidates: python-core: route: ['materialize', 'predict'] did not run on the core
+diagnostic: inputs: h11.task.ranking-without-candidates: python-core: core.inputs: differs
+diagnostic: outcome: h11.task.ranking-without-candidates: rust-host: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: outcome: h11.task.ranking-without-candidates: rust-host against python-ref: outcome.code: expected 'INVALID_REQUEST', observed 'UNSUPPORTED_REQUEST'
+diagnostic: route: h11.task.ranking-without-candidates: rust-host: route: ['predict'] did not run on the host
+diagnostic: inputs: h11.task.ranking-without-candidates: rust-host: core.inputs: differs
+diagnostic: sql.count: h11.task.ranking-without-candidates: rust-host against python-ref: materialize: 1 statements, the reference 0
+diagnostic: core: h11.task.ranking-without-candidates: python-core against rust-host: identity.operations: expected ['describe_source'], observed ['describe_source', 'materialize']
+diagnostic: core: h11.task.ranking-without-candidates: python-core against rust-host: core.inputs: differs
+diagnostic: core: h11.task.ranking-without-candidates: python-core against rust-host: core.fetches: differs
+diagnostic: core: h11.task.ranking-without-candidates: python-core against rust-host: core.error: expected None, observed {'kind': 'unsupported', 'code': 'UNSUPPORTED_REQUEST'}
+diagnostic: sql.count: h11.task.ranking-without-candidates: python-core against rust-host: materialize: 0 statements, against 1
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.anchor-leap-day-binary: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.anchor-leap-day-binary: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.anchor-leap-day-binary: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.anchor-leap-day-binary: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.anchor-leap-day-binary: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.anchor-leap-day-binary: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.anchor-leap-day-binary: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.date-month-ends: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.date-month-ends: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.date-month-ends: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.date-month-ends: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.date-month-ends: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.date-month-ends: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.date-month-ends: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.date-month-ends: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.date-month-ends: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.dst-fall-back-binary: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-fall-back-binary: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-fall-back-binary: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.dst-fall-back-binary: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.dst-fall-back-binary: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-fall-back-binary: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-fall-back-binary: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.dst-spring-forward-hours: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-spring-forward-hours: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-spring-forward-hours: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.dst-spring-forward-hours: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.dst-spring-forward-hours: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-spring-forward-hours: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.dst-spring-forward-hours: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.month-window-from-month-end: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.month-window-from-month-end: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.month-window-from-month-end: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.month-window-from-month-end: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.month-window-from-month-end: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.month-window-from-month-end: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.month-window-from-month-end: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.month-window-from-month-end: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.month-window-from-month-end: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.pre-epoch: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.pre-epoch: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.pre-epoch: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.pre-epoch: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.pre-epoch: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.pre-epoch: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.pre-epoch: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.pre-epoch: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.pre-epoch: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.text-iso-offset: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.text-iso-offset: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-offset: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-offset: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.text-iso-offset: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.text-iso-offset: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.text-iso-offset: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-offset: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-offset: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: python-core against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: python-core against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: python-core against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.text-iso-zulu-fraction: python-core against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-zulu-fraction: python-core against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-zulu-fraction: python-core against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: python-old against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: python-old against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: python-old against python-ref: materialize statement 5: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: rust-host against python-ref: materialize statement 3: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: rust-host against python-ref: materialize statement 4: text differs
+diagnostic rule sql.text: h11.time.text-iso-zulu-fraction: rust-host against python-ref: materialize statement 5: text differs
+diagnostic rule sql.bindings: h11.time.text-iso-zulu-fraction: rust-host against python-ref: materialize binding 0: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-zulu-fraction: rust-host against python-ref: materialize binding 1: its rows differ as written, the order of columns included
+diagnostic rule sql.bindings: h11.time.text-iso-zulu-fraction: rust-host against python-ref: materialize binding 2: its rows differ as written, the order of columns included
+compare: no differences

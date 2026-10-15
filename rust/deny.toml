@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# What `cargo deny check` holds every dependency to: advisories, licences,
+# bans and sources.
+# https://embarkstudios.github.io/cargo-deny/checks/cfg.html
+
+[graph]
+all-features = true
+
+[advisories]
+# RustSec advisories fail the check; an exception is a reviewed entry here,
+# with a decision row in docs/design/rust-core/phase-1/decisions.md.
+ignore = [
+    # pyo3 0.28 is pinned because arrow-pyarrow 58 needs it (decision B-D2);
+    # both are fixed in pyo3 0.29, which arrives with the next Arrow bump.
+    # The only mitigation is not calling the affected code: sdm-py's
+    # clippy.toml bans PyCFunction::new_closure and nth, nth_back, skip and
+    # step_by, and clippy runs with -D warnings in CI. Building for the
+    # GIL-enabled interpreter does not help with 0177: the GIL serializes
+    # calls, but a closure without Sync can still be called from more than
+    # one thread (decision E1).
+    { id = "RUSTSEC-2026-0176", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; nth/nth_back on list and tuple iterators unused (E1)" },
+    { id = "RUSTSEC-2026-0177", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; PyCFunction::new_closure unused (E1)" },
+]
+
+[licenses]
+# Only licences that the ASF puts in category A: a binary distributed under
+# Apache-2.0 can include them without imposing further terms. A dependency
+# under anything else fails the audit until someone decides about it. Only
+# the licences some dependency uses are listed, so the list says what ships.
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+# The Mozilla root certificates, under a data licence, reach the graph only as
+# a build dependency of libduckdb-sys (through ureq) inside the dev-only test
+# host; nothing shipped links them.
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
+[licenses.private]
+# The workspace's own crates are Apache-2.0 like the rest of the repository,
+# and are checked like any dependency.
+ignore = false
+
+[bans]
+# Two versions of most crates is weight, not a correctness problem; it is
+# reported. Arrow and pyo3 are the exception, below.
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+deny = [
+    # One Arrow major and one pyo3 across the workspace (decision B-D2): two
+    # Arrow versions in one process need FFI glue between them.
+    { crate = "arrow", deny-multiple-versions = true },
+    { crate = "arrow-arith", deny-multiple-versions = true },
+    { crate = "arrow-array", deny-multiple-versions = true },
+    { crate = "arrow-buffer", deny-multiple-versions = true },
+    { crate = "arrow-cast", deny-multiple-versions = true },
+    { crate = "arrow-csv", deny-multiple-versions = true },
+    { crate = "arrow-data", deny-multiple-versions = true },
+    { crate = "arrow-ipc", deny-multiple-versions = true },
+    { crate = "arrow-json", deny-multiple-versions = true },
+    { crate = "arrow-ord", deny-multiple-versions = true },
+    { crate = "arrow-pyarrow", deny-multiple-versions = true },
+    { crate = "arrow-row", deny-multiple-versions = true },
+    { crate = "arrow-schema", deny-multiple-versions = true },
+    { crate = "arrow-select", deny-multiple-versions = true },
+    { crate = "arrow-string", deny-multiple-versions = true },
+    { crate = "pyo3", deny-multiple-versions = true },
+    # jiff is the one zone library (decision A7); chrono-tz expands rules only
+    # to 2099 and embeds its database at build time.
+    { crate = "chrono-tz", reason = "zones come from jiff (decision A7)" },
+    # Archived and unmaintained; YAML goes through a maintained 1.2 crate.
+    { crate = "serde_yaml", reason = "archived; use a maintained YAML 1.2 crate" },
+    # The binding alone talks to Python.
+    { crate = "pyo3", wrappers = ["sdm-py", "arrow-pyarrow", "pyo3-log"], reason = "only the Python binding loads Python" },
+    { crate = "arrow-pyarrow", wrappers = ["sdm-py"], reason = "only the Python binding loads Python" },
+    { crate = "pyo3-log", wrappers = ["sdm-py"], reason = "only the Python binding loads Python" },
+    # The database driver and anyhow belong to the dev-only test host.
+    { crate = "duckdb", wrappers = ["sdm-testkit"], reason = "the test host alone runs DuckDB in Rust" },
+    { crate = "anyhow", wrappers = ["sdm-testkit"], reason = "first-party errors are typed with thiserror" },
+]
+
+[sources]
+# crates.io only.
+unknown-registry = "deny"
+unknown-git = "deny"

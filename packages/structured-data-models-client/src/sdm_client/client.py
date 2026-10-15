@@ -1,6 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: on the core route, predict's host-held rules (design,
+# "Host-held semantics"): the model and output checks, the empty answer,
+# the merge of the parts and the notice of an absent output; their use on
+# the core route is deleted in Phase 1 by T1.28b, and the old route's own
+# goes in Phase 5.
 
 r"""One connection to one NIM, serving every model it can reach.
 
@@ -17,6 +22,7 @@ the endpoint and credential of the client that started it.
 from __future__ import annotations
 
 import dataclasses
+import json
 import warnings
 from collections.abc import Iterable, Mapping, Sequence
 from types import TracebackType
@@ -428,6 +434,12 @@ class SDMClient:
         _require_output_names(outputs)
         if request.parts is not None:
             return self._answer_in_parts(request, model, outputs)
+        # On the core route the model and output checks, the answer to a
+        # request with no rows, the context's checks, the merge and the
+        # notice of an absent output are the core's (T1.28b).
+        on_the_core = _predicts_on_the_core(request)
+        if on_the_core is not None:
+            return on_the_core.predict(self, request, model, outputs)
         adapter, fields = self._prepare(request, model, outputs)
         if request.nothing_to_score:
             return _empty_answer(adapter.spec.model_id, fields, request)
@@ -478,6 +490,26 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
+        on_the_core = (
+            None
+            if ranking
+            or not request.parts
+            or getattr(request.parts[0], '_core_state', None) is None
+            else _predicts_on_the_core(request.parts[0])
+        )
+        if on_the_core is not None:
+            # A forecast the core gathered, which the core predicts step by
+            # step and puts together (T1.36 fix 21); a refusal is said of
+            # the step it names, as each part's is below.
+            try:
+                merged = on_the_core.predict(self, request, model, outputs)
+            except StructuredDataError as error:
+                step = getattr(error, '_forecast_step', None)
+                details = getattr(error, 'details', None)
+                if step is None and isinstance(details, dict):
+                    step = details.pop('forecast_step', None)
+                raise about_the_part(error, rewritten, step or 1) from error
+            return _report_absent(merged, outputs, spec_for(model).model_id)
         answers = []
         for position, (part, (_, about)) in enumerate(
             zip(request.parts or (), rewritten.parts, strict=True)
@@ -587,6 +619,25 @@ class SDMClient:
                 # An adapter that had nothing to add returns the same object,
                 # and `raise error from error` makes it its own cause, which
                 # is a cycle for anything that walks the chain.
+                raise
+            raise explained from error
+
+    def _send_body(self, adapter: Any, body: bytes) -> dict[str, Any]:
+        r"""Post one call already written (the core's, on its route), its
+        bytes unchanged where the transport sends bytes as they are, as the
+        HTTP transport does, so the bytes the core's size limit counted are
+        the bytes sent (register PD-2, T1.28a); a transport that writes its
+        own body (a Databricks serving endpoint's envelope) is handed the
+        call decoded. A refusal the adapter explains as :meth:`_send`
+        does."""
+        send = getattr(self._transport, 'predict_body', None)
+        try:
+            if send is not None:
+                return send(body)
+            return self._transport.predict(json.loads(body))
+        except StructuredDataError as error:
+            explained = adapter.explain_error(error, json.loads(body))
+            if explained is error:
                 raise
             raise explained from error
 
@@ -770,6 +821,27 @@ class SDMClient:
 
     def __repr__(self) -> str:
         return f'SDMClient(url={redact_url(self._transport.url)!r})'
+
+
+def _predicts_on_the_core(request: Request) -> Any | None:
+    r"""The core's ``predict`` bridge, when this call runs on the core.
+
+    A request materialized over a DuckDB source predicts on the core when
+    the routing seam forces its paths there (T1.11d); every other call,
+    and every call by default, takes the old route. The bridge refuses, as
+    the seam's own failure, a request the core did not materialize.
+    """
+    schema = getattr(request, 'schema', None)
+    source = getattr(schema, 'source', None)
+    if getattr(source, 'backend', None) != 'duckdb' or not request.payloads:
+        return None
+    from sdm_client import _routing
+
+    if _routing.route(_routing.PREDICT_DUCKDB) != 'core':
+        return None
+    from sdm_client._rust import predict as on_the_core
+
+    return on_the_core
 
 
 def _report_absent(

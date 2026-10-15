@@ -1,0 +1,108 @@
+{
+  "format": "sdm-case/1",
+  "id": "edit.accepted-meaning-key-links",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "edits": [
+      {
+        "op": "set_stype",
+        "table": "users",
+        "column": "age",
+        "stype": "categorical"
+      },
+      {
+        "op": "set_primary_key",
+        "table": "users",
+        "column": "user_id"
+      },
+      {
+        "op": "set_time_column",
+        "table": "orders",
+        "column": "ts"
+      },
+      {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "orders",
+            "source_column": "user_id",
+            "target_table": "users",
+            "target_column": "user_id"
+          }
+        ]
+      }
+    ]
+  },
+  "until": "materialize",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "materialize"
+  },
+  "why": "Edits the reference takes (a meaning, a key, a time column, the relationships) are made by the core as the reference makes them, and the request is the one the edited schema gives",
+  "source": "T1.24b: the schema's edit semantics, accepted edits' parity across the hosts (decision E67)"
+}

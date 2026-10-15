@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from typing import TYPE_CHECKING, Any, TypeAlias
 
@@ -47,6 +48,15 @@ _AUTH_ARGS = frozenset(
 )
 
 
+# snowflake-connector-python 5.0.0 declares these as `ConnectionConfig` fields,
+# but `ConnectionConfig.from_kwargs` refuses them from callers as
+# wrapper-internal and points to `application` instead. The driver lists them
+# in `ConnectionConfig._INTERNAL_PARAMS`, which is read as well so that a later
+# release adding one is covered; they are spelled out here in case that
+# private table moves.
+_DRIVER_INTERNAL_ARGS = frozenset({'client_app_id', 'client_app_version'})
+
+
 def _declared_connect_args() -> frozenset[str]:
     r"""The connection keywords the Snowflake driver genuinely honours.
 
@@ -57,8 +67,31 @@ def _declared_connect_args() -> frozenset[str]:
     with ``SnowflakeConnection.__init__`` restores them, and folding in
     ``_AUTH_ARGS`` keeps the allow-list from ever contradicting the
     borrow logic that runs after it.
+
+    Version 5 of the driver moved its parameters to the public
+    ``ConnectionConfig`` dataclass, one field per parameter, and left
+    ``DEFAULT_CONFIGURATION`` behind as an empty stub. Its fields are read
+    where the class exists, so the same names are accepted on either side of
+    that change. A leading underscore marks the class's own bookkeeping
+    rather than a parameter, and the fields the driver refuses from callers
+    are left out (see ``_DRIVER_INTERNAL_ARGS``). The legacy spellings it
+    still honours as aliases, such as ``private_key_file_pwd``, are accepted
+    too, as they were before version 5.
     """
-    declared = set(snowflake_connector.connection.DEFAULT_CONFIGURATION)
+    declared = set(
+        getattr(snowflake_connector.connection, 'DEFAULT_CONFIGURATION', ())
+    )
+    config = getattr(snowflake_connector, 'ConnectionConfig', None)
+    if dataclasses.is_dataclass(config):
+        internal = _DRIVER_INTERNAL_ARGS | frozenset(
+            getattr(config, '_INTERNAL_PARAMS', ())
+        )
+        declared.update(
+            field.name
+            for field in dataclasses.fields(config)
+            if not field.name.startswith('_') and field.name not in internal
+        )
+        declared.update(getattr(config, '_ALIAS_MAP', {}))
     signature = inspect.signature(Connection.__init__)
     declared.update(
         name

@@ -1,0 +1,60 @@
+{
+  "about": "python-core's run of the edit.* cases, as contract/tests/test_edit_cases.py writes it: per case, the digests of the core's inputs and of the edits' starts, the core's error code, and the digest of the request state; sdm-testkit's tests/edit_cases.rs holds rust-host to it (T1.24b; the cases in contract/cases/s1 from T1.27).",
+  "cases": {
+    "edit.accepted-meaning-key-links": {
+      "edits": "12b47d8c1e839a99bca6bd1739ee7ff407853400cf527514e3a72a0a24b69040",
+      "error": null,
+      "inputs": "97cb4dcd6416159d0b7ad9cbd8e9495ceedd42e5ddcab93e7f27d77d57d29796",
+      "materialized": "062b64ccbbf27a2ebc2d2137884a9812e0d182f7f32fd648656ba553f08ef1b3"
+    },
+    "edit.key-missing-column": {
+      "edits": "dd8af178a557d3343e892608f903f44ca8ca64ec6126ba820abe9c3c999cd201",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.key-time-column": {
+      "edits": "9a17b666c2594abe3e16d8e5a991b099ec4f7b69d4a54f9b5374ac8377011e9a",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.leave-out-the-key": {
+      "edits": "215de4063d83df05a8b6d65881387ed45fa1a31f11399a48367084932318012d",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.link-not-the-key": {
+      "edits": "e65d13179208a8a846170ea7fe2169a323a007817d65acd82c19cdbec2790a80",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.meaning-not-carried": {
+      "edits": "31662554c38c3032c499d95a9c1c08cceb2a6956a2cb6617f52dbff2e014c5a0",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.meaning-unknown": {
+      "edits": "f11eac2ae6c3015f4254b04c8cc8fc353c42fa0e219c8b1f23a75b4339df4354",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.time-column-not-a-time": {
+      "edits": "7a474d163e304aadf2961397a4c003e89be7ec4c68feb14097166d1ee784d661",
+      "error": "INVALID_REQUEST",
+      "inputs": "43b1bf1016366b00a3a42771a291f3997c6fada8d04470ca1c7de4e3afaf7137",
+      "materialized": null
+    },
+    "edit.time-column-text": {
+      "edits": "00028f1dcf7eb74bf5eb14899886e06f3545e3ccba2ee150a1ed00701843b4e0",
+      "error": null,
+      "inputs": "99412173d6718514afaf13673d2c1590bdaf5898f004e268bb2732cfed32ac88",
+      "materialized": "5f8593a39d20576f68c96c70545ff2e588ef402d572571c2739a3bb3547fda28"
+    }
+  },
+  "format": "sdm-edits-pin/1"
+}

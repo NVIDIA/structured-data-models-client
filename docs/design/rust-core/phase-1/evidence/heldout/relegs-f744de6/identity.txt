@@ -1,0 +1,3 @@
+relegs of the one-shot run (owner items 49, 50)
+candidate f744de6b98fe19edc3eb29346365ecda377a9e48
+started 2026-10-15T16:46:43Z

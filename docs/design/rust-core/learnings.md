@@ -92,6 +92,7 @@ Evidence tied to exact commits forced repeated re-validation, and approvals were
 The second orchestrator added rules on itself and asked the owner one question in its 63 hours.
 **Lesson:** cap rounds and relocks, approve by meaning (one decision covers many files), and bound phases by executable outcomes.
 Stop rules are acted on by the owner, not by the agent doing the work.
+*Note (T1.27, checkpoint 7):* this predates Phase 1's E29, under which a review round reports its findings and the work continues while both reviewers iterate, P1 and P2 findings blocking and the rest carried forward (E49(b)).
 
 ### 10. Work fragmented instead of integrating
 
@@ -106,6 +107,32 @@ Push every candidate that passes its checks before building on it, and treat "pa
 When the proposal was posted, reviewers asked for pluggable data access, so a host could answer with a non-SQL source, and for one shared PQL instead of two.
 The first was agreed and the second left open: the plan omitted the data-access seam, and shared PQL never became a real shared dependency, so the implementation hard-coded the SQL dialects and wrote another PQL parser.
 **Lesson:** every review comment ends as a plan item, a decision, or an explicit "no", and is tracked to the end.
+*Note (T1.27, checkpoint 7):* the shared PQL question was answered in Phase 1 by E18: the parser is this client's own and permanent.
+
+### 12. Differences found by review instead of by the implementer (Phase 1, added at T1.27)
+
+At checkpoint 5, three of six packages lost a review round to a difference from the reference that no register entry named.
+**Lesson:** define the supported semantic policy first, and before review classify every differential mismatch to an approved class or a proposed register entry; one committed differential tool (`contract/tools/differential.py`, T1.27) exits non-zero on anything left unclassified.
+
+### 13. A harness cannot approve its own changed assertions (Phase 1, added at checkpoint 8)
+
+The gate judges a candidate with its checkpoint's harness, so a change to a judging file and the product change that needs it cannot land together; four packages found that out in review.
+**Lesson:** split at push, not in review: the judging change lands alone as part 1, and the rest is judged under it.
+
+### 14. Contract-version bumps serialize at integration (Phase 1, added at checkpoint 8)
+
+Two lanes each bumping the contract version collided, and one renumbered and replayed behind the other.
+**Lesson:** whoever lands second renumbers; after the rebase, review the interaction (a range-diff showing only the version changed), not the whole package again.
+
+### 15. Evidence names the exact SHA that lands (Phase 1, added at checkpoint 8)
+
+A review, a measurement or a recorded reference line counts only for the commit it names.
+**Lesson:** reviews name the candidate that lands, landing evidence the landing and its tree's equality with that candidate, and a replay gets a range-diff re-check.
+
+### 16. Separate test authors catch what implementers miss (Phase 1, added at checkpoint 8)
+
+A test author working from the brief, the spec and the reference found defects the implementer's own tests passed, but late findings still came from the interpreter and pandas versions the tests had not run on.
+**Lesson:** keep tests by a separate author, and have them run the supported interpreter and pandas matrix early, not at landing.
 
 ## What held up and is worth keeping
 
@@ -125,3 +152,5 @@ After reviewing each other's reports, the second orchestrator endorsed proving t
 | Process | Reset it | Keep the full machinery, trim the launchers | Reset it: keep behavioral requirements and independent review, drop per-file approvals and unbounded relocks |
 | Slice order | Warehouse first, Python and Java together | Python slices first, Java later | Python leads every slice: PQL, offline databases, then warehouses; Java follows |
 | Deleting internal tests | On a schedule | Only when replacements prove they catch the same issues | Replacements must show they catch what the old tests caught; then delete |
+
+*Note (T1.27, checkpoint 7):* the per-file approvals the table drops became, in Phase 1, H2's protected-path declarations: a change names the protected paths it touches, and the landing carries them, approved by meaning, not by file hash.

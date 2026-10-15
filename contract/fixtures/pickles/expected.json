@@ -1,0 +1,209 @@
+{
+  "pandas": "3.0.6",
+  "protocol": 4,
+  "python": "3.12.13",
+  "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+  "schemas": {
+    "edited": {
+      "links": [],
+      "source": false,
+      "tables": [
+        {
+          "columns": [
+            [
+              "user_id",
+              "int64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "age",
+              "int64",
+              "ID",
+              "categorical",
+              true
+            ],
+            [
+              "score",
+              "float64",
+              "numerical",
+              null,
+              false
+            ]
+          ],
+          "duplicate_keys": 0,
+          "kind": "Table",
+          "name": "users",
+          "primary_key": "age",
+          "rows": 6,
+          "time_column": null
+        },
+        {
+          "columns": [
+            [
+              "order_id",
+              "int64",
+              "ID",
+              "numerical",
+              false
+            ],
+            [
+              "user_id",
+              "int64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "price",
+              "float64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "ts",
+              "timestamp[us]",
+              "timestamp",
+              null,
+              true
+            ]
+          ],
+          "duplicate_keys": 0,
+          "kind": "Table",
+          "name": "orders",
+          "primary_key": "order_id",
+          "rows": 12,
+          "time_column": null
+        }
+      ]
+    },
+    "one-table": {
+      "links": [],
+      "source": false,
+      "tables": [
+        {
+          "columns": [
+            [
+              "order_id",
+              "int64",
+              "ID",
+              "numerical",
+              false
+            ],
+            [
+              "user_id",
+              "int64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "price",
+              "float64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "ts",
+              "timestamp[us]",
+              "timestamp",
+              null,
+              true
+            ]
+          ],
+          "duplicate_keys": 0,
+          "kind": "Table",
+          "name": "orders",
+          "primary_key": "order_id",
+          "rows": 12,
+          "time_column": "ts"
+        }
+      ]
+    },
+    "two-tables": {
+      "links": [
+        [
+          "orders",
+          "user_id",
+          "users",
+          "user_id"
+        ]
+      ],
+      "source": false,
+      "tables": [
+        {
+          "columns": [
+            [
+              "user_id",
+              "int64",
+              "ID",
+              "numerical",
+              false
+            ],
+            [
+              "age",
+              "int64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "score",
+              "float64",
+              "numerical",
+              null,
+              false
+            ]
+          ],
+          "duplicate_keys": 0,
+          "kind": "Table",
+          "name": "users",
+          "primary_key": "user_id",
+          "rows": 6,
+          "time_column": null
+        },
+        {
+          "columns": [
+            [
+              "order_id",
+              "int64",
+              "ID",
+              "numerical",
+              false
+            ],
+            [
+              "user_id",
+              "int64",
+              "ID",
+              "numerical",
+              false
+            ],
+            [
+              "price",
+              "float64",
+              "numerical",
+              null,
+              false
+            ],
+            [
+              "ts",
+              "timestamp[us]",
+              "timestamp",
+              null,
+              true
+            ]
+          ],
+          "duplicate_keys": 0,
+          "kind": "Table",
+          "name": "orders",
+          "primary_key": "order_id",
+          "rows": 12,
+          "time_column": "ts"
+        }
+      ]
+    }
+  }
+}

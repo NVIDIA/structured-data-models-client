@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "edit.meaning-not-carried",
+  "status": "diagnostic",
+  "slice": "S1",
+  "paths": [],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "edits": [
+      {
+        "op": "set_stype",
+        "table": "users",
+        "column": "country",
+        "stype": "numerical"
+      }
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "A meaning the column's values cannot carry is refused at the assignment",
+  "source": "T1.24b: the schema's edit semantics, a refused edit's parity across the hosts (decision E67)"
+}

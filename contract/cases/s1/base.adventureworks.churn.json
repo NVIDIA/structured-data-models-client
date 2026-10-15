@@ -1,0 +1,339 @@
+{
+  "format": "sdm-case/1",
+  "id": "base.adventureworks.churn",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "schema.edit/set-time-column/any",
+    "schema.edit/drop-column/any",
+    "query.materialize/indices-binary/duckdb",
+    "client.predict/binary/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "utf8/feature",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "from_source": {
+      "tables": {
+        "customers": "adventureworks_customers",
+        "products": "adventureworks_products",
+        "sales_order_headers": "adventureworks_sales_order_headers",
+        "sales_order_details": "adventureworks_sales_order_details"
+      },
+      "primary_keys": {
+        "customers": "CustomerID",
+        "products": "ProductID",
+        "sales_order_details": "SalesOrderDetailID"
+      },
+      "time_columns": {
+        "sales_order_headers": "OrderDate",
+        "sales_order_details": "OrderDate"
+      },
+      "relationships": [
+        {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "ProductID",
+          "target_table": "products",
+          "target_column": "ProductID"
+        }
+      ]
+    },
+    "edits": [
+      {
+        "op": "clear_time_column",
+        "table": "products"
+      },
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "rowguid"
+      }
+    ],
+    "pql": "PREDICT COUNT(sales_order_headers.*, 0, 90, days) = 0 FOR EACH customers.CustomerID",
+    "materialize": {
+      "indices": [
+        29945,
+        12196,
+        12880,
+        12959,
+        13405,
+        13762,
+        29504,
+        11610,
+        12039,
+        13013,
+        13968,
+        14157,
+        16097,
+        18160,
+        11205,
+        11327,
+        11683,
+        11860,
+        11980,
+        12221,
+        12362,
+        12563,
+        12771,
+        12962,
+        13032
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "customers",
+            "source": "adventureworks_customers"
+          },
+          {
+            "name": "products",
+            "source": "adventureworks_products"
+          },
+          {
+            "name": "sales_order_headers",
+            "source": "adventureworks_sales_order_headers"
+          },
+          {
+            "name": "sales_order_details",
+            "source": "adventureworks_sales_order_details"
+          }
+        ],
+        "primary_keys": {
+          "customers": {
+            "value": [
+              "CustomerID"
+            ]
+          },
+          "products": {
+            "value": [
+              "ProductID"
+            ]
+          },
+          "sales_order_details": {
+            "value": [
+              "SalesOrderDetailID"
+            ]
+          }
+        },
+        "time_columns": {
+          "sales_order_headers": {
+            "value": "OrderDate"
+          },
+          "sales_order_details": {
+            "value": "OrderDate"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "sales_order_headers",
+              "column": "CustomerID"
+            },
+            {
+              "table": "customers",
+              "column": "CustomerID"
+            }
+          ],
+          [
+            {
+              "table": "sales_order_details",
+              "column": "CustomerID"
+            },
+            {
+              "table": "customers",
+              "column": "CustomerID"
+            }
+          ],
+          [
+            {
+              "table": "sales_order_details",
+              "column": "ProductID"
+            },
+            {
+              "table": "products",
+              "column": "ProductID"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "29945"
+        },
+        {
+          "t": "i64",
+          "v": "12196"
+        },
+        {
+          "t": "i64",
+          "v": "12880"
+        },
+        {
+          "t": "i64",
+          "v": "12959"
+        },
+        {
+          "t": "i64",
+          "v": "13405"
+        },
+        {
+          "t": "i64",
+          "v": "13762"
+        },
+        {
+          "t": "i64",
+          "v": "29504"
+        },
+        {
+          "t": "i64",
+          "v": "11610"
+        },
+        {
+          "t": "i64",
+          "v": "12039"
+        },
+        {
+          "t": "i64",
+          "v": "13013"
+        },
+        {
+          "t": "i64",
+          "v": "13968"
+        },
+        {
+          "t": "i64",
+          "v": "14157"
+        },
+        {
+          "t": "i64",
+          "v": "16097"
+        },
+        {
+          "t": "i64",
+          "v": "18160"
+        },
+        {
+          "t": "i64",
+          "v": "11205"
+        },
+        {
+          "t": "i64",
+          "v": "11327"
+        },
+        {
+          "t": "i64",
+          "v": "11683"
+        },
+        {
+          "t": "i64",
+          "v": "11860"
+        },
+        {
+          "t": "i64",
+          "v": "11980"
+        },
+        {
+          "t": "i64",
+          "v": "12221"
+        },
+        {
+          "t": "i64",
+          "v": "12362"
+        },
+        {
+          "t": "i64",
+          "v": "12563"
+        },
+        {
+          "t": "i64",
+          "v": "12771"
+        },
+        {
+          "t": "i64",
+          "v": "12962"
+        },
+        {
+          "t": "i64",
+          "v": "13032"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the schema as base.adventureworks's after the same edits; task binary_classification, classes ['false', 'true'], positive class 'true'; three SDMWarnings and a UserWarning; result columns row_index int64, id int64, prediction bool, 25 rows"
+  },
+  "why": "T1.32f (owner, 2026-10-12, E78(k)), folded into T1.33: the AdventureWorks notebook's inactivity_90d question, a binary classification (a count over the order headers, which have no key, compared with zero), on the same base, schema and edits as base.adventureworks, without inference_config, as the notebook asks it; an acceptance case from T1.33 on base.adventureworks's routes, so python-core runs describe_source, materialize and predict on the core and rust-host the whole journey; its expectation the reference's",
+  "source": "examples/databricks/adventureworks_relational.ipynb, inactivity_90d, its schema as the notebook builds it, swapped to local DuckDB (E27); the question is the notebook's, as the client's to_string() prints it (its spacing around '='), and indices its frequent_customers query's answer over the fixture (the 25 customers with the most order headers, ties by CustomerID)"
+}

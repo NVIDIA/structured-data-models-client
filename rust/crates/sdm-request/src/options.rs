@@ -1,0 +1,686 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! The call's options that shape the payload, read by the reference's rules
+//! (T1.28a): the run mode a context size selects, the regression's
+//! statistic, and the inference options (`inference_config`), which the
+//! engine reads into its config classes (`InferenceConfig`,
+//! `ClassificationInferenceConfig`, `RegressionInferenceConfig`) and writes
+//! into the payload (`_inference_config_to_json`).
+//!
+//! Each refusal is a code and fields naming the option and why, never the
+//! value given; the host words it.
+
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_wire::json::{Value, whole};
+use sdm_wire::payload::{ClassificationConfig, InferenceConfig};
+
+/// An integer the caller gave: its sign, and its magnitude, `None` past
+/// `u128`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Integer {
+    pub negative: bool,
+    pub magnitude: Option<u128>,
+}
+
+/// The seed the call names (`random_seed`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AskedSeed {
+    /// Not named: the host's `seed` and `unseeded`, or the default.
+    Absent,
+    /// Named as none: an unseeded sample.
+    Unseeded,
+    /// An integer of any size, as signed hexadecimal text (the contract's
+    /// `Seed`).
+    Given(String),
+}
+
+/// The call's option values the core reads ([`values`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Asked {
+    pub num_context_samples: Option<Integer>,
+    pub num_hops: Option<Integer>,
+    /// How many hops `num_neighbors` asks for: its length.
+    pub num_neighbors: Option<Integer>,
+    pub prediction_statistic: Option<String>,
+    pub inference_config: Option<Value>,
+    pub seed: AskedSeed,
+}
+
+/// A value of the wrong type for its option, refused as the client
+/// refuses it (`INVALID_REQUEST`), naming the option and the type it takes.
+fn mistyped(field: &str, reason: &'static str) -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "an option of the call is of a type it does not take",
+    )
+    .with_field("field", Detail::text(field))
+    .with_field("reason", Detail::text(reason))
+}
+
+/// An integer token's digits as decimal text, its sign apart.
+fn integer(field: &str, value: &Value) -> Result<(bool, String), CoreError> {
+    match value {
+        Value::Number(token) if sdm_wire::json::is_integer_token(token) => {
+            let (negative, digits) = match token.strip_prefix('-') {
+                Some(digits) => (true, digits),
+                None => (false, token.as_str()),
+            };
+            let digits = digits.trim_start_matches('0');
+            Ok((negative && !digits.is_empty(), digits.to_owned()))
+        }
+        // A boolean, a float or anything else: not a whole number, as the
+        // client's check (`numbers.Integral`, a bool excluded) refuses it.
+        _ => Err(mistyped(field, "not_a_whole_number")),
+    }
+}
+
+fn magnitude(field: &str, value: &Value) -> Result<Integer, CoreError> {
+    let (negative, digits) = integer(field, value)?;
+    Ok(Integer {
+        negative,
+        magnitude: if digits.is_empty() {
+            Some(0)
+        } else {
+            digits.parse().ok()
+        },
+    })
+}
+
+/// Decimal digits as lowercase hexadecimal, of any size.
+fn hexadecimal(decimal: &str) -> String {
+    let mut digits: Vec<u32> = decimal.bytes().map(|b| u32::from(b - b'0')).collect();
+    let mut hex = Vec::new();
+    while !digits.is_empty() {
+        let mut remainder = 0;
+        let mut quotient = Vec::with_capacity(digits.len());
+        for d in digits {
+            let value = remainder * 10 + d;
+            let q = value / 16;
+            remainder = value % 16;
+            if !(quotient.is_empty() && q == 0) {
+                quotient.push(q);
+            }
+        }
+        hex.push(char::from_digit(remainder, 16).unwrap_or('0'));
+        digits = quotient;
+    }
+    if hex.is_empty() {
+        return "0".to_owned();
+    }
+    hex.iter().rev().collect()
+}
+
+/// Reads the call's option values (`Materialize.values`), each of the type
+/// the reference's client takes, a member present only where the call
+/// names the option; a value of another type is `INVALID_REQUEST` naming
+/// the option, as the client's checks refuse it.
+pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
+    let mut asked = Asked {
+        num_context_samples: None,
+        num_hops: None,
+        num_neighbors: None,
+        prediction_statistic: None,
+        inference_config: None,
+        seed: AskedSeed::Absent,
+    };
+    let Some(given) = given else {
+        return Ok(asked);
+    };
+    let Value::Object(members) = given else {
+        return Err(mistyped("values", "not_an_object"));
+    };
+    for (name, value) in members {
+        match (name.as_str(), value) {
+            // A size or a count of hops left as none is no size asked.
+            ("num_context_samples" | "num_hops" | "num_neighbors", Value::Null) => {}
+            ("num_context_samples", v) => asked.num_context_samples = Some(magnitude(name, v)?),
+            ("num_hops", v) => asked.num_hops = Some(magnitude(name, v)?),
+            ("num_neighbors", Value::Array(hops)) => {
+                asked.num_neighbors = Some(Integer {
+                    negative: false,
+                    magnitude: Some(hops.len() as u128),
+                });
+            }
+            ("num_neighbors", _) => return Err(mistyped(name, "not_a_sequence")),
+            ("prediction_statistic", Value::Text(text)) => {
+                asked.prediction_statistic = Some(text.clone());
+            }
+            ("prediction_statistic", _) => return Err(mistyped(name, "not_text")),
+            ("inference_config", Value::Null) => {}
+            ("inference_config", v @ Value::Object(_)) => asked.inference_config = Some(v.clone()),
+            ("inference_config", _) => return Err(mistyped(name, "not_a_mapping")),
+            ("random_seed", Value::Null) => asked.seed = AskedSeed::Unseeded,
+            ("random_seed", v) => {
+                let (negative, digits) = integer(name, v)?;
+                let sign = if negative { "-" } else { "" };
+                asked.seed = AskedSeed::Given(format!("{sign}0x{}", hexadecimal(&digits)));
+            }
+            _ => return Err(mistyped(name, "not_an_option")),
+        }
+    }
+    Ok(asked)
+}
+
+/// A task's kind, as the engine names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Regression,
+    Binary,
+    Multiclass,
+}
+
+impl Kind {
+    /// The kind's name on the wire (`TaskType`'s value).
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Kind::Regression => "regression",
+            Kind::Binary => "binary_classification",
+            Kind::Multiclass => "multiclass_classification",
+        }
+    }
+
+    pub fn is_classification(self) -> bool {
+        !matches!(self, Kind::Regression)
+    }
+}
+
+/// How much context a run gathers, and how wide it samples
+/// (`_MAX_CONTEXT_SIZE`, `_DEFAULT_NUM_NEIGHBORS`): the client's two modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunMode {
+    Fast,
+    Best,
+}
+
+impl RunMode {
+    /// The mode's name on the wire.
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            RunMode::Fast => "fast",
+            RunMode::Best => "best",
+        }
+    }
+
+    /// The most context examples the mode gathers.
+    pub fn context_examples(self) -> usize {
+        match self {
+            RunMode::Fast => 1_000,
+            RunMode::Best => 10_000,
+        }
+    }
+
+    /// The neighbors kept of each row at each of the default two hops.
+    pub fn neighbors(self) -> [u64; 2] {
+        match self {
+            RunMode::Fast => [32, 32],
+            RunMode::Best => [64, 64],
+        }
+    }
+}
+
+/// The run mode a context size asks for, as the client chooses it
+/// (`_run_mode_for`, with `num_context_samples`' bound of
+/// `_validate_materialize_args`): none or up to a fast run's examples, a
+/// fast run; up to a best run's, a best one. Below 1 is `INVALID_REQUEST`;
+/// past a best run's examples, `UNSUPPORTED_REQUEST`, as the endpoint takes
+/// no more.
+pub fn run_mode(asked: Option<Integer>) -> Result<RunMode, CoreError> {
+    let Some(Integer {
+        negative,
+        magnitude: value,
+    }) = asked
+    else {
+        return Ok(RunMode::Fast);
+    };
+    if negative || value == Some(0) {
+        return Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "num_context_samples is at least 1",
+        )
+        .with_field("field", Detail::text("num_context_samples")));
+    }
+    match value {
+        Some(n) if n <= RunMode::Fast.context_examples() as u128 => Ok(RunMode::Fast),
+        Some(n) if n <= RunMode::Best.context_examples() as u128 => Ok(RunMode::Best),
+        _ => Err(CoreError::new(
+            ErrorKind::Unsupported,
+            ErrorCode::UnsupportedRequest,
+            "num_context_samples is past the most context the endpoint takes",
+        )
+        .with_field("field", Detail::text("num_context_samples"))
+        .with_field(
+            "limit",
+            Detail::Scalar(Scalar::UInt64(RunMode::Best.context_examples() as u64)),
+        )),
+    }
+}
+
+/// The most hops the endpoint reads (`hops_max`).
+pub const HOPS_MAX: u128 = 6;
+
+/// The hops the sampling options ask for, as the client bounds them
+/// (`_check_shape`): `num_neighbors`' length where it is given, else
+/// `num_hops`; none, or fewer than one, is `INVALID_REQUEST` (a request
+/// that crosses no relationship), more than [`HOPS_MAX`]
+/// `UNSUPPORTED_REQUEST`.
+pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result<(), CoreError> {
+    let (
+        field,
+        Integer {
+            negative,
+            magnitude: value,
+        },
+    ) = match (num_neighbors, num_hops) {
+        (Some(n), _) => ("num_neighbors", n),
+        (None, Some(n)) => ("num_hops", n),
+        (None, None) => return Ok(()),
+    };
+    if negative || value == Some(0) {
+        return Err(invalid(field, "no_hop"));
+    }
+    if value.is_none_or(|n| n > HOPS_MAX) {
+        return Err(CoreError::new(
+            ErrorKind::Unsupported,
+            ErrorCode::UnsupportedRequest,
+            "the sampling options ask more hops than the endpoint reads",
+        )
+        .with_field("field", Detail::text(field))
+        .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))));
+    }
+    Ok(())
+}
+
+/// The statistics a regression reports of its predicted distribution
+/// (`PREDICTION_STATISTICS`).
+pub const STATISTICS: [&str; 2] = ["mean", "median"];
+
+fn invalid(field: &'static str, reason: &'static str) -> CoreError {
+    CoreError::new(
+        ErrorKind::InvalidRequest,
+        ErrorCode::InvalidRequest,
+        "an option of the call is not one the engine reads",
+    )
+    .with_field("field", Detail::text(field))
+    .with_field("reason", Detail::text(reason))
+}
+
+/// The statistic the caller chose, refused unless the endpoint reports it
+/// (`_statistic_asked_for`).
+pub fn statistic(given: Option<&str>) -> Result<Option<String>, CoreError> {
+    match given {
+        None => Ok(None),
+        Some(name) if STATISTICS.contains(&name) => Ok(Some(name.to_owned())),
+        Some(_) => Err(invalid("prediction_statistic", "not_a_statistic")),
+    }
+}
+
+/// A statistic chosen for a task with no distribution to summarise
+/// (`_record_the_statistic`): refused, as the reference refuses it.
+pub fn statistic_for(kind: Kind, statistic: Option<&String>) -> Result<(), CoreError> {
+    if statistic.is_some() && kind != Kind::Regression {
+        return Err(invalid("prediction_statistic", "not_a_regression")
+            .with_field("task", Detail::text(kind.wire_name())));
+    }
+    Ok(())
+}
+
+/// The inference options, read as the engine's config classes read them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Options {
+    pub num_estimators: u64,
+    pub column_shuffle: bool,
+    pub category_shuffle: bool,
+    pub hop_shuffle: bool,
+    /// A classification's.
+    pub class_shuffle: bool,
+    /// A regression's.
+    pub target_transforms: Vec<String>,
+    /// A regression's.
+    pub output_type: String,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options {
+            num_estimators: 1,
+            column_shuffle: false,
+            category_shuffle: false,
+            hop_shuffle: false,
+            class_shuffle: false,
+            target_transforms: vec!["quantile".to_owned()],
+            output_type: "median".to_owned(),
+        }
+    }
+}
+
+const TRANSFORMS: [&str; 3] = ["clip", "power", "quantile"];
+const OUTPUT_TYPES: [&str; 3] = ["mean", "median", "quantiles"];
+
+/// A refusal of the inference option `key`: `INVALID_REQUEST`, as the
+/// engine's validation error is the caller's (a `ValueError`).
+fn option_refused(key: &str, reason: &'static str) -> CoreError {
+    invalid("inference_config", reason).with_field("key", Detail::text(key))
+}
+
+/// A value the engine's validation coerces from text, which this core does
+/// not read (pydantic's lax text coercions): refused by name.
+fn coerced_from_text(key: &str) -> CoreError {
+    sdm_engine::not_yet("inference_config_text").with_field("key", Detail::text(key))
+}
+
+/// A boolean option: a JSON boolean, or a number equal to 0 or 1, as the
+/// engine's validation takes one.
+fn boolean(key: &str, value: &Value) -> Result<bool, CoreError> {
+    match value {
+        Value::Bool(b) => Ok(*b),
+        Value::Number(token) => {
+            let n: f64 = token.parse().unwrap_or(f64::NAN);
+            if n == 0.0 {
+                Ok(false)
+            } else if n == 1.0 {
+                Ok(true)
+            } else {
+                Err(option_refused(key, "not_a_boolean"))
+            }
+        }
+        Value::Text(_) => Err(coerced_from_text(key)),
+        _ => Err(option_refused(key, "not_a_boolean")),
+    }
+}
+
+/// `num_estimators`: a whole number from 1 to 4, given as an integer, a
+/// float with no fraction or a boolean (as 0 or 1), as the engine's
+/// validation takes it.
+fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
+    let n = match value {
+        Value::Bool(b) => i128::from(*b),
+        Value::Number(token) => {
+            whole(token).ok_or_else(|| option_refused(key, "not_a_whole_number"))?
+        }
+        Value::Text(_) => return Err(coerced_from_text(key)),
+        _ => return Err(option_refused(key, "not_a_whole_number")),
+    };
+    if !(1..=4).contains(&n) {
+        return Err(option_refused(key, "out_of_range"));
+    }
+    Ok(n as u64)
+}
+
+/// Reads the caller's `inference_config` for a task of `kind`: the keys its
+/// config class holds, each value as the engine's validation takes it, the
+/// rest the class's defaults; a key the class does not hold, or a value it
+/// refuses, is `INVALID_REQUEST`. `None` is the defaults.
+pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> {
+    let mut options = Options::default();
+    let Some(given) = given else {
+        return Ok(options);
+    };
+    let Value::Object(members) = given else {
+        return Err(invalid("inference_config", "not_an_object"));
+    };
+    for (key, value) in members {
+        match key.as_str() {
+            "num_estimators" => options.num_estimators = estimators(key, value)?,
+            "column_shuffle" => options.column_shuffle = boolean(key, value)?,
+            "category_shuffle" => options.category_shuffle = boolean(key, value)?,
+            "hop_shuffle" => options.hop_shuffle = boolean(key, value)?,
+            "class_shuffle" if kind.is_classification() => {
+                options.class_shuffle = boolean(key, value)?;
+            }
+            "target_transforms" if kind == Kind::Regression => {
+                let Value::Array(items) = value else {
+                    return Err(option_refused(key, "not_a_list"));
+                };
+                options.target_transforms = items
+                    .iter()
+                    .map(|item| match item {
+                        // A null transform, which the engine's type takes
+                        // and sends as null, is refused by name: the
+                        // payload's transforms are names (register P1B-3).
+                        Value::Null => Err(sdm_engine::not_yet("target_transform_null")),
+                        Value::Text(name) if TRANSFORMS.contains(&name.as_str()) => {
+                            Ok(name.clone())
+                        }
+                        _ => Err(option_refused(key, "not_a_transform")),
+                    })
+                    .collect::<Result<_, _>>()?;
+            }
+            "output_type" if kind == Kind::Regression => match value {
+                Value::Text(name) if OUTPUT_TYPES.contains(&name.as_str()) => {
+                    options.output_type = name.clone();
+                }
+                _ => return Err(option_refused(key, "not_an_output_type")),
+            },
+            _ => return Err(option_refused(key, "not_an_option")),
+        }
+    }
+    Ok(options)
+}
+
+impl Options {
+    /// A regression's options as the engine writes them.
+    pub fn regression(&self) -> InferenceConfig {
+        InferenceConfig {
+            kind: "regression".to_owned(),
+            num_estimators: self.num_estimators,
+            column_shuffle: self.column_shuffle,
+            category_shuffle: self.category_shuffle,
+            hop_shuffle: self.hop_shuffle,
+            class_shuffle: None,
+            target_transforms: self.target_transforms.clone(),
+            output_type: self.output_type.clone(),
+        }
+    }
+
+    /// A classification's options as the engine writes them.
+    pub fn classification(&self) -> ClassificationConfig {
+        ClassificationConfig {
+            kind: "classification".to_owned(),
+            num_estimators: self.num_estimators,
+            column_shuffle: self.column_shuffle,
+            category_shuffle: self.category_shuffle,
+            hop_shuffle: self.hop_shuffle,
+            class_shuffle: Some(self.class_shuffle),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(text: &str) -> Value {
+        sdm_wire::json::read(text.as_bytes()).unwrap()
+    }
+
+    fn rule(e: &CoreError) -> Option<String> {
+        e.fields.get("rule").map(|d| format!("{d:?}"))
+    }
+
+    fn int(negative: bool, magnitude: Option<u128>) -> Option<Integer> {
+        Some(Integer {
+            negative,
+            magnitude,
+        })
+    }
+
+    #[test]
+    fn the_run_mode_is_the_client_s() {
+        assert_eq!(run_mode(None).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1))).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1_000))).unwrap(), RunMode::Fast);
+        assert_eq!(run_mode(int(false, Some(1_001))).unwrap(), RunMode::Best);
+        assert_eq!(run_mode(int(false, Some(10_000))).unwrap(), RunMode::Best);
+        for (asked, code) in [
+            (int(false, Some(0)), ErrorCode::InvalidRequest),
+            (int(true, Some(5)), ErrorCode::InvalidRequest),
+            (int(false, Some(10_001)), ErrorCode::UnsupportedRequest),
+            (int(false, None), ErrorCode::UnsupportedRequest),
+        ] {
+            assert_eq!(run_mode(asked).unwrap_err().code, code, "{asked:?}");
+        }
+    }
+
+    #[test]
+    fn the_hops_are_bounded_as_the_client_bounds_them() {
+        let some = |n: u128| int(false, Some(n));
+        assert!(hops(None, None).is_ok());
+        assert!(hops(some(6), None).is_ok());
+        assert!(
+            hops(some(9), some(2)).is_ok(),
+            "the neighbors' length counts"
+        );
+        assert_eq!(
+            hops(some(0), None).unwrap_err().code,
+            ErrorCode::InvalidRequest
+        );
+        assert_eq!(
+            hops(None, some(0)).unwrap_err().code,
+            ErrorCode::InvalidRequest
+        );
+        assert_eq!(
+            hops(int(true, Some(1)), None).unwrap_err().code,
+            ErrorCode::InvalidRequest
+        );
+        assert_eq!(
+            hops(some(7), None).unwrap_err().code,
+            ErrorCode::UnsupportedRequest
+        );
+        assert_eq!(
+            hops(int(false, None), None).unwrap_err().code,
+            ErrorCode::UnsupportedRequest
+        );
+    }
+
+    #[test]
+    fn the_options_are_read_as_the_engine_reads_them() {
+        let o = options(Kind::Regression, Some(&read(r#"{"num_estimators": 4.0, "column_shuffle": 1, "target_transforms": ["power", "clip"], "output_type": "quantiles"}"#))).unwrap();
+        assert_eq!(o.num_estimators, 4);
+        assert!(o.column_shuffle);
+        assert_eq!(
+            o.target_transforms,
+            vec!["power".to_owned(), "clip".to_owned()]
+        );
+        assert_eq!(o.output_type, "quantiles");
+        assert_eq!(
+            options(
+                Kind::Binary,
+                Some(&read(r#"{"num_estimators": true, "class_shuffle": 0.0}"#))
+            )
+            .unwrap()
+            .num_estimators,
+            1
+        );
+        for (kind, text) in [
+            (Kind::Regression, r#"{"num_estimators": 5}"#),
+            (Kind::Regression, r#"{"num_estimators": 0}"#),
+            (Kind::Regression, r#"{"num_estimators": 4.5}"#),
+            (Kind::Regression, r#"{"num_estimators": null}"#),
+            (Kind::Regression, r#"{"column_shuffle": 2}"#),
+            (Kind::Regression, r#"{"class_shuffle": true}"#),
+            (Kind::Binary, r#"{"output_type": "mean"}"#),
+            (Kind::Binary, r#"{"target_transforms": []}"#),
+            (Kind::Regression, r#"{"target_transforms": "clip"}"#),
+            (Kind::Regression, r#"{"target_transforms": ["x"]}"#),
+            (Kind::Regression, r#"{"output_type": "x"}"#),
+            (Kind::Regression, r#"{"foo": 1}"#),
+            (Kind::Regression, r#"[1]"#),
+        ] {
+            let e = options(kind, Some(&read(text))).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
+            assert_eq!(rule(&e), None, "{text}");
+        }
+        for text in [
+            r#"{"column_shuffle": "yes"}"#,
+            r#"{"num_estimators": "4"}"#,
+            r#"{"target_transforms": [null]}"#,
+        ] {
+            let e = options(Kind::Regression, Some(&read(text))).unwrap_err();
+            assert_eq!(e.code, ErrorCode::UnsupportedRequest, "{text}");
+            assert!(rule(&e).is_some(), "{text}");
+        }
+    }
+
+    #[test]
+    fn the_call_s_values_are_read_by_the_types_the_client_takes() {
+        let asked = values(Some(&read(
+            r#"{"num_context_samples": 10, "num_hops": null, "num_neighbors": [8, 8, 4], "prediction_statistic": "mean", "inference_config": {"num_estimators": 2}, "random_seed": 1180591620717411303424}"#,
+        )))
+        .unwrap();
+        assert_eq!(asked.num_context_samples, int(false, Some(10)));
+        assert_eq!(asked.num_hops, None);
+        assert_eq!(asked.num_neighbors, int(false, Some(3)));
+        assert_eq!(asked.prediction_statistic.as_deref(), Some("mean"));
+        assert!(asked.inference_config.is_some());
+        // 2**70, as the contract's seed writes it.
+        assert_eq!(asked.seed, AskedSeed::Given("0x400000000000000000".into()));
+        let seed = |text: &str| values(Some(&read(text))).unwrap().seed;
+        assert_eq!(seed(r#"{"random_seed": null}"#), AskedSeed::Unseeded);
+        assert_eq!(
+            seed(r#"{"random_seed": -42}"#),
+            AskedSeed::Given("-0x2a".into())
+        );
+        assert_eq!(
+            seed(r#"{"random_seed": 0}"#),
+            AskedSeed::Given("0x0".into())
+        );
+        assert_eq!(seed("{}"), AskedSeed::Absent);
+        assert_eq!(
+            values(Some(&read(r#"{"num_context_samples": -3}"#)))
+                .unwrap()
+                .num_context_samples,
+            int(true, Some(3))
+        );
+        for text in [
+            r#"{"num_context_samples": 2.5}"#,
+            r#"{"num_context_samples": true}"#,
+            r#"{"num_hops": "2"}"#,
+            r#"{"num_hops": 2.0}"#,
+            r#"{"num_neighbors": "ab"}"#,
+            r#"{"num_neighbors": {"a": 1}}"#,
+            r#"{"prediction_statistic": 3}"#,
+            r#"{"prediction_statistic": null}"#,
+            r#"{"inference_config": [1]}"#,
+            r#"{"random_seed": 1.5}"#,
+            r#"{"random_seed": false}"#,
+            r#"{"no_such": 1}"#,
+            r#"[1]"#,
+        ] {
+            let e = values(Some(&read(text))).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
+        }
+    }
+
+    #[test]
+    fn a_wide_object_is_refused_at_its_first_key_the_engine_does_not_read() {
+        // E49's width probe: a hundred thousand members, read once, refused
+        // by name at the first the engine's config does not hold.
+        let members: Vec<String> = (0..100_000).map(|i| format!(r#""k{i}": {i}"#)).collect();
+        let wide = read(&format!("{{{}}}", members.join(",")));
+        let e = options(Kind::Regression, Some(&wide)).unwrap_err();
+        assert_eq!(e.code, ErrorCode::InvalidRequest);
+        assert_eq!(e.fields["key"], Detail::text("k0"));
+    }
+
+    #[test]
+    fn a_statistic_is_one_the_endpoint_reports_and_a_regression_s() {
+        assert_eq!(statistic(Some("mean")).unwrap().as_deref(), Some("mean"));
+        assert_eq!(statistic(None).unwrap(), None);
+        assert_eq!(
+            statistic(Some("mode")).unwrap_err().code,
+            ErrorCode::InvalidRequest
+        );
+        let chosen = Some("median".to_owned());
+        assert!(statistic_for(Kind::Regression, chosen.as_ref()).is_ok());
+        assert_eq!(
+            statistic_for(Kind::Binary, chosen.as_ref())
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidRequest
+        );
+    }
+}

@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-wire"
+description = "The wire types generated from the pinned model API"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+# The payload's schema, derived from its types (T1.28w).
+schemars.workspace = true
+# The payload's stypes.
+sdm-contract = { path = "../sdm-contract" }
+serde.workspace = true
+# raw_value: a value's text as written, so a number is kept as the token
+# the sender wrote; it only adds `RawValue`, changing no other reading.
+serde_json = { workspace = true, features = ["raw_value"] }
+
+[lints]
+workspace = true

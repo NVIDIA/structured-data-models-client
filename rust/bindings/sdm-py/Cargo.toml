@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-py"
+description = "The Python binding over sdm-host, the module sdm_client._native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# An extension module leaves Python's symbols for the interpreter that loads
+# it to provide, so it cannot link into a test binary; it is tested as it
+# ships, from the installed wheel.
+[lib]
+name = "_native"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[features]
+# Operations only tests reach; the shipped wheel leaves it off, and the
+# binding's tests build a wheel with it on.
+test-ops = ["sdm-host/test-ops", "sdm-contract/test-ops"]
+
+[dependencies]
+arrow-array = { workspace = true, features = ["ffi"] }
+arrow-pyarrow.workspace = true
+arrow-schema = { workspace = true, features = ["ffi"] }
+pyo3.workspace = true
+pyo3-log.workspace = true
+# Among first-party crates, sdm-host and, for types only, sdm-contract;
+# never sdm-core (decision E21).
+sdm-contract = { path = "../../crates/sdm-contract" }
+sdm-host = { path = "../../crates/sdm-host" }
+
+# Not the workspace lints: unsafe code is denied rather than forbidden, so a
+# site that needed it could allow it locally, with a reason. The crate has
+# none: Arrow crosses through arrow-pyarrow and the PyCapsule interface.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

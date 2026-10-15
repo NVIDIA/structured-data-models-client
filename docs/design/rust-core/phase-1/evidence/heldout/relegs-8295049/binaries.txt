@@ -1,0 +1,4 @@
+client wheel:
+  structured_data_models_client-1.0.0-cp310-abi3-macosx_11_0_arm64.whl sha256 a41595d14376b2dacb8d98a13f7e5019b9c6501ecade01f2a48f4fd7fc343447 native b79f6386e897634d2c1d73b889b483cda754332b8bea8f5b4cb4de4093b9d77a commit 8295049c95f4e23dfa63d8805f36aa88427dc183
+sdm-contract-run:
+  sha256 fa4bdb7b05782df057863ab5efe05d969ad4794bde557862ec2f7f204ff452d3

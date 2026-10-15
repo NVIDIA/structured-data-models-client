@@ -1,0 +1,43 @@
+{
+  "after": {
+    "databricks-sdk": "0.153.0",
+    "databricks-sql-connector": "4.6.0",
+    "matplotlib": "3.7.0",
+    "mlflow-skinny": null,
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "pyarrow": "25.0.1",
+    "pyspark": null,
+    "scikit-learn": "1.1.1",
+    "scipy": "1.10.0",
+    "structured-data-models-api": "1.0.0",
+    "structured-data-models-client": "1.0.0",
+    "structured-data-models-connectors": "1.0.0",
+    "structured-data-models-pql": "1.0.0",
+    "structured-data-models-relational-engine": "1.0.0"
+  },
+  "checks": {
+    "client wheel carries sdm_client._native": true,
+    "import matplotlib.pyplot": true,
+    "import mlflow": false,
+    "import pyspark.pandas": true,
+    "import scipy.stats": true,
+    "import sklearn.linear_model": true,
+    "numpy is 1.26.x": true,
+    "offline journey to materialize": true,
+    "pandas >= 2.2": true,
+    "pyarrow >= 14.0.1": true,
+    "relational engine imports": true,
+    "sdm_client._native loads": true,
+    "spark still answers": true
+  },
+  "commit": "0a8a74125d8372b9bc71363239322a785430cc5c",
+  "life_cycle": "TERMINATED",
+  "machine": "x86_64",
+  "passed": false,
+  "python": "3.10.12",
+  "result": "SUCCESS",
+  "run_id": 644976276138616,
+  "runtime": "14.3",
+  "wheel_dir": "<the authorized volume>/wheels/sdm-client-0a8a741/"
+}

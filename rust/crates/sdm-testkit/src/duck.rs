@@ -1,0 +1,274 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! The pure-Rust host's DuckDB: a connection as the Python host's driver
+//! has it, and the DuckDB provider, which answers a fetch step by running
+//! the statements its plan carries, in order, on a cursor of its own (a
+//! connection to the same database, as the Python provider's cursor is),
+//! and handing every batch of the last one's result back as one attachment.
+//!
+//! The Python wheel of DuckDB links ICU, so a session there takes `SET
+//! TimeZone` and casts a `TIMESTAMPTZ` in that zone. The `icu` feature of
+//! `duckdb` 1.10506.0 needs DuckDB's sources beside the crate, which the
+//! published crate does not carry, so it cannot be built (decision E37).
+//! [`open`] loads ICU explicitly instead, the extension DuckDB signs for
+//! this exact version, installed from DuckDB's repository the first time
+//! (a signature-checked network bootstrap, not a hermetic one; CI caches
+//! the extension directory), its bytes checked against the digest recorded
+//! for the platform before it is loaded; autoloading and autoinstalling
+//! stay off, so nothing else loads, and the loaded ICU's version is
+//! checked. JSON, which the Python wheel also links, is loaded the same way
+//! (T1.33), so a JSON column can be set up here.
+
+use std::collections::BTreeMap;
+
+use anyhow::{Context, Result, anyhow, bail};
+use duckdb::arrow::compute::concat_batches;
+use duckdb::arrow::datatypes::SchemaRef;
+use duckdb::arrow::record_batch::RecordBatch;
+use duckdb::vtab::arrow::{ArrowVTab, arrow_recordbatch_to_query_params};
+use duckdb::{Config, Connection};
+use sdm_contract::ErrorKind;
+use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError, SqlParam};
+use sdm_contract::run::FetchStep;
+
+use crate::driver::DriverLog;
+
+/// The DuckDB version the reference runs, which this host must link.
+pub const DUCKDB_VERSION: &str = "v1.5.6";
+
+/// The SHA-256 of DuckDB's signed ICU extension for v1.5.6, by platform,
+/// as `extensions.duckdb.org` serves it (decompressed), which is the file
+/// `INSTALL icu` writes.
+const ICU_SHA256: [(&str, &str); 4] = [
+    (
+        "linux_amd64",
+        "f7bdb7b30da48406cc58429b8b5d901a1aea5f8b9c0bd1928642f0ab262d5d85",
+    ),
+    (
+        "linux_arm64",
+        "414bd5f36d5efd15cf92d008a7e9369ada3031d584e8a992bff73f9d3b444749",
+    ),
+    (
+        "osx_amd64",
+        "9cc1f9c2c261de0af335d530749d23e5f472bb85c76f0552ab34adfb5cf1dfd3",
+    ),
+    (
+        "osx_arm64",
+        "3578a29bb3e05024eaf75c849d502089d25ed2b629823ed97508a86e62acbba7",
+    ),
+];
+
+/// The SHA-256 of DuckDB's signed JSON extension for v1.5.6, by platform,
+/// recorded as [`ICU_SHA256`] is (T1.33). The Python wheel the reference
+/// runs links JSON; this host loads it the way it loads ICU, rather than
+/// building it into the bundled DuckDB, which would rebuild DuckDB and leave
+/// CI's cached build beside a second one.
+const JSON_SHA256: [(&str, &str); 4] = [
+    (
+        "linux_amd64",
+        "3d511cc45086176ff5f39bc7e9e7d5f223ae7df2f020933d8c189ba72cdfefb5",
+    ),
+    (
+        "linux_arm64",
+        "f1f1e30d351706b90de79aa386d6f8d4f7166fa8010666b9029f5cf22edeb630",
+    ),
+    (
+        "osx_amd64",
+        "67c65794da71ba75210bb3ffd0555210275d8e76dc32cb9d8bbdc24aefb62c40",
+    ),
+    (
+        "osx_arm64",
+        "7e35cd56f0ec59c2bd3aae8793ce68b87ae0a7fa873e1bdc50f531bc859fc591",
+    ),
+];
+
+/// A fresh in-memory database, with ICU and JSON loaded and extension
+/// autoloading off.
+pub fn open() -> Result<Connection> {
+    let config = Config::default()
+        .enable_autoload_extension(false)
+        .context("turning extension autoloading off")?;
+    let connection =
+        Connection::open_in_memory_with_flags(config).context("opening an in-memory DuckDB")?;
+    let version: String = connection.query_row("SELECT version()", [], |row| row.get(0))?;
+    if version != DUCKDB_VERSION {
+        bail!("DuckDB {version} is linked, and the reference runs {DUCKDB_VERSION}");
+    }
+    load(&connection, "icu", &ICU_SHA256)?;
+    load(&connection, "json", &JSON_SHA256)?;
+    Ok(connection)
+}
+
+/// Loads DuckDB's signed extension `name`: installed once per machine from
+/// DuckDB's repository, signature checked by DuckDB; its bytes are checked
+/// here against the digest recorded for the platform before it is loaded
+/// (decision E37), and the loaded version must be the linked DuckDB's.
+fn load(connection: &Connection, name: &str, digests: &[(&str, &str)]) -> Result<()> {
+    let installed = |connection: &Connection| -> Result<Option<String>> {
+        Ok(connection
+            .query_row(
+                "SELECT install_path FROM duckdb_extensions() \
+                 WHERE extension_name = ? AND installed",
+                [name],
+                |row| row.get(0),
+            )
+            .ok())
+    };
+    let path = match installed(connection)? {
+        Some(path) => path,
+        None => {
+            // Tests in parallel may install it at once; whichever install
+            // lands, the file must then be there.
+            let _ = connection.execute_batch(&format!("INSTALL {name}"));
+            installed(connection)?
+                .with_context(|| format!("installing DuckDB's {name} extension"))?
+        }
+    };
+    let platform: String =
+        connection.query_row("SELECT platform FROM pragma_platform()", [], |row| {
+            row.get(0)
+        })?;
+    let Some((_, digest)) = digests.iter().find(|(p, _)| *p == platform) else {
+        bail!("no recorded {name} digest for the platform {platform}");
+    };
+    let bytes = std::fs::read(&path).with_context(|| format!("reading {path}"))?;
+    if crate::case::sha256(&bytes) != *digest {
+        bail!("the {name} extension at {path} is not the one recorded for {platform}");
+    }
+    connection
+        .execute_batch(&format!("LOAD {name}"))
+        .with_context(|| format!("loading DuckDB's {name} extension"))?;
+    let (loaded, extension): (bool, String) = connection.query_row(
+        "SELECT loaded, extension_version FROM duckdb_extensions() WHERE extension_name = ?",
+        [name],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    if !loaded || extension != DUCKDB_VERSION {
+        bail!(
+            "{name} {extension} is not the reference DuckDB's ({DUCKDB_VERSION}), or is not loaded"
+        );
+    }
+    Ok(())
+}
+
+/// A query's result: its schema and every batch the driver handed over.
+pub struct Fetched {
+    pub schema: SchemaRef,
+    pub batches: Vec<RecordBatch>,
+}
+
+/// The answer to one fetch step whose plan binds no key set, or the
+/// provider's error as the contract carries it: its kind, never the
+/// driver's text.
+pub fn answer(connection: &Connection, step: &FetchStep) -> Result<Fetched, ProviderError> {
+    answer_with(connection, step, &BTreeMap::new())
+}
+
+/// The answer to one fetch step, its key sets bound from `keys`, the
+/// attachments the step named, by id: each as the relation its plan names
+/// it by, on the step's own cursor, as the Python provider registers one;
+/// a key set's rows travel as Arrow, never as text (decision Q1). A plan
+/// with a scalar parameter, which no request carries yet, is not run.
+pub fn answer_with(
+    connection: &Connection,
+    step: &FetchStep,
+    keys: &BTreeMap<AttachmentId, Fetched>,
+) -> Result<Fetched, ProviderError> {
+    answer_logged(connection, step, keys, &mut DriverLog::default())
+}
+
+/// [`answer_with`], recording in `log` the cursor, each statement run with
+/// its result, and each key set bound (from T1.11e, the observation's
+/// `driver` section).
+pub fn answer_logged(
+    connection: &Connection,
+    step: &FetchStep,
+    keys: &BTreeMap<AttachmentId, Fetched>,
+    log: &mut DriverLog,
+) -> Result<Fetched, ProviderError> {
+    let failed = || ProviderError {
+        kind: ErrorKind::DataSource,
+        retryable: false,
+        sqlstate: None,
+        vendor_code: None,
+    };
+    let FetchPlan::Sql { statements, .. } = &step.plan else {
+        // A host plan is a host provider's to answer; this one runs SQL.
+        return Err(failed());
+    };
+    let Some((last, before)) = statements.split_last() else {
+        return Err(failed());
+    };
+    // A cursor of its own, as the Python provider and the reference read:
+    // a connection to the same database, which takes the database's
+    // settings and none of the session's.
+    let cursor = connection.try_clone().map_err(|_| failed())?;
+    let handle = log.cursor();
+    // Each name binds one key set; two under one name are refused, as the
+    // Python provider refuses them, never one kept over the other.
+    let mut bound = BTreeMap::new();
+    for statement in statements {
+        for param in &statement.params {
+            let SqlParam::KeySet {
+                keys: set,
+                relation,
+            } = param
+            else {
+                return Err(failed());
+            };
+            match bound.insert(relation.clone(), set.attachment) {
+                Some(earlier) if earlier != set.attachment => return Err(failed()),
+                Some(_) => continue,
+                None => {}
+            }
+            let fetched = keys.get(&set.attachment).ok_or_else(failed)?;
+            let sql = bind(&cursor, relation, fetched).map_err(|_| failed())?;
+            log.bound(handle, relation, &sql, &fetched.schema, &fetched.batches);
+        }
+    }
+    for statement in before {
+        log.statement(handle, &statement.text);
+        if cursor.execute_batch(&statement.text).is_err() {
+            log.failed();
+            return Err(failed());
+        }
+    }
+    log.statement(handle, &last.text);
+    match run(&cursor, &last.text) {
+        Ok(fetched) => {
+            log.answered(&fetched.schema, &fetched.batches);
+            Ok(fetched)
+        }
+        Err(_) => {
+            log.failed();
+            Err(failed())
+        }
+    }
+}
+
+/// Binds `keys` as the relation `name` on `cursor`: a temporary table of
+/// the key set's rows, read from Arrow by `duckdb-rs`'s Arrow table
+/// function, so every value keeps its type (an unsigned 64-bit integer, a
+/// decimal of any scale) and nothing passes through text or a float.
+fn bind(cursor: &Connection, name: &str, keys: &Fetched) -> Result<String> {
+    cursor
+        .register_table_function::<ArrowVTab>("arrow")
+        .map_err(|e| anyhow!("{e}"))?;
+    let batch = concat_batches(&keys.schema, &keys.batches).map_err(|e| anyhow!("{e}"))?;
+    let params = arrow_recordbatch_to_query_params(batch);
+    let quoted = format!("\"{}\"", name.replace('"', "\"\""));
+    let sql = format!("CREATE TEMPORARY TABLE {quoted} AS SELECT * FROM arrow(?, ?)");
+    cursor.execute(&sql, params).map_err(|e| anyhow!("{e}"))?;
+    Ok(sql)
+}
+
+/// Every batch of `sql`'s result, with its schema, empty or not.
+pub fn run(connection: &Connection, sql: &str) -> Result<Fetched> {
+    let mut statement = connection.prepare(sql).map_err(|e| anyhow!("{e}"))?;
+    let arrow = statement.query_arrow([]).map_err(|e| anyhow!("{e}"))?;
+    let schema = arrow.get_schema();
+    let batches: Vec<RecordBatch> = arrow.collect();
+    Ok(Fetched { schema, batches })
+}

@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-contract"
+description = "The contract between the core and its hosts: versioned types only"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Operations only tests reach (`test_ops`); a shipped build leaves it off.
+test-ops = []
+
+[dependencies]
+arrow-array.workspace = true
+arrow-buffer.workspace = true
+arrow-schema.workspace = true
+base64.workspace = true
+schemars.workspace = true
+serde.workspace = true
+# unbounded_depth lets the validated-query reader go past serde_json's
+# recursion limit, on serde_stacker's growing stack.
+serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_stacker.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

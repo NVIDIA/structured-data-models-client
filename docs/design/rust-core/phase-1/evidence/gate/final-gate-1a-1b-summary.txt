@@ -1,0 +1,40 @@
+== merge SHA 0a8a74125d8372b9bc71363239322a785430cc5c (Land T1.36: the final bookkeeping, four owner questions named, and Snowflake connector 5.0)
+== 1. CI's wheels for exactly this SHA
+== 2. locked 1a (checks 1, 2, 3, 6; Docker for wheel-smoke: registry rate limits have failed runs before, retry later, never skip)
+gate: candidate 0a8a74125d8372b9bc71363239322a785430cc5c
+gate: base c505788f3d74845c8192ce78822606f32f6992f4, checkpoint c505788f3d74845c8192ce78822606f32f6992f4
+gate: judged by the checkpoint's harness, at landing c505788f Land T1.36: the final review's findings closed, the register settled, the owner's confirmations recorded
+  ok   observations
+  ok   ratchet
+  ok   compare
+  ok   l0
+  ok   coverage
+  ok   runners
+  ok   l1
+  ok   seeded
+  ok   wheel-smoke
+locked checks (1a):
+  ok   check 1: runners observations ratchet compare coverage l1
+  ok   check 2: seeded
+  ok   check 3: wheel-smoke
+  ok   check 6: l0 observations ratchet compare coverage runners l1 seeded wheel-smoke
+gate: passed (--locked 1a)
+== 3. locked 1b (checks 4, 5, 6; the inventory step: 40 cases + base.adventureworks are acceptance)
+gate: candidate 0a8a74125d8372b9bc71363239322a785430cc5c
+gate: base c505788f3d74845c8192ce78822606f32f6992f4, checkpoint c505788f3d74845c8192ce78822606f32f6992f4
+gate: judged by the checkpoint's harness, at landing c505788f Land T1.36: the final review's findings closed, the register settled, the owner's confirmations recorded
+  ok   observations
+  ok   ratchet
+  ok   compare
+  ok   l0
+  ok   coverage
+  ok   runners
+  ok   l1
+  ok   inventory
+locked checks (1b):
+  ok   check 4: runners observations ratchet compare l1 inventory
+  ok   check 5: observations ratchet compare inventory
+  ok   check 6: l0 observations ratchet compare coverage runners l1 inventory
+gate: passed (--locked 1b)
+== 4. both halves passed, in the one evidence file
+halves ['1a', '1b'] both passed []

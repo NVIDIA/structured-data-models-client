@@ -2,22 +2,24 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# On the Rust core's epic branch the client carries the core, the native
+# module `sdm_client._native` built from rust/bindings/sdm-py, so maturin is
+# its build backend (decision B-D3) and the wheel is one cp310-abi3 build per
+# platform. `main` keeps setuptools until the epic merges.
 [build-system]
-requires = ["setuptools>=77"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.15,<2"]
+build-backend = "maturin"
 
 [project]
 name = "structured-data-models-client"
-# The version lives in exactly one place per distribution: `_version.py`, a
-# module holding a single literal and importing nothing. setuptools reads it
-# statically, so building the wheel never imports the package, which matters
-# because importing these roots pulls pandas, and a build backend that has to
-# import pandas to learn a version number cannot produce a wheel at all.
+# maturin reads the version from sdm-py's Cargo.toml, the workspace's
+# version; `_version.py` still holds the same literal for code that reads it,
+# and a test holds the two, and the other four distributions, equal.
 dynamic = ["version"]
 description = "One Python client for NVIDIA's structured-data foundation model NIMs"
 readme = "README.md"
 license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+license-files = ["LICENSE", "NOTICE", "THIRD-PARTY-NOTICES-RUST.txt"]
 requires-python = ">=3.10"
 authors = [{ name = "NVIDIA" }]
 keywords = ["structured-data", "foundation-model", "tabular", "relational"]
@@ -25,7 +27,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -37,12 +39,15 @@ classifiers = [
 ]
 # What the base install carries: the wire vocabulary, the language, an HTTP
 # session, and frames. A model that does heavy client-side work brings its own
-# runtime through an extra instead.
+# runtime through an extra instead. pyarrow is the core's way in and out
+# (decision E16): Arrow crosses through the PyCapsule interface, which pyarrow
+# has from 14.0.1.
 dependencies = [
     "structured-data-models-api==1.0.0",
     "structured-data-models-pql==1.0.0",
-    "pandas>=1.5",
-    "numpy>=1.23",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "pyarrow>=14.0.1",
     "requests>=2.28",
     "urllib3>=1.26",
 ]
@@ -79,17 +84,16 @@ databricks-serving = ["databricks-sdk>=0.68.0,<1.0"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]
-test = ["pytest", "requests-mock"]
+test = ["pytest", "pytest-xdist", "requests-mock"]
 
-[tool.setuptools.dynamic]
-version = {attr = "sdm_client._version.__version__"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["sdm_client*"]
-
-[tool.setuptools.package-data]
-"sdm_client" = ["py.typed"]
+# The Python package is src/sdm_client, py.typed and _native.pyi included;
+# the extension module lands beside them. The shipped build has the
+# production features only: `test-ops` is for the binding's own tests.
+[tool.maturin]
+manifest-path = "../../rust/bindings/sdm-py/Cargo.toml"
+module-name = "sdm_client._native"
+python-source = "src"
+locked = true
 
 [tool.ruff]
 extend = "../../pyproject.toml"

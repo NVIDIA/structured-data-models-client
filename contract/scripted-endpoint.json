@@ -1,0 +1,345 @@
+{
+  "format": "sdm-scripted-endpoint/1",
+  "description": "The scripted model endpoint's rule (contract/runners/scripted_endpoint.py), as vectors both endpoints answer exactly: each request's method, path and body text, and the status and parsed JSON body of the answer.",
+  "vectors": [
+    {
+      "name": "regression",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\", \"__kumo_anchor_time\"], \"rows\": [[112, 0, \"2024-03-01T00:00:00.000000Z\"], [113, 1, \"2024-03-01T00:00:00.000000Z\"]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "112",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "113",
+            "row_index": 1,
+            "prediction": 1.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "regression, instance_id not the first column",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"__kumo_entity_ref_0\", \"instance_id\"], \"rows\": [[0, 7], [1, 9]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "7",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "9",
+            "row_index": 1,
+            "prediction": 1.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "binary classification answers the first class",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\", \"classes\": [\"false\", \"true\"]}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[5, 0], [6, 1]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "5",
+            "row_index": 0,
+            "prediction": "false"
+          },
+          {
+            "id": "6",
+            "row_index": 1,
+            "prediction": "false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclass classification answers the first class",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"multiclass_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\", \"classes\": [\"IN\", \"DE\", \"US\"]}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[0, 0]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "0",
+            "row_index": 0,
+            "prediction": "IN"
+          }
+        ]
+      }
+    },
+    {
+      "name": "an integer id past 2**64 is answered as written",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[1180591620717411303424], [-9223372036854775809]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "1180591620717411303424",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "-9223372036854775809",
+            "row_index": 1,
+            "prediction": 1.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "text ids are answered as themselves",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[\"a'b\", 0], [\"\", 1]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "a'b",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "",
+            "row_index": 1,
+            "prediction": 1.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "no rows, no predictions",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": []}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": []
+      }
+    },
+    {
+      "name": "not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{not json",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "NaN is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[NaN]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "Infinity is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[Infinity]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "-Infinity is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[-Infinity]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "NaN outside the rows is not JSON",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\", \"x\": NaN}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[1]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_json"
+      }
+    },
+    {
+      "name": "not an object",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "[1, 2]",
+      "status": 400,
+      "answer": {
+        "error": "not_an_object"
+      }
+    },
+    {
+      "name": "no predict section",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}}",
+      "status": 400,
+      "answer": {
+        "error": "no_instance_table"
+      }
+    },
+    {
+      "name": "records format",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"records\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[1, 2]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_arrays"
+      }
+    },
+    {
+      "name": "a row shorter than the instance_id column",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"__kumo_entity_ref_0\", \"instance_id\"], \"rows\": [[1]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "not_arrays"
+      }
+    },
+    {
+      "name": "no instance_id column",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"a\", \"b\"], \"rows\": [[1, 2]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "no_instance_id"
+      }
+    },
+    {
+      "name": "a fractional id",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[1.5]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "bad_instance_id"
+      }
+    },
+    {
+      "name": "an exponent id",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"task\": {\"kind\": \"regression\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[1e3]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "bad_instance_id"
+      }
+    },
+    {
+      "name": "a null id",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[null, 0]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "bad_instance_id"
+      }
+    },
+    {
+      "name": "a boolean id",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[true, 0]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "bad_instance_id"
+      }
+    },
+    {
+      "name": "a classification without classes",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[1, 0]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "no_classes"
+      }
+    },
+    {
+      "name": "a classification whose first class is a number",
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"multiclass_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\", \"classes\": [0, 1]}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[1, 0]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "no_classes"
+      }
+    },
+    {
+      "name": "a GET of the predictions path",
+      "method": "GET",
+      "path": "/v1/predictions",
+      "body": "",
+      "status": 404,
+      "answer": {
+        "error": "not_found"
+      }
+    },
+    {
+      "name": "another path",
+      "method": "POST",
+      "path": "/v1/sessions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[1, 0]]}}}",
+      "status": 404,
+      "answer": {
+        "error": "not_found"
+      }
+    }
+  ]
+}

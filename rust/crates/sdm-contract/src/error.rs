@@ -1,0 +1,429 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Errors and warnings.
+//!
+//! An error is `{kind, code, message, fields, cause, retryable,
+//! drop_held}` with a closed list of kinds and a closed list of codes; a warning travels on its
+//! own channel, in order. No string here names a Python or Java class: each
+//! host maps every code to its own classes through one reviewed table,
+//! never reading message text. Codes are promised, message text is not.
+//!
+//! Each code may carry only the kinds [`ErrorCode::kinds`] lists, so a
+//! host's mapping keys on the code alone (decision E22). Every construction
+//! is held to that table: [`CoreError::new`] debug-asserts the pair;
+//! [`CoreError::provider`] and [`CoreError::transport`], whose kind comes
+//! from the host, give `INTERNAL_ERROR` for a kind outside the code's set;
+//! and since the fields are public and the type deserializes, `sdm-host`
+//! checks every pair where an error crosses the boundary
+//! ([`CoreError::holds_to_table`]).
+
+use std::collections::BTreeMap;
+use std::fmt;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::data::ProviderError;
+use crate::scalar::Scalar;
+
+/// What kind of problem an error is.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorKind {
+    /// The caller's request is not one the core accepts.
+    InvalidRequest,
+    /// A valid request the core does not support, such as a type outside
+    /// the closed set.
+    Unsupported,
+    /// Something the request names does not exist.
+    NotFound,
+    /// The data source or its driver failed.
+    DataSource,
+    /// The model endpoint or its transport failed.
+    ModelEndpoint,
+    /// The run was cancelled.
+    Cancelled,
+    /// The host broke the run protocol: a call in the wrong state, a reply
+    /// the run did not ask for, a malformed control message.
+    Protocol,
+    /// A defect in the core, a contained panic included.
+    Internal,
+}
+
+impl ErrorKind {
+    /// Every kind, in the order the contract lists them.
+    pub const ALL: [ErrorKind; 8] = [
+        ErrorKind::InvalidRequest,
+        ErrorKind::Unsupported,
+        ErrorKind::NotFound,
+        ErrorKind::DataSource,
+        ErrorKind::ModelEndpoint,
+        ErrorKind::Cancelled,
+        ErrorKind::Protocol,
+        ErrorKind::Internal,
+    ];
+
+    /// The kind's name, as the contract spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ErrorKind::InvalidRequest => "invalid_request",
+            ErrorKind::Unsupported => "unsupported",
+            ErrorKind::NotFound => "not_found",
+            ErrorKind::DataSource => "data_source",
+            ErrorKind::ModelEndpoint => "model_endpoint",
+            ErrorKind::Cancelled => "cancelled",
+            ErrorKind::Protocol => "protocol",
+            ErrorKind::Internal => "internal",
+        }
+    }
+}
+
+/// The codes the core gives: one closed list, so each host's mapping
+/// matches every code with no catch-all arm (decision H6). Host and core
+/// ship together, so the list is exhaustive; a new code is a contract
+/// version bump. PQL's own diagnostic codes stay strings inside
+/// `PqlDiagnostic`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ErrorCode {
+    /// The caller's request is not one the core accepts.
+    InvalidRequest,
+    /// A valid request this core does not support.
+    UnsupportedRequest,
+    /// The model endpoint answered with something the core cannot read.
+    InvalidResponse,
+    /// The host's configuration of a run is not one the core accepts.
+    InvalidConfiguration,
+    /// The transport to the model endpoint failed: it could not reach the
+    /// endpoint, or could not read its answer.
+    TransportError,
+    /// A defect in the core, a contained panic included.
+    InternalError,
+    /// The model a request names does not exist.
+    UnknownModel,
+    /// An optional dependency of the host is not installed.
+    MissingExtra,
+    /// A schema the core cannot work with.
+    InvalidSchema,
+    /// The endpoint does not support sessions.
+    SessionsUnsupported,
+    /// An Arrow type outside the closed set.
+    UnsupportedType,
+    /// A value the admitted type of its column cannot hold, such as a `timestamp[s]` past the microseconds an int64 counts.
+    ValueOutOfRange,
+    /// A provider answered with a schema other than the one asked for.
+    ProviderSchemaMismatch,
+    /// A provider's query failed.
+    ProviderError,
+    /// A reply for an id the run is not waiting on: unknown, stale or already answered.
+    UnknownReply,
+    /// `next` was called before every reply the run asked for arrived.
+    ReplyMissing,
+    /// A reply of the wrong kind: a model answer for a fetch, or the other way round.
+    WrongReply,
+    /// The run was used after it finished.
+    RunFinished,
+    /// The run was used after it was cancelled.
+    RunCancelled,
+    /// The run was used after a panic poisoned it.
+    RunPoisoned,
+    /// A second call reached a run while one was in progress.
+    RunBusy,
+    /// A control message the contract cannot read, larger than the control cap, of the wrong direction, or whose attachments do not match the ids it names.
+    InvalidMessage,
+}
+
+impl ErrorCode {
+    /// Every code, in the order the contract lists them.
+    pub const ALL: [ErrorCode; 22] = [
+        ErrorCode::InvalidRequest,
+        ErrorCode::UnsupportedRequest,
+        ErrorCode::InvalidResponse,
+        ErrorCode::InvalidConfiguration,
+        ErrorCode::TransportError,
+        ErrorCode::InternalError,
+        ErrorCode::UnknownModel,
+        ErrorCode::MissingExtra,
+        ErrorCode::InvalidSchema,
+        ErrorCode::SessionsUnsupported,
+        ErrorCode::UnsupportedType,
+        ErrorCode::ValueOutOfRange,
+        ErrorCode::ProviderSchemaMismatch,
+        ErrorCode::ProviderError,
+        ErrorCode::UnknownReply,
+        ErrorCode::ReplyMissing,
+        ErrorCode::WrongReply,
+        ErrorCode::RunFinished,
+        ErrorCode::RunCancelled,
+        ErrorCode::RunPoisoned,
+        ErrorCode::RunBusy,
+        ErrorCode::InvalidMessage,
+    ];
+
+    /// The kinds an error of this code may carry (decision E22): one for
+    /// every code but `PROVIDER_ERROR`, whose kind the host's provider
+    /// chooses from a closed set.
+    ///
+    /// `VALUE_OUT_OF_RANGE` stays `unsupported` (E13): the value is the
+    /// source's own, valid there; what fails is that the type the core
+    /// admits it as cannot hold it, which is the core's limit, not the
+    /// source's failure.
+    pub fn kinds(self) -> &'static [ErrorKind] {
+        use ErrorKind as K;
+        match self {
+            ErrorCode::InvalidRequest
+            | ErrorCode::InvalidConfiguration
+            | ErrorCode::InvalidSchema => &[K::InvalidRequest],
+            ErrorCode::UnsupportedRequest
+            | ErrorCode::MissingExtra
+            | ErrorCode::SessionsUnsupported
+            | ErrorCode::UnsupportedType
+            | ErrorCode::ValueOutOfRange => &[K::Unsupported],
+            ErrorCode::UnknownModel => &[K::NotFound],
+            ErrorCode::InvalidResponse | ErrorCode::TransportError => &[K::ModelEndpoint],
+            ErrorCode::InternalError => &[K::Internal],
+            ErrorCode::ProviderSchemaMismatch => &[K::DataSource],
+            ErrorCode::ProviderError => &[K::DataSource, K::NotFound],
+            ErrorCode::RunCancelled => &[K::Cancelled],
+            ErrorCode::UnknownReply
+            | ErrorCode::ReplyMissing
+            | ErrorCode::WrongReply
+            | ErrorCode::RunFinished
+            | ErrorCode::RunPoisoned
+            | ErrorCode::RunBusy
+            | ErrorCode::InvalidMessage => &[K::Protocol],
+        }
+    }
+
+    /// Whether an error of this code may carry `kind`.
+    pub fn allows(self, kind: ErrorKind) -> bool {
+        self.kinds().contains(&kind)
+    }
+
+    /// The code's name, as the contract spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ErrorCode::InvalidRequest => "INVALID_REQUEST",
+            ErrorCode::UnsupportedRequest => "UNSUPPORTED_REQUEST",
+            ErrorCode::InvalidResponse => "INVALID_RESPONSE",
+            ErrorCode::InvalidConfiguration => "INVALID_CONFIGURATION",
+            ErrorCode::TransportError => "TRANSPORT_ERROR",
+            ErrorCode::InternalError => "INTERNAL_ERROR",
+            ErrorCode::UnknownModel => "UNKNOWN_MODEL",
+            ErrorCode::MissingExtra => "MISSING_EXTRA",
+            ErrorCode::InvalidSchema => "INVALID_SCHEMA",
+            ErrorCode::SessionsUnsupported => "SESSIONS_UNSUPPORTED",
+            ErrorCode::UnsupportedType => "UNSUPPORTED_TYPE",
+            ErrorCode::ValueOutOfRange => "VALUE_OUT_OF_RANGE",
+            ErrorCode::ProviderSchemaMismatch => "PROVIDER_SCHEMA_MISMATCH",
+            ErrorCode::ProviderError => "PROVIDER_ERROR",
+            ErrorCode::UnknownReply => "UNKNOWN_REPLY",
+            ErrorCode::ReplyMissing => "REPLY_MISSING",
+            ErrorCode::WrongReply => "WRONG_REPLY",
+            ErrorCode::RunFinished => "RUN_FINISHED",
+            ErrorCode::RunCancelled => "RUN_CANCELLED",
+            ErrorCode::RunPoisoned => "RUN_POISONED",
+            ErrorCode::RunBusy => "RUN_BUSY",
+            ErrorCode::InvalidMessage => "INVALID_MESSAGE",
+        }
+    }
+}
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// A value under an error's or a warning's `fields`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum Detail {
+    Scalar(Scalar),
+    List(Vec<Scalar>),
+}
+
+impl Detail {
+    pub fn text(value: impl Into<String>) -> Self {
+        Detail::Scalar(Scalar::Utf8(value.into()))
+    }
+}
+
+/// A state a host holds between runs and hands back to the core with a
+/// later run's start, opaque to it.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum HeldState {
+    /// The sampler state a materializer's last run left
+    /// (`Materialize.sampler_state`, decision E52).
+    SamplerState,
+}
+
+/// An error the core reports.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CoreError {
+    pub kind: ErrorKind,
+    /// Stable across releases and languages.
+    pub code: ErrorCode,
+    /// For a person to read; not promised, and never holding an input value.
+    pub message: String,
+    /// What callers branch on, by name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, Detail>,
+    /// The error this one was raised from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cause: Option<Box<CoreError>>,
+    /// Whether the same call may succeed if tried again; carried from
+    /// provider and transport errors, false otherwise.
+    #[serde(default)]
+    pub retryable: bool,
+    /// The states the host handed this run that it must drop rather than
+    /// hand back again: the core refused them, so a later run given them
+    /// would be refused the same way (decision E74). The host follows this
+    /// alone, never reading which field an error names; empty for any
+    /// other error.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub drop_held: Vec<HeldState>,
+}
+
+impl CoreError {
+    /// An error of `code` and `kind`, which must be one of the code's
+    /// [`ErrorCode::kinds`]; a debug build asserts it (decision E22).
+    pub fn new(kind: ErrorKind, code: ErrorCode, message: impl Into<String>) -> Self {
+        debug_assert!(
+            code.allows(kind),
+            "{code} does not carry kind {}",
+            kind.as_str()
+        );
+        Self {
+            kind,
+            code,
+            message: message.into(),
+            fields: BTreeMap::new(),
+            cause: None,
+            retryable: false,
+            drop_held: Vec::new(),
+        }
+    }
+
+    /// A protocol error: the host broke the run protocol.
+    pub fn protocol(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::Protocol, code, message)
+    }
+
+    /// The error a provider's failure becomes: its kind and retryability,
+    /// with the driver's SQLSTATE and vendor code as fields. The driver's
+    /// message is not part of the contract, since drivers quote values in
+    /// it.
+    ///
+    /// A kind `PROVIDER_ERROR` does not carry gives `INTERNAL_ERROR`
+    /// instead (decision E22).
+    pub fn provider(error: &ProviderError) -> Self {
+        if !ErrorCode::ProviderError.allows(error.kind) {
+            return Self::outside_table(error.kind, ErrorCode::ProviderError);
+        }
+        let mut out = Self::new(
+            error.kind,
+            ErrorCode::ProviderError,
+            "the data provider failed",
+        );
+        out.retryable = error.retryable;
+        if let Some(sqlstate) = &error.sqlstate {
+            out = out.with_field("sqlstate", Detail::text(sqlstate.clone()));
+        }
+        if let Some(vendor_code) = &error.vendor_code {
+            out = out.with_field("vendor_code", Detail::text(vendor_code.clone()));
+        }
+        out
+    }
+
+    /// The error a model transport's failure becomes: its kind and
+    /// retryability. A kind `TRANSPORT_ERROR` does not carry gives
+    /// `INTERNAL_ERROR` instead (decision E22).
+    pub fn transport(kind: ErrorKind, retryable: bool) -> Self {
+        if !ErrorCode::TransportError.allows(kind) {
+            return Self::outside_table(kind, ErrorCode::TransportError);
+        }
+        let mut out = Self::new(
+            kind,
+            ErrorCode::TransportError,
+            "the transport to the model endpoint failed",
+        );
+        out.retryable = retryable;
+        out
+    }
+
+    /// The `INTERNAL_ERROR` that replaces an error whose kind its code does
+    /// not carry, naming the pair as `pair_kind` and `pair_code`.
+    pub fn outside_table(kind: ErrorKind, code: ErrorCode) -> Self {
+        Self::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "an error carried a kind its code does not allow",
+        )
+        .with_field("pair_kind", Detail::text(kind.as_str()))
+        .with_field("pair_code", Detail::text(code.as_str()))
+    }
+
+    /// Whether this error, and every error in its cause chain, carries a
+    /// kind its code allows (decision E22).
+    pub fn holds_to_table(&self) -> bool {
+        self.code.allows(self.kind) && self.cause.as_deref().is_none_or(CoreError::holds_to_table)
+    }
+
+    #[must_use]
+    pub fn with_field(mut self, name: &str, value: Detail) -> Self {
+        self.fields.insert(name.to_owned(), value);
+        self
+    }
+
+    /// This error, telling the host to drop the held state `state` it
+    /// handed the run (decision E74).
+    #[must_use]
+    pub fn dropping(mut self, state: HeldState) -> Self {
+        if !self.drop_held.contains(&state) {
+            self.drop_held.push(state);
+        }
+        self
+    }
+
+    #[must_use]
+    pub fn caused_by(mut self, cause: CoreError) -> Self {
+        self.cause = Some(Box::new(cause));
+        self
+    }
+}
+
+impl fmt::Display for CoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for CoreError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause
+            .as_deref()
+            .map(|c| c as &(dyn std::error::Error + 'static))
+    }
+}
+
+/// A warning a run gives, kept in the order given.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CoreWarning {
+    #[schemars(regex(pattern = r"^[A-Z][A-Z0-9_]*$"))]
+    pub code: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, Detail>,
+}

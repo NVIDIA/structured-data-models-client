@@ -3,6 +3,10 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+# Client wheels scripts/rust_core/native_wheel.py builds, here and in CI.
+/native/
+/native-test-ops/
+/dist-native/
 _sibling_wheels/
 .venv*/
 .pytest_cache/
@@ -11,3 +15,5 @@ _sibling_wheels/
 .coverage
 htmlcov/
 *.so
+target/
+/uv.lock

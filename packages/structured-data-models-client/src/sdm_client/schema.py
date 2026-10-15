@@ -185,6 +185,21 @@ class Column:
                 'assign the dtype you want instead',
                 code='INVALID_REQUEST',
             )
+        if (
+            key == 'stype'
+            and getattr(
+                getattr(getattr(self, '_table', None), '_schema', None),
+                '_core_description',
+                None,
+            )
+            is not None
+        ):
+            # A core-built schema's column: the core checks and makes the
+            # edit, and its answer is stored (T1.24b, decision E66(g)).
+            from sdm_client._rust import edits
+
+            if edits.column(self, value):
+                return
         if key == 'stype':
             self._check_stype(value)
             self._check_supports_dtype(value, getattr(self, 'dtype', None))
@@ -394,6 +409,19 @@ class _TableShape:
         return _copy_table(self)
 
     def __setattr__(self, key: str, value: Any) -> None:
+        if (
+            key in ('primary_key', 'time_column')
+            and getattr(
+                getattr(self, '_schema', None), '_core_description', None
+            )
+            is not None
+        ):
+            # A core-built schema's table: the core checks and makes the
+            # edit, and its answer is stored (T1.24b, decision E66(g)).
+            from sdm_client._rust import edits
+
+            if edits.table(self, key, value):
+                return
         if key in ('primary_key', 'time_column') and 'columns' in self.__dict__:
             # Before anything is marked, not after. Naming a key or a time
             # column types the columns it names, and ownership was taken in
@@ -762,6 +790,16 @@ class SourceTable(_TableShape):
         says nothing about it. A table of frames drops a column from its frame
         before :meth:`Schema.from_data` instead.
         """
+        if (
+            getattr(getattr(self, '_schema', None), '_core_description', None)
+            is not None
+        ):
+            # A core-built schema's table: the core checks and makes the
+            # edit, and its answer is stored (T1.24b).
+            from sdm_client._rust import edits
+
+            if edits.leave_out(self, column):
+                return
         self._check_column(column)
         role = (
             'primary key'
@@ -868,6 +906,10 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
+        # The core's description of the source, kept by Schema.from_source
+        # on the core route for materialize on the core (private routing
+        # seam, T1.11c); None otherwise.
+        self._core_description: Any = None
 
     @property
     def source(self) -> Source | None:
@@ -887,6 +929,16 @@ class Schema:
         the other accepted. `check_consistent()`, which a caller runs to
         ask exactly this, passed it.
         """
+        if (
+            key == 'relationships'
+            and getattr(self, '_core_description', None) is not None
+        ):
+            # A core-built schema: the core checks and makes the edit, and
+            # its answer is stored (T1.24b, decision E66(g)).
+            from sdm_client._rust import edits
+
+            if edits.relationships(self, value):
+                return
         if key == 'relationships' and hasattr(self, '_tables'):
             value = _Links(self._settle(value), self)
             object.__setattr__(self, key, value)
@@ -922,7 +974,14 @@ class Schema:
         schema of frames.
         """
         object.__setattr__(
-            self, '__dict__', {'_source': None, '_engine_tables': None, **state}
+            self,
+            '__dict__',
+            {
+                '_source': None,
+                '_engine_tables': None,
+                '_core_description': None,
+                **state,
+            },
         )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
@@ -976,6 +1035,7 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
+        copied._core_description = self._core_description
         return copied
 
     @classmethod
@@ -1160,6 +1220,27 @@ class Schema:
         _require_a_source(source)
         if tables is not None:
             _require_table_names(tables)
+
+        if getattr(source, 'backend', None) == 'duckdb':
+            from sdm_client import _routing
+
+            paths = (
+                _routing.FROM_SOURCE_DUCKDB
+                if tables is None
+                else _routing.FROM_SOURCE_DUCKDB_TABLES
+            )
+            if _routing.route(paths) == 'core':
+                from sdm_client._rust import schema as on_the_core
+
+                return on_the_core.from_source(
+                    cls,
+                    source,
+                    tables,
+                    primary_keys=primary_keys,
+                    time_columns=time_columns,
+                    relationships=relationships,
+                    check_keys=check_keys,
+                )
 
         read = EngineTables()
         engine_tables: dict[str, Any] | None = None
@@ -2562,6 +2643,13 @@ class _Links(list):
         object.__setattr__(self, '_schema', schema)
 
     def _resettle(self, links: list[Relationship]) -> None:
+        if getattr(self._schema, '_core_description', None) is not None:
+            # A core-built schema: the core checks and makes the edit, and
+            # its answer is stored in this list (T1.24b).
+            from sdm_client._rust import edits
+
+            if edits.relationships(self._schema, links, into=self):
+                return
         settled = self._schema._settle(links)
         super().clear()
         super().extend(settled)

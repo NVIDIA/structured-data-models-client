@@ -1,6 +1,10 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
+# Bridge code: on the core route, the num_context_samples bound in
+# _validate_materialize_args (design, "Host-held semantics") is deleted in
+# Phase 1 by T1.28a; the decomposition and the model and route choice move
+# in a later phase (the ledger), and the S0 hook in _resolve goes in Phase 5.
 
 r"""Asking a question in PQL, and gathering the data that answers it.
 
@@ -24,6 +28,7 @@ otherwise, and the model asked to answer it has to be that same one.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from collections.abc import Mapping, Sequence
 from numbers import Integral
@@ -33,6 +38,7 @@ import pandas as pd
 from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client.decompose import (
+    FORECAST,
     Decomposition,
     about_the_part,
     parts_of,
@@ -165,6 +171,8 @@ class PredictiveQuery:
                 'rows you want',
                 code='INVALID_REQUEST',
             )
+        from sdm_client import _routing
+
         self._validate_materialize_args(
             relational=relational,
             model_id=spec.model_id if spec is not None else None,
@@ -174,18 +182,32 @@ class PredictiveQuery:
             predict=predict,
             num_context_samples=num_context_samples,
             options=options,
+            # The core bounds the context size on its route (T1.28a): a
+            # schema over a DuckDB source is relational (refused above if
+            # not), and goes to the core where the seam forces it there.
+            bounded_by_the_core=getattr(self.schema.source, 'backend', None)
+            == 'duckdb'
+            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core',
         )
 
         # Resolved once, and against the profile this request is for, because
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
+        # A forecast over a DuckDB source on the core route is split into
+        # its steps by the core (T1.36 fix 21).
+        on_the_core = (
+            relational
+            and getattr(self.schema.source, 'backend', None) == 'duckdb'
+            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+        )
         rewritten = parts_of(
             asked,
             self.text,
             list(candidates) if candidates is not None else None,
             options,
             self.schema,
+            on_the_core=on_the_core,
         )
         if task is not None and (relational or rewritten is not None):
             why = (
@@ -200,6 +222,15 @@ class PredictiveQuery:
                 f'the query rather than beside it',
                 code='INVALID_REQUEST',
                 details={'task': repr(task)},
+            )
+
+        if rewritten is not None and rewritten.kind == FORECAST and on_the_core:
+            return self._in_steps_on_the_core(
+                asked,
+                rewritten,
+                indices=indices,
+                num_context_samples=num_context_samples,
+                options=options,
             )
 
         if rewritten is not None:
@@ -246,6 +277,7 @@ class PredictiveQuery:
         predict: pd.DataFrame | None,
         num_context_samples: int | None,
         options: dict[str, Any] | None,
+        bounded_by_the_core: bool = False,
     ) -> None:
         r"""Refuse a call that cannot be gathered, in an order that advises.
 
@@ -367,7 +399,7 @@ class PredictiveQuery:
                     f'{num_context_samples!r}',
                     code='INVALID_REQUEST',
                 )
-            if num_context_samples < 1:
+            if num_context_samples < 1 and not bounded_by_the_core:
                 raise StructuredDataError(
                     'num_context_samples must be at least 1; a model predicts '
                     f'from labelled examples, and {num_context_samples} '
@@ -408,31 +440,123 @@ class PredictiveQuery:
         whole._asked = self.text
         return whole
 
+    def _in_steps_on_the_core(
+        self,
+        asked: ValidatedPredictiveQuery,
+        rewritten: Decomposition,
+        *,
+        indices: Sequence[Any] | None,
+        num_context_samples: int | None,
+        options: dict[str, Any],
+    ) -> Request:
+        r"""A forecast gathered on the core, which asks each step as the
+        regression :meth:`_in_parts` would (T1.36 fix 21), kept together as
+        :meth:`_in_parts` keeps the parts it gathers: a refusal said of the
+        step it happened in, which the core names (``forecast_step``), or of
+        the first where this client refuses the call's options before the
+        core runs.
+        """
+        import copy
+
+        steps = int(getattr(asked, 'num_forecasts', 1) or 1)
+        named = Decomposition(
+            FORECAST, tuple((None, n + 1) for n in range(steps))
+        )
+        assert indices is not None
+        try:
+            whole = self._relational_materializer.materialize(
+                query=asked,
+                indices=indices,
+                num_context_samples=num_context_samples,
+                options=options,
+            )
+        except MissingExtraError:
+            raise
+        except StructuredDataError as error:
+            details = getattr(error, 'details', None)
+            step = (
+                details.pop('forecast_step', 1)
+                if isinstance(details, dict)
+                else 1
+            )
+            raise about_the_part(error, named, step) from error
+        state = whole._core_state
+        gathered = []
+        for step, payload, query in [
+            (1, whole.payloads[0], state['query']),
+            *state.get('forecast', ()),
+        ]:
+            part = Request.materialized(
+                payloads=(payload,),
+                windowed=whole._windowed,
+                schema=self.schema.snapshot(),
+                query=query,
+                indices=list(indices),
+                entity_table=whole.entity_table,
+                requested_inference=whole.requested_inference,
+            )
+            part._core_state = {'version': state['version']}
+            gathered.append((part, query, step))
+        carrier = copy.copy(gathered[0][0])
+        carrier._parts = tuple(part for part, _, _ in gathered)
+        carrier._decomposition = dataclasses.replace(
+            rewritten,
+            parts=tuple((query, step) for _, query, step in gathered),
+        )
+        carrier._asked = self.text
+        return carrier
+
     def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
-        r"""Parse and validate the query."""
+        r"""Parse and validate the query.
+
+        On the core route (S0, the private routing seam) the core decides
+        validity, and an accepted query is resolved by the old validator for
+        the old materializer, which also checks that the two agree.
+        """
         from predictive_query import validate
 
+        from sdm_client import _routing
         from sdm_client.schema import to_schema_definition
 
-        resolved, response = validate(
-            self.text, to_schema_definition(self.schema), profile
-        )
+        core = _routing.route(_routing.S0) == 'core'
+        definition = to_schema_definition(self.schema)
+        if core:
+            from sdm_client._rust import s0
+
+            accepted, messages = s0.validate(self.text, definition, profile)
+            if accepted:
+                return s0.shadow(self.text, definition, profile)
+            raise self._refusal(messages, profile)
+        resolved, response = validate(self.text, definition, profile)
         if resolved is None or not response.ok:
-            reasons = (
-                '; '.join(
-                    _without_the_validator_trace(error.message)
-                    for error in response.errors
-                )
-                or 'the query did not resolve'
-            )
-            raise StructuredDataError(
-                f'{self.text!r} is not a query {profile.capabilities.model} '
-                f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
-                f'{self._why_the_target_is_text(reasons, profile)}'
-                f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
-                code='INVALID_REQUEST',
+            raise self._refusal(
+                [error.message for error in response.errors], profile
             )
         return resolved
+
+    def _refusal(
+        self, messages: list[str], profile: Profile
+    ) -> StructuredDataError:
+        r"""The refusal of a query the language does not accept.
+
+        The hints below recognise the refusal by the old validator's wording.
+        On the core route the messages are the core's diagnostics, whose
+        wording is not promised, so a hint may not appear there; S0 parity is
+        the validity and the code, never the text.
+        """
+        reasons = (
+            '; '.join(
+                _without_the_validator_trace(message) for message in messages
+            )
+            or 'the query did not resolve'
+        )
+        return StructuredDataError(
+            f'{self.text!r} is not a query {profile.capabilities.model} '
+            f'can answer: {_without_a_remedy_this_caller_cannot_run(reasons)}'
+            f'{self._why_the_target_is_text(reasons, profile)}'
+            f'{self._how_to_resolve_an_ambiguous_link(reasons)}',
+            code='INVALID_REQUEST',
+        )
 
     def _how_to_resolve_an_ambiguous_link(self, reasons: str) -> str:
         r"""Say how to resolve an ambiguous link, in the words of this object.

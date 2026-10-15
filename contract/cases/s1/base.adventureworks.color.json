@@ -1,0 +1,218 @@
+{
+  "format": "sdm-case/1",
+  "id": "base.adventureworks.color",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "schema.edit/set-time-column/any",
+    "schema.edit/drop-column/any",
+    "query.materialize/indices-multiclass/duckdb",
+    "client.predict/multiclass/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "utf8/target",
+    "utf8/feature",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "from_source": {
+      "tables": {
+        "customers": "adventureworks_customers",
+        "products": "adventureworks_products",
+        "sales_order_headers": "adventureworks_sales_order_headers",
+        "sales_order_details": "adventureworks_sales_order_details"
+      },
+      "primary_keys": {
+        "customers": "CustomerID",
+        "products": "ProductID",
+        "sales_order_details": "SalesOrderDetailID"
+      },
+      "time_columns": {
+        "sales_order_headers": "OrderDate",
+        "sales_order_details": "OrderDate"
+      },
+      "relationships": [
+        {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "ProductID",
+          "target_table": "products",
+          "target_column": "ProductID"
+        }
+      ]
+    },
+    "edits": [
+      {
+        "op": "clear_time_column",
+        "table": "products"
+      },
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "rowguid"
+      }
+    ],
+    "pql": "PREDICT products.Color FOR EACH products.ProductID",
+    "materialize": {
+      "indices": [
+        709
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "customers",
+            "source": "adventureworks_customers"
+          },
+          {
+            "name": "products",
+            "source": "adventureworks_products"
+          },
+          {
+            "name": "sales_order_headers",
+            "source": "adventureworks_sales_order_headers"
+          },
+          {
+            "name": "sales_order_details",
+            "source": "adventureworks_sales_order_details"
+          }
+        ],
+        "primary_keys": {
+          "customers": {
+            "value": [
+              "CustomerID"
+            ]
+          },
+          "products": {
+            "value": [
+              "ProductID"
+            ]
+          },
+          "sales_order_details": {
+            "value": [
+              "SalesOrderDetailID"
+            ]
+          }
+        },
+        "time_columns": {
+          "sales_order_headers": {
+            "value": "OrderDate"
+          },
+          "sales_order_details": {
+            "value": "OrderDate"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "sales_order_headers",
+              "column": "CustomerID"
+            },
+            {
+              "table": "customers",
+              "column": "CustomerID"
+            }
+          ],
+          [
+            {
+              "table": "sales_order_details",
+              "column": "CustomerID"
+            },
+            {
+              "table": "customers",
+              "column": "CustomerID"
+            }
+          ],
+          [
+            {
+              "table": "sales_order_details",
+              "column": "ProductID"
+            },
+            {
+              "table": "products",
+              "column": "ProductID"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "709"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the schema as base.adventureworks's after the same edits; task multiclass_classification, the nulls no class, classes ['Black', 'Silver', 'Multi', 'Blue', 'White', 'Red', 'Yellow', 'Silver/Black'] (in that order); four SDMWarnings and a UserWarning; result columns row_index int64, id int64, prediction str, one row"
+  },
+  "why": "T1.32f (owner, 2026-10-12, E78(k)), folded into T1.33: the AdventureWorks notebook's product_color question, a multiclass classification over a static text target with nulls (products.Color: eight colours and 18 nulls in the fixture), on the same base, schema and edits as base.adventureworks, without inference_config, as the notebook asks it; an acceptance case from T1.33 on base.adventureworks's routes, so python-core runs describe_source, materialize and predict on the core and rust-host the whole journey; its expectation the reference's. Color, not the ProductLine T1.32e's live benchmark asks: the endpoint refused Color on the full data (TASK_SCHEMA_MISMATCH, a declared class, Grey, in no context row), while over this fixture the reference's request declares eight classes and its context holds every one, and the scripted endpoint answers either",
+  "source": "examples/databricks/adventureworks_relational.ipynb, product_color, its schema as the notebook builds it, swapped to local DuckDB (E27); the question is the notebook's unchanged, and indices its top_product query's answer over the fixture"
+}

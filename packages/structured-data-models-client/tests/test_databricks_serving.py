@@ -851,3 +851,35 @@ def test_an_unusable_timeout_is_refused_at_construction(bad):
     with pytest.raises(StructuredDataError) as error:
         SDMClient.for_databricks_serving(ENDPOINT, timeout=bad)
     assert error.value.code == 'INVALID_CONFIGURATION'
+
+
+def test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T1.28b fix round 3: an answer nested past what this interpreter's
+    # reader reads (Python before 3.12 raises RecursionError) is the same
+    # TRANSPORT_ERROR as any answer that is not JSON, flagged so the core
+    # route reports it as too deep; a malformed answer is not flagged.
+    from sdm_client.core import databricks_serving
+
+    real = databricks_serving.json.loads
+
+    def loads(text: Any, *args: Any, **kwargs: Any) -> Any:
+        if str(text).count('[') > 900:
+            raise RecursionError('maximum recursion depth exceeded')
+        return real(text, *args, **kwargs)
+
+    monkeypatch.setattr(databricks_serving.json, 'loads', loads)
+    client = SDMClient.for_databricks_serving(
+        ENDPOINT, workspace_client=Workspace()
+    )
+    transport = client._transport
+    with pytest.raises(StructuredDataError) as deep:
+        transport._decoded('[' * 5000 + ']' * 5000)
+    assert deep.value.code == 'TRANSPORT_ERROR'
+    assert deep.value._response_too_deep
+    assert deep.value.__cause__ is None
+    with pytest.raises(StructuredDataError) as malformed:
+        transport._decoded('{"a": ')
+    assert malformed.value.code == 'TRANSPORT_ERROR'
+    assert not malformed.value._response_too_deep

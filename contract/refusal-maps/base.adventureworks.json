@@ -1,0 +1,991 @@
+{
+  "format": "sdm-refusal-map/1",
+  "case": "base.adventureworks",
+  "reading": "The first refusal of each probe. A refusal masks every later one, so each probe after the first removes what the one before it was refused for, and the map is the first refusal per operation with the earlier ones removed. The probes run in order: the notebook's call as it is, its tables named, keys, time columns and relationships passed to Schema.from_source as the notebook passes them, its edits (the products' time column cleared, rowguid deleted) and materialize with inference_config, which describes the source on both runners; then without inference_config, which reaches predict's result on both runners from T1.26b, the core walking the order lines to the customers they refer to and sending the products' text as the reference's words; then with one hop, and without the text columns of the tables sampled, the probes that removed T1.26b's refusals until it landed, kept as the journey reached both ways. From T1.24 Schema.from_source with tables named has a core route and every option passes through to the core, which refuses by name what it does not take, and from T1.25 the core reads text as dates as the reference does, so the probes restore the inputs earlier probes masked while their rules had not landed (the tables' names, the keys, time columns and relationships given, the edit stamps, sparse and several timestamps, the text columns whose values could be dates): and from T1.28a the notebook's call, inference_config included, reaches predict's result on python-core, the core reading the options as the engine reads them and writing those the model reads into the call, so the map has no entry; the probes after it are kept as the journey reached both ways. From T1.29, when the case was admitted to acceptance, rust-host starts materialize with the call's option values as the client does, reading the inference options from the case's input.materialize, so its notebook probe names inference_config too and reaches predict's result, and the map has no gap.",
+  "gaps": [],
+  "entries": [],
+  "probes": [
+    {
+      "id": "notebook",
+      "removes": "nothing: the case as the notebook makes it",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "input": {
+          "base": "adventureworks",
+          "from_source": {
+            "tables": {
+              "customers": "adventureworks_customers",
+              "products": "adventureworks_products",
+              "sales_order_headers": "adventureworks_sales_order_headers",
+              "sales_order_details": "adventureworks_sales_order_details"
+            },
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
+            "relationships": [
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
+            ]
+          },
+          "edits": [
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            }
+          ],
+          "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+          "materialize": {
+            "indices": [
+              709
+            ],
+            "inference_config": {
+              "num_estimators": 4,
+              "column_shuffle": true
+            }
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": "adventureworks_customers"
+                },
+                {
+                  "name": "products",
+                  "source": "adventureworks_products"
+                },
+                {
+                  "name": "sales_order_headers",
+                  "source": "adventureworks_sales_order_headers"
+                },
+                {
+                  "name": "sales_order_details",
+                  "source": "adventureworks_sales_order_details"
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "CustomerID"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "ProductID"
+                  ]
+                },
+                "sales_order_details": {
+                  "value": [
+                    "SalesOrderDetailID"
+                  ]
+                }
+              },
+              "time_columns": {
+                "sales_order_headers": {
+                  "value": "OrderDate"
+                },
+                "sales_order_details": {
+                  "value": "OrderDate"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "sales_order_headers",
+                    "column": "CustomerID"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "CustomerID"
+                  }
+                ],
+                [
+                  {
+                    "table": "sales_order_details",
+                    "column": "CustomerID"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "CustomerID"
+                  }
+                ],
+                [
+                  {
+                    "table": "sales_order_details",
+                    "column": "ProductID"
+                  },
+                  {
+                    "table": "products",
+                    "column": "ProductID"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "setup": null,
+        "until": "predict",
+        "expect": "success",
+        "edits": [
+          {
+            "op": "clear_time_column",
+            "table": "products"
+          },
+          {
+            "op": "delete_column",
+            "table": "customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_details",
+            "column": "rowguid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "no-inference-config",
+      "removes": "inference_config",
+      "python-core": {
+        "derive": {
+          "from": "notebook",
+          "steps": [
+            {
+              "remove": "materialize.inference_config"
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "input": {
+          "base": "adventureworks",
+          "from_source": {
+            "tables": {
+              "customers": "adventureworks_customers",
+              "products": "adventureworks_products",
+              "sales_order_headers": "adventureworks_sales_order_headers",
+              "sales_order_details": "adventureworks_sales_order_details"
+            },
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
+            "relationships": [
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
+            ]
+          },
+          "edits": [
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            }
+          ],
+          "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+          "materialize": {
+            "indices": [
+              709
+            ]
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "notebook",
+          "steps": []
+        },
+        "setup": null,
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": "adventureworks_customers"
+                },
+                {
+                  "name": "products",
+                  "source": "adventureworks_products"
+                },
+                {
+                  "name": "sales_order_headers",
+                  "source": "adventureworks_sales_order_headers"
+                },
+                {
+                  "name": "sales_order_details",
+                  "source": "adventureworks_sales_order_details"
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "CustomerID"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "ProductID"
+                  ]
+                },
+                "sales_order_details": {
+                  "value": [
+                    "SalesOrderDetailID"
+                  ]
+                }
+              },
+              "time_columns": {
+                "sales_order_headers": {
+                  "value": "OrderDate"
+                },
+                "sales_order_details": {
+                  "value": "OrderDate"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "sales_order_headers",
+                    "column": "CustomerID"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "CustomerID"
+                  }
+                ],
+                [
+                  {
+                    "table": "sales_order_details",
+                    "column": "CustomerID"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "CustomerID"
+                  }
+                ],
+                [
+                  {
+                    "table": "sales_order_details",
+                    "column": "ProductID"
+                  },
+                  {
+                    "table": "products",
+                    "column": "ProductID"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success",
+        "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+        "edits": [
+          {
+            "op": "clear_time_column",
+            "table": "products"
+          },
+          {
+            "op": "delete_column",
+            "table": "customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_details",
+            "column": "rowguid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "one-hop",
+      "removes": "the order lines' link to customers, so the lines refer only to products",
+      "python-core": {
+        "derive": {
+          "from": "no-inference-config",
+          "steps": [
+            {
+              "drop_relationship": {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              }
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "input": {
+          "base": "adventureworks",
+          "from_source": {
+            "tables": {
+              "customers": "adventureworks_customers",
+              "products": "adventureworks_products",
+              "sales_order_headers": "adventureworks_sales_order_headers",
+              "sales_order_details": "adventureworks_sales_order_details"
+            },
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
+            "relationships": [
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
+            ]
+          },
+          "edits": [
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            }
+          ],
+          "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+          "materialize": {
+            "indices": [
+              709
+            ]
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "no-inference-config",
+          "steps": [
+            {
+              "drop_relationship": {
+                "source_table": "sales_order_details",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              }
+            }
+          ]
+        },
+        "setup": null,
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": "adventureworks_customers"
+                },
+                {
+                  "name": "products",
+                  "source": "adventureworks_products"
+                },
+                {
+                  "name": "sales_order_headers",
+                  "source": "adventureworks_sales_order_headers"
+                },
+                {
+                  "name": "sales_order_details",
+                  "source": "adventureworks_sales_order_details"
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "CustomerID"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "ProductID"
+                  ]
+                },
+                "sales_order_details": {
+                  "value": [
+                    "SalesOrderDetailID"
+                  ]
+                }
+              },
+              "time_columns": {
+                "sales_order_headers": {
+                  "value": "OrderDate"
+                },
+                "sales_order_details": {
+                  "value": "OrderDate"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "sales_order_headers",
+                    "column": "CustomerID"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "CustomerID"
+                  }
+                ],
+                [
+                  {
+                    "table": "sales_order_details",
+                    "column": "ProductID"
+                  },
+                  {
+                    "table": "products",
+                    "column": "ProductID"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success",
+        "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+        "edits": [
+          {
+            "op": "clear_time_column",
+            "table": "products"
+          },
+          {
+            "op": "delete_column",
+            "table": "customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_details",
+            "column": "rowguid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "no-text",
+      "removes": "products' Name and ProductNumber, the text columns of the tables sampled",
+      "python-core": {
+        "derive": {
+          "from": "one-hop",
+          "steps": [
+            {
+              "delete_column": [
+                "products",
+                "Name"
+              ]
+            },
+            {
+              "delete_column": [
+                "products",
+                "ProductNumber"
+              ]
+            }
+          ]
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "input": {
+          "base": "adventureworks",
+          "from_source": {
+            "tables": {
+              "customers": "adventureworks_customers",
+              "products": "adventureworks_products",
+              "sales_order_headers": "adventureworks_sales_order_headers",
+              "sales_order_details": "adventureworks_sales_order_details"
+            },
+            "primary_keys": {
+              "customers": "CustomerID",
+              "products": "ProductID",
+              "sales_order_details": "SalesOrderDetailID"
+            },
+            "time_columns": {
+              "sales_order_headers": "OrderDate",
+              "sales_order_details": "OrderDate"
+            },
+            "relationships": [
+              {
+                "source_table": "sales_order_headers",
+                "source_column": "CustomerID",
+                "target_table": "customers",
+                "target_column": "CustomerID"
+              },
+              {
+                "source_table": "sales_order_details",
+                "source_column": "ProductID",
+                "target_table": "products",
+                "target_column": "ProductID"
+              }
+            ]
+          },
+          "edits": [
+            {
+              "op": "clear_time_column",
+              "table": "products"
+            },
+            {
+              "op": "delete_column",
+              "table": "customers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_headers",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "sales_order_details",
+              "column": "rowguid"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "Name"
+            },
+            {
+              "op": "delete_column",
+              "table": "products",
+              "column": "ProductNumber"
+            }
+          ],
+          "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+          "materialize": {
+            "indices": [
+              709
+            ]
+          }
+        },
+        "until": "predict",
+        "expect": "success"
+      },
+      "rust-host": {
+        "derive": {
+          "from": "one-hop",
+          "steps": []
+        },
+        "setup": null,
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": "adventureworks_customers"
+                },
+                {
+                  "name": "products",
+                  "source": "adventureworks_products"
+                },
+                {
+                  "name": "sales_order_headers",
+                  "source": "adventureworks_sales_order_headers"
+                },
+                {
+                  "name": "sales_order_details",
+                  "source": "adventureworks_sales_order_details"
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "CustomerID"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "ProductID"
+                  ]
+                },
+                "sales_order_details": {
+                  "value": [
+                    "SalesOrderDetailID"
+                  ]
+                }
+              },
+              "time_columns": {
+                "sales_order_headers": {
+                  "value": "OrderDate"
+                },
+                "sales_order_details": {
+                  "value": "OrderDate"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "sales_order_headers",
+                    "column": "CustomerID"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "CustomerID"
+                  }
+                ],
+                [
+                  {
+                    "table": "sales_order_details",
+                    "column": "ProductID"
+                  },
+                  {
+                    "table": "products",
+                    "column": "ProductID"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "709"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict",
+        "expect": "success",
+        "pql": "PREDICT SUM(sales_order_details.OrderQty, 0, 30, days) FOR EACH products.ProductID",
+        "edits": [
+          {
+            "op": "clear_time_column",
+            "table": "products"
+          },
+          {
+            "op": "delete_column",
+            "table": "customers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "products",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_headers",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "sales_order_details",
+            "column": "rowguid"
+          },
+          {
+            "op": "delete_column",
+            "table": "products",
+            "column": "Name"
+          },
+          {
+            "op": "delete_column",
+            "table": "products",
+            "column": "ProductNumber"
+          }
+        ]
+      }
+    }
+  ]
+}

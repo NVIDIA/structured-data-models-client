@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sdm:inventory:1",
+  "title": "Phase 1b case inventory",
+  "description": "The shape of docs/design/rust-core/phase-0/phase-1b-inventory.yaml, as T0.7 wrote it; its header comment defines each key. The inventory loader in contract/runners/run_python.py maps each case into the case format (case.schema.json) and back without loss.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "bases", "defaults", "cases"],
+  "properties": {
+    "format": {"const": "sdm-phase-1b-inventory/1"},
+    "bases": {"$ref": "urn:sdm:case:1#/$defs/bases"},
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pql", "materialize"],
+      "properties": {
+        "pql": {"type": "string", "minLength": 1},
+        "materialize": {"$ref": "urn:sdm:case:1#/$defs/materialize"}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/case"}
+    }
+  },
+  "$defs": {
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "seam", "cells", "base", "expect", "why", "source"],
+      "properties": {
+        "id": {"$ref": "urn:sdm:case:1#/$defs/id"},
+        "seam": {"$ref": "urn:sdm:case:1#/$defs/seam"},
+        "cells": {"$ref": "urn:sdm:case:1#/$defs/cells"},
+        "base": {"$ref": "urn:sdm:case:1#/$defs/name"},
+        "setup": {"$ref": "urn:sdm:case:1#/$defs/statements"},
+        "from_source": {"$ref": "urn:sdm:case:1#/$defs/from_source"},
+        "pql": {"type": "string", "minLength": 1},
+        "materialize": {"$ref": "urn:sdm:case:1#/$defs/materialize"},
+        "expect": {"$ref": "urn:sdm:case:1#/$defs/expect"},
+        "register": {"type": "string", "minLength": 1},
+        "why": {"type": "string", "minLength": 1},
+        "source": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

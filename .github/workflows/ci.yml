@@ -15,19 +15,146 @@ on:
   push:
     # The Rust core migration's epic branch and its phase branches run the
     # same gates as main; the reference and archive branches deliberately
-    # do not.
-    branches: [main, rust-core, 'rust-core-phase-*']
+    # do not, including a lane package's archive branch,
+    # rust-core-phase-1-archive-*, which keeps an abandoned tip (E43, CI2).
+    branches:
+      - main
+      - rust-core
+      - 'rust-core-phase-*'
+      - '!rust-core-phase-1-archive-*'
 
 permissions:
   contents: read
+  # For the images CI pulls from ghcr.io with GITHUB_TOKEN (E131).
+  packages: read
+  # For the landing job's skip step, which reads the candidate's runs
+  # (E131).
+  actions: read
 
+# A newer push cancels a topic branch's run in progress. On the phase
+# branch and the lane branches a run in progress is not cancelled (E43): a
+# candidate's run on its lane is the evidence its landing stands on (E131),
+# so the next push there must not cancel it. A run still queued there can
+# be: GitHub keeps one pending run per group, and a newer push supersedes
+# it. land.py refuses a candidate whose newest run was cancelled, and
+# land.py verify asks for a rerun rather than a revert.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !(github.ref_name == 'rust-core-phase-1' || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
+
+env:
+  # Whether this run saves its caches: the Rust builds and the DuckDB
+  # extensions. GitHub restores a push's caches only from its own branch
+  # and the default branch, so a cache a topic branch saves serves that
+  # branch alone, and those filled the repository's 10 GiB. Only main,
+  # rust-core and the lane branches save: each parallel lane of packages
+  # pushes to one lane branch it reuses, so a package's first run restores
+  # the builds the lane's previous package saved (decision E43). The phase
+  # branch no longer saves (E131): every push there is a landing commit,
+  # whose jobs are left out, and no other branch can restore its caches.
+  # Every run restores what its own branch saved; a run that saves nothing
+  # still runs every check.
+  # pip's caches are saved on main alone (E131): one per job and Python on
+  # every long-lived branch took half the 10 GiB, and evicted the Rust
+  # builds, which cost far more to redo. Every branch restores main's.
+  SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core"]'), github.ref_name) || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
+  SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
+  # The images CI pulls, each named here once and pinned by digest (E131),
+  # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
+  # from ghcr.io logs in with GITHUB_TOKEN; any other is anonymous.
+  # Each a private copy, on this repository's GitHub Packages, of the
+  # upstream image by the same digest (E131): anonymous pulls from public
+  # registries failed for their limits.
+  # The PostgreSQL server for test and engine: Docker's official image
+  # for postgres:17. A service container's image cannot read env, so the
+  # landing job hands it on.
+  POSTGRES_IMAGE: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+  # The manylinux2014 image both wheel builds run in (PyPA's, published on quay.io).
+  MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
+  # The binding's tests run at the E16 floor; DuckDB, at the reference's
+  # version, is for the DuckDB provider's tests there (T1.11b).
+  BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6
 
 jobs:
+  # Decision E131 (the owner's of 2026-10-14): CI does not test an empty
+  # landing commit again. land.py makes one per landing (one parent, no
+  # file changed, a subject starting `Land `) and pushes it to the topic
+  # and the phase branch; its tree is its candidate's, which land.py
+  # requires green on the candidate's own exact-SHA push run, and
+  # `land.py verify` stands on that run. A moved landing (`Moved-from`,
+  # E130) still runs: its candidate never ran, and the commit it was moved
+  # from was judged against an older checkpoint, so its landing runs judge
+  # it against its own. On a push of such a commit to the
+  # phase branch or a branch under it every other job is left out: each
+  # needs this one, directly or through the jobs it needs, and runs only
+  # when it does not say skip. Any other push, and every pull request, runs
+  # them all. It also hands the service containers the PostgreSQL image.
+  # tests/test_ci_workflow.py runs this step's text.
+  landing:
+    name: landing commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      skip: ${{ steps.landing.outputs.skip }}
+      postgres-image: ${{ env.POSTGRES_IMAGE }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      # Skip only on evidence (E131): the pushed commit is an empty landing
+      # commit with no Moved-from, and the commit its tree was tested on,
+      # the first below it that is no empty landing commit (whose runs this
+      # job leaves out, so they are never evidence), has for its newest run
+      # of this workflow on a push to the phase branch or a branch under it
+      # (never an archive branch) one that completed with success, read
+      # with gh. No such run (none, failed, cancelled, unfinished, or the
+      # API unreadable) runs every job.
+      - id: landing
+        name: An empty landing commit is not tested again
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          empty_landing() {
+            [ "$(git rev-list --parents -n 1 "$1" | wc -w)" -eq 2 ] || return 1
+            case "$(git log -1 --format=%s "$1")" in 'Land '*) ;; *) return 1 ;; esac
+            [ "$(git rev-parse "$1^{tree}")" = "$(git rev-parse "$1^^{tree}")" ]
+          }
+          skip=false
+          why='not a push of an empty landing commit under rust-core-phase-1'
+          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
+            push:rust-core-phase-1 | push:rust-core-phase-1-*)
+              moved=$(git log -1 --format='%(trailers:key=Moved-from,valueonly)' HEAD)
+              if [ -z "$moved" ] && empty_landing HEAD; then
+                if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+                tested=$(git rev-parse HEAD^)
+                while empty_landing "$tested"; do tested=$(git rev-parse "$tested^"); done
+                newest=$(gh api "repos/${GITHUB_REPOSITORY:-}/actions/workflows/ci.yml/runs?head_sha=$tested&event=push&per_page=100" \
+                  --jq '[.workflow_runs[] | select(.head_branch == "rust-core-phase-1" or ((.head_branch | startswith("rust-core-phase-1-")) and (.head_branch | startswith("rust-core-phase-1-archive-") | not)))]
+                    | sort_by(.created_at) | last | if . == null then "none" else "\(.id) \(.status) \(.conclusion)" end') || newest=unreadable
+                case "$newest" in
+                  *' completed success') skip=true; why="its tree is green in run ${newest%% *} at $tested" ;;
+                  *) why="no green run of its tree at $tested (newest: $newest)" ;;
+                esac
+              fi ;;
+          esac
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
+          echo "every other job left out: $skip; $why"
+      # On the phase branch, every push, a landing's included, lands one
+      # package as a fast-forward, its landing commit's Base-SHA the
+      # previous tip: ratchet.py's --phase-push check, which the gate makes
+      # when the jobs run, made here whether or not they are left out.
+      - name: A push to the phase branch lands one package
+        if: github.event_name == 'push' && github.ref_name == 'rust-core-phase-1'
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+          where=$(python3 scripts/rust_core/ratchet.py where)
+          python3 scripts/rust_core/ratchet.py checkpoint --repo . $where
+
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -39,6 +166,9 @@ jobs:
 
   hygiene:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -46,21 +176,422 @@ jobs:
           python-version: '3.12'
       - run: python scripts/check_repo_hygiene.py all
 
+  # The Rust core (docs/design/rust-core/phase-1/design.md, section CI). Each
+  # job installs the toolchain rust/rust-toolchain.toml pins, and caches the
+  # build keyed on Cargo.lock. Third-party actions are pinned by commit, as
+  # the organisation's allow list requires.
+  rust-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - run: cargo fmt --all --check
+      # sdm-testkit builds the bundled DuckDB, so its clippy runs in rust-test,
+      # which builds it anyway (H3); the L0 self-tests' clippy fixture needs
+      # only jiff, and stays here.
+      - run: cargo clippy --workspace --exclude sdm-testkit --all-targets --locked -- -D warnings
+      # The binding with its test-only operations, as its tests build it.
+      - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
+      # The L0 guards (T1.10c): the crate graph (l0_deps.py), with the
+      # bridge freeze (bridge_freeze.py, E50), whose baseline ratchets
+      # against the merge base with origin/rust-core-phase-1, which the full
+      # checkout above fetches; and the vocabulary, SQL-fragment, skip and
+      # ignore, clippy-ban and step-variant scans (l0_scan.py). The bans
+      # themselves are enforced by the clippy runs above, from
+      # rust/clippy.toml.
+      - name: L0 graph, bans and scans
+        run: |
+          python3 scripts/rust_core/l0_deps.py
+          python3 scripts/rust_core/l0_scan.py
+        working-directory: .
+      # Each guard passes on the tree and fails on a fixture seeded with the
+      # fault it exists for, and clippy refuses each banned item in a fixture
+      # crate under rust/clippy.toml.
+      - name: L0 self-tests
+        run: python3 scripts/rust_core/selftest.py
+        working-directory: .
+      # land.py's checks, each passing a sound landing and refusing a seeded
+      # fault, against a scripted git and gh; lane.py's lane rules and
+      # land.py's on a lane, against real temporary git repositories and a
+      # fake gh; and prune_caches.py's stale-cache rules; with no network
+      # (decision E43, CI2).
+      - name: land.py, lane.py and prune_caches.py self-tests
+        run: |
+          python3 scripts/rust_core/land_selftest.py
+          python3 scripts/rust_core/lane_selftest.py
+          python3 scripts/rust_core/prune_caches.py --selftest
+        working-directory: .
+      # The contract schema: regenerated from the types and compared with the
+      # committed file, locked to the current version; no entry merged into
+      # rust-core rewritten, and at most one working entry, which is why this
+      # job checks out every branch (for the merge base with rust-core).
+      - run: cargo test -p sdm-contract --locked --test schema_lock
+      - run: python3 scripts/rust_core/contract_lock.py
+        working-directory: .
+      # The client wheel's notices for the Rust crates it links, regenerated
+      # from Cargo.lock and compared with the committed file.
+      - run: python3 scripts/rust_core/rust_notices.py --check
+        working-directory: .
+
+  rust-deny:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: taiki-e/install-action@9114bf4d891761788c546334fd37538eae1bf8b3 # v2.87.16
+        with:
+          tool: cargo-deny
+      - run: cargo deny --locked check
+
+  rust-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
+    defaults:
+      run:
+        working-directory: rust
+    # Line tables only for the workspace's own crates (dependencies build
+    # with none, rust/Cargo.toml): a panic and its backtrace still name each
+    # file and line, and the test binaries take far less of the runner's
+    # disk. The test profile inherits dev's; stated for both all the same.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      # Every branch, for the gate's checkpoint (the merge base with the
+      # phase branch) and its worktree.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # This job builds the bundled DuckDB; on a cold cache (any Cargo.lock
+      # change misses rust-cache's key) the build ran the runner out of disk
+      # (T1.35). The preinstalled toolchains it never uses are removed first,
+      # the free space printed before and after.
+      - name: Free runner disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      # The test host's ICU and JSON, DuckDB's signed extensions for v1.5.6,
+      # which it installs the first time and checks against their recorded
+      # digests before every load (decision E37; JSON from T1.33): cached, so
+      # a run downloads them once. The key names both, so the cache saved
+      # before JSON, which lacks it, is not restored as a hit.
+      # Saved, like every cache here, only where SAVE_CACHES says.
+      - id: duckdb-extensions
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.duckdb/extensions/v1.5.6
+          key: duckdb-extensions-v1.5.6-icu-json-${{ runner.os }}-${{ runner.arch }}
+      # The test kit's clippy, here on the DuckDB build this job makes (H3).
+      - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      # The pure-Rust host over the contract cases, its observations compared
+      # with the cases' expectations and reference observations (T1.10;
+      # T1.18 moves this to the checkpoint's comparator), from T1.11e under
+      # contract/compare-policy.yaml, which pyyaml reads: its statements and
+      # their results against the reference's (H9), its call against the
+      # reference's request, and base.regression reaching its result. The
+      # test host links no Python. Its DuckDB loads ICU explicitly, installing
+      # DuckDB's signed extension for its version the first time, from the
+      # cache above when it holds it (decision E37).
+      - run: cargo run -p sdm-testkit --bin sdm-contract-run --locked -- --out ../rust-host.jsonl ../contract/cases
+      - run: |
+          cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt
+          ! grep -w pyo3 ../testkit-tree.txt
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      # On the phase branch and its lanes the gate step below runs this
+      # comparison with the checkpoint's comparator, each baselined case's
+      # outcome against its effective expectation (an approved change
+      # included), so this one runs only elsewhere (T1.14); whether the
+      # gate runs is the gate step's to decide, failing closed.
+      - run: |
+          pip install jsonschema pyyaml
+          where=$(python scripts/rust_core/ratchet.py where) || exit 1
+          if [ -n "$where" ]; then
+            echo 'the gate step compares rust-host on this branch'
+            exit 0
+          fi
+          python scripts/rust_core/compare.py --cases contract/cases --reference contract/reference/*.jsonl rust-host.jsonl
+        working-directory: .
+      # The gate (T1.14): the candidate judged by its checkpoint's harness,
+      # from the checkpoint's own worktree (design, "Reference observations
+      # and the gate"; H2): rust-host's observations made with the
+      # checkpoint's case loader and observation writer, the checkpoint's
+      # ratchet (protected paths, reference immutability, cases, register,
+      # relaxations, KNOWN_DIFFERING, baselines and availability), its
+      # comparator and its L0 scripts. On a push to the phase branch the
+      # checkpoint is the push's previous tip, and the push lands exactly
+      # one package; on a lane or topic branch, the merge base with the
+      # phase branch's tip, a landing commit judged against its own
+      # recorded base. Before T1.14 lands, the bootstrap: the candidate's
+      # harness runs.
+      # Whether the gate runs fails closed (T1.18), decided in the step
+      # itself so a local replay runs it too (replay_jobs.py takes no
+      # conditions): on a push to the phase branch or any branch under it
+      # the gate must run, from GitHub's own event and ref, not from the
+      # candidate's ratchet.py, whose `where` then only names the base; an
+      # error or an empty answer there fails. Elsewhere there is no ratchet.
+      # tests/test_contract_ci_gate.py runs this step's text.
+      - name: gate (rust-host)
+        run: |
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'gate: ratchet.py where failed'; exit 1; }
+          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
+            push:rust-core-phase-1 | push:rust-core-phase-1-*)
+              [ -n "$where" ] || { echo "gate: ratchet.py where named no base on $GITHUB_REF_NAME, where the gate must run"; exit 1; } ;;
+          esac
+          [ -n "$where" ] || { echo 'gate: no ratchet off the phase branch'; exit 0; }
+          scripts/rust_core/gate.sh $where --run rust-host
+        working-directory: .
+      # rust-host's observations, made above by this candidate's host, for
+      # the cross-host job (T1.29), which holds them to python-core's on
+      # the core rule: uploaded whether or not the gate passed, so that
+      # comparison reports for itself.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: observations-rust-host
+          path: rust-host.jsonl
+          if-no-files-found: error
+      - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.duckdb/extensions/v1.5.6
+          key: ${{ steps.duckdb-extensions.outputs.cache-primary-key }}
+
+  # The client wheel, which carries the core as sdm_client._native (design,
+  # "Packaging"). maturin, at the version native_wheel.py pins, builds it in
+  # a manylinux2014 container run with docker rather than through an
+  # action: the x86_64 cp310-abi3 wheel that ships. native_wheel.py records
+  # the build's target flags and fails on target-cpu, and reads the wheel
+  # with auditwheel show. Every job that installs the client takes it from
+  # this job's artifact, and this job builds and uploads nothing else, so
+  # those jobs wait for the shipped wheel only (CI1): the test-only build
+  # and the binding's tests run beside it, in native-test-ops and binding.
+  native-wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
+    env:
+      NATIVE_ARGS: --out native
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      # The image, pulled with retries and, from ghcr.io, logged in (E131).
+      - &manylinux-pull
+        name: Pull the manylinux2014 image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$MANYLINUX"
+      # As the runner's user, so the cache can read rust/target afterwards,
+      # in a home the runner made, so that user can write it, holding the
+      # runner's crate registry, which the cache restores. NATIVE_ARGS says
+      # which build: native-test-ops runs this same step for its own.
+      - &manylinux-build
+        name: Build the wheel in manylinux2014
+        run: |
+          home="$RUNNER_TEMP/manylinux-home"
+          mkdir -p "$HOME/.cargo/registry" "$HOME/.cargo/git" "$home/.cargo/registry" "$home/.cargo/git"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp/home -e CARGO_HOME=/tmp/home/.cargo -e RUSTUP_HOME=/tmp/home/.rustup \
+            -e NATIVE_ARGS \
+            -v "$home:/tmp/home" -v "$PWD:/io" -w /io \
+            -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
+            -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
+            "$MANYLINUX" bash -euo pipefail -c '
+              # rustup-init 1.29.0, checked against its published SHA-256.
+              curl --proto "=https" --tlsv1.2 -sSf -o /tmp/home/rustup-init \
+                https://static.rust-lang.org/rustup/archive/1.29.0/x86_64-unknown-linux-gnu/rustup-init
+              echo "4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10  /tmp/home/rustup-init" \
+                | sha256sum -c -
+              chmod +x /tmp/home/rustup-init
+              /tmp/home/rustup-init -y --profile minimal --default-toolchain none --no-modify-path
+              export PATH="$CARGO_HOME/bin:$PATH"
+              (cd rust && rustup toolchain install)
+              /opt/python/cp312-cp312/bin/python -m venv /tmp/home/maturin
+              /tmp/home/maturin/bin/pip install --quiet maturin==1.15.0
+              export PATH="/tmp/home/maturin/bin:$PATH"
+              python scripts/rust_core/native_wheel.py $NATIVE_ARGS --manylinux
+            '
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-wheel
+          path: native/
+
+  # The binding with its test-only operations, built beside native-wheel by
+  # the same step and tested at the E16 floor: every file of the binding's
+  # tests, and the Python host's tests that need those operations, which
+  # the test job does not collect (E23). Its wheel is its own artifact,
+  # which wheel-smoke installs in its clean containers and no job that
+  # builds or ships takes (E23).
+  native-test-ops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
+    env:
+      NATIVE_ARGS: --out native-test-ops --test-ops
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - *manylinux-pull
+      - *manylinux-build
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      # The connectors are for the canary test's journey over DuckDB
+      # (T1.11d), which tests_test_ops runs here at the floor.
+      - name: The binding's tests on the test-ops build
+        run: |
+          python -m venv /tmp/test-ops
+          /tmp/test-ops/bin/pip install --quiet pytest $BINDING_FLOOR \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            ./packages/structured-data-models-connectors \
+            "$(ls native-test-ops/*.whl)"
+          /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
+            -p no:cacheprovider --native-build test-ops
+          /tmp/test-ops/bin/python -m pytest packages/structured-data-models-client/tests_test_ops -q \
+            -p no:cacheprovider
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops/
+
+  # The binding's tests on the wheel that ships, at the E16 floor: the file
+  # any build passes.
+  binding:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      - name: The binding's tests on the shipped build
+        run: |
+          python -m venv /tmp/production
+          /tmp/production/bin/pip install --quiet pytest $BINDING_FLOOR \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            "$(ls native/*.whl)"
+          /tmp/production/bin/python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
+            -p no:cacheprovider --native-build production
+
+  # The wheels as a user installs them (T1.17, decision E16), each lane in
+  # a clean container, both gating: the floor (Python 3.10, pyarrow 14.0.1,
+  # pandas 2.2.0, NumPy 1.26.4) and the newest (Python 3.14 with the newest
+  # pandas 3, NumPy 2 and pyarrow, resolved on every run). wheel_smoke.py
+  # runs itself in the lane's Python image, pinned by digest, the checkout
+  # mounted read-only; it installs the shipped wheel and the test-ops one,
+  # as these jobs built them, each in an environment of its own holding
+  # only wheels, and runs the binding's tests on them from outside the
+  # checkout (shared and released buffers, admitted types, outputs after
+  # collection, error and destruction, busy and cancel). Each lane's
+  # resolved environments, reports and environment.json are its artifact,
+  # uploaded whether it passed or not.
+  wheel-smoke:
+    name: wheel-smoke (${{ matrix.lane }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [native-wheel, native-test-ops]
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [floor, newest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      # The lane's image, as wheel_smoke.py names it, pulled with retries
+      # and, from ghcr.io, logged in (E131): the two lanes start together,
+      # and a registry that refuses a pull for its rate often takes it a
+      # minute later. The run below then finds it pulled.
+      - name: Pull the lane's image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$(python3 scripts/rust_core/wheel_smoke.py image ${{ matrix.lane }})"
+      - name: The lane's clean container
+        run: |
+          python3 scripts/rust_core/wheel_smoke.py --lane ${{ matrix.lane }} --container \
+            --wheel "$(ls native/*.whl)" --test-ops-wheel "$(ls native-test-ops/*.whl)" \
+            --out wheel-smoke
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-smoke-${{ matrix.lane }}
+          path: wheel-smoke/
+
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
       # The engine needs its runtime dependencies present to be checked at all,
       # and a toolchain to install. It ships py.typed exactly like the other
       # four, so leaving it out would make the gate narrower than the promise.
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # The image's compilers and CMake are that toolchain; the runner image
+      # carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       - run: pip install --upgrade pip mypy
+      # The client from the native wheel; its stub, _native.pyi, ships in it.
       - run: |
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
-            -e './packages/structured-data-models-client' \
+            "$(ls native/*.whl)" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,snowflake,databricks]' \
             -e './packages/structured-data-models-relational-engine'
       # Every session a source takes too, so each driver's types are its own
@@ -77,6 +608,8 @@ jobs:
   # reached a release through a promise nothing checked.
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [landing, native-wheel]
     strategy:
       fail-fast: false
       matrix:
@@ -85,8 +618,13 @@ jobs:
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
-      postgres:
-        image: postgres:17
+      postgres: &postgres-service
+        # POSTGRES_IMAGE, by way of the landing job, pulled from ghcr.io
+        # as this workflow, which needs packages: read.
+        image: ${{ needs.landing.outputs.postgres-image }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
         env:
           POSTGRES_DB: sdm_test
           POSTGRES_PASSWORD: postgres
@@ -103,56 +641,96 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      # pip's downloads and built wheels, keyed on the week and on every
+      # distribution's manifest and restored from the newest of this job's
+      # otherwise; saved on main alone, which every branch restores (E131).
+      # pip still resolves each requirement against the index, so the cache
+      # only saves downloads and changes no version (CI1).
+      - id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: pip-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ github.job }}-${{ matrix.python-version }}-${{ steps.week.outputs.week }}-${{ hashFiles('packages/*/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-${{ github.job }}-${{ matrix.python-version }}-
       # databricks is here for its driver, not for a server: those tests mock
       # the connection. Without the driver, importing the backend raises and
-      # every test covering it skips.
+      # every test covering it skips. The client is the native wheel's, the
+      # one abi3 build every interpreter here installs.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
-            -e './packages/structured-data-models-client[test]' \
+            "$(ls native/*.whl)[test]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,test]'
       - run: |
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
             -m 'not live_nim and not live_warehouse'
+      - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ steps.pip-cache.outputs.cache-primary-key }}
 
   engine:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [landing, native-wheel]
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
+    # The same service as test's.
     services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_DB: sdm_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
+      postgres: *postgres-service
     env:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
+      # Every branch, for the gate's checkpoint and its worktree.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      # The image's compilers and CMake, which a source build uses; the
+      # runner image carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
+      # pip's downloads and built wheels, keyed on the week and on every
+      # distribution's manifest and restored from the newest of this job's
+      # otherwise; saved on main alone, which every branch restores (E131).
+      # pip still resolves each requirement against the index, so the cache
+      # only saves downloads and changes no version (CI1).
+      - id: week
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      - id: pip-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ github.job }}-3.12-${{ steps.week.outputs.week }}-${{ hashFiles('packages/*/pyproject.toml') }}
+          restore-keys: pip-${{ runner.os }}-${{ github.job }}-3.12-
       # ruff is here for the root suite, not for linting: the test that
       # checks the engine ignore-list note shells out to it and skips
       # without it, which would make that check vacuous here.
       # The Databricks and Snowflake drivers are for the offline tests of those
       # backends, which skip whole modules without them; pyyaml reads the
       # semantic-view fixtures, and `explain` carries the SDK the explanation
-      # tests fake around.
+      # tests fake around. jsonschema validates the contract's cases and
+      # observations, which the root suite checks.
       - run: |
           pip install --upgrade pip 'ruff==0.16.*'
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
-            pyyaml
+            pyyaml jsonschema
           pip install -e './packages/structured-data-models-relational-engine[test,explain]'
       # The same marker filter as the internal pipeline. The live NIM and live
       # warehouse tests need credentials this job does not have, so they are
@@ -164,32 +742,265 @@ jobs:
       # The client's suite again, with an engine present. The test job installs
       # none, so every client test that needs one skips there and runs nowhere.
       - run: |
-          pip install -e './packages/structured-data-models-client[test]'
+          pip install "$(ls native/*.whl)[test]"
           python -m pytest packages/structured-data-models-client/tests -q \
             -m 'not live_nim and not live_warehouse'
       # And the root suite, which holds the relational wire snapshots. They
       # only exercise anything with an engine installed, so running them in
       # the test job would prove nothing.
+      # The contract cases and the runner's controls (contract/tests) run
+      # in contract-python, from T1.18.
       - run: python -m pytest tests -q
+      - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/pip
+          key: ${{ steps.pip-cache.outputs.cache-primary-key }}
+
+  # The L2 corpus on the Python runners per runtime cell (H1; design, "CI";
+  # T1.18): each cell pinned as run_python.py's CELLS names it, python-core
+  # and python-old observed with the checkpoint's runner and judged by the
+  # checkpoint's ratchet and comparator through gate.sh, which also
+  # validates the register; rust-test runs the L0 scripts. In a cell other
+  # than the reference's the comparator holds python-core to python-old on
+  # host fields and reports the reference's (H1). Each observation must name
+  # the job's cell, so a pin that drifts fails. The runner's controls and
+  # the route tests (contract/tests) run once, in ref-pandas3, with their
+  # comparisons on the same effective expectations as the gate. One job per
+  # cell, sharing its steps: replay_jobs.py substitutes no matrix value but
+  # the Python version.
+  contract-python-ref-pandas3:
+    name: contract-python (ref-pandas3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: native-wheel
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+    steps:
+      - &contract-checkout
+        uses: actions/checkout@v7
+        with:
+          # Every branch, for the gate's checkpoint and its worktree.
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - &contract-wheel
+        uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
+      # The cell's pins as constraints, so nothing installed after moves
+      # them; DuckDB at the reference's version; the engine, which a case's
+      # materialize needs, built from source with the runner image's
+      # compilers and CMake.
+      - &contract-install
+        name: Install the cell
+        run: |
+          printf '%s\n' $CELL_PINS duckdb==1.5.6 > "$RUNNER_TEMP/cell.txt"
+          pip install --upgrade pip
+          pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout \
+            ./packages/structured-data-models-api ./packages/structured-data-models-pql \
+            './packages/structured-data-models-connectors[duckdb]' \
+            ./packages/structured-data-models-relational-engine "$(ls native/*.whl)[test]"
+      # In parallel, each test file on one worker so its module fixtures are
+      # built once; the results match a serial run's, test by test. The
+      # files whose module fixtures hold a family run parsed share one
+      # worker, one after the other (contract/tests/conftest.py), so this
+      # runner's memory holds one at a time. A test past 10 minutes fails
+      # with its stack, and a worker that dies ends the run rather than
+      # leaving xdist waiting on it.
+      - name: The runner's controls and the route tests
+        run: python -m pytest contract/tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+      # As in rust-test, whether the gate runs fails closed (T1.18); off
+      # the phase branch, the candidate's own runners and comparator run.
+      # Every cell gates, the floor's too (T1.18's own run alone reported
+      # it, E65(c); the waiver went at T1.25b, every checkpoint descending
+      # from T1.18's landing). tests/test_contract_ci_gate.py runs this
+      # step's text.
+      - &contract-gate
+        name: gate (python-core, python-old)
+        env:
+          PYTHON: python
+        run: |
+          set -o pipefail
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'gate: ratchet.py where failed'; exit 1; }
+          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
+            push:rust-core-phase-1 | push:rust-core-phase-1-*)
+              [ -n "$where" ] || { echo "gate: ratchet.py where named no base on $GITHUB_REF_NAME, where the gate must run"; exit 1; } ;;
+          esac
+          mkdir -p gate-observations
+          status=0
+          if [ -z "$where" ]; then
+            echo 'gate: no ratchet off the phase branch: the candidate runners and comparator'
+            for runner in python-core python-old; do
+              python -I contract/runners/run_python.py --mode $runner \
+                --out gate-observations/$runner.jsonl contract/cases || exit 1
+            done
+            python scripts/rust_core/compare.py --cases contract/cases \
+              --reference contract/reference/*.jsonl gate-observations/python-*.jsonl || status=$?
+          else
+            scripts/rust_core/gate.sh $where --run python-core,python-old --no-l0 \
+              --out gate-observations || status=$?
+          fi
+          python - <<'EOF' || exit 1
+          import json, os, pathlib, sys
+          cell = os.environ['CELL']
+          for runner in ('python-core', 'python-old'):
+              path = pathlib.Path('gate-observations') / f'{runner}.jsonl'
+              lines = path.read_text().splitlines() if path.is_file() else []
+              try:
+                  seen = {json.loads(line)['identity']['cell'] for line in lines}
+              except (ValueError, RecursionError, KeyError, TypeError):
+                  sys.exit(f'{runner}: an observation names no cell')
+              if seen != {cell}:
+                  sys.exit(f'{runner}: observed in {sorted(map(str, seen))}, not {cell}')
+          print(f'every observation in {cell}')
+          EOF
+          exit $status
+      # python-core's observations in the reference's cell, made by this
+      # candidate's runner as rust-host's are by its host, for the
+      # cross-host job (T1.29), whether or not the gate passed.
+      - if: ${{ !cancelled() }}
+        name: python-core's observations for the cross-host comparison
+        run: |
+          mkdir -p cross-host
+          python -I contract/runners/run_python.py --mode python-core \
+            --out cross-host/python-core.jsonl contract/cases
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: observations-python-core
+          path: cross-host/python-core.jsonl
+          if-no-files-found: error
+
+  # The two core hosts on core fields (design, "Observations and
+  # comparator"; T1.29): python-core's observations from
+  # contract-python (ref-pandas3) and rust-host's from rust-test, compared
+  # by compare.py in one run, so its core rule (the same operations, inputs,
+  # fetches, description, request state, call and result) gates a
+  # difference between the two hosts on every acceptance case in CI. It
+  # compares two executions of one core, so a change both make alike is
+  # not its to catch: contract/pinned/base.regression.core.json, the fixed
+  # expectation both hosts are held to, stays for that (E81(c)). It fails
+  # when either side's file is missing, empty or not that runner's, and
+  # judges outcomes against the effective expectations on the phase branch
+  # and its lanes, as the gate does. contract/tests/test_cross_host.py runs
+  # this step's text.
+  cross-host:
+    name: cross-host (python-core, rust-host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Its own !cancelled() would run it on a landing commit, whose jobs
+    # are left out (E131), so it says so itself.
+    needs: [landing, rust-test, contract-python-ref-pandas3]
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8
+        with:
+          name: observations-python-core
+          path: cross-host
+      - uses: actions/download-artifact@v8
+        with:
+          name: observations-rust-host
+          path: cross-host
+      - name: compare (python-core, rust-host)
+        run: |
+          pip install pyyaml jsonschema
+          python - <<'EOF' || exit 1
+          import json, pathlib, sys
+          for runner in ('python-core', 'rust-host'):
+              path = pathlib.Path('cross-host') / f'{runner}.jsonl'
+              lines = path.read_text().splitlines() if path.is_file() else []
+              if not lines:
+                  sys.exit(f'cross-host: no observations of {runner}')
+              try:
+                  seen = {json.loads(line)['identity']['runner'] for line in lines}
+              except (ValueError, RecursionError, KeyError, TypeError):
+                  sys.exit(f'cross-host: an observation of {runner} names no runner')
+              if seen != {runner}:
+                  sys.exit(f'cross-host: {path} holds {sorted(map(str, seen))}, not {runner}')
+          print('cross-host: python-core and rust-host observed')
+          EOF
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'cross-host: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out cross-host/effective.json || exit 1
+            expect=(--expect cross-host/effective.json)
+          fi
+          python scripts/rust_core/compare.py --cases contract/cases \
+            --reference contract/reference/*.jsonl ${expect[@]+"${expect[@]}"} \
+            cross-host/python-core.jsonl cross-host/rust-host.jsonl
+
+  contract-python-dbr17-pandas2:
+    name: contract-python (dbr17-pandas2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-gate
+
+  contract-python-floor-pandas2-2:
+    name: contract-python (floor-pandas2.2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - *contract-wheel
+      - *contract-install
+      - *contract-gate
 
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: native-wheel
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq build-essential cmake
+      # The image's compilers and CMake, which a source build uses; the
+      # runner image carries them, so nothing is installed (CI1).
+      - run: for tool in gcc g++ make cmake; do command -v "$tool"; done
       - run: pip install --upgrade pip build
       # Each distribution builds in an isolated environment holding only the
       # build backend. That catches what no test can, because it fails before a
       # test could run: a version resolved by importing the package root cannot
-      # produce a wheel at all.
+      # produce a wheel at all. The client is the exception: it carries the
+      # core, so it is the wheel native-wheel built, taken as it is.
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-wheel
+          path: native
       - run: |
-          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors structured-data-models-relational-engine; do
+          for package in structured-data-models-api structured-data-models-pql structured-data-models-connectors structured-data-models-relational-engine; do
             echo "building $package"
             ( cd "packages/$package" && python -m build --wheel --outdir "$GITHUB_WORKSPACE/dist" . )
           done
+          cp native/*.whl dist/
       # Every distribution carries the one version they are released together
       # at, read from what was just built rather than written here.
       - run: |
@@ -225,6 +1036,7 @@ jobs:
   # directory where the source tree is not importable.
   installed-wheel:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     steps:
       - uses: actions/checkout@v7
@@ -259,6 +1071,13 @@ jobs:
                   f'a downstream type checker ignores its annotations entirely'
               )
           print('four distributions imported from site-packages, all typed')
+
+          # The core is in the installed client, not merely in the checkout;
+          # found without importing it, which only a core route does.
+          import importlib.util
+          spec = importlib.util.find_spec('sdm_client._native')
+          assert spec and 'site-packages' in spec.origin, spec
+          print(f'the core ships in the client: {pathlib.Path(spec.origin).name}')
           EOF
       - working-directory: /tmp
         run: |
@@ -270,6 +1089,7 @@ jobs:
   # native toolchain.
   sbom:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: build
     steps:
       - uses: actions/checkout@v7

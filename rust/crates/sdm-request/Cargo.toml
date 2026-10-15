@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-request"
+description = "Materialization, the payload, the response and the result layout"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+arrow-array.workspace = true
+arrow-schema.workspace = true
+sdm-contract = { path = "../sdm-contract" }
+sdm-engine = { path = "../sdm-engine" }
+sdm-wire = { path = "../sdm-wire" }
+
+[dev-dependencies]
+serde_json.workspace = true
+# The schema check, to hold the payload the producer builds to the
+# definition the contract's lock holds (T1.22).
+sdm-contract = { path = "../sdm-contract", features = ["test-ops"] }
+
+[lints]
+workspace = true

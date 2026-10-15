@@ -371,11 +371,15 @@ def _decoded_object(content: bytes, url: str) -> dict[str, Any]:
     try:
         body = json.loads(content or b'{}')
     except (ValueError, RecursionError) as error:
-        raise StructuredDataError(
+        failed = StructuredDataError(
             f'{redact_url(url)} did not return JSON',
             code='TRANSPORT_ERROR',
             details={'url': redact_url(url)},
-        ) from error
+        )
+        # Nested past what this interpreter's reader reads: said so, for the
+        # core route (StructuredDataError._response_too_deep).
+        failed._response_too_deep = isinstance(error, RecursionError)
+        raise failed from error
     if not isinstance(body, dict):
         raise StructuredDataError(
             f'Expected a JSON object from {redact_url(url)}, got '
@@ -680,6 +684,14 @@ class Transport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post(_PREDICTIONS_PATH, payload)
 
+    def predict_body(self, body: bytes) -> dict[str, Any]:
+        r"""Sends a prediction call already written as UTF-8 JSON, the bytes
+        as they are: the core's call on its route, whose size limit counts
+        the bytes it wrote, which are the bytes sent (register PD-2,
+        T1.28a). The old route's calls go through :meth:`predict`.
+        """
+        return self._post_body(_PREDICTIONS_PATH, body)
+
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Pins a context server-side; ``payload`` carries the context-only
         sections of a prediction request.
@@ -721,7 +733,6 @@ class Transport:
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         self._require_open()
-        url = self._url + path
         # Encode before sending, so a value with no JSON form is named here
         # rather than raising a TypeError from inside `requests` that mentions
         # neither this client nor the offending key.
@@ -739,14 +750,19 @@ class Transport:
                 f'{error}',
                 code='INVALID_REQUEST',
             ) from error
+        # Encoded here rather than handed over as `str`: requests gives a str
+        # body to httplib, which encodes latin-1, so this is only safe today
+        # because `json.dumps` defaults to `ensure_ascii=True`. Not a default
+        # worth depending on.
+        return self._post_body(path, body.encode('utf-8'))
+
+    def _post_body(self, path: str, body: bytes) -> dict[str, Any]:
+        self._require_open()
+        url = self._url + path
         try:
             with self._session.post(
                 url,
-                # Encoded here rather than handed over as `str`: requests
-                # gives a str body to httplib, which encodes latin-1, so this
-                # is only safe today because `json.dumps` defaults to
-                # `ensure_ascii=True`. Not a default worth depending on.
-                data=body.encode('utf-8'),
+                data=body,
                 headers={'Content-Type': 'application/json'},
                 timeout=self._timeout,
                 verify=self._verify_ssl,

@@ -1,0 +1,25 @@
+{
+ "description": "The refusal map's probes of base.adventureworks (contract/refusal-maps) on which both core hosts reach describe_source, each with the SHA-256 of describe_source's SourceDescription and, where it starts materialize, of the schema materialize samples (python-core's built from its Schema, rust-host's its own description with the probe's edits made), each as canonical JSON: keys sorted, no whitespace, UTF-8. contract/tests/test_refusal_map.py holds python-core to it and sdm-testkit's tests/refusal_map.rs holds rust-host to it, so CI gates that the two hosts' descriptions are identical wherever both reach describe_source (T1.21d, the AdventureWorks exit); a probe either host reaches describe_source on that the pin does not list, or one it lists that a host does not reach, fails. From T1.23 each probe also pins the digest of the core's warnings, each its code and fields (warnings), which each host words itself.",
+ "probes": {
+  "no-inference-config": {
+   "described": "2bc4502b361db202106a821404f45c960d3d9d5b10baa55b2a133802724d3b68",
+   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
+   "materialize_schema": "a610f81eb5b18d30eb422ec894944000992e31bca9fddbaf1fedcd20f69a31dd"
+  },
+  "no-text": {
+   "described": "9f78f106cc7fb412f0d5e328dc583566dadc6f8b4709a0dda5e686e5926f73da",
+   "warnings": "5dfd8f6589bb38a7e067ca20d9b00f52e9636e69a593ddfce7b1fea2ec225370",
+   "materialize_schema": "5fd65c17e84068c90f2b5e50d74bcabd6895fc027fc5a4b4350ecf09c8e728c6"
+  },
+  "notebook": {
+   "described": "2bc4502b361db202106a821404f45c960d3d9d5b10baa55b2a133802724d3b68",
+   "warnings": "b52de4793e7622571a0454e7d6350f125f90f10dd4d47b3eb2287312f1ade1d6",
+   "materialize_schema": "a610f81eb5b18d30eb422ec894944000992e31bca9fddbaf1fedcd20f69a31dd"
+  },
+  "one-hop": {
+   "described": "9f78f106cc7fb412f0d5e328dc583566dadc6f8b4709a0dda5e686e5926f73da",
+   "warnings": "a61d868f5ecc892fd21cdc5e34f9fd8729915b88fc5a5ca0e370b942cd28d344",
+   "materialize_schema": "f54fb05ef8ecf85ea2a7f141795d3d3b8b4b53b215ef939b3e65290985ddcc81"
+  }
+ }
+}

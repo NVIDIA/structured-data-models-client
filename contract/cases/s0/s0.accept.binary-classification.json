@@ -1,0 +1,107 @@
+{
+  "format": "sdm-case/1",
+  "id": "s0.accept.binary-classification",
+  "status": "acceptance",
+  "slice": "S0",
+  "paths": [
+    "query.validate/accept/any"
+  ],
+  "routes": [
+    "query.validate/accept/any",
+    "query.validate/refuse/any"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "materialize",
+  "core": {
+    "validate_query": {
+      "profile": {
+        "name": "RELATIONAL",
+        "model": null
+      },
+      "schema": {
+        "tables": [
+          {
+            "name": "orders",
+            "columns": [
+              {
+                "name": "order_id",
+                "dtype": "int",
+                "stype": "ID"
+              },
+              {
+                "name": "user_id",
+                "dtype": "int",
+                "stype": "ID"
+              },
+              {
+                "name": "price",
+                "dtype": "float",
+                "stype": "numerical"
+              },
+              {
+                "name": "ts",
+                "dtype": "time",
+                "stype": "timestamp"
+              }
+            ],
+            "primary_key": "order_id",
+            "time_column": "ts",
+            "end_time_column": null
+          },
+          {
+            "name": "users",
+            "columns": [
+              {
+                "name": "user_id",
+                "dtype": "int",
+                "stype": "ID"
+              },
+              {
+                "name": "age",
+                "dtype": "int",
+                "stype": "numerical"
+              },
+              {
+                "name": "country",
+                "dtype": "string",
+                "stype": "categorical"
+              }
+            ],
+            "primary_key": "user_id",
+            "time_column": null,
+            "end_time_column": null
+          }
+        ],
+        "links": [
+          [
+            {
+              "column": "user_id",
+              "table": "orders"
+            },
+            {
+              "column": "user_id",
+              "table": "users"
+            }
+          ]
+        ]
+      }
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "materialize"
+  },
+  "why": "Binary classification: a condition over a windowed count, accepted and materialized",
+  "source": "T1.12, the S0 corpus (design, T1.12 row), on the shop base"
+}

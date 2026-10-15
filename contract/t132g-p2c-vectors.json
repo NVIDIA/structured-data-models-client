@@ -1,0 +1,742 @@
+{
+ "format": "sdm-result-vectors/1",
+ "about": "T1.32g part 2c's vectors, written by the independent test author: a map's and a union's canonical cells, which run_python's arrow_values and sdm-testkit's values must both give. A map is [\"map\", [[key, value], ...]], its entries in the order Arrow holds them (duplicates kept), a null map null, an empty one [\"map\", []]. A union is [\"union\", type code, member name, the member's cell], never null itself: a null member, or a union DuckDB writes as null (a null under its first member), is the member's tag with a null cell. A vector with 'sql' runs on DuckDB; one with 'build' is built as Arrow by each test (DuckDB writes no duplicate map key and no dense union). A value of a type the form does not hold stays [\"?\", \"arrow:<type>\"] and is listed unencodable, inside a map or a chosen member too; a member not chosen names nothing. An interval is [\"interval\", months, days, nanoseconds] since part 2e (contract/t132g-p2e-vectors.json).",
+ "vectors": [
+  {
+   "name": "maps: entries in order, empty, null, a null value",
+   "sql": "SELECT MAP {'b': 1, 'a': 2} AS a, MAP {}::MAP(VARCHAR, INTEGER) AS b, NULL::MAP(VARCHAR, INTEGER) AS c, MAP {'k': NULL::INTEGER} AS d",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "map<string, int32>"
+    },
+    {
+     "name": "b",
+     "type": "map<string, int32>"
+    },
+    {
+     "name": "c",
+     "type": "map<string, int32>"
+    },
+    {
+     "name": "d",
+     "type": "map<string, int32>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b",
+     "c",
+     "d"
+    ],
+    "types": [
+     "MAP(VARCHAR, INTEGER)",
+     "MAP(VARCHAR, INTEGER)",
+     "MAP(VARCHAR, INTEGER)",
+     "MAP(VARCHAR, INTEGER)"
+    ],
+    "ordered": "84251a07979994f6cc72f26929ab99377206ab4fef7e16fd0b485249d99a06ea",
+    "unordered": "84251a07979994f6cc72f26929ab99377206ab4fef7e16fd0b485249d99a06ea",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "b"
+        ],
+        [
+         "i",
+         "1"
+        ]
+       ],
+       [
+        [
+         "s",
+         "a"
+        ],
+        [
+         "i",
+         "2"
+        ]
+       ]
+      ]
+     ],
+     [
+      "map",
+      []
+     ],
+     null,
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "k"
+        ],
+        null
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "maps holding and held by nested values",
+   "sql": "SELECT MAP {'x': [1, 2], 'y': []} AS a, MAP {1: {'p': 'q'}} AS b, [MAP {'k': 1}, NULL] AS c, struct_pack(m := MAP {'k': MAP {'j': 2}}) AS d",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "map<string, list<l: int32>>"
+    },
+    {
+     "name": "b",
+     "type": "map<int32, struct<p: string>>"
+    },
+    {
+     "name": "c",
+     "type": "list<l: map<string, int32>>"
+    },
+    {
+     "name": "d",
+     "type": "struct<m: map<string, map<string, int32>>>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b",
+     "c",
+     "d"
+    ],
+    "types": [
+     "MAP(VARCHAR, INTEGER[])",
+     "MAP(INTEGER, STRUCT(p VARCHAR))",
+     "MAP(VARCHAR, INTEGER)[]",
+     "STRUCT(m MAP(VARCHAR, MAP(VARCHAR, INTEGER)))"
+    ],
+    "ordered": "8757d7bd3955459ae8aaed96fb8a14c44187715d02ff3b063eb51443436ed2b4",
+    "unordered": "8757d7bd3955459ae8aaed96fb8a14c44187715d02ff3b063eb51443436ed2b4",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "x"
+        ],
+        [
+         "list",
+         [
+          [
+           "i",
+           "1"
+          ],
+          [
+           "i",
+           "2"
+          ]
+         ]
+        ]
+       ],
+       [
+        [
+         "s",
+         "y"
+        ],
+        [
+         "list",
+         []
+        ]
+       ]
+      ]
+     ],
+     [
+      "map",
+      [
+       [
+        [
+         "i",
+         "1"
+        ],
+        [
+         "struct",
+         [
+          [
+           "p",
+           [
+            "s",
+            "q"
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ],
+     [
+      "list",
+      [
+       [
+        "map",
+        [
+         [
+          [
+           "s",
+           "k"
+          ],
+          [
+           "i",
+           "1"
+          ]
+         ]
+        ]
+       ],
+       null
+      ]
+     ],
+     [
+      "struct",
+      [
+       [
+        "m",
+        [
+         "map",
+         [
+          [
+           [
+            "s",
+            "k"
+           ],
+           [
+            "map",
+            [
+             [
+              [
+               "s",
+               "j"
+              ],
+              [
+               "i",
+               "2"
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "one map's entries in two orders",
+   "sql": "SELECT * FROM (VALUES (MAP {'a': 1, 'b': 2}), (MAP {'b': 2, 'a': 1})) t(m)",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "m",
+     "type": "map<string, int32>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "m"
+    ],
+    "types": [
+     "MAP(VARCHAR, INTEGER)"
+    ],
+    "ordered": "501c70a02f1143b6d74db8134743df7106064d23111e83ab5c8738234ca77c7a",
+    "unordered": "501c70a02f1143b6d74db8134743df7106064d23111e83ab5c8738234ca77c7a",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "a"
+        ],
+        [
+         "i",
+         "1"
+        ]
+       ],
+       [
+        [
+         "s",
+         "b"
+        ],
+        [
+         "i",
+         "2"
+        ]
+       ]
+      ]
+     ]
+    ],
+    [
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "b"
+        ],
+        [
+         "i",
+         "2"
+        ]
+       ],
+       [
+        [
+         "s",
+         "a"
+        ],
+        [
+         "i",
+         "1"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "sparse unions: each member, a null member, a null union",
+   "sql": "SELECT union_value(i := 1)::UNION(i INTEGER, s VARCHAR) AS a, union_value(s := 'x')::UNION(i INTEGER, s VARCHAR) AS b, union_value(s := NULL::VARCHAR)::UNION(i INTEGER, s VARCHAR) AS c, NULL::UNION(i INTEGER, s VARCHAR) AS d",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "sparse_union<i: int32=0, s: string=1>"
+    },
+    {
+     "name": "b",
+     "type": "sparse_union<i: int32=0, s: string=1>"
+    },
+    {
+     "name": "c",
+     "type": "sparse_union<i: int32=0, s: string=1>"
+    },
+    {
+     "name": "d",
+     "type": "sparse_union<i: int32=0, s: string=1>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b",
+     "c",
+     "d"
+    ],
+    "types": [
+     "UNION(i INTEGER, s VARCHAR)",
+     "UNION(i INTEGER, s VARCHAR)",
+     "UNION(i INTEGER, s VARCHAR)",
+     "UNION(i INTEGER, s VARCHAR)"
+    ],
+    "ordered": "02495b1b50e7ae0b5688717576096b1ef2db4623a0d0c06657e23a8483f6fd01",
+    "unordered": "02495b1b50e7ae0b5688717576096b1ef2db4623a0d0c06657e23a8483f6fd01",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "union",
+      0,
+      "i",
+      [
+       "i",
+       "1"
+      ]
+     ],
+     [
+      "union",
+      1,
+      "s",
+      [
+       "s",
+       "x"
+      ]
+     ],
+     [
+      "union",
+      1,
+      "s",
+      null
+     ],
+     [
+      "union",
+      0,
+      "i",
+      null
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "one value under two union tags",
+   "sql": "SELECT union_value(i := 1)::UNION(i INTEGER, j INTEGER) AS a, union_value(j := 1)::UNION(i INTEGER, j INTEGER) AS b",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "sparse_union<i: int32=0, j: int32=1>"
+    },
+    {
+     "name": "b",
+     "type": "sparse_union<i: int32=0, j: int32=1>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b"
+    ],
+    "types": [
+     "UNION(i INTEGER, j INTEGER)",
+     "UNION(i INTEGER, j INTEGER)"
+    ],
+    "ordered": "54170436603fdcacf82aa51cea689118d4b5878c5af27770970a29799b478a55",
+    "unordered": "54170436603fdcacf82aa51cea689118d4b5878c5af27770970a29799b478a55",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "union",
+      0,
+      "i",
+      [
+       "i",
+       "1"
+      ]
+     ],
+     [
+      "union",
+      1,
+      "j",
+      [
+       "i",
+       "1"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "unions in a list, a member a list",
+   "sql": "SELECT [union_value(i := 1)::UNION(i INTEGER, l INTEGER[]), union_value(l := [2, 3])::UNION(i INTEGER, l INTEGER[])] AS a",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "list<l: sparse_union<i: int32=0, l: list<l: int32>=1>>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a"
+    ],
+    "types": [
+     "UNION(i INTEGER, l INTEGER[])[]"
+    ],
+    "ordered": "451d44aa3c14706659b6fba558cc444228a22efdf230d8a32351fd561eaab789",
+    "unordered": "451d44aa3c14706659b6fba558cc444228a22efdf230d8a32351fd561eaab789",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "list",
+      [
+       [
+        "union",
+        0,
+        "i",
+        [
+         "i",
+         "1"
+        ]
+       ],
+       [
+        "union",
+        1,
+        "l",
+        [
+         "list",
+         [
+          [
+           "i",
+           "2"
+          ],
+          [
+           "i",
+           "3"
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "an interval inside a map and as a chosen union member",
+   "sql": "SELECT MAP {'k': INTERVAL 1 DAY} AS a, union_value(v := INTERVAL 1 DAY)::UNION(n INTEGER, v INTERVAL) AS b",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "map<string, month_day_nano_interval>"
+    },
+    {
+     "name": "b",
+     "type": "sparse_union<n: int32=0, v: month_day_nano_interval=1>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a",
+     "b"
+    ],
+    "types": [
+     "MAP(VARCHAR, INTERVAL)",
+     "UNION(n INTEGER, v INTERVAL)"
+    ],
+    "ordered": "b672782d64384cd7705cdcdb82d8e80d5249811270730e9cfb5cbc215220230c",
+    "unordered": "b672782d64384cd7705cdcdb82d8e80d5249811270730e9cfb5cbc215220230c",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "k"
+        ],
+        [
+         "interval",
+         0,
+         1,
+         "0"
+        ]
+       ]
+      ]
+     ],
+     [
+      "union",
+      1,
+      "v",
+      [
+       "interval",
+       0,
+       1,
+       "0"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "an unchosen interval member names nothing",
+   "sql": "SELECT union_value(n := 1)::UNION(n INTEGER, v INTERVAL) AS a",
+   "fetchall": "unencodable",
+   "arrow": [
+    {
+     "name": "a",
+     "type": "sparse_union<n: int32=0, v: month_day_nano_interval=1>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "a"
+    ],
+    "types": [
+     "UNION(n INTEGER, v INTERVAL)"
+    ],
+    "ordered": "4ac8f71e4e376914ebbee758218795baa4c475a20b28fa970f50796614975d35",
+    "unordered": "4ac8f71e4e376914ebbee758218795baa4c475a20b28fa970f50796614975d35",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "union",
+      0,
+      "n",
+      [
+       "i",
+       "1"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "a map with a duplicate key",
+   "build": "a map with a duplicate key",
+   "arrow": [
+    {
+     "name": "m",
+     "type": "map<string, int32>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "m"
+    ],
+    "types": null,
+    "ordered": "0325c1adfff01bbfc7f958ac96ea730e341f2e889082eb7fe458d79075762fb9",
+    "unordered": "0325c1adfff01bbfc7f958ac96ea730e341f2e889082eb7fe458d79075762fb9",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "map",
+      [
+       [
+        [
+         "s",
+         "a"
+        ],
+        [
+         "i",
+         "1"
+        ]
+       ],
+       [
+        [
+         "s",
+         "a"
+        ],
+        [
+         "i",
+         "2"
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "a dense union with codes 3 and 7 and a null member",
+   "build": "a dense union with codes 3 and 7 and a null member",
+   "arrow": [
+    {
+     "name": "u",
+     "type": "dense_union<i: int32=3, s: string=7>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "u"
+    ],
+    "types": null,
+    "ordered": "f90e2e6d3820fc9d4c85c1c1b10a03a587a115944dcc546edea1e06263d9f7fa",
+    "unordered": "6416f2d029029a57465877ccaa76d027bf15771ff262feb9dc7f02283d1f3df4",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "union",
+      3,
+      "i",
+      [
+       "i",
+       "5"
+      ]
+     ]
+    ],
+    [
+     [
+      "union",
+      7,
+      "s",
+      null
+     ]
+    ],
+    [
+     [
+      "union",
+      7,
+      "s",
+      [
+       "s",
+       "x"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "a sparse union with codes 3 and 7 and a null member",
+   "build": "a sparse union with codes 3 and 7 and a null member",
+   "arrow": [
+    {
+     "name": "u",
+     "type": "sparse_union<i: int32=3, s: string=7>"
+    }
+   ],
+   "values": {
+    "columns": [
+     "u"
+    ],
+    "types": null,
+    "ordered": "1b4d872385f24d744e174f87dd13904ef286b974674919af2380e96385cbb853",
+    "unordered": "64cfb8c1df4d46dad3a065e6d9e883115d05e7cc7df7ba053d1f628fb995809d",
+    "unencodable": []
+   },
+   "rows": [
+    [
+     [
+      "union",
+      7,
+      "s",
+      [
+       "s",
+       "y"
+      ]
+     ]
+    ],
+    [
+     [
+      "union",
+      3,
+      "i",
+      null
+     ]
+    ]
+   ]
+  }
+ ]
+}
