@@ -31,6 +31,12 @@ endpoint:
   call by name, with all steps asked and with the first step empty; the
   same tampered start without the capture is answered. Passes at 8295049c
   (where the first-step-empty variants are refused for the bug as well).
+- ``test_the_capture_refuses_an_id_that_is_not_the_next_step_with_rows``
+  (Codex round 3, P2): the calls must carry exactly the ids of the steps
+  with rows, in order. Step 3 empty with its id on step 2's call, and
+  steps 1 and 3 empty with step 3's id on step 2's one call, fail at
+  b02af721 (accepted); steps with rows swapped, and an empty later step's
+  id on step 1, are refused there already.
 
 The implementer changes nothing of this file.
 """
@@ -266,5 +272,57 @@ def test_the_capture_still_refuses_a_call_with_another_step_s_id(
     assert 'does not carry the request id' in str(got['error'])
     # Without the capture the same tampered start is answered: the refusal
     # is the capture's.
+    plain = _ask(monkeypatch, empty, capture=False, rewrite=rewrite)
+    assert plain['error'] is None, plain['error']
+
+
+def _steps_1_and_2_swapped(ids: list[str]) -> None:
+    ids[0], ids[1] = ids[1], ids[0]
+
+
+def _step_3_s_id_on_step_1(ids: list[str]) -> None:
+    ids[0] = ids[2]
+
+
+@pytest.mark.parametrize(
+    ('empty', 'rewrite'),
+    [
+        # Codex round 3 (a): calls [step 1, step 3's id] while step 3 has
+        # no rows, so the steps with rows are 1 and 2.
+        ((3,), _step_3_s_id_on_step_2),
+        # Codex round 3 (b): the one call, step 2's, carries the id of
+        # step 3, which has no rows.
+        ((1, 3), _step_3_s_id_on_step_2),
+        # A step with rows given another such step's id, out of order.
+        ((), _steps_1_and_2_swapped),
+        ((3,), _steps_1_and_2_swapped),
+        # A step with rows given the id of an empty step after it.
+        ((2,), _step_3_s_id_on_step_1),
+    ],
+    ids=[
+        'step-3-empty-its-id-on-step-2',
+        'steps-1-and-3-empty-step-3-s-id-on-step-2',
+        'steps-1-and-2-swapped',
+        'step-3-empty-steps-1-and-2-swapped',
+        'step-2-empty-step-3-s-id-on-step-1',
+    ],
+)
+def test_the_capture_refuses_an_id_that_is_not_the_next_step_with_rows(
+    monkeypatch: pytest.MonkeyPatch,
+    empty: tuple[int, ...],
+    rewrite: Callable[[list[str]], None],
+) -> None:
+    r"""The calls must carry exactly the ids of the steps with rows (the
+    steps whose instance table has rows, as ``sdm-core``'s ``predict.rs``
+    decides which steps it calls for), in step order. An id of an empty
+    step, or of a step with rows out of its turn, is refused by name; the
+    same tampered start without the capture is answered (Codex round 3,
+    P2: at b02af721 the capture accepts any later step's id)."""
+    got = _ask(monkeypatch, empty, capture=True, rewrite=rewrite)
+    assert isinstance(got['error'], RUNNER.RunnerFailure), (
+        f'accepted: calls carried {got["received"]}, the steps were '
+        f'started with {got["started"]}, steps {empty} empty'
+    )
+    assert 'does not carry the request id' in str(got['error'])
     plain = _ask(monkeypatch, empty, capture=False, rewrite=rewrite)
     assert plain['error'] is None, plain['error']
