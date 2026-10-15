@@ -124,6 +124,8 @@ class Fake:
     #: stands for a push by someone else after the landing.
     remote_refs: dict[str, str] = field(default_factory=dict)
     moved_after_push: dict[str, str] = field(default_factory=dict)
+    #: Runs a watch leaves as they are: still unfinished when it returns.
+    stuck: set[int] = field(default_factory=set)
 
     def sha(self, rev: str) -> str | None:
         rev = rev.removesuffix('^{commit}')
@@ -274,6 +276,8 @@ class Fake:
             for runs in self.runs.values():
                 for run in runs:
                     if run['databaseId'] == run_id:
+                        if args[1] == 'watch' and run_id in self.stuck:
+                            return land.Completed(1, '', 'still running')
                         if args[1] == 'watch':
                             # A finished run stays as it finished.
                             if run['status'] != 'completed':
@@ -2163,8 +2167,9 @@ def _(tmp: Path) -> tuple[bool, str]:
 # - ``land.py verify L`` passes (exit 0, ``VERIFIED <L>``) when L changes no
 #   file and its parent, the candidate, has a green exact-SHA push run as
 #   its newest gating run, whether L's own runs are absent or skipped; for
-#   a moved landing (``Moved-from: X``), when L's tree is X's and X's newest
-#   gating run is green. The output names the run it stands on, by id.
+#   a moved landing (``Moved-from: X``), when L's tree is X's, X's newest
+#   gating run is green, and, since round 4, L's own run is green (see
+#   there). The output names the run it stands on, by id.
 # - It fails (nonzero, no ``VERIFIED``) when L changes files (naming that,
 #   ``changes files`` or ``empty``), when a moved landing's tree is not X's
 #   (naming ``tree``), when the candidate's or X's newest gating run is red
@@ -2201,10 +2206,12 @@ def landing_on(
     base: str,
     files: dict[str, str] | None = None,
     moved_from: tuple[str, int] | None = None,
+    to_phase: bool = True,
 ) -> str:
     """A landing commit on HEAD, with land.py's trailers (``Moved-from``
-    and ``Moved-from-run`` when moved), pushed to the topic branch and the
-    phase branch; empty unless ``files`` are written."""
+    and ``Moved-from-run`` when moved), pushed to the topic branch and,
+    unless ``to_phase`` is false, the phase branch; empty unless ``files``
+    are written."""
     for name, text in (files or {}).items():
         (r.work / name).write_text(text)
         r.git('add', '-A', name)
@@ -2225,10 +2232,10 @@ def landing_on(
     )
     r.git('commit', '-q', '--allow-empty', '-m', message)
     sha = r.git('rev-parse', 'HEAD')
-    r.git(
-        'push', '-q', 'origin',
-        f'{sha}:refs/heads/{MOVED_TOPIC}', f'{sha}:refs/heads/{PHASE}',
-    )  # fmt: skip
+    refs = [f'{sha}:refs/heads/{MOVED_TOPIC}']
+    if to_phase:
+        refs.append(f'{sha}:refs/heads/{PHASE}')
+    r.git('push', '-q', 'origin', *refs)
     return sha
 
 
@@ -2243,14 +2250,24 @@ class Landed:
     x: str | None = None
 
 
-def plain_landed(tmp: Path, files: dict[str, str] | None = None) -> Landed:
+def plain_landed(
+    tmp: Path,
+    files: dict[str, str] | None = None,
+    wrapped: bool = False,
+    to_phase: bool = True,
+) -> Landed:
+    """A landing on a candidate; with ``wrapped``, the candidate is an
+    empty ``Land`` commit on the package's untested commit, and ``cand``
+    that commit below it."""
     r = Repo(tmp)
     r.git('checkout', '-q', '-b', 'start')
     base = r.commit('Land T1.97: the phase so far', {'base.txt': 'base\n'})
     r.git('push', '-q', 'origin', f'{base}:refs/heads/{PHASE}')
     r.git('checkout', '-q', '-b', MOVED_TOPIC)
     cand = r.commit('T1.99: a test package', {'a.txt': 'a\n'})
-    return Landed(r, cand, landing_on(r, base, files))
+    if wrapped:
+        r.commit('Land T1.99: an earlier landing, left on the branch')
+    return Landed(r, cand, landing_on(r, base, files, to_phase=to_phase))
 
 
 def moved_landed(tmp: Path, onto: Commits | None = None) -> Landed:
@@ -2276,13 +2293,18 @@ def skipped_on(sha: str) -> list[dict[str, Any]]:
 class Verified:
     """``land.py verify`` on a real landing commit, gh the fake."""
 
-    def __init__(self, landed: Landed, runs: dict[str, list[dict[str, Any]]]):
+    def __init__(
+        self,
+        landed: Landed,
+        runs: dict[str, list[dict[str, Any]]],
+        stuck: Sequence[int] = (),
+    ):
         self.landed = landed
         self.lines: list[str] = []
         self.code: int | str | None = None
-        tools = land.Tools(
-            run=Real(landed.repo, runs), sleep=lambda _: None, repo='o/r'
-        )
+        real = Real(landed.repo, runs)
+        real.fake.stuck = set(stuck)
+        tools = land.Tools(run=real, sleep=lambda _: None, repo='o/r')
         try:
             with (
                 in_repo(landed.repo),
@@ -2372,29 +2394,6 @@ def _(tmp: Path) -> tuple[bool, str]:
     return verified_on(Verified(landed, runs), CAND_RUN)
 
 
-@case("CI4 verify: a moved landing with no runs of its own passes on X's run")
-def _(tmp: Path) -> tuple[bool, str]:
-    landed = moved_landed(tmp)
-    assert landed.x
-    v = Verified(
-        landed, {landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)]}
-    )
-    return verified_on(v, X_RUN)
-
-
-@case(
-    "CI4 verify: a moved landing whose own runs were skipped passes on X's run"
-)
-def _(tmp: Path) -> tuple[bool, str]:
-    landed = moved_landed(tmp)
-    assert landed.x
-    runs = {
-        landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)],
-        landed.sha: skipped_on(landed.sha),
-    }
-    return verified_on(Verified(landed, runs), X_RUN)
-
-
 @case('CI4 verify: fails, the landing commit changes a file')
 def _(tmp: Path) -> tuple[bool, str]:
     landed = plain_landed(tmp, files={'a.txt': 'changed at landing\n'})
@@ -2408,10 +2407,11 @@ def _(tmp: Path) -> tuple[bool, str]:
         tmp, onto=(('T1.99: a test package', {'a.txt': 'not X\n'}),)
     )
     assert landed.x
-    v = Verified(
-        landed, {landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)]}
-    )
-    return failed_for(v, 'tree')
+    runs = {
+        landed.x: [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)],
+        landed.sha: own_green(landed.sha),
+    }
+    return failed_for(Verified(landed, runs), 'tree')
 
 
 @case("CI4 verify: fails, the candidate's newest run is red after a green one")
@@ -2442,7 +2442,8 @@ def _(tmp: Path) -> tuple[bool, str]:
                 run_id=NEWER_RUN,
                 created='2026-10-09T00:01:00Z',
             ),
-        ]
+        ],
+        landed.sha: own_green(landed.sha),
     }
     v = Verified(landed, runs)
     return failed_for(v, 'VERIFY FAILED', f'run {NEWER_RUN}', revert=True)
@@ -2474,6 +2475,209 @@ def _(tmp: Path) -> tuple[bool, str]:
     runs = {landed.cand: cand_runs(landed), landed.sha: own}
     v = Verified(landed, runs)
     return failed_for(v, 'VERIFY FAILED', f'run {LAND_PHASE_RUN}', revert=True)
+
+
+# --- CI4 round 4: a moved landing stands on its own run; evidence follows
+# down; verify checks what the phase branch holds ---------------------------
+#
+# Codex's P1 on cb46bc5a: ci.yml runs a moved landing's jobs (E131 (c)):
+# in a chained move X was judged against an older checkpoint's harness and
+# baselines, so the landing's own run is the current checkpoint's
+# judgement. ``land.py verify`` of a moved landing requires a green gating
+# run on the landing commit itself (exit 0, naming it by id): none, only a
+# skipped one, only a pull request's, a cancelled one or one still
+# unfinished after the wait is incomplete (exit 3, ``VERIFY INCOMPLETE``,
+# naming the landing commit, no revert instructions); a red one fails
+# (exit 1, ``VERIFY FAILED``, the run by id, the revert instructions). Its
+# tree is still X's, and a red newest run of X still fails. A plain
+# landing, whose runs ci.yml skips, keeps candidate-only verification (the
+# cases above).
+#
+# The subagent's P3-2: fix round 1 made a candidate that is itself an
+# empty ``Land`` commit stand on the first commit below it that is none,
+# in land.py's CI check and in verify, and made verify refuse a landing the
+# phase branch on the remote does not hold. A wrapper's own run is never
+# evidence.
+
+
+def own_green(sha: str) -> list[dict[str, Any]]:
+    """The moved landing's own run on the phase branch, green."""
+    return [ci_run(sha, PHASE, run_id=LAND_PHASE_RUN)]
+
+
+def x_green(landed: Landed) -> list[dict[str, Any]]:
+    assert landed.x
+    return [ci_run(landed.x, MOVED_TOPIC, run_id=X_RUN)]
+
+
+def incomplete_for(v: Verified) -> tuple[bool, str]:
+    text = v.text
+    ok = (
+        v.code == 3
+        and 'VERIFY INCOMPLETE' in text
+        and 'VERIFIED' not in text
+        and v.landed.sha[:12] in text
+        and 'Nothing was reverted' not in text
+    )
+    return ok, (
+        'incomplete, naming the landing commit'
+        if ok
+        else f'exit {v.code}, wanted 3 and VERIFY INCOMPLETE naming '
+        f'{v.landed.sha[:12]}: {text[-600:]}'
+    )
+
+
+@case('CI4 verify: a moved landing passes on its own green run')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    runs = {landed.x: x_green(landed), landed.sha: own_green(landed.sha)}
+    return verified_on(Verified(landed, runs), LAND_PHASE_RUN)
+
+
+@case('CI4 verify: a moved landing with no run of its own is incomplete')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    return incomplete_for(Verified(landed, {landed.x: x_green(landed)}))
+
+
+@case('CI4 verify: a moved landing whose own runs were skipped is incomplete')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    runs = {landed.x: x_green(landed), landed.sha: skipped_on(landed.sha)}
+    return incomplete_for(Verified(landed, runs))
+
+
+@case('CI4 verify: a moved landing whose own run was cancelled is incomplete')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    own = own_green(landed.sha)
+    own[0].update(conclusion='cancelled')
+    runs = {landed.x: x_green(landed), landed.sha: own}
+    return incomplete_for(Verified(landed, runs))
+
+
+@case('CI4 verify: a moved landing whose own run never finishes is incomplete')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    own = [
+        ci_run(landed.sha, PHASE, status='in_progress', run_id=LAND_PHASE_RUN)
+    ]
+    runs = {landed.x: x_green(landed), landed.sha: own}
+    return incomplete_for(Verified(landed, runs, stuck=[LAND_PHASE_RUN]))
+
+
+@case(
+    "CI4 verify: a moved landing whose own green run is a pull request's is incomplete"
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    own = [
+        ci_run(landed.sha, PHASE, run_id=LAND_PHASE_RUN, event='pull_request')
+    ]
+    runs = {landed.x: x_green(landed), landed.sha: own}
+    return incomplete_for(Verified(landed, runs))
+
+
+@case('CI4 verify: fails, a moved landing whose own run is red')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = moved_landed(tmp)
+    own = own_green(landed.sha)
+    own[0].update(conclusion='failure')
+    runs = {landed.x: x_green(landed), landed.sha: own}
+    v = Verified(landed, runs)
+    return failed_for(v, 'VERIFY FAILED', f'run {LAND_PHASE_RUN}', revert=True)
+
+
+@case(
+    'CI4 verify: a landing on an empty Land commit stands on the commit below'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp, wrapped=True)
+    return verified_on(
+        Verified(landed, {landed.cand: cand_runs(landed)}), CAND_RUN
+    )
+
+
+@case(
+    "CI4 verify: fails, a landing on an empty Land commit, only the wrapper's run green"
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp, wrapped=True)
+    wrapper = landed.repo.git('rev-parse', f'{landed.sha}^')
+    runs = {wrapper: [ci_run(wrapper, MOVED_TOPIC, run_id=CAND_RUN)]}
+    v = Verified(landed, runs)
+    return failed_for(v, landed.cand[:12], codes=(1, 3))
+
+
+@case('CI4 verify: refuses a landing the phase branch on the remote lacks')
+def _(tmp: Path) -> tuple[bool, str]:
+    landed = plain_landed(tmp, to_phase=False)
+    v = Verified(landed, {landed.cand: cand_runs(landed)})
+    ok = (
+        v.code not in (0, None)
+        and 'VERIFIED' not in v.text
+        and landed.sha[:12] in v.text
+        and f'not in {PHASE}' in v.text
+    )
+    return ok, (
+        'refused, naming the phase branch'
+        if ok
+        else f'exit {v.code}: {v.text[-600:]}'
+    )
+
+
+def wrapped_candidate(tmp: Path) -> tuple[Moved, str]:
+    """A candidate that is an empty ``Land`` commit on the package's
+    untested commit U, on the phase head; and U."""
+    r = Repo(tmp)
+    r.git('checkout', '-q', '-b', 'start')
+    h = r.commit('Land T1.97: the phase so far', {'base.txt': 'base\n'})
+    r.git('push', '-q', 'origin', f'{h}:refs/heads/{PHASE}')
+    r.git('checkout', '-q', '-b', MOVED_TOPIC)
+    u = r.commit('T1.99: a test package', {'a.txt': 'a\n'})
+    e = r.commit('Land T1.99: an earlier landing, left on the branch')
+    r.git('fetch', '-q', 'origin')
+    return Moved(r, h, u, h, e, []), u
+
+
+@case(
+    'CI4 land: a candidate that is an empty Land commit on an untested commit is refused'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    m, u = wrapped_candidate(tmp)
+    c = MovedCase(tmp, m, runs={}, name=m.c).land(moved_from=None)
+    return refused_naming(c, u[:12])
+
+
+@case(
+    'CI4 land: a candidate that is an empty Land commit, only its own run green, is refused'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    m, u = wrapped_candidate(tmp)
+    runs = {m.c: [ci_run(m.c, MOVED_TOPIC, run_id=CAND_RUN)]}
+    c = MovedCase(tmp, m, runs=runs, name=m.c).land(moved_from=None)
+    return refused_naming(c, u[:12])
+
+
+@case(
+    'CI4 land: a candidate that is an empty Land commit lands on the green run below it'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    m, u = wrapped_candidate(tmp)
+    runs = {u: [ci_run(u, MOVED_TOPIC, run_id=CAND_RUN)]}
+    c = MovedCase(tmp, m, runs=runs, name=m.c).land(moved_from=None)
+    sha = m.repo.git('rev-parse', 'HEAD')
+    ok = (
+        c.code == 0
+        and f'LANDED {sha}' in c.text
+        and m.repo.git('rev-parse', 'HEAD^') == m.c
+        and m.repo.remote(PHASE) == sha
+        and str(CAND_RUN) in c.message()
+    )
+    return (
+        ok,
+        'landed on the run below' if ok else f'exit {c.code}: {c.text[-600:]}',
+    )
 
 
 for conclusion in ('success', 'cancelled'):

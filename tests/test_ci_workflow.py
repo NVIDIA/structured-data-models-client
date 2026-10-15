@@ -15,10 +15,12 @@ not pinned by digest, and logs in to ghcr.io alone.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -82,27 +84,342 @@ def _repo(tmp_path: Path) -> Path:
     return repo
 
 
-def _skip(repo: Path, tmp_path: Path, event: str, ref: str) -> str:
-    output = tmp_path / 'output'
-    output.write_text('')
+#: The GitHub API as the skip step reaches it: ``gh`` (``gh run list`` or
+#: ``gh api``) and ``curl``, faked on PATH, answering from a file of runs.
+#: A run there: ``sha``, ``id``, ``branch``, ``event``, ``status``,
+#: ``conclusion``, ``created``, ``workflow`` (the file, ``ci.yml``).
+FAKE_API = r"""
+import json, os, re, subprocess, sys
+from urllib.parse import parse_qsl, urlparse
+
+WORKFLOWS = {'ci.yml': (1, 'CI'), 'publish.yml': (2, 'Publish')}
+
+
+def log(argv):
+    with open(os.environ['FAKE_CALLS'], 'a') as handle:
+        handle.write(json.dumps(argv) + '\n')
+
+
+def runs(sha=None, event=None, branch=None, status=None, workflow=None):
+    with open(os.environ['FAKE_RUNS']) as handle:
+        every = json.load(handle)
+    found = []
+    for run in every:
+        number, name = WORKFLOWS[run['workflow']]
+        if sha and run['sha'] != sha:
+            continue
+        if event and run['event'] != event:
+            continue
+        if branch and run['branch'] != branch:
+            continue
+        if workflow and workflow not in (
+            run['workflow'], '.github/workflows/' + run['workflow'],
+            name, str(number),
+        ):
+            continue
+        if status and status not in (run['status'], run['conclusion']):
+            continue
+        found.append(run)
+    return sorted(found, key=lambda run: run['created'], reverse=True)
+
+
+def rest(run):
+    number, name = WORKFLOWS[run['workflow']]
+    done = run['status'] == 'completed'
+    return {
+        'id': run['id'], 'run_number': run['id'], 'run_attempt': 1,
+        'head_sha': run['sha'], 'head_branch': run['branch'],
+        'event': run['event'], 'status': run['status'],
+        'conclusion': run['conclusion'] if done else None,
+        'created_at': run['created'], 'updated_at': run['created'],
+        'run_started_at': run['created'],
+        'path': '.github/workflows/' + run['workflow'], 'name': name,
+        'workflow_id': number, 'display_title': 'a commit',
+        'html_url': 'https://github.com/o/r/actions/runs/%d' % run['id'],
+        'url': 'https://api.github.com/repos/o/r/actions/runs/%d' % run['id'],
+    }
+
+
+def cli(run):
+    number, name = WORKFLOWS[run['workflow']]
+    done = run['status'] == 'completed'
+    return {
+        'databaseId': run['id'], 'number': run['id'], 'attempt': 1,
+        'headSha': run['sha'], 'headBranch': run['branch'],
+        'event': run['event'], 'status': run['status'],
+        'conclusion': run['conclusion'] if done else '',
+        'createdAt': run['created'], 'updatedAt': run['created'],
+        'startedAt': run['created'], 'name': name, 'workflowName': name,
+        'workflowDatabaseId': number, 'displayTitle': 'a commit',
+        'url': 'https://github.com/o/r/actions/runs/%d' % run['id'],
+    }
+
+
+def answer(path, query):
+    match = re.search(r'/actions/(?:workflows/([^/]+)/)?runs/?$', path)
+    if not match:
+        return None
+    found = runs(
+        sha=query.get('head_sha'), event=query.get('event'),
+        branch=query.get('branch'), status=query.get('status'),
+        workflow=match.group(1),
+    )
+    return {'total_count': len(found), 'workflow_runs': [rest(r) for r in found]}
+
+
+def emit(value, jq=None):
+    text = json.dumps(value)
+    if jq is None:
+        sys.stdout.write(text + '\n')
+        return 0
     done = subprocess.run(
-        ['bash', '--noprofile', '--norc', '-e', '-c', _landing_step()['run']],
-        cwd=repo,
-        env={
-            **os.environ,
+        ['jq', '-r', jq], input=text, capture_output=True, text=True
+    )
+    sys.stdout.write(done.stdout)
+    sys.stderr.write(done.stderr)
+    return done.returncode
+
+
+def options(argv, valued):
+    flags, rest_ = {}, []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        key, eq, value = arg.partition('=')
+        if arg.startswith('-') and eq and key in valued:
+            flags.setdefault(key, []).append(value)
+        elif arg in valued and i + 1 < len(argv):
+            flags.setdefault(arg, []).append(argv[i + 1])
+            i += 1
+        elif arg.startswith('-'):
+            flags.setdefault(arg, []).append('')
+        else:
+            rest_.append(arg)
+        i += 1
+    return flags, rest_
+
+
+def first(flags, *names):
+    for name in names:
+        if flags.get(name):
+            return flags[name][-1]
+    return None
+
+
+def gh(argv):
+    if os.environ.get('FAKE_API_FAILS'):
+        sys.stderr.write('HTTP 502: Bad Gateway\n')
+        return 1
+    if argv[:2] == ['run', 'list']:
+        flags, _ = options(argv[2:], {
+            '--commit', '-c', '--branch', '-b', '--event', '-e', '--status',
+            '-s', '--workflow', '-w', '--limit', '-L', '--json', '--jq',
+            '-q', '--repo', '-R', '--user', '-u', '--created', '--template',
+            '-t',
+        })
+        found = runs(
+            sha=first(flags, '--commit', '-c'),
+            event=first(flags, '--event', '-e'),
+            branch=first(flags, '--branch', '-b'),
+            status=first(flags, '--status', '-s'),
+            workflow=first(flags, '--workflow', '-w'),
+        )
+        limit = first(flags, '--limit', '-L')
+        found = [cli(r) for r in found][: int(limit) if limit else 20]
+        fields = first(flags, '--json')
+        if fields:
+            keep = fields.split(',')
+            found = [{k: r[k] for k in keep if k in r} for r in found]
+        return emit(found, first(flags, '--jq', '-q'))
+    if argv[:1] == ['api']:
+        flags, rest_ = options(argv[1:], {
+            '-X', '--method', '-f', '-F', '--raw-field', '--field', '-H',
+            '--header', '--jq', '-q', '--hostname', '--template', '-t',
+            '--cache', '--input',
+        })
+        url = urlparse(rest_[0])
+        query = dict(parse_qsl(url.query))
+        for name in ('-f', '-F', '--raw-field', '--field'):
+            for field in flags.get(name, []):
+                key, _, value = field.partition('=')
+                query[key] = value
+        found = answer(url.path, query)
+        if found is None:
+            sys.stderr.write('gh: Not Found (HTTP 404)\n')
+            return 1
+        return emit(found, first(flags, '--jq', '-q'))
+    sys.stderr.write('fake gh: unsupported %r\n' % argv)
+    return 1
+
+
+def curl(argv):
+    flags, rest_ = options(argv, {
+        '-H', '--header', '-o', '--output', '-w', '--write-out', '-X',
+        '--request', '-d', '--data', '--data-urlencode', '-u', '--user',
+        '--retry', '--retry-delay', '--retry-max-time', '-m', '--max-time',
+        '--connect-timeout', '-A', '--user-agent', '--url',
+    })
+    urls = [a for a in rest_ if re.match(r'https?://', a)] + flags.get('--url', [])
+    fail = any(f in flags for f in ('-f', '--fail', '--fail-with-body', '-sf', '-fs', '-fsS', '-sSf', '-fsSL', '-sSfL'))
+    url = urlparse(urls[0])
+    api = os.environ.get('GITHUB_API_URL', 'https://api.github.com')
+    if url.netloc != urlparse(api).netloc:
+        sys.stderr.write('curl: (6) Could not resolve host: %s\n' % url.netloc)
+        return 6
+    query = dict(parse_qsl(url.query))
+    if '-G' in flags or '--get' in flags:
+        for name in ('-d', '--data', '--data-urlencode'):
+            for field in flags.get(name, []):
+                key, _, value = field.partition('=')
+                query[key] = value
+    if os.environ.get('FAKE_API_FAILS'):
+        found, code = {'message': 'Bad Gateway'}, 502
+    else:
+        found = answer(url.path, query)
+        code = 200 if found is not None else 404
+        if found is None:
+            found = {'message': 'Not Found'}
+    if code >= 400 and fail:
+        sys.stderr.write('curl: (22) The requested URL returned error: %d\n' % code)
+        return 22
+    body = json.dumps(found)
+    target = first(flags, '-o', '--output')
+    if target and target != '-':
+        with open(target, 'w') as handle:
+            handle.write(body)
+        body = ''
+    write = first(flags, '-w', '--write-out')
+    if write:
+        body += write.replace('%{http_code}', str(code)).replace('\\n', '\n')
+    sys.stdout.write(body)
+    return 0
+
+
+argv = sys.argv[1:]
+log([os.path.basename(sys.argv[0])] + argv)
+sys.exit(gh(argv) if os.path.basename(sys.argv[0]) == 'gh' else curl(argv))
+"""
+
+
+def _run(
+    sha: str,
+    run_id: int,
+    branch: str = LANE,
+    event: str = 'push',
+    status: str = 'completed',
+    conclusion: str = 'success',
+    created: str = '2026-10-14T00:00:00Z',
+    workflow: str = 'ci.yml',
+) -> dict[str, Any]:
+    return {
+        'sha': sha,
+        'id': run_id,
+        'branch': branch,
+        'event': event,
+        'status': status,
+        'conclusion': conclusion if status == 'completed' else None,
+        'created': created,
+        'workflow': workflow,
+    }
+
+
+def _decide(
+    repo: Path,
+    tmp_path: Path,
+    event: str,
+    ref: str,
+    runs: list[dict[str, Any]],
+    api_fails: bool = False,
+) -> tuple[str, list[list[str]]]:
+    r"""The skip step's answer, ``true`` or ``false``, or ``failed`` when
+    the step itself fails (closed), with the GitHub API faked to know
+    ``runs``; and the calls the fakes took."""
+    here = tmp_path / f'api-{len(list(tmp_path.glob("api-*")))}'
+    bin_dir = here / 'bin'
+    bin_dir.mkdir(parents=True)
+    for name in ('gh', 'curl'):
+        tool = bin_dir / name
+        tool.write_text(f'#!{sys.executable}\n{FAKE_API}')
+        tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    (here / 'runs.json').write_text(json.dumps(runs))
+    calls = here / 'calls'
+    calls.write_text('')
+    output = here / 'output'
+    output.write_text('')
+    head = _git(repo, 'rev-parse', 'HEAD')
+    event_file = here / 'event.json'
+    event_file.write_text(
+        json.dumps({'after': head, 'ref': f'refs/heads/{ref}'})
+    )
+    nowhere = 'http://127.0.0.1:9'
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(('GITHUB_', 'GH_', 'RUNNER_'))
+    }
+    env.update(
+        {
             **GIT_ENV,
+            'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
+            'HOME': str(here),
+            'GH_CONFIG_DIR': str(here / 'gh'),
+            'GH_TOKEN': 'fake-token',
+            'GITHUB_TOKEN': 'fake-token',
+            'GITHUB_ACTIONS': 'true',
+            'GITHUB_API_URL': 'https://api.github.com',
+            'GITHUB_SERVER_URL': 'https://github.com',
+            'GITHUB_REPOSITORY': 'o/r',
+            'GITHUB_REPOSITORY_OWNER': 'o',
+            'GITHUB_WORKFLOW_REF': f'o/r/.github/workflows/ci.yml@refs/heads/{ref}',
+            'GITHUB_RUN_ID': '999',
+            'GITHUB_SHA': head,
+            'GITHUB_REF': f'refs/heads/{ref}',
             'GITHUB_EVENT_NAME': event,
             'GITHUB_REF_NAME': ref,
+            'GITHUB_EVENT_PATH': str(event_file),
             'GITHUB_OUTPUT': str(output),
-        },
+            'FAKE_RUNS': str(here / 'runs.json'),
+            'FAKE_CALLS': str(calls),
+            # Nothing reaches the network but through the fakes.
+            'HTTPS_PROXY': nowhere,
+            'HTTP_PROXY': nowhere,
+            'https_proxy': nowhere,
+            'http_proxy': nowhere,
+            'ALL_PROXY': nowhere,
+        }
+    )
+    if api_fails:
+        env['FAKE_API_FAILS'] = '1'
+    done = subprocess.run(
+        ['bash', '--noprofile', '--norc', '-eo', 'pipefail', '-c',
+         _landing_step()['run']],
+        cwd=repo,
+        env=env,
         capture_output=True,
         text=True,
         check=False,
-    )
-    assert done.returncode == 0, done.stdout + done.stderr
-    lines = output.read_text().splitlines()
-    assert len(lines) == 1 and lines[0].startswith('skip='), lines
-    return lines[0].removeprefix('skip=')
+    )  # fmt: skip
+    called = [json.loads(x) for x in calls.read_text().splitlines()]
+    if done.returncode != 0:
+        return 'failed', called
+    lines = [
+        x for x in output.read_text().splitlines() if x.startswith('skip=')
+    ]
+    assert len(lines) == 1, (output.read_text(), done.stdout, done.stderr)
+    return lines[0].removeprefix('skip='), called
+
+
+def _skip(repo: Path, tmp_path: Path, event: str, ref: str) -> str:
+    r"""The skip step's answer when every commit has a green push run on
+    the lane: the landing's shape alone decides (the evidence cases below
+    seed their runs one by one)."""
+    seeded = [
+        _run(sha, 100 + n)
+        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
+    ]
+    found, _ = _decide(repo, tmp_path, event, ref, seeded)
+    assert found in ('true', 'false'), found
+    return found
 
 
 def _landing(repo: Path, subject: str = 'Land T1.2: the candidate') -> None:
@@ -660,32 +977,57 @@ GHCR_CREDENTIALS = {
 }
 
 
+#: A secret or the workflow's token, however the workflow names it.
+TOKEN = r'secrets\.|github\.token'
+#: How the skip step may hold the token, for ``gh`` or ``curl``.
+API_TOKENS = [
+    (key, value)
+    for key in ('GH_TOKEN', 'GITHUB_TOKEN')
+    for value in ('${{ secrets.GITHUB_TOKEN }}', '${{ github.token }}')
+]
+
+
+def _api_only(key: str, value: object, run: str) -> None:
+    r"""The skip step's token goes to the GitHub API alone: held as gh
+    or curl read it, its text runs no container, logs in nowhere, and
+    names no host but the API's."""
+    assert (key, value) in API_TOKENS, (key, value)
+    assert 'docker' not in run and 'login' not in run, run
+    for host in re.findall(r'https?://([^/\s"\')]+)', run):
+        assert host == 'api.github.com', host
+
+
 def test_ci4_the_token_goes_only_to_ghcr_io(
     request: pytest.FixtureRequest,
 ) -> None:
     r"""GITHUB_TOKEN reaches only pull_image.sh, which logs in to ghcr.io
     alone, and the credentials of a service whose image is on ghcr.io,
     which are exactly ``github.actor`` and ``secrets.GITHUB_TOKEN``; a
-    service whose image is elsewhere has no credentials. No other secret
-    is used, and nothing wider than reading packages is granted."""
+    service whose image is elsewhere has no credentials; and the landing
+    job's skip step, which reads the candidate's runs from the GitHub API
+    (round 4) and runs no container. No other secret is used, and nothing
+    wider than reading packages and Actions runs is granted."""
 
     def check() -> None:
         workflow = _workflow()
-        assert workflow['permissions'] == {
-            'contents': 'read',
-            'packages': 'read',
-        }
-        assert 'secrets.' not in str(workflow.get('env'))
+        assert workflow['permissions'] in (
+            {'contents': 'read', 'packages': 'read'},
+            {'contents': 'read', 'packages': 'read', 'actions': 'read'},
+        )
+        assert not re.search(TOKEN, str(workflow.get('env')))
         steps = services = 0
         for name, job in workflow['jobs'].items():
-            assert 'secrets.' not in str(job.get('env')), name
+            assert not re.search(TOKEN, str(job.get('env'))), name
             assert 'permissions' not in job, name
             assert 'container' not in job, name
             for step in job.get('steps', []):
-                assert 'secrets.' not in str(step.get('with')), (name, step)
-                assert 'secrets.' not in str(step.get('run')), (name, step)
+                assert not re.search(TOKEN, str(step.get('with'))), (name, step)
+                assert not re.search(TOKEN, str(step.get('run'))), (name, step)
                 for key, value in (step.get('env') or {}).items():
-                    if 'secrets.' not in str(value):
+                    if not re.search(TOKEN, str(value)):
+                        continue
+                    if name == 'landing' and step.get('id') == 'landing':
+                        _api_only(key, value, str(step['run']))
                         continue
                     steps += 1
                     assert (key, value) == (
@@ -712,9 +1054,9 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
         allowed = {
             'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}',
             'password: ${{ secrets.GITHUB_TOKEN }}',
-        }
+        } | {f'{key}: {value}' for key, value in API_TOKENS}
         for line in CI.read_text(encoding='utf-8').splitlines():
-            if 'secrets' in line and not line.strip().startswith('#'):
+            if re.search(TOKEN, line) and not line.strip().startswith('#'):
                 assert line.strip() in allowed, line
 
     _held(request, check)
@@ -1124,5 +1466,202 @@ def test_ci4_the_phase_check_reaches_a_previous_tip_past_the_clone_s_depth(
         _, step = _phase_check_step()
         done, _ = phase.run(before, str(step['run']))
         assert done.returncode == 0, done.stdout + done.stderr
+
+    _held(request, check)
+
+
+# --- CI4 round 4: a landing is skipped only on its candidate's evidence ---------
+#
+# Codex's P1 on cb46bc5a: the skip step decided on the landing's shape
+# alone, so an untested candidate (a failing test, never pushed alone) with
+# an empty ``Land`` commit on top, pushed together, skipped every job, and
+# the phase check passed. Owner decision 30 skips a tree that already
+# passed exact-SHA CI; it never infers that from a subject.
+#
+# Interface the cases hold the workflow to:
+# - The skip step (id ``landing``) says ``skip=true`` only when, besides the
+#   landing's shape, the underlying candidate has a green run: following
+#   empty landing commits down (one parent, its parent's tree, ``Land ``),
+#   the first commit that is not one; its newest run of ci.yml on its exact
+#   SHA that is a push to the phase branch or a branch under it (never an
+#   archive branch, never a pull request's) completed with conclusion
+#   success. A wrapper's own run is never evidence, whatever its
+#   conclusion: its jobs were left out.
+# - Missing, failed, cancelled or unfinished evidence, or an API that does
+#   not answer, never says skip: the step says ``skip=false`` (the full
+#   jobs run) or fails (closed).
+# - It reads the runs through ``gh`` or ``curl`` on PATH (here, fakes that
+#   answer from the seeded runs; the network is closed to anything else),
+#   holding the token as ``GH_TOKEN`` or ``GITHUB_TOKEN``; the workflow
+#   grants ``actions: read``. In a clone of depth 2 it deepens itself
+#   (``git fetch --deepen`` or ``--unshallow``) to follow wrappers down.
+# - A push that is no landing never needs the API: it says ``skip=false``
+#   and passes when the API is down.
+#
+# Each is held by ``contract/tests/ci4_gate.py``.
+
+#: Runs of the candidate, newest last, by case; ``C`` the candidate, ``L``
+#: the landing on it, ``W`` a second landing wrapping ``L``, ``P`` the
+#: candidate's parent.
+EVIDENCE: dict[str, tuple[bool, int, Any]] = {
+    # name: (skips, wrappers, runs)
+    'untested': (False, 1, lambda c: []),
+    'green': (True, 1, lambda c: [_run(c['C'], 1)]),
+    'green-on-a-topic-branch': (
+        True,
+        1,
+        lambda c: [_run(c['C'], 1, branch=f'{PHASE}-t1.99')],
+    ),
+    'red-after-green': (
+        False,
+        1,
+        lambda c: [
+            _run(c['C'], 1),
+            _run(
+                c['C'], 2, conclusion='failure', created='2026-10-14T01:00:00Z'
+            ),
+        ],
+    ),
+    'cancelled-after-green': (
+        False,
+        1,
+        lambda c: [
+            _run(c['C'], 1),
+            _run(
+                c['C'],
+                2,
+                conclusion='cancelled',
+                created='2026-10-14T01:00:00Z',
+            ),
+        ],
+    ),
+    'in-progress-after-green': (
+        False,
+        1,
+        lambda c: [
+            _run(c['C'], 1),
+            _run(
+                c['C'], 2, status='in_progress', created='2026-10-14T01:00:00Z'
+            ),
+        ],
+    ),
+    'queued': (False, 1, lambda c: [_run(c['C'], 1, status='queued')]),
+    'pull-request-only': (
+        False,
+        1,
+        lambda c: [_run(c['C'], 1, event='pull_request', branch=LANE)],
+    ),
+    'archive-branch-only': (
+        False,
+        1,
+        lambda c: [_run(c['C'], 1, branch=f'{PHASE}-archive-lane-1a-t1.99')],
+    ),
+    'main-only': (False, 1, lambda c: [_run(c['C'], 1, branch='main')]),
+    'another-workflow-only': (
+        False,
+        1,
+        lambda c: [_run(c['C'], 1, workflow='publish.yml')],
+    ),
+    'parent-only': (False, 1, lambda c: [_run(c['P'], 1)]),
+    'landing-run-only': (False, 1, lambda c: [_run(c['L'], 1)]),
+    'wrapped-green': (True, 2, lambda c: [_run(c['C'], 1)]),
+    'wrapped-wrapper-success-only': (
+        False,
+        2,
+        lambda c: [_run(c['L'], 1), _run(c['W'], 2)],
+    ),
+    'wrapped-wrapper-skipped-only': (
+        False,
+        2,
+        lambda c: [_run(c['L'], 1, conclusion='skipped')],
+    ),
+}
+
+
+def _untested_push(
+    tmp_path: Path, ref: str, wrappers: int
+) -> tuple[Path, dict[str, str]]:
+    r"""Codex's reproduction: a candidate adding a failing test, never
+    tested, an empty ``Land T1.99`` with correct trailers on it (and, for
+    ``wrappers`` 2, a second empty landing on that), pushed together to
+    ``ref``; and a clone of depth 2 of it, as actions/checkout leaves it."""
+    phase = _Phase(tmp_path)
+    test = phase.work / 'tests/test_ci4_fault.py'
+    test.parent.mkdir()
+    test.write_text('def test_new_code():\n    assert False\n')
+    _git(phase.work, 'add', '-A')
+    _git(phase.work, 'commit', '-q', '-m', 'T1.99: untested faulty candidate')
+    shas = {'P': phase.l0, 'C': _git(phase.work, 'rev-parse', 'HEAD')}
+    shas['L'] = phase.landing('T1.99', phase.l0)
+    if wrappers == 2:
+        shas['W'] = phase.landing('T1.99', phase.l0)
+    _git(phase.work, 'push', '-q', 'origin', f'HEAD:refs/heads/{ref}')
+    clone = tmp_path / 'clone'
+    _git(
+        tmp_path, 'clone', '-q', '--depth', '2', '--branch', ref,
+        f'file://{phase.origin}', str(clone),
+    )  # fmt: skip
+    return clone, shas
+
+
+@pytest.mark.parametrize('ref', [PHASE, LANE])
+@pytest.mark.parametrize('case', sorted(EVIDENCE))
+def test_ci4_a_landing_is_skipped_only_on_its_candidate_s_green_run(
+    tmp_path: Path, request: pytest.FixtureRequest, case: str, ref: str
+) -> None:
+    def check() -> None:
+        skips, wrappers, runs = EVIDENCE[case]
+        clone, shas = _untested_push(tmp_path, ref, wrappers)
+        found, calls = _decide(clone, tmp_path, 'push', ref, runs(shas))
+        if skips:
+            assert found == 'true', (found, calls)
+        else:
+            assert found in ('false', 'failed'), (found, calls)
+
+    _held(request, check)
+
+
+@pytest.mark.parametrize('ref', [PHASE, LANE])
+def test_ci4_an_api_that_does_not_answer_never_skips(
+    tmp_path: Path, request: pytest.FixtureRequest, ref: str
+) -> None:
+    def check() -> None:
+        clone, shas = _untested_push(tmp_path, ref, 1)
+        green = [_run(shas['C'], 1)]
+        found, calls = _decide(clone, tmp_path, 'push', ref, green, True)
+        assert found in ('false', 'failed'), (found, calls)
+
+    _held(request, check)
+
+
+def test_ci4_a_push_that_is_no_landing_needs_no_api(
+    tmp_path: Path, request: pytest.FixtureRequest
+) -> None:
+    def check() -> None:
+        repo = _repo(tmp_path)
+        found, _ = _decide(repo, tmp_path, 'push', LANE, [], api_fails=True)
+        assert found == 'false'
+
+    _held(request, check)
+
+
+def test_ci4_the_skip_step_reads_runs_with_the_workflow_token(
+    request: pytest.FixtureRequest,
+) -> None:
+    r"""The skip step holds the token for gh or curl, and the workflow
+    may read Actions runs."""
+
+    def check() -> None:
+        workflow = _workflow()
+        assert workflow['permissions'] == {
+            'contents': 'read',
+            'packages': 'read',
+            'actions': 'read',
+        }
+        env = _landing_step().get('env') or {}
+        held = [(k, v) for k, v in env.items() if (k, v) in API_TOKENS]
+        assert held, env
+        run = str(_landing_step()['run'])
+        assert re.search(r'\b(gh|curl)\b', run), run
 
     _held(request, check)
