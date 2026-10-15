@@ -5093,3 +5093,50 @@ entries:
     orchestrator, recorded at T1.36 (E141); never the implementer's approval.
     The Phase 2 row is migration-plan.md's "host error and warning wording".
     Held by the client's tests/test_the_rust_host.py, which pins both texts.
+
+- id: P1B-76
+  title: A BOOLEAN[] or STRUCT of BOOLEAN DuckDB hands over losslessly is refused by name where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    Under SET arrow_lossless_conversion = true DuckDB hands a BOOLEAN nested
+    in a list or a struct over as int8 storage of the canonical extension
+    arrow.bool8, on the child field; the reference's Schema.from_source fails
+    a BOOLEAN[] column with an unnamed ValueError and a STRUCT(a BOOLEAN)
+    column with an unnamed RuntimeError.
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    host layer admits the nested arrow.bool8 child as boolean, as it does a
+    top-level one (T1.33), so the column is list<bool> or struct<a: bool>,
+    refused as the default forms are (list.boolean, P1B-10):
+    UnsupportedRequestError, code UNSUPPORTED_REQUEST, fields operation
+    describe_source and rule column_type. The extension on any storage but
+    int8 (another integer, text, a dictionary of int8), at any depth, is
+    refused by the host layer's admission, UNSUPPORTED_TYPE naming the
+    column's path and the Arrow type received, never read by its storage.
+    The default route is unchanged.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source under arrow_lossless_conversion
+    holding a BOOLEAN[] or a STRUCT with a BOOLEAN field, under a forced core
+    route; an Arrow field tagged arrow.bool8 on storage other than int8.
+  cases: [T1.36]
+  refs:
+  - 'contract/type-set-vectors.json#lossless.list-boolean refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/type-set-vectors.json#lossless.struct-boolean refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E142}
+  notes: >-
+    A named refusal where the reference fails unnamed, E66(b)'s class, for
+    the reviewer to check it fits; the behavior is the default forms' (P1B-10
+    and the list.boolean vector, approved), reached through DuckDB's lossless
+    Arrow form, written as an entry of its own as P1B-49 is. Approver:
+    reviewer. Recommendation: approve. Measured by T1.36's test author (P3
+    C13): contract/type-set-vectors.json's two rows, the reference's answers
+    recorded through each row's witness by contract/tools/type_set_record.py
+    in the reference environment (DuckDB 1.5.6), the core's held through real
+    DuckDB on rust-host by sdm-testkit's tests/t133_type_reach.rs; the
+    extension's edges (a value other than 0 or 1 read as true, nested
+    children, the tag on other storage, a dictionary of int8) by sdm-host's
+    tests/t136_bool8.rs. Each transition held by
+    contract/tests/test_t133_type_set.py, pending until an approved entry
+    names it. Never self-approved.

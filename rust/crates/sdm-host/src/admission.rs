@@ -111,12 +111,18 @@ fn is_bool8(field: &Field) -> bool {
 
 /// `field` as admitted at `path`: its type through `convert`, its name,
 /// nullability and metadata kept, but an `arrow.bool8` field's, which is
-/// `boolean` without the extension's keys.
+/// `boolean` without the extension's keys. The extension on any storage but
+/// `int8` (another integer, text, a dictionary of `int8`) is refused by name:
+/// read by its storage it would keep a tag naming a type it does not hold,
+/// and a dictionary decoded to `int8` would read true as 1.
 fn admitted_field(
     path: &str,
     field: &Field,
     convert: fn(&str, &DataType) -> Result<DataType, CoreError>,
 ) -> Result<Field, CoreError> {
+    if field.extension_type_name() == Some(BOOL8) && !is_bool8(field) {
+        return Err(unsupported(path, field.data_type()));
+    }
     if is_bool8(field) {
         let mut metadata = field.metadata().clone();
         for key in EXTENSION_KEYS {
