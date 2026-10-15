@@ -1,0 +1,21 @@
+# The identity block (evidence item 1) of the T1.35 run script, run_all.sh lines 448-463,
+# verbatim; the whole script's SHA-256 is in run_all.sh.sha256 (it stays outside the tree,
+# since it names this machine's paths). The block reads the wheels' bytes and hashes them
+# itself; it does not read native_wheel.py's sidecar JSON.
+
+  run "identity (item 1)" -- python3 -I - "$PACK/identity.md" "$SHA" "$BASE" "$CHECKPOINT" "$REF_SHA" "$WHEEL_COMMIT" "${RUN:-}" \
+      "$ART/client" "$WHEELS_DBR" "$GATE_JSON" "$OBS" <<'PY'
+import glob, hashlib, json, pathlib, subprocess, sys
+out, sha, base, ckpt, ref, wcommit, run, client, dbr, gate, obs = sys.argv[1:]
+def sha256(p): return hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+local = glob.glob(client + '/*.whl')[0]; ci = glob.glob(dbr + '/native/*.whl')[0]
+first = json.loads(next(pathlib.Path(obs).glob('python-core.jsonl')).read_text().splitlines()[0])['identity']
+rows = [('phase commit', sha), ('base (Base-SHA)', base), ('checkpoint', ckpt), ('reference commit', ref),
+        ('CI run (native-wheel)', f'{run} on {wcommit} (same tree)'),
+        ('CI wheel', f'{pathlib.Path(ci).name} sha256 {sha256(ci)}'),
+        ('local build', f'{pathlib.Path(local).name} sha256 {sha256(local)}'),
+        ('gate evidence', f'{pathlib.Path(gate).name} sha256 {sha256(gate)} (outside the tree)'),
+        ('ref-cell versions', json.dumps(first.get('versions'), sort_keys=True)),
+        ('platform', first.get('platform'))]
+pathlib.Path(out).write_text('# Identity\n\n| item | value |\n|---|---|\n' + ''.join(f'| {k} | `{v}` |\n' for k, v in rows))
+print('     identity.md written')
