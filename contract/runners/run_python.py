@@ -1323,17 +1323,26 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
         names = [kind.field(j).name for j in range(kind.num_fields)]
         # Each child as stored, at the struct's offset: flatten() would merge
         # the struct's nulls into each child, which aborts the process for a
-        # union child (a union has no validity bitmap). A null struct row is
-        # null below, whatever its children hold.
+        # union child (a union has no validity bitmap). A child's slot under
+        # a null struct row holds whatever the producer left there, so the
+        # children are read with their names set aside, and only the cells
+        # of the rows the struct shows count as unencodable, as with a
+        # union's members (:func:`_union_cells`). A null struct row is null.
+        scratch: list[str] = []
         children = [
-            _arrow_cells(array.field(j), odd) for j in range(kind.num_fields)
+            _arrow_cells(array.field(j), scratch)
+            for j in range(kind.num_fields)
         ]
-        return [
-            ['struct', [[name, children[j][i]] for j, name in enumerate(names)]]
-            if ok
-            else None
-            for i, ok in enumerate(valid)
-        ]
+        rows: list[Any] = []
+        for i, ok in enumerate(valid):
+            if not ok:
+                rows.append(None)
+                continue
+            fields = [[name, children[j][i]] for j, name in enumerate(names)]
+            for _, cell in fields:
+                _chosen_odd(cell, odd)
+            rows.append(['struct', fields])
+        return rows
     if is_.is_map(kind):
         cells: list[Any] = []
         for i, ok in enumerate(valid):
