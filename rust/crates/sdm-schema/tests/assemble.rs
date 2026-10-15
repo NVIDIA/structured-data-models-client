@@ -36,6 +36,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
         },
         nullable: true,
         unique: false,
+        declared_type: None,
     }
 }
 
@@ -442,6 +443,7 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
         stype_before_key: Some(Stype::Timestamp),
         nullable: true,
         unique: false,
+        declared_type: None,
     };
     assemble::mark_keys(&mut stamped);
     assert_eq!(stamped.tables[0].time_column.as_deref(), Some("user_id"));

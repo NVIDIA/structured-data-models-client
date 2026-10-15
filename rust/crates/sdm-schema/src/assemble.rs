@@ -241,6 +241,7 @@ pub fn assemble(
                     stype_before_key: c.stype_before_key,
                     nullable: c.nullable,
                     unique: c.unique,
+                    declared_type: c.declared_type,
                 })
                 .collect(),
             primary_key: table.primary_key.into_iter().collect(),

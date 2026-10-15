@@ -110,10 +110,6 @@ impl DataLayer for Data {
         }
     }
 
-    fn reads_key_types(&self, provider: &ProviderChoice) -> bool {
-        matches!(provider, ProviderChoice::Sql { dialect } if rendered(dialect).is_ok())
-    }
-
     fn read(
         &self,
         request: &DataRequest,

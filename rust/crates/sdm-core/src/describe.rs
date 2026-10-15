@@ -32,9 +32,9 @@ use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
-use sdm_contract::data::{DataRequest, DescribePart, SEED_KEY, SEED_KEY_TYPE, TableKey};
+use sdm_contract::data::{DataRequest, DescribePart, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
-use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_engine::time::Instant;
 use sdm_engine::time::text::Reader;
 use sdm_schema::assemble::{self, Assembled, Given};
@@ -675,65 +675,8 @@ async fn count_keys(
 
 /// The data a request's answer holds, or the provider's error.
 pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData, CoreError> {
-    let request = typed_seeds(asker, request).await?;
     let name = request.name();
     data(asker.fetch(request)?.await, name)
-}
-
-/// `request` with its seed key column naming the joined key's declared
-/// type ([`SEED_KEY_TYPE`]), read from the source's catalog, for a
-/// `neighbors` or `lookup` whose seed key is `decimal128(38, 0)` on a data
-/// layer that joins by it (`Asker::reads_key_types`), for [`ask`] and
-/// [`ask_all_vec`] alike: the one seed type no
-/// single comparison joins exactly with every key it may meet (a VARINT
-/// and a UHUGEINT key alike, or a DOUBLE as before part 3; register
-/// P1B-43). Any other request is as it came.
-async fn typed_seeds(asker: &Asker, mut request: DataRequest) -> Result<DataRequest, CoreError> {
-    let wide = ColumnType::Decimal128 {
-        precision: 38,
-        scale: 0,
-    };
-    let (table, key) = match &request {
-        DataRequest::Neighbors {
-            table, key, seeds, ..
-        }
-        | DataRequest::Lookup {
-            table, key, seeds, ..
-        } if asker.reads_key_types()
-            && seeds
-                .columns
-                .iter()
-                .any(|c| c.name == SEED_KEY && c.column_type == wide) =>
-        {
-            (table.clone(), key.clone())
-        }
-        _ => return Ok(request),
-    };
-    // Asked directly, not through `ask`, which this serves.
-    let asking = DataRequest::Describe {
-        tables: vec![table],
-        part: DescribePart::Columns,
-    };
-    let answer = data(asker.fetch(asking.clone())?.await, asking.name())?;
-    let CatalogAnswer::Columns(columns) = asker.read(&asking, &answer)? else {
-        return Err(internal("a table's columns were answered as another part"));
-    };
-    let declared = columns
-        .into_iter()
-        .find(|c| c.name == key)
-        .map(|c| c.declared_type);
-    if let (
-        Some(declared),
-        DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. },
-    ) = (declared, &mut request)
-    {
-        for column in seeds.columns.iter_mut().filter(|c| c.name == SEED_KEY) {
-            column
-                .metadata
-                .insert(SEED_KEY_TYPE.to_owned(), declared.clone());
-        }
-    }
-    Ok(request)
 }
 
 /// The catalog's answer to `request`, a `describe`: fetched, admitted,
@@ -808,11 +751,6 @@ pub(crate) async fn ask_all_vec(
     asker: &Asker,
     requests: Vec<DataRequest>,
 ) -> Result<Vec<ArrowData>, CoreError> {
-    let mut typed = Vec::with_capacity(requests.len());
-    for request in requests {
-        typed.push(typed_seeds(asker, request).await?);
-    }
-    let requests = typed;
     let names: Vec<&'static str> = requests.iter().map(DataRequest::name).collect();
     let asks = requests
         .into_iter()

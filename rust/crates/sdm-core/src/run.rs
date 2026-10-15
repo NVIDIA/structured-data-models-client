@@ -170,13 +170,6 @@ impl Asker {
         Ok(self.ask_planned(request, plan))
     }
 
-    /// Whether the run's data layer joins seeds by the joined key's
-    /// declared type (`DataLayer::reads_key_types`); `false` for an
-    /// operation that names no provider.
-    pub fn reads_key_types(&self) -> bool {
-        self.data.as_ref().is_some_and(DataAccess::reads_key_types)
-    }
-
     /// What the run's provider declared it answers, for an operation that
     /// names one.
     pub fn capabilities(&self) -> Result<&ProviderCapabilities, CoreError> {

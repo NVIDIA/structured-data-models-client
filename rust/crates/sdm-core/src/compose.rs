@@ -74,12 +74,6 @@ impl DataAccess {
         self.layer.opaque_vendor(&self.provider)
     }
 
-    /// Whether the data layer joins seeds by the joined key's declared type
-    /// (`DataLayer::reads_key_types`).
-    pub fn reads_key_types(&self) -> bool {
-        self.layer.reads_key_types(&self.provider)
-    }
-
     /// How the run's provider answers `request`. A request whose fields
     /// contradict each other is refused with `INVALID_REQUEST`, an optional
     /// request the provider did not declare with `UNSUPPORTED_REQUEST`

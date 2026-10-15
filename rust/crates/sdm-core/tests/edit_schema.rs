@@ -80,6 +80,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> DescribedColumn {
         stype_before_key: None,
         nullable: true,
         unique: false,
+        declared_type: None,
     }
 }
 

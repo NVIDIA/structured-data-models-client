@@ -4188,9 +4188,12 @@ entries:
     (sdm-data's DuckDB dialect declares DuckDB's; a host provider declares
     none): another vendor's, or none, is admitted by its storage as before
     (binary, left out). A decimal128(38, 0) seed key is joined in the
-    joined key's own type where that is an integer type, read from the
-    source's catalog (t.key = TRY_CAST(seed AS type), a VARINT through
-    HUGEINT), exact and native: no one SQL type compares such a seed exactly
+    joined key's own type where that is an integer type, as describe_source
+    read it from the source's catalog and the described schema keeps it
+    (DescribedColumn.declared_type, contract version 24, for a column
+    received as decimal128(38, 0) only), so materialize adds no statement
+    (t.key = TRY_CAST(seed AS type), a VARINT through HUGEINT), exact and
+    native: no one SQL type compares such a seed exactly
     with a VARINT and a UHUGEINT key alike (DuckDB has no DECIMAL(38, 0) to
     VARINT cast, and compares a UHUGEINT with a HUGEINT through DOUBLE); a
     float or a decimal with a scale keeps the comparison it had before part

@@ -76,6 +76,9 @@ pub struct InferredColumn {
     /// Whether the catalog declares a primary or unique key of this one
     /// column.
     pub unique: bool,
+    /// The catalog's declared type, for a column received as
+    /// `decimal128(38, 0)` only (`DescribedColumn::declared_type`).
+    pub declared_type: Option<String>,
 }
 
 /// Why inference passed a timestamp over for the time column, as the
@@ -484,6 +487,8 @@ pub fn preview(
             received: ColumnType::from_arrow(&declared.name, field.data_type())?,
             nullable: !is_primary && !declared.not_null,
             unique: declared_unique.contains(&declared.name),
+            declared_type: (field.data_type() == &DataType::Decimal128(38, 0))
+                .then(|| declared.declared_type.clone()),
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {

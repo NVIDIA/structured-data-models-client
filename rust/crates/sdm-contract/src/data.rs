@@ -33,9 +33,11 @@ use crate::types::{ColumnType, Field, Unit};
 pub const SEED_KEY: &str = "key";
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
-/// catalog's `type`), set by the core for a data layer that reads key
-/// types ([`DataLayer::reads_key_types`]): the layer joins the seeds in the
-/// key's own type where that is exact (register P1B-43).
+/// catalog's `type`, kept in the described schema,
+/// `DescribedColumn::declared_type`), set by the core for a
+/// `decimal128(38, 0)` seed key: a SQL layer joins the seeds in the key's
+/// own type where that is exact (register P1B-43); a host provider may
+/// ignore it.
 pub const SEED_KEY_TYPE: &str = "sdm:key_declared_type";
 /// The column of a seed key set that holds each seed's batch position, and
 /// of a `neighbors` or `lookup` result, under [`BATCH_COLUMN`], that names
@@ -657,17 +659,6 @@ pub trait DataLayer: Send + Sync {
     fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
         let _ = provider;
         None
-    }
-
-    /// Whether the layer joins a `neighbors` or `lookup` request's seeds by
-    /// the joined key's declared type, which the core then reads from the
-    /// catalog and names on the seed key column ([`SEED_KEY_TYPE`]) for a
-    /// `decimal128(38, 0)` seed key, the one type no single comparison
-    /// joins exactly with every key it meets (register P1B-43). `false`,
-    /// the default and a host provider's, asks nothing.
-    fn reads_key_types(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
     }
 }
 

@@ -1,2 +1,2 @@
 # The contract schema lock: one line per version; see scripts/rust_core/contract_lock.py.
-23 sha256:51474392443f9f3c189c921ebaf4f37f3288d602ad1d982af64fc8e67cf365b1 sdm-contract-23.json
+24 sha256:a688fc4966d3e9a45990e3e2f35b73b28c321f40bf913cbf69cac4b9f6e8a562 sdm-contract-24.json

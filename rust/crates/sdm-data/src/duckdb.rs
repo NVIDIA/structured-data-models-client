@@ -857,8 +857,9 @@ pub(crate) const OPAQUE_VENDOR: &str = "DuckDB";
 
 /// The condition joining the seeds to `table`'s `key`: `t.key = s.key`, as
 /// before part 3, but for a `decimal128(38, 0)` seed key whose column names
-/// the key's declared type ([`SEED_KEY_TYPE`], which the core reads from
-/// the catalog for this layer) and that type is an integer one: then the
+/// the key's declared type ([`SEED_KEY_TYPE`], which the core carries from
+/// what `describe_source` read of the catalog, so no statement is added)
+/// and that type is an integer one: then the
 /// seed is cast to the key's own type, `t.key = TRY_CAST(s.key AS type)`,
 /// so the two compare as one type, exactly, by the key's native equality,
 /// and a seed the type cannot hold is null and matches nothing (register

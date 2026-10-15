@@ -15,9 +15,10 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit as ArrowUnit};
 use sdm_contract::data::{
-    DataRequest, KeySet, NullOrder, SEED_BATCH, SEED_KEY, SeedBound, TieBreak, TieTerm,
+    DataRequest, KeySet, NullOrder, SEED_BATCH, SEED_KEY, SEED_KEY_TYPE, SeedBound, TieBreak,
+    TieTerm,
 };
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
 
 use crate::graph::Table;
 use crate::random::Pcg64;
@@ -227,7 +228,7 @@ pub fn by_fkey(
         table: table.source.clone(),
         key: fkey.to_owned(),
         columns,
-        seeds,
+        seeds: typed(seeds, table, fkey),
         window: table
             .time_column
             .as_ref()
@@ -266,7 +267,7 @@ pub fn by_time(
         table: table.source.clone(),
         key: fkey.to_owned(),
         columns,
-        seeds,
+        seeds: typed(seeds, table, fkey),
         window: Some(sdm_contract::data::Window {
             column: time,
             lower: start.then(|| SeedBound {
@@ -299,8 +300,33 @@ pub fn by_pkey(
     })?;
     Ok(DataRequest::Lookup {
         table: table.source.clone(),
+        seeds: typed(seeds, table, &key),
         key,
         columns,
-        seeds,
     })
+}
+
+/// `seeds`, their key column naming the declared type of `table`'s `key`
+/// ([`SEED_KEY_TYPE`]) where the described schema keeps one (a key
+/// received as `decimal128(38, 0)`, `DescribedColumn::declared_type`) and
+/// the seed key is of that type: the data layer joins such a seed in the
+/// key's own type (register P1B-43), from what `describe_source` read, so
+/// `materialize` asks the source nothing more.
+fn typed(mut seeds: KeySet, table: &Table, key: &str) -> KeySet {
+    let wide = ColumnType::Decimal128 {
+        precision: 38,
+        scale: 0,
+    };
+    if let Some(declared) = table.column(key).and_then(|c| c.declared_type.as_ref()) {
+        for column in seeds
+            .columns
+            .iter_mut()
+            .filter(|c| c.name == SEED_KEY && c.column_type == wide)
+        {
+            column
+                .metadata
+                .insert(SEED_KEY_TYPE.to_owned(), declared.clone());
+        }
+    }
+    seeds
 }

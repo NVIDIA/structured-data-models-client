@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/23",
+  "$id": "sdm-contract/24",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -696,6 +696,13 @@
         "unique": {
           "description": "Whether the catalog declares a primary or unique key of this one\ncolumn, which the source refuses to repeat.",
           "type": "boolean"
+        },
+        "declared_type": {
+          "description": "The column's type as the source's catalog declares it (`describe`\ncolumns' `type`, as the source spells it), kept for a column received\nas `decimal128(38, 0)` only: a key the data layer joins a seed of\nthat type to in the key's own type, so `materialize` asks the source\nnothing more (register P1B-43). `None` for every other column, and\nabsent from the JSON.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,

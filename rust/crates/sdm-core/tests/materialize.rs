@@ -79,6 +79,7 @@ fn column(
         stype_before_key: None,
         nullable: !unique,
         unique,
+        declared_type: None,
     }
 }
 

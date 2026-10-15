@@ -26,6 +26,7 @@ fn column(name: &str, received: ColumnType, dtype: Dtype, stype: Stype) -> Descr
         stype_before_key: None,
         nullable: true,
         unique: false,
+        declared_type: None,
     }
 }
 
