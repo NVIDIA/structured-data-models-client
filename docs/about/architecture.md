@@ -558,9 +558,16 @@ build:
 | `multiclass_classification` | `prediction`, `probabilities` |
 
 So `scores`, `rankings`, `embeddings` and `explanation` are declared by the
-client and refused by that deployment on every task. `rankings` is the one
-that still works end to end: `RANK TOP k` is decomposed into a classification
-per candidate, so the ranking is assembled here rather than asked for.
+client and refused by that deployment on every task. That is a fact about this
+build, not about the fields: `explanation` has been measured working against
+another relational deployment, which returns an explanation the client parses
+and hands back on `PredictionResult.explanation`. A deployment that refuses it is
+narrower than the model family, not the client declaring something nothing
+serves.
+
+`rankings` is the one that still works end to end against the narrower build:
+`RANK TOP k` is decomposed into a classification per candidate, so the ranking
+is assembled here rather than asked for.
 
 `forecasting` and `temporal_link_prediction` are declared as tasks and are not
 served either — a forecast is sent as a regression per step, and a bare
