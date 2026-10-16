@@ -11,7 +11,8 @@
 # build every distribution and attach it to the GitHub Release. Asking Kitmaker
 # to publish from them is a separate step that a person runs, because Kitmaker's
 # Portal is on NVIDIA's internal network and a GitHub-hosted runner cannot
-# resolve it, let alone reach it. RELEASING.md has that procedure.
+# resolve it, let alone reach it. RELEASING.md says who runs that step and
+# what it has to do; the procedure itself is not kept in a public tree.
 #
 # Two consequences worth stating rather than discovering.
 #
@@ -321,17 +322,20 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" "$path" --repo "$GITHUB_REPOSITORY"
           done
 
-      # The release is built and attached but nothing is on the index yet,
-      # and the person who approved this is the one who has to finish it.
+      # The release is built and attached, and the person who approved this is
+      # the one who has to finish it. What the index holds is deliberately not
+      # asserted here: this job never asks, and a dispatch against a tag that
+      # was already published would make any claim about it wrong.
       - name: Say what is left to do
         run: |
           {
             echo "### Attached, not published"
             echo
             echo "\`$GITHUB_REF_NAME\` is on the Releases page with every"
-            echo "distribution and the SBOM attached, and nothing has reached"
-            echo "PyPI. Publishing is a separate step that runs from inside"
-            echo "NVIDIA's network. RELEASING.md has the procedure."
+            echo "distribution and the SBOM attached. This workflow publishes"
+            echo "nothing to PyPI; that is a separate step, run from inside"
+            echo "NVIDIA's network. RELEASING.md says who runs it and what it"
+            echo "has to do."
             echo
             echo "Mark this release Latest once the index has all five."
           } >> "$GITHUB_STEP_SUMMARY"
