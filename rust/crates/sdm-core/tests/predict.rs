@@ -290,8 +290,7 @@ fn only_the_inference_options_the_caller_set_are_sent() {
         Err(error) => error,
         Ok(mut run) => run
             .next()
-            .err()
-            .expect("an option the model does not read was sent"),
+            .expect_err("an option the model does not read was sent"),
     };
     assert_eq!(
         (error.kind, error.code),
