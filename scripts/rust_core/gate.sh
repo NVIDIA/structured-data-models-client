@@ -697,7 +697,7 @@ for path in sys.argv[2:]:
                 identity = json.loads(line)['identity']
                 seen.add(identity['runner'])
                 if identity['runner'] != 'rust-host':
-                    cells.add(str(identity.get('cell')))
+                    cells.add(str(identity.get('cell') or ''))
     except (OSError, ValueError, RecursionError, KeyError, TypeError, AttributeError):
         sys.exit(f'{path}: not observations it reads')
 with open(sys.argv[1], 'w', encoding='utf-8') as file:

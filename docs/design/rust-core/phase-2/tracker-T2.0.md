@@ -46,7 +46,12 @@ It lands alone, first, on `rust-core-phase-2`, with two reviewers.
    On the epic branch no landing will name a protected change made after the checkpoint L (the merged phase's last landing), so the ratchet's rule `epic` (fixes 1 and 2) fails each such change unless an owner-approved row names its commit.
    - **When it applies:** with `--epic`, which `where` prints for a push to `rust-core` and `gate.sh` hands the harness. So a replay of an older push, or a local replay (`gate.sh --base L --epic`), judges the rule, whatever the remote tip is (fix 4). A check without `--epic` on the epic branch's head (the tip of `origin/rust-core`, or `rust-core` checked out) says rule `epic` did not run and how to run it (fix 5).
    - **What it covers:**
-     - What the phase merge M that brought L in holds beyond L. Each such path counts as the change of the epic-side commits that made it (`L..M^1`). It is also M's own change, which no row can name, unless one of those commits holds exactly the content M keeps. So a conflict resolved to a third version fails (fix 5).
+     - What the phase merge M that brought L in holds beyond L. Each such path counts as the change of the epic-side commits that made it (`L..M^1`).
+       - It is also M's own change, which no row can name, unless git's own merge of M's two parents (`git merge-tree --write-tree M^1 L`, which writes objects but no ref) is clean there and M's entry, mode and object ID, is that merge's (fix 6).
+       - So a clean merge of an approved epic change and the landing's change in one file passes.
+       - A merge that changes a protected mode fails, as does any resolution of a path git leaves conflicted, other than taking the landing's own version.
+       - The owner's cost: resolving a protected-path conflict any other way needs a follow-up reviewed landing.
+     - Entries are compared by mode and object ID throughout, ordinary commits included: a mode-only change is a change (fix 6).
      - Every commit after M (`M..HEAD`), each against its first parent, a merge included. So a merge that takes a protected file from an older parent is seen, and a change a later commit undoes still counts (fix 4).
      - Paths are read NUL-separated, so a name past ASCII or holding a control character is seen (fix 4), and the protected patterns span a newline in a name (fix 5).
      - Nothing after L counts as a landing, whatever its subject or trailers: a later landing reaches `rust-core` only by the owner's merge, which makes it the next checkpoint.
@@ -196,6 +201,8 @@ These questions are deliberately left open, not fixed:
 - `ci.yml`'s phase predicate lets names with a letter before the last digit, a leading zero or a dot through as phase branches, refused by name in the phase check (rounds 2 to 4; see "For the owner").
 - The bootstrap recognises T2.0 by commit subject, until T2.0 lands (round 3; see "For the owner").
 
+- The test author's `test_a_phase_2_half_named_by_its_locked_set_passes_and_is_recorded` passes only in an environment pinned to the reference cell, as CI's `ref-pandas3` is. In the development environment its locked check 1 is "reported, not gated" (round 5, reviewer P3-2). `gate.sh` now writes no cell rather than "None" there, so the message reads "no one cell".
+
 ### Fix rounds
 
 - Round 1 (both reviewers):
@@ -219,3 +226,8 @@ These questions are deliberately left open, not fixed:
   - A phase merge's protected content is now judged by content: a conflict resolution that no epic commit holds is the merge's own change.
   - A run without `--epic` on the epic branch's head now says rule `epic` did not run.
   - The protected patterns now span a newline in a name.
+- Round 5 (Codex), fix 6:
+  - A phase merge is judged against git's own merge of its parents, by mode and object ID.
+  - A clean merge of approved and landed changes passes.
+  - A mode change fails, and so does a conflicted protected path resolved other than to the landing's version.
+  - `gate.sh` no longer prints "observed in None".

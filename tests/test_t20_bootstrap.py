@@ -800,27 +800,39 @@ def test_a_local_replay_through_the_gate_runs_rule_epic(
     assert f'changed on the epic branch by {bad[:12]}' in done.stdout
 
 
-def conflict_world(base: Path, resolution: str) -> dict[str, Any]:
-    r"""Codex's round 4 P1-1: rust-core takes U, adding a protected
-    ``scripts/rust_core/merge_setting.py`` with ``LIMIT = 20``; Phase 2
-    lands L2 adding it with ``LIMIT = 30`` and an owner-approved row naming
-    U; rust-core merges L2 (``--no-ff``), the add/add conflict resolved to
-    ``LIMIT = <resolution>``."""
-    built = world(base)
+SETTING = 'scripts/rust_core/merge_setting.py'
+BASE_TEXT = 'HEAD = 1\nMIDDLE = 2\nTAIL = 3\n'
+
+
+def merge_world(
+    base: Path,
+    epic_text: str,
+    landing_text: str,
+    resolution: str | None = None,
+    after: Callable[[Path], None] | None = None,
+) -> dict[str, Any]:
+    r"""The fork point holds an executable protected ``SETTING``; rust-core
+    takes U, writing ``epic_text`` there, and Phase 2 lands L2, writing
+    ``landing_text`` and an owner-approved row naming U; rust-core merges
+    L2 (``--no-ff``). A conflict is resolved to ``resolution``; ``after``
+    changes the merge's tree before it is committed."""
+
+    def fork_edit(repo: Path) -> None:
+        write(SETTING, BASE_TEXT)(repo)
+        (repo / SETTING).chmod(0o755)
+
+    built = world(base, fork_edit=fork_edit)
     work = base / 'work'
     shas = dict(built['shas'])
-    setting = 'scripts/rust_core/merge_setting.py'
     git(work, 'checkout', '-q', EPIC)
-    shas['U'] = commit(
-        work, 'Update: the setting', write(setting, 'LIMIT = 20\n')
-    )
+    shas['U'] = commit(work, 'Update: the setting', write(SETTING, epic_text))
     git(work, 'checkout', '-q', PHASE2)
 
     def package(repo: Path) -> None:
         (repo / 'scripts/rust_core/ratchet.py').write_bytes(
             RATCHET.read_bytes()
         )
-        write(setting, 'LIMIT = 30\n')(repo)
+        write(SETTING, landing_text)(repo)
         write(
             'docs/design/rust-core/phase-2/decisions.md',
             row(f'The update `{shas["U"][:10]}`'),
@@ -830,38 +842,112 @@ def conflict_world(base: Path, resolution: str) -> dict[str, Any]:
         work, 'T2.0', package, protected='scripts/rust_core/**'
     )
     git(work, 'checkout', '-q', EPIC)
-    subprocess.run(
+    merged = subprocess.run(
         ['git', '-C', str(work), *helpers.IDENTITY, 'merge', '-q', '--no-ff',
-         '-m', 'Merge T2.0', shas['L2']],
+         '--no-commit', shas['L2']],
         capture_output=True, check=False, stdin=subprocess.DEVNULL,
     )  # fmt: skip
-    write(setting, f'LIMIT = {resolution}\n')(work)
+    if resolution is not None:
+        write(SETTING, resolution)(work)
+        (work / SETTING).chmod(0o755)
+    if after is not None:
+        after(work)
     git(work, 'add', '-A')
-    git(work, 'commit', '-q', '--no-edit')
+    git(work, 'commit', '-q', '-m', 'Merge T2.0')
     shas['M2'] = git(work, 'rev-parse', 'HEAD')
+    shas['clean'] = 'yes' if merged.returncode == 0 else 'no'
     return {'work': work, 'shas': shas}
 
 
-@pytest.mark.parametrize(
-    ('resolution', 'fails'), [('25', True), ('20', False), ('30', False)]
-)
-def test_a_phase_merge_s_conflict_resolution_is_judged_by_content(
-    tmp_path: Path, resolution: str, fails: bool
-) -> None:
-    r"""Codex's round 4 P1-1: a conflict resolved to a third version (25)
-    is the merge's own change, which no row can name, and fails; keeping
-    the approved epic version (20) or the landing's (30) passes."""
-    built = conflict_world(tmp_path, resolution)
+def judged(
+    built: dict[str, Any],
+) -> tuple[subprocess.CompletedProcess[str], bool]:
+    r"""rule epic on the merge, and whether it charged the merge itself."""
     work, shas = built['work'], built['shas']
     git(work, 'checkout', '-q', '--detach', shas['M2'])
     done = epic_check(work, shas['L2'])
-    merge_named = any(
-        f'merge_setting.py: changed on the epic branch by {shas["M2"][:12]}'
-        in x
+    charged = any(
+        f'changed on the epic branch by {shas["M2"][:12]}' in x
         for x in failures(done)
     )
-    assert merge_named is fails, done.stdout
-    assert (done.returncode == 1) is fails, done.stdout
+    return done, charged
+
+
+@pytest.mark.parametrize(
+    ('resolution', 'fails'),
+    [('LIMIT = 25\n', True), ('LIMIT = 20\n', True), ('LIMIT = 30\n', False)],
+)
+def test_a_protected_path_a_phase_merge_leaves_conflicted_is_the_merge_s(
+    tmp_path: Path, resolution: str, fails: bool
+) -> None:
+    r"""Codex's round 4 P1-1, under fix 6's rule: git's own merge of the
+    two sides conflicts on the path, so a resolution other than the
+    landing's own version (a third version, or the approved epic one) is
+    the merge's own change, which no row can name: it needs a follow-up
+    reviewed landing. Resolved to the landing's version, the merge brings
+    nothing beyond the reviewed landing there."""
+    built = merge_world(tmp_path, 'LIMIT = 20\n', 'LIMIT = 30\n', resolution)
+    assert built['shas']['clean'] == 'no'
+    done, charged = judged(built)
+    assert charged is fails and (done.returncode == 1) is fails, done.stdout
+
+
+def test_a_clean_merge_of_an_approved_epic_change_and_the_landing_s_passes(
+    tmp_path: Path,
+) -> None:
+    r"""Codex's round 5 P2-1: U changes the head of the file, L2 its tail;
+    git merges them cleanly and the merge keeps that, so it passes, U named
+    by L2's row."""
+    built = merge_world(
+        tmp_path,
+        'HEAD = 10\nMIDDLE = 2\nTAIL = 3\n',
+        'HEAD = 1\nMIDDLE = 2\nTAIL = 30\n',
+    )
+    assert built['shas']['clean'] == 'yes'
+    done, charged = judged(built)
+    assert not charged and done.returncode == 0, done.stdout
+
+
+@pytest.mark.parametrize('what', ['lost executable bit', 'mode only'])
+def test_a_merge_changing_a_protected_mode_is_the_merge_s(
+    tmp_path: Path, what: str
+) -> None:
+    r"""Codex's round 5 P1-1 and the reviewer's P3-1: the clean merge's
+    content kept, but the executable bit lost on the merged file, or set on
+    a protected file neither side touched: the merge's own change, failing."""
+
+    def after(repo: Path) -> None:
+        if what == 'lost executable bit':
+            (repo / SETTING).chmod(0o644)
+        else:
+            (repo / 'scripts/rust_core/phases.py').chmod(0o755)
+
+    built = merge_world(
+        tmp_path,
+        'HEAD = 10\nMIDDLE = 2\nTAIL = 3\n',
+        'HEAD = 1\nMIDDLE = 2\nTAIL = 30\n',
+        after=after,
+    )
+    done, charged = judged(built)
+    assert charged and done.returncode == 1, done.stdout
+
+
+def test_an_ordinary_commit_changing_only_a_protected_mode_fails(
+    named: dict[str, Any],
+) -> None:
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    bad = commit(
+        work,
+        'Handoff: executable',
+        lambda r: (r / 'scripts/rust_core/phases.py').chmod(0o755),
+    )
+    found = failures(epic_check(work, shas['L2']))
+    assert any(
+        'scripts/rust_core/phases.py: changed on the epic branch by '
+        f'{bad[:12]}' in x
+        for x in found
+    ), found
 
 
 def test_a_run_without_epic_on_the_epic_head_says_the_rule_did_not_run(

@@ -1553,24 +1553,39 @@ def owner_named(repo: Path, decisions: str, commit: str) -> bool:
     return False
 
 
-def blob(repo: Path, commit: str, path: str) -> str:
-    r"""The object ``path`` is at ``commit``, or an empty string when the
-    commit has no such path."""
+def entry(repo: Path, tree: str, path: str) -> str:
+    r"""``path``'s tree entry at ``tree`` (a commit or tree): its mode,
+    type and object ID, so a mode change is a change; an empty string when
+    it has no such path."""
+    out = git(repo, 'ls-tree', '-z', tree, '--', f':(literal){path}')
+    for record in out.split('\0'):
+        meta, tab, name = record.partition('\t')
+        if tab and name == path:
+            return meta
+    return ''
+
+
+def merge_of(repo: Path, ours: str, theirs: str) -> tuple[str, set[str]] | None:
+    r"""git's own merge of ``ours`` and ``theirs`` (``git merge-tree
+    --write-tree``, objects written, no ref): its tree and the paths it
+    leaves conflicted; None when git cannot merge them at all."""
     done = subprocess.run(
-        [
-            'git',
-            '-C',
-            str(repo),
-            'rev-parse',
-            '--verify',
-            '-q',
-            f'{commit}:{path}',
-        ],
+        ['git', '-C', str(repo), 'merge-tree', '--write-tree', '--name-only',
+         '-z', ours, theirs],
         capture_output=True,
         text=True,
         check=False,
-    )
-    return done.stdout.strip() if done.returncode == 0 else ''
+    )  # fmt: skip
+    if done.returncode not in (0, 1):
+        return None
+    parts = done.stdout.split('\0')
+    conflicted: set[str] = set()
+    if done.returncode == 1:
+        for name in parts[1:]:
+            if not name:
+                break
+            conflicted.add(name)
+    return parts[0].strip(), conflicted
 
 
 #: git's empty tree, the parent a root commit's change is read against.
@@ -1608,8 +1623,9 @@ def check_epic(
     merge on the head's first-parent history whose second parent is L)
     holds beyond L, each path the change of the epic-side commits that made
     it (``L..M^1``, each against its first parent), and of M itself unless
-    one of those commits holds exactly the content M keeps (a conflict
-    resolved to a third version needs M named); and
+    git's own merge of M's parents is clean there and M's entry (mode and
+    object) is that merge's (``git merge-tree``; a conflicted path is
+    always M's, and needs a follow-up reviewed landing); and
     every commit after M (``git rev-list M..HEAD``), each against its first
     parent, a merge included, so a merge taking a protected file from any
     older parent is seen, and a change a later commit undoes still
@@ -1653,23 +1669,32 @@ def check_epic(
             if protects(rules, path)
         ]
 
-    # The merge, for what it brings beyond L: each such path is the change
-    # of the commits on the epic branch's side that made it (each against
-    # its first parent), and the merge's own unless one of them holds
-    # exactly the content the merge keeps: a conflict resolved to a third
-    # version, or a change no such commit made, needs the merge named.
+    # The merge, for what it brings beyond L. Where git's own merge of its
+    # two parents (the epic side and L) is clean for a path and M's entry
+    # (mode and object) is that merge's, M added nothing of its own: the
+    # change is the epic-side commits' that made it (each against its first
+    # parent; L is reviewed). Anywhere else (a path git leaves conflicted,
+    # or M's entry other than git's merge) the path is M's own change,
+    # which no row of L's decisions can name, so it fails: an owner who
+    # resolves a protected conflict lands the resolution through a phase.
     brought = set(protected_between(checkpoint.sha, merge))
-    kept: dict[str, set[str]] = {path: set() for path in brought}
     for commit in git(repo, 'rev-list', f'{checkpoint.sha}..{merge}^1').split():
         parent = git(repo, 'rev-list', '--parents', '-n', '1', commit).split()
         before = parent[1] if len(parent) > 1 else EMPTY_TREE
-        mine = [p for p in protected_between(before, commit) if p in brought]
-        made(commit, mine)
-        for path in mine:
-            kept[path].add(blob(repo, commit, path))
+        made(
+            commit,
+            [p for p in protected_between(before, commit) if p in brought],
+        )
+    merged = merge_of(repo, f'{merge}^1', checkpoint.sha) if brought else None
     made(
         merge,
-        sorted(p for p in brought if blob(repo, merge, p) not in kept[p]),
+        sorted(
+            p
+            for p in brought
+            if merged is None
+            or p in merged[1]
+            or entry(repo, merge, p) != entry(repo, merged[0], p)
+        ),
     )
     # Every commit after the merge, a merge against its first parent.
     for commit in git(repo, 'rev-list', f'{merge}..{head}').split():
