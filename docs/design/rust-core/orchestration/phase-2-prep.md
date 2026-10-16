@@ -2,7 +2,7 @@
 
 Phase 2 is S1 offline: `Schema.from_source` → `materialize` → `predict` on DuckDB, SQLite and Postgres, including ranking and forecasting, plus the provider conformance kit, a minimal non-SQL test provider and a swapped data layer (migration-plan.md sections 4 and 8).
 Its exit is the slice gate (plan section 7).
-This page is a starting plan, drafted on 2026-10-14 from Phase 1's state and updated after Phase 1's merge. The kickoff turns it into `phase-2/design.md` and `phase-2/tracker.md`.
+This page is a starting plan, drafted on 2026-10-14 from Phase 1's state and updated after Phase 1's merge. It is an input to `phase-2/design.md`, not a substitute: the kickoff writes, reviews and locks the design as the handbook's "Every phase starts with its design" describes, and only then do product packages start.
 
 ## The short answer
 
@@ -14,6 +14,7 @@ This page is a starting plan, drafted on 2026-10-14 from Phase 1's state and upd
 
 Do these first, mostly in parallel. None is product code.
 
+0. **The Phase 2 design**: `phase-2/design.md`, `decisions.md` and `tracker.md`, written from the inputs the handbook lists, reviewed by both reviewers, the owner's answers recorded and the acceptance checks locked. The work breakdown, schedule, questions and risks below are its starting material. Product packages (T2.1 on) wait for it; T2.0 and the items marked as tooling don't.
 1. **T2.0 Parameterize the phase branch, and bootstrap the first checkpoint.** 18 files hard-code `rust-core-phase-1`: `.github/workflows/ci.yml` (11 places, including `cancel-in-progress`), `scripts/rust_core/prepush.sh`, ten Python scripts beside it (`land.py`, `lane.py`, `ratchet.py`, `prune_caches.py`, `replay_jobs.py`, `bridge_freeze.py`, `l0_deps.py` and three self-tests) and six tests under `tests/`. Make the phase a single setting (for example `rust-core-phase-[0-9]+` patterns in CI and one constant or flag in the scripts). `grep -rn 'rust-core-phase-1' .github scripts tests` finds them.
    Two more things in the same package. The phase branch starts at `rust-core`'s head, which is a merge, not a landing commit, so `ratchet.py` ("the checkpoint ... is not a landing commit") refuses the gate for every early candidate: accept the phase branch's fork point from `rust-core` as the first checkpoint, with a self-test. And `land.py`, `ratchet.py` and `lane.py` accept only `T<n>.<n>[a-z]` and `CI<n>` package IDs, so Phase 2 packages are named `T2.<n>`.
    **CI on `rust-core` itself is red since the Phase 1 merge** (run 38818504440 on `91a00319`): off `rust-core-phase-1` branches there is no ratchet, so `ci.yml` compares the runners' observations straight against `contract/reference` (`compare.py` in `rust-test`'s compare step and in the contract gate step) and `contract/tests/test_runners.py` does the same in `ref-pandas3`. Every approved difference then fails `rust-test`, `contract-python` and `cross-host`. T2.0 also gives the epic branch a ratchet base (for example, the merged phase's last landing as its checkpoint), so `rust-core` goes green again.

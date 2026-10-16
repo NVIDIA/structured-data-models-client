@@ -22,7 +22,7 @@ Things only I can do (logins, SSO, Databricks), list for me as "! <command>" lin
 ## 2. Take over
 
 ```text
-Read, in this order: docs/design/rust-core/orchestration/README.md (the handbook), its briefs/ and phase-1-log.md, then migration-plan.md sections 2, 8 and 9, learnings.md, and phase-1/decisions.md's rows marked approved or confirmed by the owner.
+Read, in this order: docs/design/rust-core/orchestration/README.md (the handbook), its briefs/ and phase-1-log.md, then migration-plan.md (all of it), learnings.md, phase-1/design.md (its sections and its "Explicitly out" list), phase-1/decisions.md's rows marked approved or confirmed by the owner, and the headings of phase-1/as-built.md and register.yaml.
 
 Then:
 1. Save memories for what must survive this session: the owner's preferences and the hard rules from the handbook's "The owner" and "Hard rules" sections, one memory per rule with its reason; and a project memory saying the migration's state (Phase 1 merged into rust-core as 91a00319 on 2026-10-15; Phase 2 not started) and that the handbook is the starting point.
@@ -32,11 +32,11 @@ Then:
 ## 3. Kick off Phase 2
 
 ```text
-Start Phase 2. Read docs/design/rust-core/orchestration/phase-2-prep.md.
+Start Phase 2. Read docs/design/rust-core/orchestration/phase-2-prep.md and the handbook's "Every phase starts with its design".
 
-1. Send me all of its owner questions at once, in plain language, each with your recommendation and what it costs either way. Don't wait for the answers; start the prep that doesn't depend on them.
-2. Create rust-core-phase-2 from rust-core, and phase-2/design.md (3 pages or fewer) and phase-2/tracker.md on it.
-3. T2.0 first: parameterize the phase branch across ci.yml and scripts/rust_core, and bootstrap the first checkpoint (a separate test author, an implementer, two reviewers; it lands alone).
+1. Create rust-core-phase-2 from rust-core. Write phase-2/design.md, decisions.md and tracker.md from the inputs the handbook lists (the plan, learnings.md, Phase 1's design, decisions, as-built, register and not-yet-refusals, the carried rows, and phase-2-prep.md). Keep it short and point at Phase 1 for everything unchanged.
+2. Have both reviewers review the design until both approve. In the same turn, send me every owner question at once (the prep file's plus any the design raises), in plain language, each with your recommendation and what it costs either way. Record my answers in decisions.md and lock the acceptance checks. No product package starts before that.
+3. Meanwhile, T2.0: parameterize the phase branch across ci.yml and scripts/rust_core, and bootstrap the first checkpoint (a separate test author, an implementer, two reviewers; it lands alone).
 4. In parallel: the new held-out set, frozen in the current case format, where implementers can't read it; the test-author batch; the update from main and the reference rerun; the speed-ups (queue-driven land_chain, CI5, one Codex pane per lane, the fast local loop).
 5. Then run the one-day plan: T2.1 alone first, then the lanes stacked on it.
 

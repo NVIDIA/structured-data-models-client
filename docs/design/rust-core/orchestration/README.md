@@ -34,6 +34,36 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 - **Two reviewers per substantive round**: a fresh Claude subagent and Codex (in a herdr pane, or headless `codex exec`). Both get the same brief and review the exact SHA.
 - **The owner**: answers product questions, approves register entries reviewers can't, and merges each phase into `rust-core`.
 
+## Every phase starts with its design
+
+No package starts until the phase has a reviewed design and locked acceptance checks (migration-plan.md section 9). Phase 1 did this as its first task, T1.1 ("Phase documents and locked checks"), and so does every later phase.
+
+**1. Read what the phase inherits.** The design is written from these, not from memory:
+
+| Source | What to take from it |
+|---|---|
+| [migration-plan.md](../migration-plan.md) | The phase's row and exit (section 8), the slice it delivers (section 4), the gate (section 7), the standing decisions (section 2), the architecture (section 3), the process and stop rules (section 9) |
+| [learnings.md](../learnings.md) | The first attempt's failure modes. Each risk in the design names the lesson it guards against, and design checkpoints review against this file |
+| [phase-1/design.md](../phase-1/design.md) | The mechanisms the phase reuses (contract, runners, comparator, ratchet, gate, lanes, landing): cite them, don't restate them. Its "Explicitly out" list names what Phase 1 handed to later phases |
+| [phase-1/decisions.md](../phase-1/decisions.md) | The standing rows the phase runs under (for example E25 and E29 on reviews, E43 on lanes, E49 on tooling, E92 on the named refusals to lift, E130 and E131 on landing and CI). Rows marked approved or confirmed by the owner stay in force unless the owner changes them |
+| [phase-1/as-built.md](../phase-1/as-built.md) | What actually exists, where it differs from the Phase 1 design, and the "Host-held semantics" ledger rows still to move into the core |
+| [register.yaml](../register.yaml) | One register for the whole migration. Phase 1's entries stay in force; the phase adds its own and never re-approves old ones |
+| [phase-1/not-yet-refusals.md](../phase-1/not-yet-refusals.md) | Every named "not yet" refusal and which phase owns it |
+| migration-plan.md section 8, "Carried into Phase 2" | Phase 1's deferred review findings and the owner's follow-ups (FX rows) |
+| [phase-1/evidence/](../phase-1/evidence/) | The shape of the go or no-go evidence pack |
+| This folder | The process lessons, [phase-1-log.md](phase-1-log.md), and the phase's prep file (for Phase 2, [phase-2-prep.md](phase-2-prep.md)) |
+
+**2. Write the phase's documents** on the phase branch, in `phase-N/`:
+- `design.md`, with Phase 1's sections but only what's new: goal; scope and "explicitly out"; architecture choices new in this phase; the task table (each package with its output, exit check, dependencies, lane, and whether it changes a judging path); owner check-ins; the evidence pack; gates (merge rules, locked acceptance checks, process rules that differ from Phase 1); risks, each with the learnings lesson it guards. Phase 1's design grew to 220 KB; aim for a few pages that point at Phase 1 for everything unchanged.
+- `decisions.md`, empty except for the owner's kickoff answers. New rows only; cite Phase 1's rows instead of copying them.
+- `tracker.md`, one row per package, plus the stop-rule counters.
+
+**3. Review it** with both reviewers, as a design review: is it consistent with the plan, learnings.md and Phase 1 as built; are the locked checks falsifiable and sufficient for the phase's exit; does anything grow the harness or re-create the Python value model; is the task table the smallest that reaches the exit. Iterate until both approve.
+
+**4. Settle the owner's questions and lock the checks.** Send the open questions all at once, with a recommendation each. The owner's answers go into `decisions.md`, the locked acceptance checks are marked locked, and any later change to them goes to the owner.
+
+Tooling-only work that doesn't depend on the design (for Phase 2, T2.0) may run while the design is in review.
+
 ## A package, start to finish
 
 1. **Brief.** One file per package: scope, exits, the design row, decision rows, known findings to skip, and the standing rules from [briefs/implementer.md](briefs/implementer.md). Name every judging-path file it touches (see Landing).
@@ -44,6 +74,16 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 6. **Fix rounds** until both reviewers approve the same SHA. Reviews block only on P1 and P2; P3s go to a carry-forward list. Later rounds review only the fix commits plus the earlier repros.
 7. **Land** with `land.py` (or queue it for `auto_land.py`), only on two `APPROVE` reports naming the SHA and a green exact-SHA CI run.
 8. **Start the lane's next package** on a local branch stacked on the approved candidate as soon as both approvals are in. Never sit idle on CI.
+
+## Ending a phase
+
+1. **Close the open work**: every package landed or explicitly dropped, and dropped items closed out (pending entries retired, the decision recorded).
+2. **Reconcile the register**: every measured difference has an entry, none is left proposed, and `scripts/rust_core/register.py validate` passes.
+3. **Run the locked checks and the held-out set** on the exact final SHA, and write the evidence pack to `phase-N/evidence/`.
+4. **A fresh whole-phase review** by both reviewers. Its P1 and P2 findings are fixed, and its P3s are carried forward.
+5. **Carry forward what's left**: unfixed P3s and owner follow-ups become named rows for the next phase in migration-plan.md section 8, as "Carried into Phase 2" does; `as-built.md` records what differs from the design; process lessons go into this handbook.
+6. **The go or no-go packet**: a plain-language summary for the owner, with the evidence and anything that needs their decision. The owner decides, and the merge into `rust-core` is a `--no-ff` merge with a DCO sign-off.
+7. **After the merge, check CI on `rust-core`** and the next phase's first run. Phase 1's merge left `rust-core` red, unnoticed until the next day (see [phase-2-prep.md](phase-2-prep.md), T2.0).
 
 ## Landing
 
