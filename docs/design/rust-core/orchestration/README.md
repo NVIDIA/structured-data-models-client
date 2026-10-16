@@ -8,7 +8,7 @@ It's process material only and is deleted at the end of the migration, together 
 - [prompts.md](prompts.md): the prompts that start an orchestrator session.
 - [phase-2-prep.md](phase-2-prep.md): Phase 2's work breakdown, schedule and the owner questions to settle at kickoff.
 - [phase-1-log.md](phase-1-log.md): a short log of Phase 1.
-- [briefs/](briefs/): the standing rules appended to every implementer, test author and reviewer brief.
+- [briefs/](briefs/): the standing rules appended to every design reviewer, implementer, test author and reviewer brief.
 - [`scripts/rust_core/orchestration/`](../../../../scripts/rust_core/orchestration/): the watchdog and landing helpers.
 
 ## Where everything else lives
@@ -38,7 +38,9 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 
 No package starts until the phase has a reviewed design and locked acceptance checks (migration-plan.md section 9). Phase 1 did this as its first task, T1.1 ("Phase documents and locked checks"), and so does every later phase.
 
-**1. Read what the phase inherits.** The design is written from these, not from memory:
+**0. Bring learnings.md up to date first.** It is what every design and design checkpoint is judged against. It holds the first attempt's lessons (1 to 11) and Phase 1's up to checkpoint 8 (12 to 16). Before writing the next design, add what the finished phase taught that isn't there yet: for Phase 2, from Phase 1's later checkpoint reviews and fix rounds ([phase-1/fix-round-history.md](../phase-1/fix-round-history.md)), the final whole-phase review, the held-out run, [phase-1-log.md](phase-1-log.md) and this handbook. Same format as lessons 12 to 16: what happened, what it cost, the rule that prevents it. Product and design lessons go there; process lessons stay in this handbook. Both reviewers review it.
+
+**1. Read what the phase inherits.** The design is written from these, not from memory. Phase 1's design, decisions and as-built notes are 220 to 330 KB each, too much for the orchestrator to read whole: give each big source to a helper agent that returns a one-page digest of what the new phase inherits from it (rules in force, mechanisms to reuse, open items, traps), citing section or row numbers, and write the design from the digests. Read the plan and learnings.md in full yourself.
 
 | Source | What to take from it |
 |---|---|
@@ -58,9 +60,9 @@ No package starts until the phase has a reviewed design and locked acceptance ch
 - `decisions.md`, empty except for the owner's kickoff answers. New rows only; cite Phase 1's rows instead of copying them.
 - `tracker.md`, one row per package, plus the stop-rule counters.
 
-**3. Review it** with both reviewers, as a design review: is it consistent with the plan, learnings.md and Phase 1 as built; are the locked checks falsifiable and sufficient for the phase's exit; does anything grow the harness or re-create the Python value model; is the task table the smallest that reaches the exit. Iterate until both approve.
+**3. Review it, and iterate until it's right.** Getting the design right matters more than any other step: Phase 1's design needed three review rounds and a closure check, and the first attempt's failures were mostly in its approach (learnings.md), not in individual lines of code. Each round, a fresh Claude subagent and Codex review independently with [briefs/design-reviewer.md](briefs/design-reviewer.md), which walks the design against the plan, every learnings.md lesson one by one, Phase 1 as built, and the locked checks. Fix every P1 and P2, then run another full round with both. Stop only when both approve the same SHA with no P1 or P2; then one closure check confirms the last round's findings are applied. Keep a short table of rounds and findings in the tracker. Don't shortcut these rounds to save time: a wrong design costs days, a review round costs an hour.
 
-**4. Settle the owner's questions and lock the checks.** Send the open questions all at once, with a recommendation each. The owner's answers go into `decisions.md`, the locked acceptance checks are marked locked, and any later change to them goes to the owner.
+**4. Settle the owner's questions and lock the checks.** Send the open questions all at once, with a recommendation each. The owner's answers go into `decisions.md`. If an answer changes the design, run another review round on the change. Then the locked acceptance checks are marked locked, and any later change to them goes to the owner.
 
 Work that doesn't depend on the design's scope may run while it's in review: for Phase 2, T2.0, the new held-out set, the update from `main` and the reference rerun, and the speed-ups. Anything that depends on the locked scope (for Phase 2, the test-author batch) waits.
 
