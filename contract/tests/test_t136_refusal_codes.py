@@ -23,11 +23,16 @@ by name rather than silently changing what the core is held to.
 - ``condition_value`` (``sdm-engine``'s ``decimal_constant``): a static
   DECIMAL column compared with a float constant that overflows to an
   infinity (``1e999``, ``-1e999``, ``1E999``, ``1.0e400``), at several
-  precisions and scales and with every comparison. The reference refuses
-  it with INVALID_REQUEST at materialize (pyarrow's "Cannot convert inf to
-  Decimal128"); the core refused it as UNSUPPORTED_REQUEST naming the rule.
-  Held: the core's refusal is the reference's, INVALID_REQUEST at
-  materialize, with no rule. Controls, alike on both routes before and
+  precisions and scales and with every comparison. The reference at
+  b413e9ad refused it with INVALID_REQUEST at materialize (pyarrow's
+  "Cannot convert inf to Decimal128"); the core refused it as
+  UNSUPPORTED_REQUEST naming the rule. Held at T1.36: the core's refusal
+  is the reference's, INVALID_REQUEST at materialize, with no rule. Since
+  main's eb6c68eb (the reference at 6298913c) the reference reads the
+  decimal as float64 and materializes it, each label the finite value
+  compared with the infinity; held now: that answer, measured, and the
+  core's refusal as before, INVALID_REQUEST at materialize by no rule
+  (register P2B-1, until T2.17). Controls, alike on both routes before and
   after: a float sum compared with ``1e999`` or ``-1e999`` and a static
   integer compared with ``1e999`` materialize the same payload; a finite
   constant a DECIMAL does not hold (``1e308``) is INVALID_REQUEST; ``nan``,
@@ -75,6 +80,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
+import operator
 import sys
 import warnings
 from collections.abc import Callable
@@ -252,20 +259,50 @@ def _infinite_constants() -> list[Any]:
     ]
 
 
+#: Each comparison a condition writes, as Python reads it.
+COMPARE = {
+    '>': operator.gt,
+    '>=': operator.ge,
+    '<': operator.lt,
+    '<=': operator.le,
+    '=': operator.eq,
+    '!=': operator.ne,
+}
+
+
 @pytest.mark.parametrize(
     ('precision', 'scale', 'condition'), _infinite_constants()
 )
-def test_an_infinite_constant_against_a_decimal_is_the_reference_s_invalid_request(
+def test_an_infinite_constant_against_a_decimal_is_answered_by_the_reference(
     monkeypatch: pytest.MonkeyPatch, precision: int, scale: int, condition: str
 ) -> None:
+    r"""Since main's eb6c68eb (the reference at 6298913c) the reference reads
+    the decimal as float64 and materializes the condition: every label is
+    the finite value compared with the infinity, as Python compares them.
+    The core keeps Phase 1's exact decimals and refuses it, INVALID_REQUEST
+    at materialize by no rule: register P2B-1's refusal of a decimal input
+    the reference answers, until T2.17."""
     reference, core = _routes(
         monkeypatch,
         *_decimal(precision, scale),
         query=f'PREDICT users.d {condition} FOR EACH users.user_id',
     )
-    assert reference['stage'] == 'materialize', reference
-    assert 'Cannot convert' in reference['message'], reference
-    _refused_alike(reference, core, 'INVALID_REQUEST')
+    op, constant = condition.split()
+    infinity = float(constant)
+    assert infinity in (math.inf, -math.inf), constant
+    assert reference['stage'] == 'done', reference
+    context = reference['payload']['context']['instance_table']
+    labels = [
+        row[context['columns'].index('TARGET')] for row in context['rows']
+    ]
+    assert labels, reference
+    assert labels == [COMPARE[op](0.0, infinity)] * len(labels), labels
+    assert core['stage'] == 'materialize', core
+    assert (core['class'], core['code']) == (
+        'StructuredDataError',
+        'INVALID_REQUEST',
+    ), core
+    assert 'rule' not in core['details'], core
 
 
 @pytest.mark.parametrize(
