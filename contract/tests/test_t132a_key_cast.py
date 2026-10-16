@@ -35,14 +35,19 @@ same vectors, so the two hosts agree through them.
   under an entry of ``docs/design/rust-core/register.yaml``, proposed or
   approved, whose ``refs`` name the vector and the transition it makes:
   ``contract/key-cast-vectors.json#<id or glob> <from> -> <to>``, each of
-  ``success`` or ``refusal <CODE>``, from the reference's answer to the
-  host's. An entry covers only the transition it declares. Every other
+  ``success``, ``refusal <CODE>`` or ``unfinished`` (the reference not
+  answering within the recorder's limit, the owner's approval of
+  2026-10-16 for a reference timeout outcome), from the reference's answer
+  to the host's. An entry covers only the transition it declares. Every other
   vector is held to the reference exactly, and no vector may end in
   ``UNSUPPORTED_REQUEST`` (a rule the core does not take yet).
 - A mix of kinds the host hands over as text (``disposition: as_text``):
   its answer is the host's own answer to that text given as text, and,
   where the reference answers that text otherwise than INTERNAL_ERROR, the
-  reference's answer to it. That text is the recorder's ``host_text``, and
+  reference's answer to it, unless the vector is marked and an entry names
+  it with the transition from the reference's answer to that text to the
+  host's (since main's eb6c68eb the reference reads a decimal key's text
+  as a double). That text is the recorder's ``host_text``, and
   a float's is its text as a float entity alone (T1.32g, T1.32a's carried
   P3), the reference's since T1.36 (P1B-35's meaning, the coordinator's
   decision): ``1e16`` is ``1e+16``, ``1.5e-07`` is ``1.5e-7``. The
@@ -132,8 +137,8 @@ KEYS = {key['id']: key for key in RECORDED['keys']}
 #: A ref naming vectors and the transition it covers.
 TRANSITION = re.compile(
     re.escape('contract/key-cast-vectors.json#')
-    + r'(?P<glob>\S+) (?P<old>success|refusal [A-Z][A-Z_]*)'
-    + r' -> (?P<new>success|refusal [A-Z][A-Z_]*)'
+    + r'(?P<glob>\S+) (?P<old>success|unfinished|refusal [A-Z][A-Z_]*)'
+    + r' -> (?P<new>success|unfinished|refusal [A-Z][A-Z_]*)'
 )
 
 
@@ -195,9 +200,16 @@ def problem_of(
         if R.outcome_class(text) != 'refusal INTERNAL_ERROR' and not R.same(
             got, text
         ):
-            return (
-                f"{vid}: got {got}, the reference's answer to its text {text}"
-            )
+            old, new = R.outcome_class(text), R.outcome_class(got)
+            if (
+                not vector['register']['required']
+                or covered(vid, old, new) is None
+            ):
+                return (
+                    f"{vid}: got {got}, the reference's answer to its text "
+                    f'{text}: no register entry names it with the '
+                    f'transition {old} -> {new}'
+                )
     if R.same(got, public):
         return None
     if not vector['register']['required']:
@@ -727,16 +739,69 @@ def test_a_difference_is_held_unless_marked_and_its_transition_named(
     )
     text = mixed['reference']['as_text']
     assert problem_of(mixed, text, own_text=other) is not None
+    # A marked as_text vector whose host answers its text otherwise than
+    # the reference reads it: held unless entries name both transitions,
+    # from the reference's answer to the text and from its public answer.
+    decimal_text = next(
+        v
+        for v in vectors
+        if v['register']['disposition'] == 'as_text'
+        and v['register']['required']
+        and v['reference']['as_text']['outcome'] == 'success'
+        and v['reference']['public']['outcome'] == 'refusal'
+        and v['key'].startswith('decimal')
+    )
+    exact = {'outcome': 'success', 'entities': [['s', '1']]}
+    public = R.outcome_class(decimal_text['reference']['public'])
+    monkeypatch.setattr(me, 'transitions', lambda: ([], []))
+    assert problem_of(decimal_text, exact, own_text=exact) is not None
+    as_text_only = [('SEEDED-3', decimal_text['id'], 'success', 'success')]
+    monkeypatch.setattr(me, 'transitions', lambda: (as_text_only, []))
+    assert problem_of(decimal_text, exact, own_text=exact) is not None
+    both = [*as_text_only, ('SEEDED-3', decimal_text['id'], public, 'success')]
+    monkeypatch.setattr(me, 'transitions', lambda: (both, []))
+    assert problem_of(decimal_text, exact, own_text=exact) is None
+    # An entry never excuses a difference from the host's own text answer.
+    assert problem_of(decimal_text, exact, own_text=other) is not None
+    # The unfinished vector: held exactly with no entry, excused only by
+    # one declaring unfinished -> the host's answer.
+    late = next(
+        v
+        for v in vectors
+        if v['reference']['public']['outcome'] == 'unfinished'
+    )
+    # Refused by name, as the vector's derived expectation asks.
+    refused = dict(
+        other,
+        code='INVALID_REQUEST',
+        fields={'field': 'indices', 'reason': 'out_of_range'},
+    )
+    monkeypatch.setattr(me, 'transitions', lambda: ([], []))
+    assert problem_of(late, refused) is not None
+    wrong = [('SEEDED-4', late['id'], 'unfinished', 'success')]
+    monkeypatch.setattr(me, 'transitions', lambda: (wrong, []))
+    assert problem_of(late, refused) is not None
+    right = [('SEEDED-4', late['id'], 'unfinished', 'refusal INVALID_REQUEST')]
+    monkeypatch.setattr(me, 'transitions', lambda: (right, []))
+    assert problem_of(late, refused) is None
 
 
 def test_the_transition_syntax_reads_and_refuses() -> None:
     good = 'contract/key-cast-vectors.json#*.time.* refusal INTERNAL_ERROR -> refusal INVALID_REQUEST'
     found = TRANSITION.fullmatch(good)
     assert found is not None and found['glob'] == '*.time.*'
+    late = 'contract/key-cast-vectors.json#*.exponent.huge.* unfinished -> refusal INVALID_REQUEST'
+    found = TRANSITION.fullmatch(late)
+    assert found is not None
+    assert (found['old'], found['new']) == (
+        'unfinished',
+        'refusal INVALID_REQUEST',
+    )
     for bad in (
         'contract/key-cast-vectors.json#*.time.*',
         'contract/key-cast-vectors.json#*.time.* refusal -> success',
         'contract/key-cast-vectors.json#*.time.* success->success',
+        'contract/key-cast-vectors.json#*.time.* unfinished 300 -> success',
     ):
         assert TRANSITION.fullmatch(bad) is None, bad
 
@@ -752,7 +817,15 @@ def test_every_vector_ref_names_its_transition(
         for entry, glob, old, _ in found:
             assert any(
                 fnmatch.fnmatchcase(v['id'], glob)
-                and R.outcome_class(v['reference']['public']) == old
+                and old
+                in (
+                    R.outcome_class(v['reference']['public']),
+                    *(
+                        [R.outcome_class(v['reference']['as_text'])]
+                        if v['register']['disposition'] == 'as_text'
+                        else []
+                    ),
+                )
                 for v in RECORDED['vectors']
             ), (entry, glob, old)
 
