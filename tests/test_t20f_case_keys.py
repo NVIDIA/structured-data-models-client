@@ -97,11 +97,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason='T2.0f: the <case>@<database> keys are not implemented yet',
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -163,7 +158,6 @@ def test_the_bare_key_is_a_valid_observation() -> None:
     assert _invalid(X) is None
 
 
-@PENDING
 @pytest.mark.parametrize('database', DATABASES)
 def test_a_database_key_is_a_valid_observation(database: str) -> None:
     r"""Exit: the observation schema's case pattern takes
@@ -378,7 +372,6 @@ def test_a_database_recording_with_no_core_observation_needs_no_baseline(
     assert helpers.check(recorded, landed, files) == []
 
 
-@PENDING
 def test_a_core_observation_on_a_database_without_its_baseline_fails_by_name(
     recorded: Path, tmp_path: Path
 ) -> None:
@@ -461,7 +454,6 @@ def _remove_x(
     return edit
 
 
-@PENDING
 @pytest.mark.parametrize(
     'leave',
     [

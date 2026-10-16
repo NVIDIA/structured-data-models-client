@@ -1582,10 +1582,21 @@ def compare(
         if who in observed:
             report.fail(f'{path.name}: a second file of {who}')
         observed[who] = by_case
+    # A line's key is its case, or its case and database (``<case>@sqlite``,
+    # ``<case>@postgres``; the schema holds its form): the part before ``@``
+    # must be a case. A database line is read, and compared once T2.1a
+    # brings the comparator for SQLite and Postgres.
     known = {case['id'] for case in cases}
     for who, by_case in [('python-ref', reference), *observed.items()]:
-        for name in sorted(set(by_case) - known):
-            report.fail(f'{name}: {who} observed a case that does not exist')
+        for name in sorted(by_case):
+            if name.partition('@')[0] not in known:
+                report.fail(
+                    f'{name}: {who} observed a case that does not exist'
+                )
+            elif '@' in name:
+                report.note(
+                    f'{name}: {who}: a database line, not compared before T2.1a'
+                )
     # A case the policy names must exist, among every case of the
     # repository, not only those compared now.
     every = {

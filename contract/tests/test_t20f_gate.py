@@ -84,11 +84,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason="T2.0f: the gate's Phase 2 reader and database keys are not implemented yet",
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -221,7 +216,6 @@ def test_the_phase_2_copy_is_a_locked_set_of_half_2a() -> None:
     assert half['checks'][MAIN_CHECK] == ['ratchet', MAIN_STEP]
 
 
-@PENDING
 def test_phase_2_s_locked_set_is_read_and_each_step_without_its_tool_fails_by_name(
     stubbed: Path,
     tmp_path: Path,
@@ -334,7 +328,6 @@ FAULTS = {
 }
 
 
-@PENDING
 @pytest.mark.parametrize('fault', sorted(FAULTS))
 def test_a_malformed_phase_2_half_is_a_usage_error_naming_the_fault(
     stubbed: Path,
@@ -451,7 +444,6 @@ def mainline(stubbed: Path) -> dict[str, str]:
     return {'R': root, 'M': moved}
 
 
-@PENDING
 def test_main_at_the_reference_commit_passes_the_main_step(
     stubbed: Path,
     tmp_path: Path,
@@ -470,7 +462,6 @@ def test_main_at_the_reference_commit_passes_the_main_step(
     assert steps.get('ratchet') == 'ok', done.stdout + done.stderr
 
 
-@PENDING
 @pytest.mark.parametrize(
     'where',
     [
@@ -502,7 +493,6 @@ def test_main_not_merged_fails_the_main_step_by_name(
     assert GM.table(done, '2a')[MAIN_CHECK] == 'FAIL'
 
 
-@PENDING
 def test_main_merged_without_the_reference_rerun_fails_the_main_step(
     stubbed: Path,
     tmp_path: Path,
@@ -698,7 +688,6 @@ BAD_KEYS = (
 BAD_REFERENCE = 'nocase.reference-only@postgres'
 
 
-@PENDING
 def test_compare_takes_database_keys_and_refuses_malformed_ones_by_name(
     repo: Path, tmp_path: Path, observed: Any
 ) -> None:
