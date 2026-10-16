@@ -1,6 +1,6 @@
 {
  "recorded_by": "t128b_predict_result_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cases": [
   {
    "name": "layout.regression.given",
@@ -8577,7 +8577,7 @@
      "object"
     ],
     "status_code": null,
-    "message": "[INVALID_REQUEST] Context size exceeds the 30MB limit. Current context contains 538 nodes and 848 edges across 2 tables. Top-2 tables contributing most to the context size: users: 2.10MB, orders: 0.00MB\nPlease reduce either the number of tables in the graph, their number of columns (e.g., large text columns), neighborhood configuration, or the run mode. If none of this is possible, please create a feature request at 'https://github.com/NVIDIA/structured-data-models-client' if you must go beyond this for your use-case.",
+    "message": "[INVALID_REQUEST] Context size exceeds the 30MB limit. Current context contains 538 nodes and 848 edges across 2 tables. Top-2 tables contributing most to the context size: users: 2.10MB, orders: 0.00MB What comes down is one of three. For an ordinary question it is the call: materialize(rows_per_call=N) below the 2 this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities.",
     "rule": null,
     "calls": []
    }
