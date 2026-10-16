@@ -89,6 +89,8 @@ freeze = _module(SCRIPT, 't20e_bridge_freeze')
 TARGET = str(freeze.WHOLE[-1])
 ADDED = '_a_rule_main_added'
 KEYS = (f'{TARGET}::<module>', f'{TARGET}::{ADDED}')
+#: The function main's commit appends, whole, so a later edit names it.
+ADDED_SOURCE = f'\n\ndef {ADDED}(value):\n    return value\n'
 IDENTITY = [
     '-c',
     'user.name=Freeze Test',
@@ -178,9 +180,7 @@ def history(tmp: Path) -> History:
     m0 = commit(repo, 'Start the client (#1)')
     # Main: a rule added to a frozen bridge file, then more of main.
     target = repo / TARGET
-    target.write_text(
-        target.read_text() + f'\n\ndef {ADDED}(value):\n    return value\n'
-    )
+    target.write_text(target.read_text() + ADDED_SOURCE)
     m1 = commit(repo, 'Add a rule to the bridge (#2)')
     m2 = commit(repo, 'Document the rule (#3)')
     m3 = commit(repo, 'A later change on main (#4)')
@@ -314,10 +314,16 @@ def test_after_the_landing_the_declarations_are_held_and_spent(
     code, text = run(h.repo)
     assert code == 0, text
     target = h.repo / TARGET
+    source = target.read_text()
+    # The edit names the function it targets: the file's own functions
+    # (``_copied`` returns ``value`` too) stay as they are.
+    assert source.count(ADDED_SOURCE) == 1
     target.write_text(
-        target.read_text().replace('    return value\n', '    return 1\n')
+        source.replace(
+            ADDED_SOURCE, ADDED_SOURCE.replace('return value', 'return 1')
+        )
     )
-    freeze.write(h.repo)
+    assert freeze.write(h.repo) == [f'{TARGET}::{ADDED}']
     commit(h.repo, 'T2.1: the rule changed')
     code, text = run(h.repo)
     assert code == 1 and f'{TARGET}::{ADDED}' in text, text
