@@ -3,9 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""T2.0f's acceptance tests through the gate (the independent test
-author's): the locked-set reader for Phase 2, the ``main`` ancestry the
-``ratchet`` step adds for a half that maps check 7, and ``compare.py``'s
-known-case check taught the ``<case>@<database>`` keys.
+author's): the locked-set reader for Phase 2, the ``main`` step (the
+``origin/main`` ancestry, run only by a half that lists it; check 7 maps to
+``[ratchet, main]``), and ``compare.py``'s known-case check taught the
+``<case>@<database>`` keys.
 
 Through the real ``scripts/rust_core/gate.sh`` on the temporary repository
 and stubs ``contract/tests/test_gate_modes.py`` builds (its fixtures,
@@ -21,27 +22,30 @@ The reader (exit 1): Phase 2's real locked set, the design's
 then its copy from the design branch, ``tests/fixtures/t20f/``), landed at
 the checkpoint, is read: ``--locked 2a`` is no usage error, prints the
 table of its checks 1 to 8, 10, 11 and 12, and each step whose tool has
-not landed (``census``, ``coverage-s1``, ``l3``, ``l7``, ``ci``) fails the
-run by name. Seeded faults, each a usage error naming what is wrong, on
+not landed (``census``, ``coverage-s1``, ``l3``, ``l7``, ``ci``), and
+``main`` with no ``origin/main`` fetched, fails the run by name. Seeded faults, each a usage error naming what is wrong, on
 that file with one change: an unknown step, an unknown key of the half, a
 malformed limit (not a number, negative, a boolean, an unknown name, a
 baseline that is no commit, ``statements`` other than ``equal``, limits
 not a mapping), a malformed CI pattern (empty, not a string, a check's
 patterns not a list, patterns for a check the half does not have).
 
-Check 7 (exit 2): for a half that maps check 7, the ``ratchet`` step also
-requires the fetched ``origin/main`` (``refs/remotes/origin/main``, never
-a local ``main``) to be an ancestor of the candidate and of the reference
-commit ``contract/reference-env.txt`` names. A landing at the checkpoint
+Check 7 (exit 2): the ``main`` step, run only by a half whose ``steps``
+list it (half 2a, its check 7 holding ``[ratchet, main]``), requires the
+fetched ``origin/main`` (``refs/remotes/origin/main``, never a local
+``main``) to be an ancestor of the candidate and of the reference commit
+``contract/reference-env.txt`` names. A landing at the checkpoint
 re-keys the reference to a commit of the temporary repository, ``R``
 (its root), every citation of the old SHA outside ``docs/`` moved with it;
 ``M`` is a later commit of ``main``, a child of ``R`` that the candidate
-does not hold. Control: ``origin/main`` at ``R`` passes, a local ``main``
-at ``M`` notwithstanding. Seeded: ``origin/main`` at ``M`` (``main``
+does not hold. ``origin/main`` at ``R`` passes the ``main`` step, a local
+``main`` at ``M`` notwithstanding (gated, since today's reader refuses the
+step). Seeded: ``origin/main`` at ``M`` (``main``
 moved and not merged; a local ``main`` at ``R`` changes nothing), no
 ``origin/main`` at all, and ``M`` merged into the candidate but the
-reference not rerun each fail the ratchet step, by name. Control: Phase
-1's half ``1b`` (no check 7) is judged as before with ``main`` moved.
+reference not rerun each fail the ``main`` step and check 7, by name.
+Control: Phase 1's half ``1b`` (no ``main`` step) is judged as before with
+``main`` moved, and runs no step of T2.0f's.
 
 ``compare.py`` (exit 3): with the reference and both Python runners holding
 ``X@sqlite`` and ``X@postgres`` lines (copies of ``X``'s), ``gate.sh --only
@@ -83,17 +87,22 @@ PENDING = pytest.mark.xfail(
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
 #: Phase 2's locked set, where T2.0a lands it; until then the design
-#: branch's copy (``origin/rust-core-phase-2-design`` at 782c528d).
+#: branch's copy (``origin/rust-core-phase-2-design`` at dce97ec9, the
+#: approved design).
 LOCKED_SET = 'docs/design/rust-core/phase-2/locked-set.yaml'
 COPY = ROOT / 'tests/fixtures/t20f/phase-2-locked-set.yaml'
 #: The steps T2.0f's reader adds, each failing the locked run by name in
-#: the summary until its tool lands.
-NEW_STEPS = ('census', 'coverage-s1', 'l3', 'l7', 'ci')
+#: the summary until its tool lands (``main``, T2.0f's own, until
+#: ``origin/main`` is fetched and merged).
+NEW_STEPS = ('census', 'coverage-s1', 'l3', 'l7', 'ci', 'main')
 #: A malformed locked set is a usage error (exit 2) before any step, as
 #: the reader's refusals are today, its message naming what is wrong.
 USAGE = 2
-#: The check whose half adds the main ancestry to the ratchet step.
+#: The check that holds the ``main`` step (the ``origin/main`` ancestry, its
+#: own gate step named ``main``, run only by a half whose ``steps`` list
+#: it), beside ``ratchet``.
 MAIN_CHECK = '7'
+MAIN_STEP = 'main'
 ORIGIN_MAIN = 'refs/remotes/origin/main'
 LOCAL_MAIN = 'refs/heads/main'
 # ---------------------------------------------------------------------------------
@@ -203,8 +212,7 @@ def test_the_phase_2_copy_is_a_locked_set_of_half_2a() -> None:
     half = yaml.safe_load(phase_2_text())['halves']['2a']
     assert set(NEW_STEPS) <= set(half['steps'])
     assert {'limits', 'ci'} <= set(half)
-    assert MAIN_CHECK in half['checks']
-    assert 'ratchet' in half['checks'][MAIN_CHECK]
+    assert half['checks'][MAIN_CHECK] == ['ratchet', MAIN_STEP]
 
 
 @PENDING
@@ -363,13 +371,15 @@ def _rekey_reference(sha: str) -> Callable[[Path], None]:
 
 
 def _main_half() -> str:
-    r"""A half 2a mapping check 7 to the ratchet step, and its cases."""
+    r"""A half 2a listing the main step, check 7 holding the ratchet and
+    main steps, and its cases."""
     return yaml.safe_dump(
         {
             'format': 'sdm-locked-set/1',
             'halves': {
                 '2a': {
                     'cases': CASES,
+                    'steps': ['inventory', MAIN_STEP],
                     'checks': {
                         '1': [
                             'runners',
@@ -380,7 +390,7 @@ def _main_half() -> str:
                             'l1',
                             'inventory',
                         ],
-                        MAIN_CHECK: ['ratchet'],
+                        MAIN_CHECK: ['ratchet', MAIN_STEP],
                     },
                 }
             },
@@ -424,19 +434,23 @@ def mainline(stubbed: Path) -> dict[str, str]:
     return {'R': root, 'M': moved}
 
 
-def test_main_at_the_reference_commit_passes_the_ratchet_step(
+@PENDING
+def test_main_at_the_reference_commit_passes_the_main_step(
     stubbed: Path,
     tmp_path: Path,
     observed: Any,
     stubs: dict[str, Any],
     mainline: dict[str, str],
 ) -> None:
-    r"""Control (exit 2): ``origin/main`` at R, which the candidate and the
-    reference commit hold, passes; a local ``main`` at M is not read."""
+    r"""Exit 2, the seeds' twin: ``origin/main`` at R, which the candidate
+    and the reference commit hold, passes the main step; a local ``main``
+    at M is not read."""
     _refs(stubbed, origin_main=mainline['R'], local_main=mainline['M'])
     commit(stubbed)
     done = run_locked(stubbed, stubs, observed, tmp_path)
-    assert GM.summary(done).get('ratchet') == 'ok', done.stdout + done.stderr
+    steps = GM.summary(done)
+    assert steps.get(MAIN_STEP) == 'ok', done.stdout + done.stderr
+    assert steps.get('ratchet') == 'ok', done.stdout + done.stderr
 
 
 @PENDING
@@ -447,7 +461,7 @@ def test_main_at_the_reference_commit_passes_the_ratchet_step(
         pytest.param('missing', id='no-origin-main'),
     ],
 )
-def test_main_not_merged_fails_the_ratchet_step_by_name(
+def test_main_not_merged_fails_the_main_step_by_name(
     stubbed: Path,
     tmp_path: Path,
     observed: Any,
@@ -457,7 +471,8 @@ def test_main_not_merged_fails_the_ratchet_step_by_name(
 ) -> None:
     r"""Seeded (exit 2): ``origin/main`` moved to M, which the candidate
     does not hold (a local ``main`` at R changes nothing), or no fetched
-    ``origin/main`` at all: the ratchet step fails, naming origin/main."""
+    ``origin/main`` at all: the main step fails, naming origin/main, and
+    check 7 with it."""
     _refs(
         stubbed,
         origin_main=mainline['M'] if where == 'moved' else None,
@@ -465,13 +480,13 @@ def test_main_not_merged_fails_the_ratchet_step_by_name(
     )
     commit(stubbed)
     done = run_locked(stubbed, stubs, observed, tmp_path)
-    assert GM.summary(done).get('ratchet') == 'FAIL', done.stdout + done.stderr
-    assert 'origin/main' in step_log(done, 'ratchet'), done.stdout
+    assert GM.summary(done).get(MAIN_STEP) == 'FAIL', done.stdout + done.stderr
+    assert 'origin/main' in step_log(done, MAIN_STEP), done.stdout
     assert GM.table(done, '2a')[MAIN_CHECK] == 'FAIL'
 
 
 @PENDING
-def test_main_merged_without_the_reference_rerun_fails_the_ratchet_step(
+def test_main_merged_without_the_reference_rerun_fails_the_main_step(
     stubbed: Path,
     tmp_path: Path,
     observed: Any,
@@ -479,8 +494,8 @@ def test_main_merged_without_the_reference_rerun_fails_the_ratchet_step(
     mainline: dict[str, str],
 ) -> None:
     r"""Seeded (exit 2): the candidate merges M, but the reference commit
-    is still R, which M is no ancestor of: the ratchet step fails, naming
-    origin/main and the reference."""
+    is still R, which M is no ancestor of: the main step fails, naming
+    origin/main and the reference, and check 7 with it."""
     _refs(stubbed, origin_main=mainline['M'], local_main=None)
     git(
         stubbed,
@@ -495,10 +510,11 @@ def test_main_merged_without_the_reference_rerun_fails_the_ratchet_step(
         stubbed, 'rev-parse', 'HEAD^1^{tree}'
     )
     done = run_locked(stubbed, stubs, observed, tmp_path)
-    assert GM.summary(done).get('ratchet') == 'FAIL', done.stdout + done.stderr
-    log = step_log(done, 'ratchet')
+    assert GM.summary(done).get(MAIN_STEP) == 'FAIL', done.stdout + done.stderr
+    log = step_log(done, MAIN_STEP)
     assert 'origin/main' in log, log
     assert mainline['R'][:7] in log or 'reference-env.txt' in log, log
+    assert GM.table(done, '2a')[MAIN_CHECK] == 'FAIL'
 
 
 def test_phase_1_s_half_is_judged_as_before_with_main_moved(
@@ -507,8 +523,9 @@ def test_phase_1_s_half_is_judged_as_before_with_main_moved(
     observed: Any,
     stubs: dict[str, Any],
 ) -> None:
-    r"""Control: half 1b maps no check 7, so ``origin/main`` moved and not
-    merged leaves its ratchet step as it was, and its steps are its own."""
+    r"""Control: half 1b lists no main step, so ``origin/main`` moved and
+    not merged leaves its ratchet step as it was, no main step runs, and
+    its steps are its own."""
     root = _root(stubbed)
     moved = git(
         stubbed,
