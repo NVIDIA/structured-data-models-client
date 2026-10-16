@@ -3,22 +3,22 @@
  "about": "Register HOST-2's values (T1.36, written by the independent test author before the fix): what DuckDB 1.5.6, the reference and the core do with a TIMESTAMP_S or TIMESTAMP_MS value DuckDB hands over as an int64 past what an int64 count of microseconds reaches, and with one VARCHAR or BLOB value past int32 offsets. `vectors`: each a source (contract/bases.yaml's `shop`, then `setup`), the column it is about and its role, and the public calls' answer on each route, recorded by contract/tools/host2_values_record.py: `reference` from the reference checkout's interpreter, `core_at_measurement` from the candidate (`recorded.candidate`) on the core route, evidence of what the core did when measured, never an expectation. `outcome` is success (through predict) or the stage a call failed at, the exception's class, its code and the first line of its message; `described` the schema from_source gave. `duckdb`: what DuckDB itself hands over and holds. DuckDB writes an infinity as int64 max (and -infinity as its negation) in the column's own unit, so a TIMESTAMP_S or TIMESTAMP_MS infinity passes int64 microseconds; DuckDB holds no finite TIMESTAMP_S or TIMESTAMP_MS past them (its casts and its Arrow import refuse one), and a duration or date64 never comes out of it (an Arrow duration is stored as INTERVAL, read back as month_day_nano; a date64 as DATE, read back as date32): contract/type-set-vectors.json marks duration.* and date64 not reachable, and in Phase 1 the core routes only DuckDB sources (sdm_client/_routing.py CORE_ROUTED). `big`: one value of 2**31 + 16 bytes, with and without arrow_large_buffer_size, recorded with --big (about 7 GB at the peak, so contract/tests/test_t136_host2_values.py runs it only when SDM_T136_BIG=1). Held by contract/tests/test_t136_host2_values.py. From fix 3's review (T1.36): an outcome's `request` is the failing request its error's details name (the core's PROVIDER_ERROR of the time bounds is `time_bounds`). `first.*`: the reference's from_source reads the first non-null value of each time-column candidate (a timestamp column not named as a load stamp or a birth date), in the order the table is read, as a Python datetime (predictive_query/time_columns.py, _refused_for_values, present.iloc[0], through pyarrow's as_py), and fails unnamed (OverflowError) where that value is past the years 1 to 9999: an infinity or a finite value past them at s, ms or us, in the entity table, a feature or the time column, first or after leading nulls; a nanosecond infinity, the year 9999, a value only in a later row, or a column named loaded_at or birth_date it reads. `generated.*`: the three sources of fix 3's differential (seed 3136) where that happened, as generated.",
  "recorded": {
   "by": "contract/tools/host2_values_record.py",
-  "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
-  "candidate": "97aefc9d86669eb97f4675a53362048bd67f91cd",
+  "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+  "candidate": "078539e4b703d81cb2108852edda1a7dbc777cbe",
   "environments": {
    "reference": {
     "python": "3.12.13",
     "pandas": "3.0.6",
     "pyarrow": "25.0.1",
     "duckdb": "1.5.6",
-    "sdm_client": "/Users/awadaskar/code/sdmc-reference/packages/structured-data-models-client/src/sdm_client"
+    "sdm_client": "packages/structured-data-models-client/src/sdm_client"
    },
    "core": {
     "python": "3.12.13",
     "pandas": "3.0.6",
     "pyarrow": "25.0.1",
     "duckdb": "1.5.6",
-    "sdm_client": "/private/tmp/t136-g3/packages/structured-data-models-client/src/sdm_client"
+    "sdm_client": "packages/structured-data-models-client/src/sdm_client"
    }
   },
   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
@@ -6207,70 +6207,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6297,70 +6243,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6387,70 +6279,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6487,70 +6325,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6587,70 +6371,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6687,70 +6417,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6787,70 +6463,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6877,70 +6499,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -6967,70 +6535,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -7057,70 +6571,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -7148,70 +6608,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -7239,75 +6645,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ],
-       [
-        "seen",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": null
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [
-      [
-       "SDMWarning",
-       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
-      ]
-     ],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -7333,65 +6680,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": null
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -7417,70 +6715,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": null
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": [
-      [
-       "SDMWarning",
-       "[CONTEXT_CAPPED] 1,000 context examples were gathered, which is all this route takes by default; pass num_context_samples to ask for up to 10,000."
-      ]
-     ]
+     "from_source": []
     }
    }
   },
@@ -8131,70 +7375,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ],
-       [
-        "f",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": "f"
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -8223,75 +7413,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ],
-       [
-        "seen",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": null
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [
-      [
-       "SDMWarning",
-       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
-      ]
-     ],
-     "materialize": []
+     "from_source": []
     }
    }
   },
@@ -8331,75 +7462,16 @@
     }
    },
    "core_at_measurement": {
-    "described": {
-     "orders": {
-      "columns": [
-       [
-        "order_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "price",
-        "float64",
-        "numerical"
-       ],
-       [
-        "ts",
-        "timestamp[us]",
-        "timestamp"
-       ],
-       [
-        "seen",
-        "timestamp[us]",
-        "timestamp"
-       ]
-      ],
-      "primary_key": "order_id",
-      "time_column": "ts"
-     },
-     "users": {
-      "columns": [
-       [
-        "user_id",
-        "int64",
-        "ID"
-       ],
-       [
-        "age",
-        "int64",
-        "numerical"
-       ],
-       [
-        "country",
-        "string",
-        "categorical"
-       ]
-      ],
-      "primary_key": "user_id",
-      "time_column": null
-     }
-    },
+    "described": null,
     "outcome": {
      "result": "refusal",
-     "stage": "materialize",
+     "stage": "from_source",
      "error": "StructuredDataError",
      "code": "VALUE_OUT_OF_RANGE",
      "message": "[VALUE_OUT_OF_RANGE] a value is outside what its column type can hold in the core"
     },
     "warnings": {
-     "from_source": [
-      [
-       "SDMWarning",
-       "[TIME_COLUMNS_GUESSED] Some time columns were inferred, or refused, on a guess about what a column holds:"
-      ]
-     ],
-     "materialize": []
+     "from_source": []
     }
    }
   }

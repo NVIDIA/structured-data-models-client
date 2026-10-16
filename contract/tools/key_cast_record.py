@@ -36,6 +36,11 @@ this script keeps:
   (``rfm.py``'s ``pd.Series(indices, dtype=train_pkey.dtype)``), observed
   in place: the key's dtype and the values cast, or the exception it
   raised. It documents the rule table; no host is compared on it;
+  Each vector is observed in a worker process with
+  ``TIME_LIMIT_SECONDS`` to answer; one the reference does not answer in
+  time is recorded as ``{"outcome": "unfinished", "within_seconds": N}``
+  (the owner's approval of 2026-10-16 for a reference timeout outcome),
+  with no cast, and the worker is started again;
 - ``host_arrow``: the entities as one Arrow column by the host's natural
   inference (``pa.array(values)``) or, when that fails (mixed kinds, an
   integer past int64), as text: each value's text (``host_text``: a float
@@ -81,10 +86,13 @@ from __future__ import annotations
 import base64
 import json
 import math
+import os
 import platform
+import select
 import struct
 import subprocess
 import sys
+import time
 import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -103,6 +111,14 @@ ANCHOR = '2024-03-01'
 #: prefix and a vector's id, or a glob of ids (``fnmatch``), for example
 #: ``contract/key-cast-vectors.json#decimal128-18-0.*``.
 REGISTER_REF = 'contract/key-cast-vectors.json#'
+#: How long the reference has to answer one vector, in seconds. A vector it
+#: has not answered by then is recorded as ``unfinished`` (the owner's
+#: approval of 2026-10-16 for a reference timeout outcome): on 6298913c the
+#: reference casts ``Decimal('1.00E+2147483649')`` to an integer key and
+#: does not finish (``1E+2000000`` alone takes about 300 s, growing about as
+#: the square of the exponent). Every vector the reference answers does so
+#: in a few seconds, so this is far above the slowest of them.
+TIME_LIMIT_SECONDS = 300
 
 
 def _alter(sql_type: str, using: str | None = None) -> list[str]:
@@ -1247,6 +1263,13 @@ def register(values: list[Any], public: dict[str, Any]) -> list[str]:
     register entry: the reference's answer, never a choice. Empty: held to
     the reference exactly."""
     why = []
+    if public['outcome'] == 'unfinished':
+        why.append(
+            'the reference did not finish within '
+            f"{public['within_seconds']} seconds (the owner's approval of "
+            '2026-10-16 for a reference timeout outcome): any answer in its '
+            'place is a change to register'
+        )
     if public['outcome'] == 'refusal' and public['code'] == 'INTERNAL_ERROR':
         why.append(
             'the reference fails with INTERNAL_ERROR (E66(b): a named '
@@ -1289,17 +1312,10 @@ def as_text(values: list[Any]) -> list[Any]:
     return [None if _missing(v) else host_text(v) for v in values]
 
 
-def record(
-    key: dict[str, Any],
-    name: str,
-    values: list[Any],
-    expected: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    r"""One vector, observed on the reference: also, when the host hands a
-    mix of kinds over as text, the reference's answer to that text given
-    as text (``as_text``)."""
-    encoded = [encode(v) for v in values]
-    arrow = host_arrow(values)
+def _observed(key: dict[str, Any], values: list[Any]) -> dict[str, Any]:
+    r"""The reference's public answer and its own cast of ``values``, and,
+    when the host hands a mix of kinds over as text, its answer to that
+    text given as text."""
     with _watching_the_cast(values) as seen:
         public = observe(key, values)
     cast: dict[str, Any] | None
@@ -1310,8 +1326,108 @@ def record(
     else:
         cast = {'dtype': seen['dtype'], 'values': seen['values']}
     reference: dict[str, Any] = {'public': public, 'cast': cast}
-    if arrow['rule'] == 'text' and mixed(values):
+    if host_arrow(values)['rule'] == 'text' and mixed(values):
         reference['as_text'] = observe(key, as_text(values))
+    return reference
+
+
+class _Worker:
+    r"""This script in a worker process (``--worker``, the same interpreter),
+    observing one vector at a time, by key id and input name, so that a
+    vector the reference does not answer within ``TIME_LIMIT_SECONDS`` is
+    stopped, recorded as unfinished, and the worker started again."""
+
+    def __init__(self) -> None:
+        self._process: subprocess.Popen[str] | None = None
+        #: The longest a vector took that the reference answered.
+        self.slowest = (0.0, '')
+
+    def _start(self) -> subprocess.Popen[str]:
+        if self._process is None:
+            self._process = subprocess.Popen(
+                [sys.executable, '-I', __file__, '--worker'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                text=True,
+                cwd=ROOT,
+            )
+        return self._process
+
+    def ask(self, key: dict[str, Any], name: str) -> dict[str, Any] | None:
+        process = self._start()
+        assert process.stdin is not None and process.stdout is not None
+        process.stdin.write(json.dumps([key['id'], name]) + '\n')
+        process.stdin.flush()
+        started = time.monotonic()
+        ready, _, _ = select.select(
+            [process.stdout], [], [], TIME_LIMIT_SECONDS
+        )
+        if not ready:
+            process.kill()
+            process.wait()
+            self._process = None
+            return None
+        line = process.stdout.readline()
+        if not line:
+            raise RuntimeError(f'the worker died on {key["id"]}.{name}')
+        took = time.monotonic() - started
+        if took > self.slowest[0]:
+            self.slowest = (took, f'{key["id"]}.{name}')
+        answer: dict[str, Any] = json.loads(line)
+        return answer
+
+    def close(self) -> None:
+        if self._process is not None:
+            assert self._process.stdin is not None
+            self._process.stdin.close()
+            self._process.wait()
+            self._process = None
+
+
+def _worker() -> int:
+    r"""``--worker``: answers each request line (a key id and an input name)
+    with the reference's observation of it, one JSON line each, on the
+    stdout it was started with; anything else printed goes to stderr."""
+    import sdm_relational_engine  # noqa: F401 - the reference's engine
+
+    out = os.fdopen(os.dup(sys.stdout.fileno()), 'w')
+    sys.stdout = sys.stderr
+    keys = {key['id']: key for key in all_keys()}
+    for line in sys.stdin:
+        key_id, name = json.loads(line)
+        key = keys[key_id]
+        out.write(json.dumps(_observed(key, inputs(key)[name])) + '\n')
+        out.flush()
+    return 0
+
+
+def record(
+    key: dict[str, Any],
+    name: str,
+    values: list[Any],
+    expected: dict[str, Any] | None = None,
+    worker: _Worker | None = None,
+) -> dict[str, Any]:
+    r"""One vector, observed on the reference (by ``worker``, within
+    ``TIME_LIMIT_SECONDS``, when given): also, when the host hands a mix of
+    kinds over as text, the reference's answer to that text given as text
+    (``as_text``)."""
+    encoded = [encode(v) for v in values]
+    arrow = host_arrow(values)
+    answered = (
+        _observed(key, values) if worker is None else worker.ask(key, name)
+    )
+    reference: dict[str, Any]
+    if answered is None:
+        reference = {
+            'public': {
+                'outcome': 'unfinished',
+                'within_seconds': TIME_LIMIT_SECONDS,
+            },
+            'cast': None,
+        }
+    else:
+        reference = answered
     vector: dict[str, Any] = {
         'id': f'{key["id"]}.{name}',
         'key': key['id'],
@@ -1332,6 +1448,8 @@ def outcome_class(answer: dict[str, Any]) -> str:
     written from one of these to another."""
     if answer['outcome'] == 'success':
         return 'success'
+    if answer['outcome'] == 'unfinished':
+        return 'unfinished'
     return f'refusal {answer.get("code")}'
 
 
@@ -1483,19 +1601,35 @@ def main() -> int:
         print("sdm_client is not the reference checkout's", file=sys.stderr)
         return 1
     vectors = []
-    for key in all_keys():
-        expectations = derived(key)
-        for name, values in inputs(key).items():
-            expected = expectations[name][1] if name in expectations else None
-            vector = record(key, name, values, expected)
-            vectors.append(vector)
-            public = vector['reference']['public']
-            print(
-                vector['id'],
-                public['outcome'],
-                public.get('code') or '',
-                file=sys.stderr,
-            )
+    worker = _Worker()
+    try:
+        for key in all_keys():
+            expectations = derived(key)
+            for name, values in inputs(key).items():
+                expected = (
+                    expectations[name][1] if name in expectations else None
+                )
+                vector = record(key, name, values, expected, worker)
+                vectors.append(vector)
+                public = vector['reference']['public']
+                print(
+                    vector['id'],
+                    public['outcome'],
+                    public.get('code') or '',
+                    file=sys.stderr,
+                )
+    finally:
+        worker.close()
+    unfinished = [
+        v['id']
+        for v in vectors
+        if v['reference']['public']['outcome'] == 'unfinished'
+    ]
+    print(
+        f'slowest answered: {worker.slowest[1]} in {worker.slowest[0]:.1f} s; '
+        f'unfinished within {TIME_LIMIT_SECONDS} s: {unfinished}',
+        file=sys.stderr,
+    )
     derive_marks(vectors)
     document = {
         'format': FORMAT,
@@ -1528,4 +1662,4 @@ def main() -> int:
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    raise SystemExit(_worker() if sys.argv[1:] == ['--worker'] else main())

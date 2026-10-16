@@ -255,9 +255,10 @@ def reference_problems(
 def test_the_reference_observations_carry_the_recording_s_identity() -> None:
     assert reference_problems() == []
     header, distributions, _ = read_environment(ENVIRONMENT)
-    # The reference T0.3 recorded (phase-0/reference-environment.md), and
-    # the cell's versions among the distributions.
-    assert header['reference'].startswith('b413e9a')
+    # The reference the owner approved for Phase 2 (T2.0c: b413e9a, T0.3's,
+    # with main 327fda03 merged), and the cell's versions among the
+    # distributions.
+    assert header['reference'].startswith('6298913c')
     for line in ('pandas==3.0.6', 'pyarrow==25.0.1', 'numpy==2.5.3'):
         assert line in distributions
 
@@ -386,7 +387,7 @@ LINE_FAULTS: dict[str, tuple[Callable[[list[dict[str, Any]]], None], str]] = {
     'another runner': (_set('identity.runner', 'python-old'), 'runner'),
     'no cell': (_set('identity.cell', None), 'identity.cell'),
     'another platform': (
-        _set('identity.platform', 'linux-x86_64'),
+        _set('identity.platform', 'darwin-arm64'),
         'identity.platform',
     ),
     'an unclean checkout': (

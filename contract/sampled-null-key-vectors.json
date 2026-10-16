@@ -1,7 +1,7 @@
 {
  "format": "sdm-sampled-null-key-vectors/1",
  "recorded_by": "contract/tools/sampled_null_key_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cell": "ref-pandas3",
  "environment": {
   "python": "3.12.13",
@@ -258,16 +258,7 @@
      },
      "inference": {
       "run_mode": "fast",
-      "use_prediction_time": false,
-      "inference_config": {
-       "kind": "regression",
-       "num_estimators": {
-        "number": "1"
-       },
-       "column_shuffle": false,
-       "category_shuffle": false,
-       "hop_shuffle": false
-      }
+      "use_prediction_time": false
      },
      "metadata": {
       "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
@@ -579,16 +570,7 @@
      },
      "inference": {
       "run_mode": "fast",
-      "use_prediction_time": false,
-      "inference_config": {
-       "kind": "regression",
-       "num_estimators": {
-        "number": "1"
-       },
-       "column_shuffle": false,
-       "category_shuffle": false,
-       "hop_shuffle": false
-      }
+      "use_prediction_time": false
      },
      "metadata": {
       "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
@@ -854,16 +836,7 @@
      },
      "inference": {
       "run_mode": "fast",
-      "use_prediction_time": false,
-      "inference_config": {
-       "kind": "regression",
-       "num_estimators": {
-        "number": "1"
-       },
-       "column_shuffle": false,
-       "category_shuffle": false,
-       "hop_shuffle": false
-      }
+      "use_prediction_time": false
      },
      "metadata": {
       "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
@@ -1143,16 +1116,7 @@
      },
      "inference": {
       "run_mode": "fast",
-      "use_prediction_time": false,
-      "inference_config": {
-       "kind": "regression",
-       "num_estimators": {
-        "number": "1"
-       },
-       "column_shuffle": false,
-       "category_shuffle": false,
-       "hop_shuffle": false
-      }
+      "use_prediction_time": false
      },
      "metadata": {
       "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
@@ -1188,30 +1152,290 @@
    ],
    "reference": {
     "outcome": {
-     "result": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null
     },
     "keys": {
      "accounts": "account_id",
      "payments": "payment_id"
     },
-    "request": null,
+    "request": {
+     "model": "kumo-relational",
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": [
+       "accounts"
+      ]
+     },
+     "schema": {
+      "instance_table": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "__kumo_entity_ref_0": {
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        "TARGET": {
+         "dtype": "float32",
+         "stype": "numerical"
+        }
+       },
+       "primary_key": "instance_id"
+      },
+      "related_tables": {
+       "accounts": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "account_id": {
+          "dtype": "int64",
+          "nullable": false
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "account_id"
+        ]
+       },
+       "payments": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__node_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "amount": {
+          "dtype": "float64",
+          "stype": "numerical"
+         },
+         "account_id": {
+          "dtype": "int64",
+          "stype": "ID"
+         }
+        },
+        "primary_key": [
+         "instance_id",
+         "__node_id"
+        ]
+       }
+      },
+      "relationships": [
+       {
+        "source_columns": [
+         "__kumo_entity_ref_0"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       },
+       {
+        "source_table": "payments",
+        "source_columns": [
+         "account_id"
+        ],
+        "target_table": "accounts",
+        "target_columns": [
+         "account_id"
+        ]
+       }
+      ]
+     },
+     "context": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0",
+        "TARGET"
+       ],
+       "rows": [
+        [
+         {
+          "number": "0"
+         },
+         {
+          "number": "40"
+         },
+         {
+          "number": "40.0"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "0"
+          },
+          {
+           "number": "40"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": []
+       }
+      }
+     },
+     "predict": {
+      "instance_table": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "__kumo_entity_ref_0"
+       ],
+       "rows": [
+        [
+         {
+          "number": "1"
+         },
+         {
+          "number": "3"
+         }
+        ]
+       ]
+      },
+      "related_tables": {
+       "accounts": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       },
+       "payments": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__node_id",
+         "amount",
+         "account_id"
+        ],
+        "rows": [
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "0"
+          },
+          {
+           "number": "1.0"
+          },
+          {
+           "number": "3"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "1"
+          },
+          {
+           "number": "2.0"
+          },
+          {
+           "number": "3"
+          }
+         ],
+         [
+          {
+           "number": "1"
+          },
+          {
+           "number": "2"
+          },
+          {
+           "number": "0.0"
+          },
+          {
+           "number": "3"
+          }
+         ]
+        ]
+       }
+      }
+     },
+     "output": {
+      "fields": [
+       "prediction"
+      ],
+      "prediction_statistic": "median"
+     },
+     "inference": {
+      "run_mode": "fast",
+      "use_prediction_time": false
+     },
+     "metadata": {
+      "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
+      "num_context_examples": {
+       "number": "1"
+      },
+      "num_prediction_examples": {
+       "number": "1"
+      }
+     }
+    },
     "warnings": [
      "SDMWarning",
-     "UserWarning"
+     "UserWarning",
+     "SDMWarning"
     ]
    },
    "reference_messages": [
     "payments.payment_id identifies a row, but 1 row(s) have no value for it. Those rows cannot be scored and the model will not see them; fill or drop them, or name a different primary key.",
-    "Missing 3 indices in 2 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`."
+    "Missing 3 indices in 2 tables for optimal database querying. For improving runtime, we strongly suggest to create indices for primary and foreign keys, e.g., automatically by instantiating Kumo Relational via `KumoRelational(graph, optimize=True)`.",
+    "every context row has the same accounts.amount, so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ."
    ],
    "register": {
-    "required": true,
-    "why": [
-     "the reference fails with INTERNAL_ERROR at materialize (E66(b): a named refusal or a success in its place is a change to register)"
-    ]
+    "required": false,
+    "why": []
    }
   },
   {
@@ -1452,16 +1676,7 @@
      },
      "inference": {
       "run_mode": "fast",
-      "use_prediction_time": false,
-      "inference_config": {
-       "kind": "regression",
-       "num_estimators": {
-        "number": "1"
-       },
-       "column_shuffle": false,
-       "category_shuffle": false,
-       "hop_shuffle": false
-      }
+      "use_prediction_time": false
      },
      "metadata": {
       "source_query": "PREDICT accounts.amount FOR EACH accounts.account_id",
