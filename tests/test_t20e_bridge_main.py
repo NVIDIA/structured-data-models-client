@@ -369,7 +369,6 @@ def module_key() -> str:
     return f'{TARGET}::{freeze.MODULE}'
 
 
-@PENDING
 def test_the_merge_s_first_parent_at_the_checkpoint_passes(
     tmp_path: Path,
 ) -> None:
@@ -383,7 +382,6 @@ def test_the_merge_s_first_parent_at_the_checkpoint_passes(
     assert code == 0, text
 
 
-@PENDING
 def test_the_package_s_change_before_its_merge_is_not_main_s(
     tmp_path: Path,
 ) -> None:
@@ -454,7 +452,6 @@ def said(repo: Path, sha: str) -> str:
     return f'{sha} ' + git(repo, 'log', '-1', '--format=%s', sha)
 
 
-@PENDING
 def test_a_merge_inside_main_is_not_the_package_s_merge(
     tmp_path: Path,
 ) -> None:
