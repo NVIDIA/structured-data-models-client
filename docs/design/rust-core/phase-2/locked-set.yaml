@@ -11,7 +11,7 @@
 # gate, and 12 is the every check); the L7 limits (KO2-29); and, per check
 # run in CI, the job-name patterns whose jobs must all have concluded
 # success on the judged run. T2.0f's reader, landed before T2.0a, reads
-# the steps census, coverage-s1, l3, l7 and ci and the keys limits and ci;
+# the steps census, coverage-s1, l3, l7, ci and main and the keys limits and ci;
 # each step fails the locked run by name until its tool lands. Protected by
 # the phase-*/locked-set.yaml glob in contract/protected-paths.txt: a change
 # lands under its trailer, and a third change to the checks is the owner's.
@@ -71,7 +71,7 @@ halves:
       - time.timestamp-ns
       - time.timestamp-s
       - time.timestamptz
-    steps: [inventory, seeded, census, coverage-s1, l3, l7, ci]
+    steps: [inventory, seeded, census, coverage-s1, l3, l7, ci, main]
     checks:
       '1': [runners, observations, ratchet, compare, coverage, coverage-s1, l1, inventory, ci]
       '2': [ratchet, census]
@@ -79,7 +79,7 @@ halves:
       '4': [ci]
       '5': [ci]
       '6': [l3]
-      '7': [ratchet]
+      '7': [ratchet, main]
       '8': [ci]
       '10': [l0, seeded, ci]
       '11': [l7]
