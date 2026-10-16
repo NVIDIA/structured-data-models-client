@@ -56,6 +56,9 @@ jobs:
           # unsafe code shipped, so it is the part worth a compiled analysis.
           - language: c-cpp
             build-mode: manual
+          # The Rust core, the client's native module, read from the tree.
+          - language: rust
+            build-mode: none
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
