@@ -15,7 +15,10 @@ checkpoint holding the locked steps' stubs, a ``cargo`` stub, the Python
 runners' real observations). Whether a locked check passes as a whole
 depends on the runtime cell the runners observed in (H1), so the locked
 runs here assert the steps' own results in the gate summary, never the
-whole run's pass.
+whole run's pass. A real gate run needs the built native core, so this
+file lives in ``contract/tests`` beside ``test_gate_modes.py`` and
+``test_t20_locked_set.py``, which CI runs in the ``contract-python`` job
+that installs the core, never in the plain ``test`` jobs.
 
 The reader (exit 1): Phase 2's real locked set, the design's
 ``docs/design/rust-core/phase-2/locked-set.yaml`` (T2.0a lands it; until
@@ -28,7 +31,8 @@ that file with one change: an unknown step, an unknown key of the half, a
 malformed limit (not a number, negative, a boolean, an unknown name, a
 baseline that is no commit, ``statements`` other than ``equal``, limits
 not a mapping), a malformed CI pattern (empty, not a string, a check's
-patterns not a list, patterns for a check the half does not have).
+patterns not a list, patterns for a check the half does not have, a check
+holding the ``ci`` step with no patterns).
 
 Check 7 (exit 2): the ``main`` step, run only by a half whose ``steps``
 list it (half 2a, its check 7 holding ``[ratchet, main]``), requires the
@@ -43,7 +47,9 @@ does not hold. ``origin/main`` at ``R`` passes the ``main`` step, a local
 step). Seeded: ``origin/main`` at ``M`` (``main``
 moved and not merged; a local ``main`` at ``R`` changes nothing), no
 ``origin/main`` at all, and ``M`` merged into the candidate but the
-reference not rerun each fail the ``main`` step and check 7, by name.
+reference not rerun each fail the ``main`` step and check 7, by name; so
+does an ambiguous ``reference-env.txt`` (a second ``reference:`` field,
+malformed or naming another commit, beside the valid one).
 Control: Phase 1's half ``1b`` (no ``main`` step) is judged as before with
 ``main`` moved, and runs no step of T2.0f's.
 
@@ -76,7 +82,7 @@ from typing import Any
 import pytest
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
@@ -272,6 +278,16 @@ def _pattern(
     return change
 
 
+def _without_patterns(check: str) -> Callable[[dict[str, Any]], None]:
+    r"""Check ``check`` still holds the ci step, and its patterns are gone."""
+
+    def change(half: dict[str, Any]) -> None:
+        assert 'ci' in half['checks'][check]
+        del half['ci'][check]
+
+    return change
+
+
 def _step(name: str) -> Callable[[dict[str, Any]], None]:
     def change(half: dict[str, Any]) -> None:
         half['steps'] = [*half['steps'], name]
@@ -308,6 +324,7 @@ FAULTS = {
         'ci',
     ),
     'patterns-for-no-check': (_pattern('99', ['x*'], replace=True), '99'),
+    'ci-check-without-patterns': (_without_patterns('8'), '8'),
 }
 
 
@@ -504,6 +521,61 @@ def test_main_merged_without_the_reference_rerun_fails_the_main_step(
     log = step_log(done, MAIN_STEP)
     assert 'origin/main' in log, log
     assert mainline['R'][:7] in log or 'reference-env.txt' in log, log
+    assert GM.table(done, '2a')[MAIN_CHECK] == 'FAIL'
+
+
+def _second_reference(where: str, line: str) -> Callable[[Path], None]:
+    r"""``reference-env.txt`` with a second ``reference:`` field ``line``,
+    ``before`` or ``after`` the valid one."""
+
+    def edit(tree: Path) -> None:
+        path = tree / 'contract/reference-env.txt'
+        text = path.read_text()
+        valid = re.search(r'(?m)^reference: [0-9a-f]{40}$', text)
+        assert valid is not None
+        both = (
+            f'{line}\n{valid[0]}'
+            if where == 'before'
+            else f'{valid[0]}\n{line}'
+        )
+        path.write_text(text.replace(valid[0], both, 1))
+
+    return edit
+
+
+@PENDING
+@pytest.mark.parametrize(
+    ('where', 'extra'),
+    [
+        pytest.param('after', 'malformed', id='malformed-after'),
+        pytest.param('before', 'malformed', id='malformed-before'),
+        pytest.param('after', 'another-commit', id='another-commit'),
+    ],
+)
+def test_an_ambiguous_reference_env_fails_the_main_step_by_name(
+    stubbed: Path,
+    tmp_path: Path,
+    observed: Any,
+    stubs: dict[str, Any],
+    mainline: dict[str, str],
+    where: str,
+    extra: str,
+) -> None:
+    r"""Seeded (exit 2, review round 1): with ``origin/main`` at R, which
+    passes (the twin above), a second ``reference:`` field beside the valid
+    one, ``reference: not-a-commit`` or one naming M, makes the reference
+    commit ambiguous: the main step fails, naming ``reference-env.txt``, and
+    check 7 with it."""
+    _refs(stubbed, origin_main=mainline['R'], local_main=None)
+    line = (
+        'reference: not-a-commit'
+        if extra == 'malformed'
+        else f'reference: {mainline["M"]}'
+    )
+    commit(stubbed, 'T2.0c: a change', _second_reference(where, line))
+    done = run_locked(stubbed, stubs, observed, tmp_path)
+    assert GM.summary(done).get(MAIN_STEP) == 'FAIL', done.stdout + done.stderr
+    assert 'reference-env.txt' in step_log(done, MAIN_STEP), done.stdout
     assert GM.table(done, '2a')[MAIN_CHECK] == 'FAIL'
 
 
