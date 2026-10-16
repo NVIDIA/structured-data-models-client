@@ -77,6 +77,9 @@
 #
 # A one-shot step (3, 4) writes a "started" marker before it runs; a marker
 # with no done stamp stops every rerun: a person decides, never a rerun.
+# $WORK belongs to one SHA: the first --execute records it in $WORK/SHA, a
+# different --sha on that $WORK stops, and the build and evidence worktrees
+# are checked to be at SHA before each step uses them.
 # Never: rm -rf, --force, sudo, git config, push. Network probes run under a
 # perl alarm with stdin /dev/null.
 #
@@ -152,10 +155,19 @@ WORK=${WORK%/}
 LOGS=$WORK/logs; OBS=$WORK/obs; EVW=$WORK/ev-wt; BLD=$WORK/build-wt; ART=$WORK/artifacts
 LIVE=$WORK/live; PACK=$WORK/pack/evidence; GTMP=$WORK/tmp; STAMPS=$WORK/stamps
 HELDOUT_SH=$EVW/scripts/rust_core/heldout_run.sh
+# The stamps, worktrees and artifacts under $WORK are this SHA's only.
+WORK_CLASH=''
+if [ -e "$WORK/SHA" ]; then
+  [ "$(cat "$WORK/SHA")" = "$SHA" ] || WORK_CLASH="$WORK is the work dir of $(cat "$WORK/SHA"), not $SHA: give a new --work"
+elif [ -n "$(ls -A "$STAMPS" 2>/dev/null)" ]; then
+  WORK_CLASH="$WORK holds step stamps but no SHA record: give a new --work"
+fi
 HELDOUT_ARGS=(--candidate "$EVW" --python "${CELL_REF_PY:-<reference cell python>}"
   ${BUNDLE:+--bundle "$BUNDLE"} ${HRUN:+--out "$HRUN"} "${HELDOUT_ARGS[@]+"${HELDOUT_ARGS[@]}"}")
 if [ "$MODE" = execute ]; then
+  [ -z "$WORK_CLASH" ] || die "$WORK_CLASH"
   mkdir -p "$LOGS" "$OBS" "$ART" "$LIVE/log" "$LIVE/public" "$GTMP" "$STAMPS"
+  [ -e "$WORK/SHA" ] || echo "$SHA" >"$WORK/SHA"
   exec > >(tee -a "$WORK/phase_end.log") 2>&1
 fi
 declare -a TIMES=()
@@ -181,6 +193,12 @@ finish() { end_step stamp; }
 # A one-shot's marker: made with noclobber, so two runs can't both start it.
 started() { ( set -C; date -u +%FT%TZ >"$STAMPS/$1.started" ) 2>/dev/null || die "$1 started before (marker exists): a person decides, never a rerun"; }
 half_started() { [ -e "$STAMPS/$1.started" ] && [ ! -e "$STAMPS/$1.done" ]; }
+# A worktree made by an earlier step (or run) must still be at SHA.
+at_sha() {
+  local head; head=$(git -C "$1" rev-parse HEAD 2>/dev/null) || head='(none)'
+  [ "$head" = "$SHA" ] || { echo "     !! $1 is at ${head:0:12}, not SHA ${SHA:0:12}"; return 1; }
+  echo "     at ${SHA:0:12}"
+}
 
 # ===========================================================================
 CURRENT='0 preflight'; STEP_T0=$(date +%s)
@@ -188,6 +206,7 @@ echo; say "== step 0: preflight ($MODE) for $SHA on $PHASE_BRANCH"
 PROBLEMS=()
 problem() { PROBLEMS+=("$*"); echo "   !! $*"; }
 okay() { echo "   ok  $*"; }
+[ -z "$WORK_CLASH" ] || problem "$WORK_CLASH"
 
 alarm 120 git -C "$REPO" fetch -q origin || problem "git fetch origin failed"
 LANDING=${LANDING:-$SHA}
@@ -295,6 +314,7 @@ EVIDENCE_ARGS=(--gate-out "$OBS" --gate-json "$GATE_JSON" --reference "$EVW/cont
 # ===========================================================================
 if [ "$UNTIL" -ge 1 ] && begin 1 build; then
   run "a clean build worktree at SHA" -- bash -c "[ -d '$BLD' ] || git -C '$REPO' worktree add --quiet --detach '$BLD' '$SHA'"
+  run "the build worktree is at SHA" -- at_sha "$BLD"
   run "the local client wheel (native_wheel.py, not --manylinux)" -- \
     bash -c "ls '$ART'/client/*.whl >/dev/null 2>&1 || { cd '$BLD' && PATH='$TOOLS_BIN':\$PATH '$TOOLS_BIN/python' -I scripts/rust_core/native_wheel.py --out '$ART/client'; }"
   run "the local wheel's identity: commit = SHA, clean tree" -- python3 -I - "$ART/client" "$SHA" <<'PY'
@@ -341,6 +361,7 @@ fi
 # ===========================================================================
 if [ "$UNTIL" -ge 2 ] && begin 2 evidence; then
   run "the evidence worktree, detached at SHA (stays clean)" -- bash -c "[ -d '$EVW' ] || git -C '$REPO' worktree add --quiet --detach '$EVW' '$SHA'"
+  run "the evidence worktree is at SHA" -- at_sha "$EVW"
   run "gate --locked $HALF in ${CELL_NAMES[0]:-the reference cell}, observations kept (the gate's temp dirs under \$WORK/tmp)" -- \
     bash -c "set -o pipefail; cd '$EVW' && TMPDIR='$GTMP' PYTHON='$CELL_REF_PY' scripts/rust_core/gate.sh --base '$BASE' \
       --run python-core,python-old,rust-host --locked '$HALF' --out '$OBS' 2>&1 | tee '$OBS/gate-$HALF.log'"
@@ -384,6 +405,7 @@ fi
 
 # ===========================================================================
 if [ "$UNTIL" -ge 3 ] && begin 3 heldout; then
+  run "the evidence worktree is at SHA" -- at_sha "$EVW"
   run "held-out preconditions (heldout_run.sh's own dry run)" -- "$HELDOUT_SH" "${HELDOUT_ARGS[@]}"
   [ "$MODE" = execute ] && started 3-heldout
   run "THE held-out run, once" -- "$HELDOUT_SH" "${HELDOUT_ARGS[@]}" --execute
@@ -414,6 +436,7 @@ fi
 
 # ===========================================================================
 if [ "$UNTIL" -ge 5 ] && begin 5 pack; then
+  run "the evidence worktree is at SHA" -- at_sha "$EVW"
   run "evidence.py: cases, seams, comparator, held-out digests" -- \
     "$CELL_REF_PY" -I "$EVW/scripts/rust_core/evidence.py" "${EVIDENCE_ARGS[@]}" --heldout "$BUNDLE" --out "$PACK"
   if [ -n "$HRUN" ]; then

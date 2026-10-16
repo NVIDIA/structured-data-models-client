@@ -147,7 +147,7 @@ From the plan (section 8 Phase 4, section 4 S3):
 
 Exit: the slice gate and the switch gate.
 
-The path count in `phase-0/scope-python.yaml` is 121 S3 paths: `client.fit` 31 and `fitted.predict` 31, on **every backend** including the live warehouses; `query.materialize` 16; `client.predict` 16; `connectors.read-table` 14; `connectors.read` 4; `schema.from-data` 2; `request.tabular` 2.
+The path count in `phase-0/scope-python.yaml` is 121 S3 paths: `client.fit` 31 and `fitted.predict` 31, on **every backend** including the live warehouses; `query.materialize` 16; `client.predict` 16; `connectors.read-table` 14; `connectors.read` 4; `schema.from-data` 2; `request.tabular` 2; `result.read` 2; `schema.construct` 1; `fitted.close` 1; `result.merge` 1.
 
 Assigned to Phase 4 by Phase 1:
 - reading frame text times. PK-7 keeps pandas 3's text-timestamp detection, and the owner's E66(h) (2026-10-11) rules out pandas emulation in the core: the core's text-time reader parses a fixed list of formats and refuses the rest by name (DT-15; DT-6 was withdrawn). Q4.1 settles how frames meet both;
@@ -243,7 +243,7 @@ Assigned to Phase 5 by Phase 1:
 
 ### What gets deleted
 
-- `packages/structured-data-models-relational-engine/src`: 25,565 lines of Python, plus `csrc/neighbor_sampler.cpp` and vendored assets. Its tests are 28,925 lines.
+- `packages/structured-data-models-relational-engine/src`: 25,019 lines of Python, plus `csrc/neighbor_sampler.cpp` and vendored assets. Its tests are 29,114 lines. (Every line count in this section is `wc -l` over the `.py` files at Phase 1's merge commit 91a00319; this handoff changes none of them. The PQL count is its `src` only.)
 - Before deleting it, move what are really **host** functions into the client: the serving client (`client/snowflake_serving.py`, 349 lines), `utils/progress_logger.py`, and any HTTP or auth code. The plan keeps HTTP and auth in the host (section 3).
 - The client's old route: `materializers/relational.py` (1,597 lines), parts of `schema.py`, `client.py`, `request.py`, `decompose.py` and `adapters/*`, `_routing.py` (366 lines), the bridge freeze, and `python-old` with every judging rule that names it (E110, E112, E114).
 - `structured-data-models-pql` (13,208 lines): the runtime dependency goes. The ANTLR grammar stays only as CI's cross-check (plan section 3, PQL).

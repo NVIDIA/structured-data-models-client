@@ -32,7 +32,8 @@
 # A cell is checked after install: run_python.py's _cell() must name it from
 # its versions, and sdm_client._native must load. It is reinstalled only
 # when its tree, Python or pins change (its .cells-stamp file). The source
-# worktrees accumulate: `git worktree remove OUT/src-<tree12>` drops one.
+# worktrees accumulate: `git worktree remove OUT/src-<tree12>` drops one; a
+# reused one must still be at its tree and clean, or the run stops.
 # Nothing here deletes anything or touches the network beyond uv's and
 # cargo's package downloads.
 set -euo pipefail
@@ -86,6 +87,12 @@ done <<<"$CELLS"
 
 log "source ${COMMIT:0:12} (tree $T12)"
 [ -d "$SRC" ] || git -C "$REPO" worktree add --quiet --detach "$SRC" "$COMMIT"
+# A reused source worktree must still hold this tree, unedited: its wheels
+# are labelled with it.
+[ "$(git -C "$SRC" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$TREE" ] \
+  || { echo "$SRC is not at tree $T12: check it out at $COMMIT or remove it" >&2; exit 3; }
+[ -z "$(git -C "$SRC" status --porcelain --untracked-files=all)" ] \
+  || { echo "$SRC has local changes: restore it or remove it" >&2; exit 3; }
 
 log "tools venv (maturin $MATURIN)"
 [ -x "$OUT/tools/bin/python" ] || uv venv -q -p 3.12 "$OUT/tools"

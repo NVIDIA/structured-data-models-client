@@ -30,9 +30,9 @@
 # --wheel: the candidate's locally built wheels (native_wheel.py), installed
 #   into a fresh environment under --out; or --python, an environment that
 #   already holds them.
-# --out: the run directory; --stamp (default OUT/.ran) is made, with
-#   noclobber, just before the candidate first sees a case, so a second run
-#   stops there.
+# --out: the run directory, made absolute; --stamp (default OUT/.ran) is
+#   made, with noclobber, just before the candidate first sees a case, so a
+#   second run stops there.
 # --register: the register's path in the candidate (default
 #   docs/design/rust-core/register.yaml), snapshotted at the run's start:
 #   only entries approved before the run count.
@@ -67,10 +67,11 @@ if [ -n "${HELDOUT_WHEELS:-}" ]; then
 fi
 
 usage() { sed -n '6,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+full_help() { sed -n '6,46p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --execute) mode=execute; shift; continue ;;
-    -h | --help) usage ;;
+    -h | --help) full_help ;;
   esac
   [ $# -ge 2 ] || { echo "heldout_run.sh: $1 needs a value" >&2; exit 2; }
   case "$1" in
@@ -115,6 +116,11 @@ case "$threshold" in '' | *[!0-9]*)
   echo "heldout_run.sh: --threshold takes a count, not $threshold" >&2
   exit 2 ;;
 esac
+
+# Absolute: rust-host runs from inside the candidate, and a relative path
+# would fail there, after the stamp.
+case "$out" in /*) ;; *) out=$PWD/$out ;; esac
+case "$stamp" in '' | /*) ;; *) stamp=$PWD/$stamp ;; esac
 
 here=$(cd "$(dirname "$0")" && pwd)
 heldout=("${HELDOUT_TOOL_PYTHON:-python3}" -I "$here/heldout.py")

@@ -213,6 +213,7 @@ def test_audit_classifies_every_case(repo) -> None:
     assert 'kept' in local['keep-me']['classes']
     assert not local['keep-me']['deletable']
     assert 'checked-out' in local['main']['classes']
+    assert 'default-branch' in local['main']['classes']
     assert not local['needs-big-d']['deletable']
     assert local['needs-big-d']['flag'] == '-D'
     assert remote['done-remote']['deletable']
@@ -358,3 +359,56 @@ def test_apply_stops_at_the_first_changed_item(repo) -> None:
     assert status['wt'] == 'deleted'
     assert status['done-remote'].startswith('refused')
     assert status['merged-d'] == 'planned'
+
+
+def test_base_must_be_a_branch(repo) -> None:
+    # A commit, HEAD or tag as the base would leave the base branch itself
+    # deletable once its tip is merged.
+    r = repo
+    git(r['work'], 'tag', 'v1', r['sha']['d'])
+    for base in (r['sha']['d'], 'HEAD', 'v1', 'origin/release~1', 'nope'):
+        proc = tool(
+            'audit', '--repo', str(r['work']), '--base', base, '--no-gh'
+        )
+        assert proc.returncode == 2, (base, proc.stdout)
+        assert 'is not a branch here' in proc.stderr, base
+    for base in ('origin/release', 'refs/remotes/origin/release', 'main'):
+        proc = tool(
+            'audit', '--repo', str(r['work']), '--base', base, '--no-gh'
+        )
+        assert proc.returncode == 0, (base, proc.stderr)
+
+
+def test_ignored_files_outside_caches_keep_a_worktree(repo) -> None:
+    # git worktree remove deletes ignored files without asking; build caches
+    # are rebuilt, anything else (notes, .env, run outputs) is kept.
+    r = repo
+    common = Path(git(r['work'], 'rev-parse', '--git-common-dir'))
+    if not common.is_absolute():
+        common = r['work'] / common
+    (common / 'info').mkdir(exist_ok=True)
+    (common / 'info' / 'exclude').write_text('*.env\ntarget/\n')
+    wts = r['wts']
+    for name in ('notes', 'cache'):
+        git(r['work'], 'worktree', 'add', '-q', '--detach', str(wts / name),
+            r['sha']['b'])  # fmt: skip
+        (wts / name / 'target' / 'debug').mkdir(parents=True)
+        (wts / name / 'target' / 'debug' / 'out.bin').write_text('x\n')
+    (wts / 'notes' / 'local.env').write_text('SECRET=1\n')
+    out = r['tmp'] / 'audit.json'
+    proc = tool(
+        'audit', '--repo', str(r['work']), '--base', 'origin/release',
+        '--keep-list', str(r['keep']), '--no-gh', '--json', str(out),
+    )  # fmt: skip
+    assert proc.returncode == 0, proc.stderr
+    res = json.loads(out.read_text())
+    items = {Path(i['path']).name: i for i in res['worktrees']}
+    notes = items['notes']
+    assert not notes['deletable']
+    assert 'dirty' in notes['classes']
+    assert any(
+        'ignored files outside caches: 1' in why and 'local.env' in why
+        for why in notes['reasons']
+    ), notes['reasons']
+    assert items['cache']['deletable'], items['cache']['reasons']
+    assert 'worktree:' + os.path.realpath(wts / 'notes') not in targets(plan(r))

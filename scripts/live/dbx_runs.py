@@ -23,6 +23,7 @@ the Databricks CLI (``databricks ... -o json``) and only ever:
                        [--param KEY=VALUE ...] [--timeout SECONDS]
     dbx_runs.py submit --json FILE
     dbx_runs.py wait RUN_ID [RUN_ID ...] [--poll SECONDS] [--max-wait SECONDS]
+                     [--show-url]
 
 ``spec`` fills a job template's ``<KEY>`` placeholders (``<FOLDER>``,
 ``<NOTEBOOK>``, ``<VOLUME_DIR>``, ``<SHA>``, ``<SHA7>``, ``<TARGET>``,
@@ -31,9 +32,12 @@ the Databricks CLI (``databricks ... -o json``) and only ever:
 ``new_cluster``, checks the result as ``submit`` would, and writes it to a
 new file, mode 0600, that it never prints; a file that exists is refused.
 ``submit`` prints the run ID; ``wait`` polls until every run ends and prints
-each run's state, error and notebook exit value as JSON. A resubmission of
-the same payload reuses its ``idempotency_token``, so a retried submit
-never starts a second run.
+each run's state, error and notebook exit value as JSON. That output is
+private: a state message, error or trace can name workspace paths, hosts or
+users, so read it before quoting any of it in public evidence. The run's
+page URL (the workspace host) is left out unless ``--show-url`` asks for
+it. A resubmission of the same payload reuses its ``idempotency_token``, so
+a retried submit never starts a second run.
 
 Every workspace value comes from an argument or the environment, with no
 default, and none is written in this repository:
@@ -56,6 +60,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import posixpath
 import re
 import subprocess
 import sys
@@ -167,7 +172,9 @@ def cluster_extra(arguments: argparse.Namespace) -> dict[str, Any]:
 
 def check(payload: dict[str, Any], folder: str, policy_id: str) -> None:
     """Refuses anything but a one-time run of notebooks in ``folder`` on new
-    single-node clusters under ``policy_id`` or on serverless."""
+    single-node clusters under ``policy_id`` or on serverless. The checks
+    run on the merged cluster, so the extras cannot undo them."""
+    root = posixpath.normpath(folder.rstrip('/') or '/')
     if not payload.get('idempotency_token'):
         raise Refused('the payload has no idempotency_token')
     tasks = payload.get('tasks') or []
@@ -185,12 +192,22 @@ def check(payload: dict[str, Any], folder: str, policy_id: str) -> None:
             if forbidden in task:
                 raise Refused(f'task {name}: {forbidden} (new clusters only)')
         notebook = (task.get('notebook_task') or {}).get('notebook_path', '')
-        if not notebook.startswith(folder.rstrip('/') + '/'):
+        # A path with '..', '.' or '//' is refused outright, not resolved.
+        if notebook != posixpath.normpath(notebook) or not notebook.startswith(
+            root.rstrip('/') + '/'
+        ):
             raise Refused(f'task {name}: notebook outside the workspace folder')
         cluster = task.get('new_cluster')
         if cluster is not None:
+            if 'autoscale' in cluster:
+                raise Refused(f'task {name}: autoscale (single node only)')
             if cluster.get('num_workers') != 0:
                 raise Refused(f'task {name}: num_workers is not 0')
+            conf = cluster.get('spark_conf') or {}
+            if conf.get('spark.databricks.cluster.profile') != 'singleNode':
+                raise Refused(f'task {name}: not the singleNode profile')
+            if not str(conf.get('spark.master', '')).startswith('local'):
+                raise Refused(f'task {name}: spark.master is not local')
             if cluster.get('policy_id') != policy_id:
                 raise Refused(f'task {name}: not under the cluster policy')
         elif task.get('environment_key') not in environments:
@@ -309,7 +326,7 @@ def run_submit(arguments: argparse.Namespace) -> int:
     return 0
 
 
-def collect(profile: str, run_id: int) -> dict[str, Any]:
+def collect(profile: str, run_id: int, show_url: bool) -> dict[str, Any]:
     run = cli(profile, 'jobs', 'get-run', str(run_id))
     state = run.get('state', {})
     out: dict[str, Any] = {
@@ -317,8 +334,9 @@ def collect(profile: str, run_id: int) -> dict[str, Any]:
         'life_cycle': state.get('life_cycle_state'),
         'result': state.get('result_state'),
         'message': state.get('state_message', '')[:500],
-        'url': run.get('run_page_url'),
     }
+    if show_url:
+        out['url'] = run.get('run_page_url')
     if state.get('life_cycle_state') in ENDED:
         task = run['tasks'][0]
         output = cli(profile, 'jobs', 'get-run-output', str(task['run_id']))
@@ -339,7 +357,7 @@ def run_wait(arguments: argparse.Namespace) -> int:
     deadline = time.monotonic() + arguments.max_wait
     while pending:
         for run_id in sorted(pending):
-            status = collect(profile, run_id)
+            status = collect(profile, run_id, arguments.show_url)
             if 'output' in status:
                 results[run_id] = status
                 pending.discard(run_id)
@@ -390,6 +408,11 @@ def main(argv: list[str] | None = None) -> int:
     wait.add_argument('run_ids', nargs='+', type=int)
     wait.add_argument('--poll', type=int, default=30)
     wait.add_argument('--max-wait', type=int, default=4 * 3600)
+    wait.add_argument(
+        '--show-url',
+        action='store_true',
+        help="also print each run's page URL (names the workspace host)",
+    )
 
     arguments = parser.parse_args(argv)
     handlers = {'spec': run_spec, 'submit': run_submit, 'wait': run_wait}

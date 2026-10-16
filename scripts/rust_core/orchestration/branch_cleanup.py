@@ -21,11 +21,15 @@ branch on the remote (read live with ``git ls-remote``) and every linked
 worktree: merged into the base (the tip is an ancestor of ``--base``),
 unmerged (with the count of commits ``git cherry`` finds no equivalent
 for), archive (``--archive-glob``, default ``*archive*``), kept (the
-keep-list), and the reasons an item cannot go: a dirty worktree, one a
-running process has open, a locked one, a rebase or merge in progress, a
-branch checked out in a worktree that stays, the remote's default branch,
-the base itself, an open pull request or a protected branch (both read
-from GitHub with ``gh``; ``--no-gh`` skips that check).
+keep-list), and the reasons an item cannot go: a dirty worktree, one
+holding ignored files outside build caches (``git worktree remove`` deletes
+them without asking), one a running process has open, a locked one, a
+rebase or merge in progress, a branch checked out in a worktree that stays,
+the remote's default branch (local or remote), the base itself, an open
+pull request or a protected branch (both read from GitHub with ``gh``;
+``--no-gh`` skips that check). ``--base`` must name a branch (``NAME``,
+``REMOTE/NAME`` or a full ``refs/`` name), never a commit, tag or ``HEAD``,
+so the base branch itself is always known and kept.
 
 ``plan`` writes the deletion plan: only merged items with no blocking
 reason, in the order worktrees, remote branches, local branches. A local
@@ -67,6 +71,19 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# Ignored paths that are rebuilt, not lost, when a worktree is removed.
+CACHE_PARTS = frozenset(
+    {
+        'target',
+        '.venv',
+        'venv',
+        '__pycache__',
+        '.pytest_cache',
+        '.ruff_cache',
+        '.mypy_cache',
+    }
+)
 
 OP_FILES = (
     'rebase-merge',
@@ -325,6 +342,12 @@ def worktree_problems(repo, wt, snapshot):
         reasons.append(
             f'dirty: {len(lines)} status line(s), e.g. {lines[0].strip()}'
         )
+    ignored = ignored_files(repo, path)
+    if ignored:
+        reasons.append(
+            f'ignored files outside caches: {len(ignored)}, which worktree '
+            f'remove would delete, e.g. {ignored[0]}'
+        )
     gd = git(
         repo, '-C', path, 'rev-parse', '--absolute-git-dir', check=False
     ).stdout.strip()
@@ -339,6 +362,31 @@ def worktree_problems(repo, wt, snapshot):
             f'in use by a running process ({len(users)}), e.g. {users[0]}'
         )
     return reasons
+
+
+def ignored_files(repo, path):
+    """Ignored paths in a worktree, less build caches (a directory is
+    listed once, as DIR/)."""
+    proc = git(
+        repo,
+        '-C',
+        path,
+        'ls-files',
+        '--others',
+        '--ignored',
+        '--exclude-standard',
+        '--directory',
+        check=False,
+    )
+    if proc.returncode != 0:
+        return ['(git ls-files failed: ' + proc.stderr.strip()[:200] + ')']
+    out = []
+    for entry in proc.stdout.splitlines():
+        parts = entry.rstrip('/').split('/')
+        if CACHE_PARTS.intersection(parts) or entry.endswith('.pyc'):
+            continue
+        out.append(entry)
+    return out
 
 
 def needs_force(path):
@@ -403,6 +451,29 @@ def base_name(base, remote):
     return base
 
 
+def base_ref(repo, base, remote):
+    """The full branch ref ``--base`` names, or raise CleanupError.
+
+    A commit, tag or HEAD would leave the base branch protected by nothing
+    but its name, which is then unknown.
+    """
+    name = base_name(base, remote)
+    if base.startswith(('refs/heads/', f'refs/remotes/{remote}/')):
+        full = base
+    elif base.startswith(f'{remote}/'):
+        full = f'refs/remotes/{remote}/{name}'
+    else:
+        full = f'refs/heads/{name}'
+    found = git(repo, 'show-ref', '--verify', '--quiet', full, check=False)
+    if not name or found.returncode != 0:
+        raise CleanupError(
+            f'--base {base} is not a branch here: give NAME, {remote}/NAME '
+            'or a full refs/heads/ or refs/remotes/ name (a commit, tag or '
+            'HEAD would leave the base branch itself unprotected)'
+        )
+    return full
+
+
 def cherry_unmatched(repo, base_sha, sha):
     out = git(repo, 'cherry', base_sha, sha, check=False).stdout
     return sum(1 for line in out.splitlines() if line.startswith('+ '))
@@ -413,7 +484,7 @@ def cherry_unmatched(repo, base_sha, sha):
 
 def audit(repo, base, remote, keep, archive_globs, use_gh, approved=None):
     approved = approved or load_list(None)
-    base_sha = rev(repo, base)
+    base_sha = rev(repo, base_ref(repo, base, remote))
     if not base_sha:
         raise CleanupError(f'base {base} does not resolve to a commit')
     bname = base_name(base, remote)
@@ -499,7 +570,7 @@ def audit(repo, base, remote, keep, archive_globs, use_gh, approved=None):
         for p in problems:
             cls = (
                 'dirty'
-                if p.startswith('dirty')
+                if p.startswith(('dirty', 'ignored'))
                 else 'in-use'
                 if p.startswith('in use')
                 else 'blocked'
@@ -513,7 +584,7 @@ def audit(repo, base, remote, keep, archive_globs, use_gh, approved=None):
             item['classes'].append('kept')
             item['reasons'].append('path on the keep-list')
         if wt['branch'] and (
-            keeps_branch(keep, wt['branch']) or wt['branch'] == bname
+            keeps_branch(keep, wt['branch']) or wt['branch'] in (bname, default)
         ):
             item['classes'].append('kept')
             item['reasons'].append(f'checks out kept branch {wt["branch"]}')
@@ -545,6 +616,9 @@ def audit(repo, base, remote, keep, archive_globs, use_gh, approved=None):
         if name == bname:
             item['classes'].append('base')
             item['reasons'].append('the base branch')
+        if name == default:
+            item['classes'].append('default-branch')
+            item['reasons'].append(f"the local copy of {remote}'s default")
         if keeps_branch(keep, name):
             item['classes'].append('kept')
             item['reasons'].append('on the keep-list')
@@ -706,11 +780,22 @@ def print_plan(plan):
 # --- execute ---------------------------------------------------------------
 
 
-def guard(repo, plan, item, keep, approved, base_sha, gh_state, gone=()):
+def guard(
+    repo,
+    plan,
+    item,
+    keep,
+    approved,
+    base_sha,
+    gh_state,
+    gone=(),
+    default=None,
+):
     """Return the reasons the item may not be deleted now ([] = go).
 
     ``gone`` holds the real paths of worktrees this run has removed, or in
-    a dry run would have removed, by the time it reaches the item.
+    a dry run would have removed, by the time it reaches the item;
+    ``default`` is the remote's default branch.
     """
     reasons = []
     remote = plan['remote']
@@ -735,6 +820,11 @@ def guard(repo, plan, item, keep, approved, base_sha, gh_state, gone=()):
             wt['branch'] and keeps_branch(keep, wt['branch'])
         ):
             reasons.append('on the keep-list')
+        if wt['branch'] and wt['branch'] in (
+            base_name(plan['base'], remote),
+            default,
+        ):
+            reasons.append(f'checks out kept branch {wt["branch"]}')
         if item.get('force') and not approves_path(approved, item['path']):
             reasons.append('--force needs the path in the approved list')
         if (
@@ -751,6 +841,8 @@ def guard(repo, plan, item, keep, approved, base_sha, gh_state, gone=()):
             reasons.append('on the keep-list')
         if item['name'] == base_name(plan['base'], remote):
             reasons.append('the base branch')
+        if default and item['name'] == default:
+            reasons.append(f'default branch of {remote}')
         if gh_state is not None:
             heads, protected = gh_state
             if item['name'] in heads:
@@ -765,6 +857,8 @@ def guard(repo, plan, item, keep, approved, base_sha, gh_state, gone=()):
             reasons.append('on the keep-list')
         if item['name'] == base_name(plan['base'], remote):
             reasons.append('the base branch')
+        if default and item['name'] == default:
+            reasons.append(f"the local copy of {remote}'s default")
         users = [
             w['path']
             for w in worktrees(repo)
@@ -890,9 +984,10 @@ def execute(args):
         raise CleanupError(f'keep-list {keep_path} not found')
     keep = load_list(keep_path)
     approved = load_list(args.approved)
-    base_sha = rev(repo, plan['base'])
+    base_sha = rev(repo, base_ref(repo, plan['base'], remote))
     if not base_sha:
         raise CleanupError(f'base {plan["base"]} does not resolve')
+    default = remote_default(repo, remote)
     gh_state = None
     if plan.get('gh_checked'):
         gh_state = github_state(repo, remote)
@@ -925,7 +1020,15 @@ def execute(args):
     gone = set()
     for n, item in enumerate(items):
         reasons = guard(
-            repo, plan, item, keep, approved, base_sha, gh_state, gone
+            repo,
+            plan,
+            item,
+            keep,
+            approved,
+            base_sha,
+            gh_state,
+            gone,
+            default,
         )
         cmd = action(repo, remote, item)
         if reasons:

@@ -64,6 +64,10 @@ fi
 TMPBASE=${TMPDIR:-/tmp}
 OUT=${OUT:-${TMPBASE%/}/sdm-final-gate-${SHA:0:7}}
 OUT=${OUT%/}
+# gate.sh runs from inside the worktree: a relative --out (or PYTHON path)
+# would point elsewhere there.
+case "$OUT" in /*) ;; *) OUT=$PWD/$OUT ;; esac
+case "$PY" in /*) ;; */*) PY=$PWD/$PY ;; esac
 EVID="$(git -C "$WT" rev-parse --path-format=absolute --git-common-dir)/sdm-gate-evidence/gate/$SHA.json"
 
 echo "== SHA $SHA ($SUBJECT), halves: ${HALVES[*]} ($MODE)"

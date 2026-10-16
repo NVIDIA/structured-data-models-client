@@ -290,7 +290,7 @@ def test_report_and_counts_tolerate_one_missing_leg(tmp_path):
 # --- heldout_run.sh ----------------------------------------------------------
 
 
-def runner(tmp_path, *extra, stamp=None):
+def runner(tmp_path, *extra, stamp=None, out_arg=None):
     if shutil.which('bash') is None:
         pytest.skip('no bash')
     directory, bundle_sha, inputs_sha = frozen(tmp_path)
@@ -303,13 +303,13 @@ def runner(tmp_path, *extra, stamp=None):
         '--bundle-sha', bundle_sha, '--inputs-sha', inputs_sha, '--cases', '2',
         '--candidate', str(tmp_path / 'candidate'),
         '--reference', str(tmp_path / 'reference'), '--reference-sha', '0' * 40,
-        '--wheel', str(wheel), '--out', str(out), '--threshold', '4',
+        '--wheel', str(wheel), '--out', out_arg or str(out), '--threshold', '4',
         *(['--stamp', str(stamp)] if stamp else []), *extra,
     ]  # fmt: skip
     env = {'PATH': '/usr/bin:/bin', 'HELDOUT_TOOL_PYTHON': sys.executable}
     done = subprocess.run(
         args, capture_output=True, text=True, stdin=subprocess.DEVNULL,
-        timeout=120, env=env,
+        timeout=120, env=env, cwd=tmp_path,
     )  # fmt: skip
     return done, out
 
@@ -339,6 +339,31 @@ def test_runner_refuses_a_second_run_and_runs_nothing(tmp_path):
     assert 'nothing run' in done.stdout
     assert '== 1.' not in done.stdout
     assert not out.exists()
+
+
+def test_runner_makes_a_relative_out_absolute(tmp_path):
+    # rust-host runs from inside the candidate: a relative --out would
+    # point elsewhere there, after the stamp.
+    done, out = runner(tmp_path, out_arg='out')
+    text = done.stdout + done.stderr
+    absolute = tmp_path.resolve() / 'out'
+    assert f'run dir {absolute}' in done.stdout, text
+    assert f'--out {absolute}/python-core.jsonl' in done.stdout, text
+    assert ' --out out/' not in done.stdout
+    assert not out.exists()
+
+
+def test_runner_help_prints_the_whole_header():
+    if shutil.which('bash') is None:
+        pytest.skip('no bash')
+    done = subprocess.run(
+        ['bash', str(RUNNER), '--help'], capture_output=True, text=True,
+        stdin=subprocess.DEVNULL, timeout=60, env={'PATH': '/usr/bin:/bin'},
+    )  # fmt: skip
+    assert done.returncode == 0, done.stderr
+    assert '--bundle DIR' in done.stdout
+    assert 'HELDOUT_STAMP' in done.stdout
+    assert '3 a run with one leg missing (partial).' in done.stdout
 
 
 def runner_again(tmp_path, stamp):
