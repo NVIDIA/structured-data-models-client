@@ -68,14 +68,11 @@
     }
   },
   "expect": {
-    "outcome": "refusal",
-    "stage": "materialize",
-    "error": "StructuredDataError",
-    "code": "INTERNAL_ERROR",
-    "message": "unsupported data type 'decimal128(38, 18)[pyarrow]' for column 'TARGET'",
-    "today": "Schema.from_source reports tier as float64 / categorical"
+    "outcome": "success",
+    "stage": "predict",
+    "today": "Schema.from_source reports tier as float64 / categorical; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type 'decimal128(38, 18)[pyarrow]' for column 'TARGET'), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers"
   },
-  "register": "Engine failure on a decimal static target",
+  "register": "P2B-1: the reference at 6298913c answers (eb6c68eb reads the decimal as its declared type); the core keeps exact decimals and refuses it by name until T2.17",
   "why": "DECIMAL(38,18) classes collided to 0.1 in the first attempt",
   "source": "DV133"
 }
