@@ -754,6 +754,22 @@ def reference_lines(tree: Tree) -> dict[str, dict[str, Any]]:
     return found
 
 
+def key_form() -> re.Pattern[str]:
+    r"""The form of a line's key, as this harness's observation schema
+    holds it (its ``key``)."""
+    schema = json.loads(
+        (REPO / 'contract/observation.schema.json').read_text(encoding='utf-8')
+    )
+    return re.compile(schema['$defs']['key']['pattern'])
+
+
+def case_of(key: str) -> str:
+    r"""The case a line's key names: a DuckDB line's key is the bare case
+    ID, a SQLite or Postgres line's ``<case>@sqlite`` or ``<case>@postgres``
+    (design choice 2; the observation schema's ``key`` holds the form)."""
+    return key.partition('@')[0]
+
+
 def projection(
     observation: dict[str, Any], fields: list[str]
 ) -> dict[str, Any]:
@@ -1347,7 +1363,7 @@ def check_reference(
             if new.get(case) == line:
                 continue
             if case not in new:
-                if case not in removed:
+                if case_of(case) not in removed:
                     report.fail('reference', f'{case}: its line removed')
             elif semantic(line, ordered) != semantic(new[case], ordered):
                 if not authorized(entries, case, 'python-ref', None, None):
@@ -1358,6 +1374,36 @@ def check_reference(
                     )
             else:
                 report.note('reference', f'{case}: re-recorded, identity only')
+
+
+def check_keys(report: Report, candidate: Tree) -> None:
+    r"""Every reference line and baseline is keyed by a case of the
+    candidate's corpus, bare or with a known database (``<case>@sqlite``,
+    ``<case>@postgres``), so removing a case removes its lines on every
+    database."""
+    corpus, form = cases(candidate), key_form()
+    found = [
+        (path, line.get('case'))
+        for path in candidate.files(REFERENCE)
+        for line in jsonl(candidate.read(path), path)
+    ]
+    found += [
+        (f'{BASELINES}/{CELL}/{runner}.jsonl', key)
+        for runner, by_case in baselines(candidate).items()
+        for key in by_case
+    ]
+    for path, key in found:
+        if not isinstance(key, str):
+            report.fail(
+                'cases', f'a key of type {type(key).__name__}, in {path}'
+            )
+        elif not form.fullmatch(key):
+            report.fail(
+                'cases',
+                f'{key!r}: not a case or <case>@<database> key, in {path}',
+            )
+        elif case_of(key) not in corpus:
+            report.fail('cases', f'{key}: a line of no case, in {path}')
 
 
 def check_cases(
@@ -1713,7 +1759,7 @@ def check_availability(
             report.fail('availability', f'{runner}: not in {AVAILABILITY}')
             continue
         for case, observation in sorted(by_case.items()):
-            spec = corpus.get(case, ({}, ''))[0]
+            spec = corpus.get(case_of(case), ({}, ''))[0]
             for name, value in marked.items():
                 found = at(observation, name)
                 if value == 'unavailable':
@@ -1764,7 +1810,7 @@ def check_baselines(
             )
         }
         for case, line in sorted(held.get(runner, {}).items()):
-            if case in gone:
+            if case_of(case) in gone:
                 continue
             observation = by_case.get(case)
             if observation is None:
@@ -1801,6 +1847,8 @@ def check_baselines(
                 )
         mine = proposed.get(runner, {})
         for case, line in sorted(mine.items()):
+            if case_of(case) not in corpus:
+                continue  # a line of no case: check_keys names it
             observation = by_case.get(case)
             if (
                 line['projection'].get('outcome.code') == PANIC
@@ -1821,12 +1869,12 @@ def check_baselines(
                     f'{case}: {runner}: the proposed baseline is not the '
                     'observation (ratchet.py accept writes it)',
                 )
-        for case, (spec, _) in sorted(corpus.items()):
-            if (
-                spec.get('status') == 'acceptance'
-                and case in by_case
-                and case not in mine
-            ):
+        # An acceptance case needs a baseline on each database it is
+        # observed on: each key observed (the bare ID on DuckDB,
+        # <case>@<database> on another).
+        for case in sorted(by_case):
+            spec = corpus.get(case_of(case), ({}, ''))[0]
+            if spec.get('status') == 'acceptance' and case not in mine:
                 report.fail(
                     'baselines',
                     f'{case}: {runner}: an acceptance case with no proposed baseline',
@@ -1904,6 +1952,7 @@ def check(
             report, checkpoint, candidate, changed, trailer, bootstrap
         )
         check_reference(report, checkpoint, candidate, entries, removed)
+        check_keys(report, candidate)
         decisions = checkpoint_decisions(report, checkpoint)
         if epic:
             found_merge = epic_merge(repo, head)
