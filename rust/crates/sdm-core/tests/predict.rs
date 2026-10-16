@@ -94,6 +94,18 @@ fn predict_run_with(
     outputs: &[&str],
     default_outputs: bool,
 ) -> Result<Run, CoreError> {
+    predict_run_setting(version, payload, model, outputs, default_outputs, &[])
+}
+
+/// A run whose caller set the inference options `inference_asked`.
+fn predict_run_setting(
+    version: u32,
+    payload: String,
+    model: &str,
+    outputs: &[&str],
+    default_outputs: bool,
+    inference_asked: &[&str],
+) -> Result<Run, CoreError> {
     let operation = Operation::Predict(Predict {
         state: RequestState {
             version,
@@ -105,7 +117,7 @@ fn predict_run_with(
         request_id: "sdm-0123456789ab".into(),
         outputs: outputs.iter().map(|o| (*o).to_owned()).collect(),
         default_outputs,
-        inference_asked: vec![],
+        inference_asked: inference_asked.iter().map(|o| (*o).to_owned()).collect(),
     });
     let attachments = Attachments::from([
         (AttachmentId(1), Attachment::Bytes(payload.into_bytes())),
@@ -211,12 +223,10 @@ fn the_call_is_the_adapter_s_with_every_number_as_written() {
     // The payload's own metadata, with the call's id.
     assert_eq!(sent["metadata"]["request_id"], "sdm-0123456789ab");
     assert_eq!(sent["metadata"]["num_context_examples"], 2);
-    // Only the inference options the model reads; the rest of the section
-    // as the payload had it.
-    assert_eq!(
-        sent["inference"],
-        json!({"inference_config": {"kind": "regression", "num_estimators": 1}, "run_mode": "fast"})
-    );
+    // No inference option the caller set, so no config: the engine's
+    // defaults are left out (the reference's 26ecdd28); the rest of the
+    // section as the payload had it.
+    assert_eq!(sent["inference"], json!({"run_mode": "fast"}));
     // The members in the payload's order, the model where the payload had
     // it.
     let keys: Vec<&str> = sent
@@ -237,6 +247,59 @@ fn the_call_is_the_adapter_s_with_every_number_as_written() {
             "inference",
             "metadata"
         ]
+    );
+}
+
+#[test]
+fn only_the_inference_options_the_caller_set_are_sent() {
+    let sent = |asked: &[&str]| -> Value {
+        let mut run = predict_run_setting(
+            REQUEST_STATE_VERSION,
+            payload_text(),
+            "kumo-relational",
+            &["prediction"],
+            false,
+            asked,
+        )
+        .unwrap();
+        let (_, body) = call(&mut run);
+        serde_json::from_slice::<Value>(&body).unwrap()["inference"].clone()
+    };
+    // One option set is sent alone, with the value the payload holds.
+    assert_eq!(
+        sent(&["num_estimators"]),
+        json!({"inference_config": {"num_estimators": 1}, "run_mode": "fast"})
+    );
+    // Two, in the payload's order.
+    assert_eq!(
+        sent(&["num_estimators", "kind"]),
+        json!({"inference_config": {"kind": "regression", "num_estimators": 1}, "run_mode": "fast"})
+    );
+    // An option the model reads, set but not in the payload's config, adds
+    // nothing; with nothing else set there is no config.
+    assert_eq!(sent(&["column_shuffle"]), json!({"run_mode": "fast"}));
+    // An option set that the model does not read is still refused.
+    let error = match predict_run_setting(
+        REQUEST_STATE_VERSION,
+        payload_text(),
+        "kumo-relational",
+        &["prediction"],
+        false,
+        &["output_type"],
+    ) {
+        Err(error) => error,
+        Ok(mut run) => run
+            .next()
+            .err()
+            .expect("an option the model does not read was sent"),
+    };
+    assert_eq!(
+        (error.kind, error.code),
+        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
+    );
+    assert_eq!(
+        error.fields["unsupported"],
+        Detail::List(vec![Scalar::Utf8("output_type".into())])
     );
 }
 
