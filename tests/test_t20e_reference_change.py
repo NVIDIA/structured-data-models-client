@@ -32,6 +32,10 @@ file's name, ``reference-env.txt`` and every vector file must agree, each
 disagreement named; the old file must be gone (one reference file); the new
 recording carries every case the old one did, a dropped case named; a case
 whose recording differs is named in the report for the reviewers.
+Review round 1 added: a duplicate line naming another reference commit,
+named by file and line; a vector file whose reference field names another
+SHA (the approved one only in a note), or which is deleted, named; the new
+recording under any path but ``contract/reference/<SHA>.jsonl``, refused.
 Exit 2 (seeded faults): a row without the SHA, a row naming another SHA, a
 row that is not an owner approval, an abbreviated SHA, a row without the
 word "reference", a row outside a ``phase-*/decisions.md``, a row the
@@ -377,6 +381,98 @@ def test_a_case_whose_recording_differs_is_listed_for_the_reviewers(
     assert not any(
         re.search(rf'\b{re.escape(unchanged)}\b', p) for p in said
     ), said
+
+
+def then(*edits: Callable[[Path], None]) -> Callable[[Path], None]:
+    def edit(repo: Path) -> None:
+        for each in edits:
+            each(repo)
+
+    return edit
+
+
+@PENDING
+def test_a_duplicate_line_naming_another_reference_is_refused(
+    repo: Path,
+) -> None:
+    r"""Exit 1 (review round 1): every line of the new recording names the
+    approved reference. A copy of a case's line whose identity names
+    another reference commit, put first with the valid original later in
+    the file, is refused, naming the file and the line (line 1)."""
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+
+    def duplicate(r: Path) -> None:
+        path = r / REFERENCE / f'{NEW}.jsonl'
+        lines = path.read_text().splitlines(keepends=True)
+        copied = json.loads(lines[0])
+        copied['identity']['reference']['commit']['sha'] = OTHER
+        path.write_text(json.dumps(copied) + '\n' + ''.join(lines))
+
+    commit(repo, 'T2.0c: a stale line first', then(rerecord(NEW), duplicate))
+    found = run(repo, checkpoint).problems
+    assert any(
+        f'{NEW}.jsonl' in p and re.search(r'line 1\b|:1\b', p) for p in found
+    ), found
+
+
+@PENDING
+@pytest.mark.parametrize(
+    'seed', ['its reference field names another SHA', 'it is deleted']
+)
+def test_a_vector_file_s_reference_field_must_name_the_sha(
+    repo: Path, seed: str
+) -> None:
+    r"""Exit 1 (review round 1): the check reads the vector file's
+    reference field, the one its consistency test reads, not any mention
+    of the SHA: the field naming another SHA, with the approved one in a
+    note, is refused naming the file; so is a vector file the consistency
+    tests require, deleted by the candidate."""
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+
+    def seeded(r: Path) -> None:
+        path = r / VECTORS
+        if seed == 'it is deleted':
+            path.unlink()
+            return
+        data = json.loads(path.read_text())
+        data['reference'] = OTHER
+        data['note'] = f'to be re-recorded at {NEW}'
+        path.write_text(json.dumps(data, indent=2) + '\n')
+
+    commit(repo, f'T2.0c: {seed}', then(rerecord(NEW), seeded))
+    found = run(repo, checkpoint).problems
+    assert any(VECTORS in p for p in found), found
+
+
+@PENDING
+@pytest.mark.parametrize(
+    'name',
+    [f'{NEW}.txt', NEW, f'{NEW}.jsonl.txt', f'{NEW}/{NEW}.jsonl'],
+)
+def test_the_new_recording_is_exactly_the_sha_s_jsonl(
+    repo: Path, name: str
+) -> None:
+    r"""Exit 1 (review round 1): the replacement is exactly
+    ``contract/reference/<the approved full SHA>.jsonl``, the file
+    ``gate.sh`` reads; under another extension, none, or another path, it
+    is refused by the reference rule."""
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+
+    def moved(r: Path) -> None:
+        source = r / REFERENCE / f'{NEW}.jsonl'
+        target = r / REFERENCE / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        data = source.read_bytes()
+        source.unlink()
+        target.write_bytes(data)
+
+    commit(repo, f'T2.0c: recorded as {name}', then(rerecord(NEW), moved))
+    assert not (repo / REFERENCE / f'{NEW}.jsonl').exists()
+    found = run(repo, checkpoint).problems
+    assert RULE in rules(found), found
 
 
 # --- exit 2: the approval can't be forged ------------------------------------------
