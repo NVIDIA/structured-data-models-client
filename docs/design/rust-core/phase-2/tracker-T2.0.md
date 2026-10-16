@@ -44,11 +44,11 @@ It lands alone, first, on `rust-core-phase-2`, with two reviewers.
    `ci.yml`'s gate steps must run on `rust-core` too: an empty `where` there fails.
    `contract/tests/test_runners.py` reads `where` the same way.
    On the epic branch no landing will name a protected change made after the checkpoint L (the merged phase's last landing), so the ratchet's rule `epic` (fixes 1 and 2) fails each such change unless an owner-approved row names its commit.
-   - **When it applies:** with `--epic`, which `where` prints for a push to `rust-core` and `gate.sh` hands the harness. So a replay of an older push, or a local replay (`gate.sh --base L --epic`), judges the rule, whatever the remote tip is (fix 4).
+   - **When it applies:** with `--epic`, which `where` prints for a push to `rust-core` and `gate.sh` hands the harness. So a replay of an older push, or a local replay (`gate.sh --base L --epic`), judges the rule, whatever the remote tip is (fix 4). A check without `--epic` on the epic branch's head (the tip of `origin/rust-core`, or `rust-core` checked out) says rule `epic` did not run and how to run it (fix 5).
    - **What it covers:**
-     - What the phase merge M that brought L in holds beyond L. Each such path counts as the change of the epic-side commits that made it (`L..M^1`), or else of M itself.
+     - What the phase merge M that brought L in holds beyond L. Each such path counts as the change of the epic-side commits that made it (`L..M^1`). It is also M's own change, which no row can name, unless one of those commits holds exactly the content M keeps. So a conflict resolved to a third version fails (fix 5).
      - Every commit after M (`M..HEAD`), each against its first parent, a merge included. So a merge that takes a protected file from an older parent is seen, and a change a later commit undoes still counts (fix 4).
-     - Paths are read NUL-separated, so a name past ASCII or holding a control character is seen (fix 4).
+     - Paths are read NUL-separated, so a name past ASCII or holding a control character is seen (fix 4), and the protected patterns span a newline in a name (fix 5).
      - Nothing after L counts as a landing, whatever its subject or trailers: a later landing reaches `rust-core` only by the owner's merge, which makes it the next checkpoint.
    - **Where the rows come from:** only L's own phase decisions files, reviewed and landed, never the head being judged, so no push approves itself. A row added after L counts once a later reviewed landing carries it and the owner merges that landing.
    - **How a row names a commit:** a SHA prefix of 8 or more digits, or a range `A..B` (git's meaning, first-parent), in backticks.
@@ -190,6 +190,12 @@ These questions are deliberately left open, not fixed:
   - It also can't serve the phase check's condition, whose acceptance tests read GitHub's contexts only.
   - So both stay as they are (round 3, Codex P3-1).
 
+### Carried forward (P3s, not fixed)
+
+- A merged fake landing that carries a forged Reviewed-by still becomes `rust-core`'s checkpoint. It needs a crafted push, outside rule `epic`'s honest-drift threat model, and corroborating it against the phase branch's history and review record is left to the owner (round 4, both reviewers).
+- `ci.yml`'s phase predicate lets names with a letter before the last digit, a leading zero or a dot through as phase branches, refused by name in the phase check (rounds 2 to 4; see "For the owner").
+- The bootstrap recognises T2.0 by commit subject, until T2.0 lands (round 3; see "For the owner").
+
 ### Fix rounds
 
 - Round 1 (both reviewers):
@@ -209,3 +215,7 @@ These questions are deliberately left open, not fixed:
   - It runs on the explicit `--epic` mode, a local replay included.
   - `rust-core`'s base comes only from a phase merge's reviewed landing, never from the head's trailers.
   - The threat model and the open owner questions are recorded.
+- Round 4 (Codex), fix 5:
+  - A phase merge's protected content is now judged by content: a conflict resolution that no epic commit holds is the merge's own change.
+  - A run without `--epic` on the epic branch's head now says rule `epic` did not run.
+  - The protected patterns now span a newline in a name.

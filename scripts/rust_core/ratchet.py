@@ -1244,7 +1244,8 @@ def patterns(text: str | None) -> list[tuple[bool, re.Pattern[str]]]:
             else:
                 regex += re.escape(pattern[index])
                 index += 1
-        found.append((negate, re.compile(regex)))
+        # DOTALL: ``**`` spans a name holding a newline too.
+        found.append((negate, re.compile(regex, re.DOTALL)))
     return found
 
 
@@ -1552,6 +1553,26 @@ def owner_named(repo: Path, decisions: str, commit: str) -> bool:
     return False
 
 
+def blob(repo: Path, commit: str, path: str) -> str:
+    r"""The object ``path`` is at ``commit``, or an empty string when the
+    commit has no such path."""
+    done = subprocess.run(
+        [
+            'git',
+            '-C',
+            str(repo),
+            'rev-parse',
+            '--verify',
+            '-q',
+            f'{commit}:{path}',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return done.stdout.strip() if done.returncode == 0 else ''
+
+
 #: git's empty tree, the parent a root commit's change is read against.
 EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
 
@@ -1562,6 +1583,16 @@ def changed_paths(repo: Path, before: str, after: str) -> list[str]:
     git's quoting."""
     out = git(repo, 'diff', '--name-only', '--no-renames', '-z', before, after)
     return [path for path in out.split('\0') if path]
+
+
+def epic_head(repo: Path, head: str) -> bool:
+    r"""``head`` is the epic branch's: the tip of :data:`EPIC_REFS`' first
+    the repository holds, or the branch checked out is it; a run that
+    judges it without ``--epic`` says rule ``epic`` did not run."""
+    tip = epic_tip(repo, None)
+    return (tip is not None and tip[0] == head) or (
+        _checked_out(repo) == PHASES.EPIC
+    )
 
 
 def check_epic(
@@ -1576,7 +1607,9 @@ def check_epic(
     The commits judged: what the phase merge M that brought L in (the
     merge on the head's first-parent history whose second parent is L)
     holds beyond L, each path the change of the epic-side commits that made
-    it (``L..M^1``, each against its first parent) or else of M itself; and
+    it (``L..M^1``, each against its first parent), and of M itself unless
+    one of those commits holds exactly the content M keeps (a conflict
+    resolved to a third version needs M named); and
     every commit after M (``git rev-list M..HEAD``), each against its first
     parent, a merge included, so a merge taking a protected file from any
     older parent is seen, and a change a later commit undoes still
@@ -1622,16 +1655,21 @@ def check_epic(
 
     # The merge, for what it brings beyond L: each such path is the change
     # of the commits on the epic branch's side that made it (each against
-    # its first parent), and the merge's own where none did.
+    # its first parent), and the merge's own unless one of them holds
+    # exactly the content the merge keeps: a conflict resolved to a third
+    # version, or a change no such commit made, needs the merge named.
     brought = set(protected_between(checkpoint.sha, merge))
+    kept: dict[str, set[str]] = {path: set() for path in brought}
     for commit in git(repo, 'rev-list', f'{checkpoint.sha}..{merge}^1').split():
         parent = git(repo, 'rev-list', '--parents', '-n', '1', commit).split()
         before = parent[1] if len(parent) > 1 else EMPTY_TREE
         mine = [p for p in protected_between(before, commit) if p in brought]
         made(commit, mine)
+        for path in mine:
+            kept[path].add(blob(repo, commit, path))
     made(
         merge,
-        sorted(brought - {p for paths in makers.values() for p in paths}),
+        sorted(p for p in brought if blob(repo, merge, p) not in kept[p]),
     )
     # Every commit after the merge, a merge against its first parent.
     for commit in git(repo, 'rev-list', f'{merge}..{head}').split():
@@ -1957,6 +1995,13 @@ def check(
         decisions = checkpoint_decisions(report, checkpoint)
         if epic:
             check_epic(report, repo, checkpoint, head, decisions)
+        elif epic_head(repo, head):
+            report.note(
+                'epic',
+                "not run: this is the epic branch's head; judge it as a "
+                'push to rust-core is judged, with --epic (gate.sh $(ratchet.py '
+                'where) on the push, or --base <the merged landing> --epic)',
+            )
         old_policy = _yaml(checkpoint.read(POLICY), POLICY)
         new_policy = _yaml(candidate.read(POLICY), POLICY)
         check_relaxations(

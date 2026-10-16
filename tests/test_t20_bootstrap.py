@@ -664,23 +664,25 @@ def test_an_older_push_replayed_is_judged_as_that_push(
     assert not any('epic' in x for x in failures(done)), done.stdout
 
 
-@pytest.mark.parametrize('name', ['café.py', 'tab\there.py'])
+@pytest.mark.parametrize('name', ['café.py', 'tab\there.py', 'new\nline.py'])
 def test_a_protected_path_with_an_unusual_name_is_seen(
     named: dict[str, Any], name: str
 ) -> None:
     r"""Codex's round 3 P1-1: a path git would quote (past ASCII, or a
-    control character) is read as itself and fails unnamed."""
+    control character) is read as itself and fails unnamed; a newline in
+    the name too (the reviewer's round 4 P3-1: the patterns span it)."""
     work, shas = named['work'], named['shas']
     git(work, 'checkout', '-q', '--detach', shas['M2'])
     bad = commit(
         work, 'Handoff: a tool', write(f'scripts/rust_core/{name}', 'x\n')
     )
-    found = failures(epic_check(work, shas['L2']))
-    assert any(
-        f'scripts/rust_core/{name}: changed on the epic branch by {bad[:12]}'
-        in x
-        for x in found
-    ), found
+    # The whole output: a name holding a newline spans two lines of it.
+    done = epic_check(work, shas['L2'])
+    assert done.returncode == 1, done.stdout
+    assert (
+        f'FAILS epic: scripts/rust_core/{name}: changed on the epic branch by '
+        f'{bad[:12]}' in done.stdout
+    ), done.stdout
 
 
 def test_a_merge_taking_an_older_parent_s_protected_file_is_seen(
@@ -796,6 +798,84 @@ def test_a_local_replay_through_the_gate_runs_rule_epic(
     )  # fmt: skip
     assert done.returncode == 1, done.stdout + done.stderr
     assert f'changed on the epic branch by {bad[:12]}' in done.stdout
+
+
+def conflict_world(base: Path, resolution: str) -> dict[str, Any]:
+    r"""Codex's round 4 P1-1: rust-core takes U, adding a protected
+    ``scripts/rust_core/merge_setting.py`` with ``LIMIT = 20``; Phase 2
+    lands L2 adding it with ``LIMIT = 30`` and an owner-approved row naming
+    U; rust-core merges L2 (``--no-ff``), the add/add conflict resolved to
+    ``LIMIT = <resolution>``."""
+    built = world(base)
+    work = base / 'work'
+    shas = dict(built['shas'])
+    setting = 'scripts/rust_core/merge_setting.py'
+    git(work, 'checkout', '-q', EPIC)
+    shas['U'] = commit(
+        work, 'Update: the setting', write(setting, 'LIMIT = 20\n')
+    )
+    git(work, 'checkout', '-q', PHASE2)
+
+    def package(repo: Path) -> None:
+        (repo / 'scripts/rust_core/ratchet.py').write_bytes(
+            RATCHET.read_bytes()
+        )
+        write(setting, 'LIMIT = 30\n')(repo)
+        write(
+            'docs/design/rust-core/phase-2/decisions.md',
+            row(f'The update `{shas["U"][:10]}`'),
+        )(repo)
+
+    shas['L2'] = helpers.land(
+        work, 'T2.0', package, protected='scripts/rust_core/**'
+    )
+    git(work, 'checkout', '-q', EPIC)
+    subprocess.run(
+        ['git', '-C', str(work), *helpers.IDENTITY, 'merge', '-q', '--no-ff',
+         '-m', 'Merge T2.0', shas['L2']],
+        capture_output=True, check=False, stdin=subprocess.DEVNULL,
+    )  # fmt: skip
+    write(setting, f'LIMIT = {resolution}\n')(work)
+    git(work, 'add', '-A')
+    git(work, 'commit', '-q', '--no-edit')
+    shas['M2'] = git(work, 'rev-parse', 'HEAD')
+    return {'work': work, 'shas': shas}
+
+
+@pytest.mark.parametrize(
+    ('resolution', 'fails'), [('25', True), ('20', False), ('30', False)]
+)
+def test_a_phase_merge_s_conflict_resolution_is_judged_by_content(
+    tmp_path: Path, resolution: str, fails: bool
+) -> None:
+    r"""Codex's round 4 P1-1: a conflict resolved to a third version (25)
+    is the merge's own change, which no row can name, and fails; keeping
+    the approved epic version (20) or the landing's (30) passes."""
+    built = conflict_world(tmp_path, resolution)
+    work, shas = built['work'], built['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    done = epic_check(work, shas['L2'])
+    merge_named = any(
+        f'merge_setting.py: changed on the epic branch by {shas["M2"][:12]}'
+        in x
+        for x in failures(done)
+    )
+    assert merge_named is fails, done.stdout
+    assert (done.returncode == 1) is fails, done.stdout
+
+
+def test_a_run_without_epic_on_the_epic_head_says_the_rule_did_not_run(
+    named: dict[str, Any],
+) -> None:
+    r"""Codex's round 4 P3-2: never silent."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    git(work, 'update-ref', f'refs/remotes/origin/{EPIC}', shas['M2'])
+    done = ratchet_run(work, 'check', '--repo', '.', '--checkpoint', shas['L2'])
+    assert "epic: not run: this is the epic branch's head" in done.stdout, (
+        done.stdout
+    )
+    assert '--epic' in done.stdout
 
 
 # --- a malformed phase setting is a named error (fix 1, P3) --------------------------
