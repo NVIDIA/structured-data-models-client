@@ -54,6 +54,7 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 | 3 | 0e3ec975 | CHANGES REQUIRED (17 of 19 fixed; 0 P1, 3 P2, 6 P3) | CHANGES REQUIRED (0 P1, 2 P2, 2 P3) | 0 | 5 | Fix 3: the locked-set file written whole at the lock in T2.0's format, its steps run by T2.1a's gate and its CI checks read from the candidate's run, so no later package edits it; L7's per-scenario reading asked in K6; Postgres common-input comparison built in T2.1a and run in T2.3 (H24); census hits outside the 37 handled at once (Q-C); the lock waits for Q2.4; the P3s |
 | 4 | a416950e | CHANGES REQUIRED (15 of 15 fixed; 0 P1, 2 P2, 4 P3) | APPROVE (0 P1, 0 P2, 2 P3) | 0 | 2 | Fix 4: the locked-set file protected by T2.0a's landing; T2.1a's gate reads its `steps`, `ci_jobs` (by `--ci-run`) and `limits`; the case floor stated; T2.1a after T2.0a and re-estimated; stray lines from fix 3 |
 | 5 | 4b114203 | CHANGES REQUIRED (6 of 8 fixed; 0 P1, 2 P2, 6 P3) | APPROVE (0 P1, 0 P2, 2 P3) | 0 | 2 | Fix 5: the nine `edit.*` cases admitted by T2.12; CI checks locked by logical name and mapped to jobs by a protected `ci-checks.yaml`; the CI-check reader's seeded faults; the owner answers on the critical path; the P3s |
+| 6 | 1a983d25 | CHANGES REQUIRED (8 of 10 fixed; 0 P1, 2 P2, 2 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 2 | Fix 6: the locked set in T2.0's format (numbered `checks` over gate `steps`), all 52 S1 cases in it; CI checks as job-name patterns fixed now, no mapping file; skipped jobs fail; T2.4 judging for its CI jobs |
 
 ## Carried rows (plan section 8)
 
