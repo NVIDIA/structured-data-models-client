@@ -5932,3 +5932,42 @@ entries:
     reviewers check this entry fits it. Temporary: it lapses when T2.8c
     lands, and the final gate fails while it remains. No case covers it
     yet; T2.8c's test author adds one.
+
+- id: P2B-5
+  title: Option (b) leaves out decimal null-key rows the reference at 6298913c keeps, until T2.17
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c, the
+    reference reads a decimal key as an integer, so a null DECIMAL key
+    beside keys that are not null sorts, and materialize keeps the null-key
+    row with no further warning, exactly as for the integer twin
+    (contract/key-inference-vectors.json nulls-1-decimal.200,
+    contract/sampled-null-key-vectors.json mixed-null-decimal); at
+    b413e9ad it failed INTERNAL_ERROR, which P1B-40 (option (b), E85)
+    answered.
+  new_behavior: >-
+    The core keeps P1B-40's option (b) for decimal keys: it leaves the
+    rows with a null decimal key out of the request, the links naming them
+    dropped, and warns NULL_KEYS_LEFT_OUT, so its success differs from the
+    reference's success (the request and one more warning). T2.17 (exact
+    decimals, KO2-45) retires this entry.
+  affected_inputs: >-
+    materialize on the core route over a DuckDB source whose keyed table,
+    reached by the walk, holds a null DECIMAL key beside keys that are not
+    null.
+  cases: [T1.32e]
+  refs:
+  - eb6c68eb
+  - P1B-40
+  - 'contract/sampled-null-key-vectors.json#mixed-null-decimal success -> success'
+  - 'contract/key-inference-vectors.json#nulls-1-decimal.200 success -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16), one of
+    T2.0c's temporary decimal differences; for the owner to confirm at the
+    next check-in that KO2-45 covers it, since it turns P1B-40's approved
+    answer to a reference failure into a difference from a reference
+    success. Temporary: it lapses when T2.17 lands, and the final gate fails
+    while it remains. Found by the recorder at 4f1c3247.
