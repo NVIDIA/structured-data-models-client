@@ -7,6 +7,7 @@ It's process material only and is deleted at the end of the migration, together 
 - [setup.md](setup.md): getting a new machine ready.
 - [prompts.md](prompts.md): the prompts that start an orchestrator session.
 - [phase-2-prep.md](phase-2-prep.md): Phase 2's work breakdown, schedule and the owner questions to settle at kickoff.
+- [later-phases-prep.md](later-phases-prep.md): the same for Phases 3 to 5, plus the proposed changes to the plan's checks and the Java track.
 - [phase-1-log.md](phase-1-log.md): a short log of Phase 1.
 - [briefs/](briefs/): the standing rules appended to every design reviewer, implementer, test author and reviewer brief.
 - [`scripts/rust_core/orchestration/`](../../../../scripts/rust_core/orchestration/): the watchdog and landing helpers.
@@ -82,12 +83,48 @@ Work that doesn't depend on the design's scope may run while it's in review and 
 
 ## Ending a phase
 
-1. **Close the open work**: every package landed or explicitly dropped, and dropped items closed out (pending entries retired, the decision recorded).
-2. **Reconcile the register**: every measured difference has an entry, none is left proposed (unless the owner accepted a parked list at kickoff, as Phase 2's question G6(d) proposes), and `scripts/rust_core/register.py validate` passes.
-3. **Run the locked checks and the held-out set** on the exact final SHA, and write the evidence pack to `phase-N/evidence/`.
-4. **A fresh whole-phase review** by both reviewers. Its P1 and P2 findings are fixed, and its P3s are carried forward.
-5. **Carry forward what's left**: unfixed P3s and owner follow-ups become named rows for the next phase in migration-plan.md section 8, as "Carried into Phase 2" does; `as-built.md` records what differs from the design; process lessons go into this handbook.
-6. **The go or no-go packet**: a plain-language summary for the owner, with the evidence and anything that needs their decision. The owner decides, and the merge into `rust-core` is a `--no-ff` merge with a DCO sign-off.
+Three scripts in `scripts/rust_core/orchestration/` carry the mechanical part. Each prints `--help`, and the two that change anything are dry runs unless given `--execute`.
+
+- `packet_checks.sh N`: read-only. It lists landings with no local gate evidence for their exact SHA, migration-plan.md markers that disagree with `phase-N/decisions.md`, rows still "owner to confirm", the register's statuses (proposed entries by id) and the owner approvals since the last check-in. Run it when the phase-end work starts and again on the final head.
+- `phase_end.sh --phase N --sha SHA`: the evidence runs from one final SHA. In order: preflight (read-only), build (the local client wheel into every runtime cell, plus CI's native wheel), evidence (`gate.sh --locked` with `--out`, the other cells' runs, `cargo tree`, `tokei`, and `evidence.py` without the held-out bundle, so a refused input shows up before the one shot), held-out (`scripts/rust_core/heldout_run.sh`, once), an optional live install check (the command in `SDM_LIVE_CHECK_CMD`, skipped when unset), and pack (staged for `phase-N/evidence/`). Each step is stamped when done, so a rerun resumes at the failed step. A one-shot step that started and didn't finish stops every rerun: a person decides. Cells, tools, the held-out bundle and anything account-specific come from environment variables, never from the script.
+- `final_gate.sh WORKTREE PYTHON CI_RUN HALF...`: fetches the exact-SHA CI wheels, runs `gate.sh --locked` for each half named, and checks that the one evidence file (`<git-common-dir>/sdm-gate-evidence/gate/<sha>.json`) shows them all passed.
+
+1. **Close the open work**: every package landed or explicitly dropped, and dropped items closed out (pending entries retired, the decision recorded). `scripts/rust_core/lane.py status` shows no lane holding an unlanded package. The tracker's stop-rule counters are current, and any counter at 2 has gone to the owner. Send the phase's check-in reports that are still drafts, or fold them into the packet, so the owner doesn't see them for the first time at the decision.
+2. **Reconcile the register**: every measured difference has an entry, none is left proposed (unless the owner accepted a parked list at kickoff, as Phase 2's question G6(d) proposes), and `scripts/rust_core/register.py validate` passes. `packet_checks.sh N` section D must show 0 proposed: the held-out run counts only entries approved before it starts.
+3. **Run the locked checks and the held-out set** on the exact final SHA, and write the evidence pack to `phase-N/evidence/`:
+   - `phase_end.sh --phase N --sha SHA` (dry) until preflight is clean, then `--execute --until 2`: everything before the one shot.
+   - Then `--execute` again for the held-out run, the live check and the pack. If preflight says the gate's runner files differ from the checkpoint's, land an empty commit E on SHA and run on E with `--base SHA --landing SHA`.
+   - By hand afterwards: fill the held-out report's "approved before the run" column only from the register snapshot taken at run start; write `evidence/README.md`, naming the command that made each item; copy the staged pack into `phase-N/evidence/` in the phase-end package. The gate's evidence JSON stays outside the tree, and the pack cites it by SHA.
+   - Check every pack item against the design's evidence list, one at a time. Each must be generated by the branch's own runs, not written by hand. Anything not run (an architecture with no CI wheel, a runtime not tried, a column not measured) goes on the "not done" list.
+4. **A fresh whole-phase review** by both reviewers (`origin/rust-core..HEAD`, emphasis on the work since the last design checkpoint). Its P1 and P2 findings are fixed, and its P3s are carried forward. Both briefs cover:
+   - each locked check mapped to evidence on the merge SHA;
+   - the held-out verdict computed as the design wrote it;
+   - every register entry approved, rejected or owner-pending with a named question, with no implementer approving its own entry and every `approved_by: owner` citing the owner's written answer;
+   - the boundary (L0 report clean, no `pyo3` in the pure-Rust host's `cargo tree`, emulation allowlist changed only through owner rows);
+   - landing commits trailer-only, with `Protected-paths` naming every protected change;
+   - test-author files untouched by implementers;
+   - docs whose statuses are true.
+5. **Carry forward what's left**: unfixed P3s and owner follow-ups become named rows for the next phase in migration-plan.md section 8, as "Carried into Phase 2" does; `as-built.md` records what differs from the design; process lessons go into this handbook. Fix stale "pending owner confirmation" markers in migration-plan.md that `packet_checks.sh` section B flags.
+6. **The go or no-go packet**: a plain-language summary for the owner, with the evidence and anything that needs their decision. Keep it to one page plus links:
+   - the decision asked for (go, no-go, or re-plan);
+   - the executor's recommendation, labelled as such;
+   - each no-go criterion with its result;
+   - the held-out counts against the threshold;
+   - the per-case table summary;
+   - the register totals and what the owner approved;
+   - what wasn't done or isn't proven;
+   - the rows confirmed by default, with at most five flagged where the owner might choose differently;
+   - landings with no local gate evidence (`packet_checks.sh` section A);
+   - how to merge.
+
+   The owner's go or no-go goes into `phase-N/decisions.md` in their own words, as a docs commit before the final candidate. Then:
+   - Push the candidate and wait for green CI on every job. Rerun a registry rate-limit failure; never skip it.
+   - Run `final_gate.sh <clean worktree at the candidate> <python with this SHA's local build> <candidate's run> --base <phase tip at start> --execute <halves>`.
+   - Land with `land.py` once both reviewers confirm.
+   - Run `final_gate.sh` again on a clean worktree at the landing commit, with the candidate's run (same tree). That evidence file is the merge-SHA evidence the packet cites.
+   - Check CI's runtime-cell jobs on the landing's tree.
+
+   Then stop and report "ready to merge" with the SHA, both evidence files and the CI run IDs. Agents never merge, push `rust-core` or tag. The owner decides, and the merge into `rust-core` is a `--no-ff` merge with a DCO sign-off.
 7. **After the merge, check CI on `rust-core`** and the next phase's first run. Phase 1's merge left `rust-core` red, noticed only hours later while preparing Phase 2 (see [phase-2-prep.md](phase-2-prep.md), T2.0).
 
 ## Landing

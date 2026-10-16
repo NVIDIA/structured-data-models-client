@@ -1,0 +1,34 @@
+{
+  "_comment": "A one-time run (POST /api/2.1/jobs/runs/submit) of dbr_install_check.py, filled by `dbx_runs.py spec --template this --target TARGET --notebook NAME --sha SHA --out FILE` and submitted by `dbx_runs.py submit --json FILE`. Every <KEY> is filled from arguments and SDM_DBX_* environment variables; no workspace value is written here. A classic single-node job cluster under the given cluster policy, created for this run alone; cloud attributes, log delivery and extra tags come from SDM_DBX_CLUSTER_EXTRA. The notebook is imported beforehand as a NEW file; no existing notebook, cluster or job is touched.",
+  "run_name": "sdm-client install check <TARGET> <SHA7>",
+  "idempotency_token": "<UUID>",
+  "timeout_seconds": 3600,
+  "tasks": [
+    {
+      "task_key": "validate",
+      "timeout_seconds": 3600,
+      "notebook_task": {
+        "notebook_path": "<FOLDER>/<NOTEBOOK>",
+        "source": "WORKSPACE",
+        "base_parameters": {
+          "wheel_dir": "<VOLUME_DIR>/sdm-client-<SHA7>/",
+          "commit": "<SHA>"
+        }
+      },
+      "new_cluster": {
+        "spark_version": "<SPARK_VERSION>",
+        "node_type_id": "<NODE_TYPE>",
+        "num_workers": 0,
+        "policy_id": "<POLICY_ID>",
+        "data_security_mode": "SINGLE_USER",
+        "single_user_name": "<USER>",
+        "runtime_engine": "STANDARD",
+        "spark_conf": {
+          "spark.databricks.cluster.profile": "singleNode",
+          "spark.master": "local[*, 4]"
+        },
+        "custom_tags": {"ResourceClass": "SingleNode"}
+      }
+    }
+  ]
+}

@@ -86,6 +86,19 @@ every check.
   Examples: `./clean_tmp.sh` to see what would go, and
   `./clean_tmp.sh --apply` to remove it.
 
+## Phase-end, review and housekeeping tools
+
+Each has `--help`; anything that changes state is a dry run unless told otherwise.
+
+- **`phase_end.sh`**: the end-of-phase driver: preflight, the CI wheel and cells, the evidence pack (`evidence.py`), the one-shot held-out run (`../heldout_run.sh`), an optional live install check (`SDM_LIVE_CHECK_CMD`), and the pack. Stamps let a rerun resume without repeating the one-shot. `--execute` to act.
+- **`final_gate.sh`**: fetches the exact-SHA CI wheels and runs `gate.sh --locked` for each half named, into one evidence file.
+- **`packet_checks.sh PHASE`**: read-only go or no-go checks: landings without gate evidence, plan markers against decisions, rows awaiting the owner, proposed register entries.
+- **`register_tools.py`**: `proposed` lists proposed register entries and rows awaiting the owner; `resolve` merges `register.yaml` by entry and pending JSON files by group, usable as a git merge driver (setup lines in `--help`).
+- **`branch_cleanup.py`**: end-of-phase branch and worktree cleanup: `audit`, `plan` (with a keep-list), `execute` (dry run unless `--apply`; writes and verifies a backup bundle and a restore manifest first, re-checks each item before deleting, stops at the first failure, never deletes anything not merged into the base).
+- **`phase_stats.py`**: read-only retrospective numbers: landings per day, package stage times, CI per day with failures split into infrastructure and real, and review verdicts with same-SHA pairing of the two reviewers.
+
+Outside this folder: `../cells.sh` builds warm, non-editable cell venvs keyed by tree hash; `../heldout.py` and `../heldout_run.sh` validate, freeze, run and count a held-out set; `scripts/live/dbx_runs.py` and `scripts/live/dbr_install_check*` run one-time Databricks checks, with every workspace-specific value from the environment.
+
 ## Rules these tools follow, and probes should too
 
 - The tools never run `gh run watch`. They poll with `gh run list` and
