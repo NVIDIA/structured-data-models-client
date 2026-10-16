@@ -94,8 +94,7 @@ def _whole(cells: list[Any], dtype: str, column: str) -> list[Any]:
             if not value.is_integer():
                 raise refusal(
                     'VALIDATION_FAILED',
-                    f'key column {column!r} holds the fractional value '
-                    f'{value!r}, which joins to no row',
+                    f'identifier column {column!r} holds a fractional value',
                 )
             value = int(value)
         whole.append(value)
