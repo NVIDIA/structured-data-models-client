@@ -1242,6 +1242,11 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
         ('push', 'rust-core-phase-10-lane-a', False),
         ('push', 'rust-core-phase-10-t10.1', False),
         ('push', 'rust-core-phase-10-archive-a-t10.1-abc1234', False),
+        # Names under the prefix that are no phase branch (fix 2).
+        ('push', 'rust-core-phase-', False),
+        ('push', 'rust-core-phase-two', False),
+        ('push', 'rust-core-phase-10x', False),
+        ('push', 'rust-core-phase-experiment', False),
         ('push', 'main', False),
         ('push', 'rust-core', False),
         ('pull_request', PHASE, False),
@@ -1723,6 +1728,11 @@ def test_t20_the_workflow_names_no_one_phase() -> None:
         ('rust-core-phase-10-lane-b', False, True),
         ('rust-core-phase-10-t10.2', True, False),
         ('rust-core-phase-123', False, False),
+        # No phase branch, so cancelled like any branch (fix 2).
+        ('rust-core-phase-', True, False),
+        ('rust-core-phase-two', True, False),
+        ('rust-core-phase-10x', True, False),
+        ('rust-core-phase-experiment', True, False),
         ('rust-core', True, True),
         ('main', True, True),
         ('feature-x', True, False),
@@ -1791,3 +1801,29 @@ def test_t20_a_multi_digit_phase_s_landing_skips_on_its_green_run(
     # Control: with no green run of its own phase it runs everything.
     found, _ = _decide(repo, tmp_path, 'push', ref, [])
     assert found == 'false'
+
+
+@pytest.mark.parametrize('ref', ['rust-core-phase-02', 'rust-core-phase-x1'])
+def test_t20_a_name_the_expression_lets_through_fails_the_phase_check_by_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, ref: str
+) -> None:
+    r"""Fix 2: a name under the prefix that ends in a digit but is no phase
+    branch passes the step's condition; the step itself then fails, naming
+    it, rather than on a missing argument."""
+    _, step = _phase_check_step()
+    context = {
+        'github.event_name': 'push',
+        'github.ref_name': ref,
+        'github.ref': f'refs/heads/{ref}',
+        'github.base_ref': '',
+        'github.head_ref': '',
+    }
+    assert _evaluate(str(step.get('if', '')), context) is True
+    monkeypatch.setattr(sys.modules[__name__], 'PHASE', ref)
+    phase = _Phase(tmp_path)
+    before = _phase_scenario(phase, 'sound')
+    done, _ = phase.run(before, str(step['run']))
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert (
+        f'{ref} is under rust-core-phase- but is no phase branch' in done.stdout
+    )

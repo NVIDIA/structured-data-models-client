@@ -73,12 +73,12 @@ checkpoint's files, read from git at ``--checkpoint``:
   checkpoint's register authorizes (:func:`in_this_change`, T1.29): an entry
   approved by an earlier landing authorized that landing's change, not
   every later one to the same case or base;
-- ``epic``: on the epic branch (the candidate is the tip of
-  ``origin/rust-core``, no landing commit), every commit after the merge
-  that brought the checkpoint, and that merge for what it adds to the
-  checkpoint, that changes a protected path is named by an owner-approved
-  row of the epic head's decisions (by a SHA prefix of 8 or more digits,
-  or a range ``A..B``, in backticks), since no landing will (T2.0);
+- ``epic``: on a push to the epic branch (``GITHUB_EVENT_NAME`` push and
+  ``GITHUB_REF_NAME`` ``rust-core``), each commit after the checkpoint
+  that changes a protected path to what the head holds is named by an
+  owner-approved row of the checkpoint's own decisions (by a SHA prefix of
+  8 or more digits, or a range ``A..B``, in backticks), whatever its
+  subject or trailers, since no landing will (T2.0);
 - ``register``: ``register.py validate``, with the checkpoint's register for
   never-reused IDs; entries added or changed are listed, ``approved_by:
   owner`` ones first, for the owner's check-ins;
@@ -1476,12 +1476,16 @@ def check_relaxations(
             report.note(rule, f'{change}: approved by {decision}')
 
 
-def epic_run(repo: Path, head: str) -> bool:
-    r"""The candidate is the epic branch's head (T2.0): no landing commit,
-    and the tip of :data:`EPIC_REFS`' first the repository holds, as a CI
-    run on a push to ``rust-core`` checks it out."""
-    tip = epic_tip(repo, None)
-    return tip is not None and tip[0] == head and not is_landing(repo, head)
+def epic_run(environ: dict[str, str] | None = None) -> bool:
+    r"""The head judged is a push to the epic branch (T2.0): GitHub's
+    ``GITHUB_EVENT_NAME`` ``push`` and ``GITHUB_REF_NAME`` ``rust-core``,
+    the run's own, whatever the remote tip is now, so a replay of an older
+    push judges that push."""
+    environ = dict(os.environ) if environ is None else environ
+    return (
+        environ.get('GITHUB_EVENT_NAME') == 'push'
+        and environ.get('GITHUB_REF_NAME') == PHASES.EPIC
+    )
 
 
 #: A commit an owner's row names: a SHA prefix of at least 8 hex digits, or
@@ -1512,65 +1516,63 @@ def owner_named(repo: Path, decisions: str, commit: str) -> bool:
 
 
 def check_epic(
-    report: Report, repo: Path, checkpoint: Tree, candidate: Tree, head: str
+    report: Report, repo: Path, checkpoint: Tree, head: str, decisions: str
 ) -> None:
-    r"""On the epic branch, a protected change beyond the merged phase's
-    last landing (the checkpoint) has no landing to name it, so an owner's
-    row of the checkpoint's decisions must name each commit that makes one
-    (T2.0, rule ``epic``): every commit on ``head``'s first-parent history
-    after the merge that brought the checkpoint, and that merge itself for
-    what it holds beyond the checkpoint. A landing commit is named by its
-    own trailers. The rows are the epic head's own decisions: the epic
-    branch is the owner's, and a commit made on it after the merged
-    phase's last landing can be named nowhere else."""
-    module = capture_check()
-    try:
-        decisions = module.phase_decisions(
-            candidate.files(DECISIONS_DIR), candidate.read
-        )
-    except module.DecisionsError as error:
-        report.fail('epic', f"the epic head's {error}")
-        decisions = ''
-    rules = patterns(checkpoint.read(PROTECTED))
-    merge = None
-    for line in git(
-        repo, 'rev-list', '--first-parent', '--parents', head
-    ).splitlines():
-        parents = line.split()
-        if parents[2:3] == [checkpoint.sha]:
-            merge = parents[0]
-            break
-    if merge is None:
-        report.fail(
-            'epic',
-            f'the checkpoint {checkpoint.sha[:12]} is no landing the epic '
-            "branch's first-parent history merges",
-        )
-        return
-    made = [(merge, checkpoint.sha)] + [
-        (commit, f'{commit}^')
-        for commit in git(
-            repo, 'rev-list', '--first-parent', f'{merge}..{head}'
-        ).split()
-        if not is_landing(repo, commit)
+    r"""On a push to the epic branch, no landing will name a protected
+    change made after the checkpoint L, the merged phase's last landing
+    (T2.0, rule ``epic``): each commit in ``L..HEAD`` that changes a
+    protected path (as ``git log L..HEAD`` over the protected patterns
+    lists it) fails unless an owner-approved row of L's own decisions
+    names it. Nothing after L is a
+    landing here, whatever its subject or trailers: a later landing reaches
+    the epic branch only by the owner's merge, which makes it the next
+    checkpoint. The rows are L's alone, reviewed and landed, never the
+    head's, so no push approves itself."""
+    text = checkpoint.read(PROTECTED)
+    rules = patterns(text)
+    # Every commit in L..HEAD that changes a protected path, a change later
+    # undone included: git log over the protected patterns as pathspecs
+    # (history simplified, so a merge taking L's side brings in nothing),
+    # each commit's files held to the patterns exactly.
+    specs = [
+        (':(exclude,glob)' + line[1:])
+        if line.startswith('!')
+        else (':(glob)' + line)
+        for line in (raw.strip() for raw in (text or '').splitlines())
+        if line and not line.startswith('#')
     ]
-    for commit, before in made:
-        changed = git(
-            repo, 'diff', '--name-only', '--no-renames', '-z', before, commit
-        ).split('\0')
-        touched = [path for path in changed if path and protects(rules, path)]
-        if touched and not owner_named(repo, decisions, commit):
-            for path in touched:
-                report.fail(
-                    'epic',
-                    f'{path}: changed on the epic branch by {commit[:12]}, '
-                    'which no owner-approved row of its decisions names',
-                )
-        elif touched:
+    out = git(
+        repo,
+        'log',
+        '--cc',
+        '--name-only',
+        '--format=%x00%H',
+        f'{checkpoint.sha}..{head}',
+        '--',
+        *specs,
+    )
+    makers: dict[str, list[str]] = {}
+    for block in out.split('\0')[1:]:
+        lines = block.strip().splitlines()
+        if not lines:
+            continue
+        paths = [p for p in lines[1:] if p and protects(rules, p)]
+        if paths:
+            makers[lines[0]] = paths
+    for commit, paths in sorted(makers.items()):
+        if owner_named(repo, decisions, commit):
             report.note(
                 'epic',
-                f'{commit[:12]}: {len(touched)} protected paths, named by an '
-                'owner-approved row',
+                f'{commit[:12]}: {len(paths)} protected paths, named by an '
+                "owner-approved row of the checkpoint's decisions",
+            )
+            continue
+        for path in paths:
+            report.fail(
+                'epic',
+                f'{path}: changed on the epic branch by {commit[:12]}, '
+                "which no owner-approved row of the checkpoint's decisions "
+                'names',
             )
 
 
@@ -1875,8 +1877,8 @@ def check(
         )
         check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
-        if epic_run(repo, head):
-            check_epic(report, repo, checkpoint, candidate, head)
+        if epic_run():
+            check_epic(report, repo, checkpoint, head, decisions)
         old_policy = _yaml(checkpoint.read(POLICY), POLICY)
         new_policy = _yaml(candidate.read(POLICY), POLICY)
         check_relaxations(

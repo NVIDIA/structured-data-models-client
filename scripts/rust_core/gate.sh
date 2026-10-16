@@ -223,11 +223,11 @@ cleanup() {
 trap cleanup EXIT
 
 # The one bootstrap a checkpoint is judged by another commit's harness for
-# (T2.0): the phase, its fork point from the epic branch, and the landing
-# that stands in for it, pinned here. SDM_GATE_BOOTSTRAP ("PHASE FORK
-# STAND") replaces the pin for the gate's own tests only; ci.yml sets it
-# nowhere (tests/test_t20_bootstrap.py holds it to that).
-read -r bootstrap_phase bootstrap_fork bootstrap_stand <<<"${SDM_GATE_BOOTSTRAP:-rust-core-phase-2 9604074af96b8a05a5532c91249470595b38a4c5 bd44b34270ca59679ddf1fb4104d8aaa0373ddfb}"
+# (T2.0): the package, the phase, its fork point from the epic branch, and
+# the landing that stands in for it, pinned on this one line, which nothing
+# overrides (tests/test_t20_bootstrap.py runs copies with it rewritten).
+bootstrap='T2.0 rust-core-phase-2 9604074af96b8a05a5532c91249470595b38a4c5 bd44b34270ca59679ddf1fb4104d8aaa0373ddfb'
+read -r bootstrap_package bootstrap_phase bootstrap_fork bootstrap_stand <<<"$bootstrap"
 # The data the harness reads from the checkpoint's tree: the fork point and
 # the stand-in must agree on every one of these paths.
 judging=(contract docs/design/rust-core/register.yaml docs/design/rust-core/register.schema.json
@@ -241,9 +241,11 @@ judging=(contract docs/design/rust-core/register.yaml docs/design/rust-core/regi
 # and $checkpoint, or nothing (status 0) when every condition holds:
 # - the checkpoint is the pinned fork point, which is the merge base of the
 #   remote phase branch and the remote epic branch, read from git here;
-# - the candidate holds no landing commit after the fork point, but for
-#   itself as the first landing: an empty landing commit whose Base-SHA and
-#   Checkpoint-SHA are the fork point;
+# - every commit after the fork point is the pinned package's own (a
+#   subject "<ID>: ", "<ID> tests: ", "<ID> fix <n>: " or "<ID> tracker: "),
+#   but for the candidate itself as the package's first landing: an empty
+#   commit "Land <ID>: ..." with one parent, a Reviewed-by trailer, and
+#   Base-SHA and Checkpoint-SHA the fork point;
 # - the stand-in is the pinned landing, a landing commit, and the merged
 #   phase's last landing the fork point holds: the second parent of the
 #   newest merge on its first-parent history whose second parent is one;
@@ -259,10 +261,25 @@ bootstrap_problem() {
   [ "$fork" = "$bootstrap_fork" ] ||
     { echo "the fork point of origin/$bootstrap_phase from origin/rust-core is ${fork:-none}, not $bootstrap_fork"; return 1; }
   head=$("${g[@]}" rev-parse HEAD)
+  local id=${bootstrap_package//./\\.} sha subject
   landings=$("${g[@]}" log --format=%H -E --grep='^Land ' "$bootstrap_fork..HEAD")
+  if [ -n "$landings" ] && [ "$landings" != "$head" ]; then
+    echo "the candidate holds a landing commit after the fork point: judge it against that landing"
+    return 1
+  fi
+  while IFS= read -r sha; do
+    subject=$("${g[@]}" log -1 --format=%s "$sha")
+    if [ "$sha" = "$head" ] && [ -n "$landings" ]; then
+      [[ "$subject" =~ ^Land\ $id:\  ]] ||
+        { echo "the first landing is not $bootstrap_package's: $subject"; return 1; }
+    else
+      [[ "$subject" =~ ^$id(\ tests|\ fix\ [0-9]+|\ tracker)?:\  ]] ||
+        { echo "${sha:0:12} is not $bootstrap_package's commit: $subject"; return 1; }
+    fi
+  done < <("${g[@]}" rev-list "$bootstrap_fork..HEAD")
   if [ -n "$landings" ]; then
-    [ "$landings" = "$head" ] ||
-      { echo "the candidate holds a landing commit after the fork point: judge it against that landing"; return 1; }
+    [ -n "$("${g[@]}" log -1 --format='%(trailers:key=Reviewed-by,valueonly)' HEAD | tr -d ' \n')" ] ||
+      { echo 'the first landing has no Reviewed-by trailer'; return 1; }
     [ "$("${g[@]}" rev-list --parents -n 1 HEAD | wc -w)" = 2 ] &&
       [ "$("${g[@]}" rev-parse 'HEAD^{tree}')" = "$("${g[@]}" rev-parse 'HEAD^^{tree}')" ] ||
       { echo 'the candidate is a landing commit that is not empty, with one parent'; return 1; }

@@ -14,24 +14,33 @@ and only when every condition it reads from git holds. One temporary
 history, shaped as the real one: ``rust-core-phase-1``'s landings
 (``tests/test_contract_ratchet.py``'s ``build()``), the last landing
 holding a ``ratchet.py`` that knows no fork point (as Phase 1's), then
-``rust-core`` merging them, a handbook commit and the fork point. The pin is the
-fixture's (``SDM_GATE_BOOTSTRAP``, which ci.yml never sets); one test runs
-the real pin on the real history.
+``rust-core`` merging them, a handbook commit and the fork point. gate.sh's
+pin is one line nothing overrides; the fixture's candidates carry a copy of
+gate.sh with that line rewritten to the fixture's fork point and stand-in.
+One test runs the real pin on the real history.
 
-- The candidate on the fork point, the first landing itself (a replay of
-  its tip and its phase push) are judged by the stand-in's harness, which
-  the gate says.
+- T2.0's candidate on the fork point and T2.0's first landing itself (a
+  replay of its tip and its phase push) are judged by the stand-in's
+  harness, which the gate says.
 - Seeded, each refused: a candidate above a landing with the fork point as
-  its base (the reviewer's repro); a candidate whose ``ratchet.py`` names
-  another non-landing checkpoint (Codex's repro: it gets that commit's own
-  harness, never the stand-in); a fork point that differs from the
-  stand-in in a judging file; a remote epic branch whose fork point is not
-  the pinned one; a first landing recording another Checkpoint-SHA.
+  its base (the reviewer's round 1 repro); a candidate whose
+  ``ratchet.py`` names another non-landing checkpoint (Codex's round 1
+  repro: it gets that commit's own harness, never the stand-in); a fork
+  point that differs from the stand-in in a judging file; a remote epic
+  branch whose fork point is not the pinned one; a first landing recording
+  another Checkpoint-SHA; another package's candidate, first landing and
+  phase push (Codex's round 2 P2-2); a first landing with no Reviewed-by.
 
-The epic branch (rule ``epic``): on ``rust-core``'s head a commit after the
-merged phase's last landing that changes a protected path fails unless an
-owner-approved row of the head's decisions names it, by SHA prefix or by a
-range; a row that is not the owner's names nothing.
+The epic branch (rule ``epic``), on a push to ``rust-core``: each commit
+after the checkpoint L (the merged phase's last landing) that changes a
+protected path fails unless an owner-approved row of L's own decisions
+names it, by SHA prefix or by range. The fixture: Phase 2 cut at the fork
+point, ``rust-core`` taking a commit U that changes a protected path, a
+Phase 2 landing L2 whose decisions name U, and ``rust-core`` merging L2.
+Seeded, each failing: no row; a row that is not the owner's; a row the
+head adds itself (Codex's round 2 P1-1); a landing-shaped commit after L2
+(P1-2); an older push replayed while ``origin/rust-core`` is later
+(P1-3).
 """
 
 from __future__ import annotations
@@ -154,18 +163,62 @@ def world(
     return {'clone': clone, 'shas': shas}
 
 
-def work(repo: Path) -> None:
-    r"""The candidate's change: this tree's ratchet.py, as T2.0's."""
-    (repo / 't20.txt').write_text('x')
-    (repo / 'scripts/rust_core/ratchet.py').write_bytes(RATCHET.read_bytes())
+GATE = ROOT / 'scripts/rust_core/gate.sh'
+#: gate.sh's pin, the one line the fixture's copy rewrites.
+PIN = (
+    "bootstrap='T2.0 rust-core-phase-2 9604074af96b8a05a5532c91249470595b38a4c5 "
+    "bd44b34270ca59679ddf1fb4104d8aaa0373ddfb'\n"
+)
 
 
-def landing(repo: Path, base: str, checkpoint: str | None = None) -> str:
+def pinned_gate(shas: dict[str, str]) -> Callable[[Path], None]:
+    r"""This tree's gate.sh, its pin rewritten to the fixture's fork point
+    and stand-in: a disposable copy in the candidate's commit, as nothing
+    overrides the pin."""
+    text = GATE.read_text(encoding='utf-8')
+    assert text.count(PIN) == 1
+    copy = text.replace(
+        PIN, f"bootstrap='T2.0 {PHASE2} {shas['F']} {shas['L1']}'\n"
+    )
+
+    def edit(repo: Path) -> None:
+        path = repo / 'scripts/rust_core/gate.sh'
+        path.write_text(copy, encoding='utf-8')
+        path.chmod(0o755)
+
+    return edit
+
+
+def work_for(shas: dict[str, str], name: str = 't20') -> Callable[[Path], None]:
+    r"""The candidate's change: this tree's ratchet.py, as T2.0's, and the
+    pinned gate.sh copy."""
+
+    def edit(repo: Path) -> None:
+        (repo / f'{name}.txt').write_text('x')
+        (repo / 'scripts/rust_core/ratchet.py').write_bytes(
+            RATCHET.read_bytes()
+        )
+        pinned_gate(shas)(repo)
+
+    return edit
+
+
+def landing(
+    repo: Path,
+    base: str,
+    checkpoint: str | None = None,
+    package: str = 'T2.0',
+    reviewed: bool = True,
+) -> str:
     return commit(
         repo,
-        'Land T2.0: the package',
+        f'Land {package}: the package',
         trailers={
-            'Reviewed-by': 'independent reviewer and Codex, T2.0',
+            **(
+                {'Reviewed-by': f'independent reviewer and Codex, {package}'}
+                if reviewed
+                else {}
+            ),
             'Protected-paths': 'scripts/rust_core/**',
             'Base-SHA': base,
             'Checkpoint-SHA': checkpoint or base,
@@ -182,10 +235,7 @@ def gate(
         text=True,
         check=False,
         cwd=clone,
-        env=env(
-            SDM_PHASE_BRANCH=PHASE2,
-            SDM_GATE_BOOTSTRAP=f'{PHASE2} {shas["F"]} {shas["L1"]}',
-        ),
+        env=env(SDM_PHASE_BRANCH=PHASE2),
         stdin=subprocess.DEVNULL,
     )
 
@@ -216,7 +266,7 @@ def test_the_fork_point_s_candidate_is_judged_by_the_stand_in(
     built: dict[str, Any],
 ) -> None:
     clone, shas = at_fork(built)
-    commit(clone, 'T2.0: the work', work)
+    commit(clone, 'T2.0: the work', work_for(shas))
     done = gate(clone, shas, '--base', f'origin/{PHASE2}', '--only', 'ratchet')
     assert stood_in(done, shas), done.stdout + done.stderr
 
@@ -229,7 +279,7 @@ def test_the_first_landing_its_tip_and_its_phase_push_are_judged(
     phase push from the fork point, is judged by the stand-in, as its
     parent's tree under its trailers."""
     clone, shas = at_fork(built)
-    commit(clone, 'T2.0: the work', work)
+    commit(clone, 'T2.0: the work', work_for(shas))
     landing(clone, shas['F'])
     for where in (['--base', f'origin/{PHASE2}'], ['--phase-push', shas['F']]):
         done = gate(clone, shas, *where, '--only', 'ratchet')
@@ -240,7 +290,7 @@ def test_a_first_landing_recording_another_checkpoint_is_refused(
     built: dict[str, Any],
 ) -> None:
     clone, shas = at_fork(built)
-    commit(clone, 'T2.0: the work', work)
+    commit(clone, 'T2.0: the work', work_for(shas))
     landing(clone, shas['F'], checkpoint=shas['H1'])
     done = gate(clone, shas, '--base', f'origin/{PHASE2}', '--only', 'ratchet')
     assert done.returncode == 1, done.stdout + done.stderr
@@ -255,7 +305,7 @@ def test_a_candidate_above_a_landing_with_the_fork_point_as_base_is_refused(
     that landing given ``--base`` the fork point is never judged by the
     stand-in."""
     clone, shas = at_fork(built)
-    commit(clone, 'T2.0: the work', work)
+    commit(clone, 'T2.0: the work', work_for(shas))
     landing(clone, shas['F'])
     commit(clone, 'T2.0a: the design', write('design.txt', 'd'))
     done = gate(clone, shas, '--base', shas['F'], '--only', 'ratchet')
@@ -272,7 +322,7 @@ def test_a_candidate_ratchet_naming_another_checkpoint_never_gets_the_stand_in(
     as its checkpoint: X's own harness judges, and refuses; the stand-in is
     not the candidate's to choose."""
     clone, shas = at_fork(built)
-    commit(clone, 'T2.0: the work', work)
+    commit(clone, 'T2.0: the work', work_for(shas))
     landed = landing(clone, shas['F'])
     x = commit(
         clone,
@@ -315,7 +365,7 @@ def test_a_fork_point_differing_from_the_stand_in_in_judging_data_is_refused(
         fork_edit=write('docs/design/rust-core/register.yaml', 'entries: []\n'),
     )
     clone, shas = built['clone'], built['shas']
-    commit(clone, 'T2.0: the work', work)
+    commit(clone, 'T2.0: the work', work_for(shas))
     done = gate(clone, shas, '--base', f'origin/{PHASE2}', '--only', 'ratchet')
     assert done.returncode == 1, done.stdout + done.stderr
     assert 'differ in more than added files' in done.stderr
@@ -327,7 +377,14 @@ def test_a_remote_fork_point_that_is_not_the_pinned_one_is_refused(
     clone, shas = at_fork(built)
     # A candidate whose ratchet names the pinned fork point regardless.
     fake = f"print('{shas['F']} {shas['F']} harness')\n"
-    commit(clone, 'T2.0: the work', write('scripts/rust_core/ratchet.py', fake))
+    commit(
+        clone,
+        'T2.0: the work',
+        lambda r: (
+            write('scripts/rust_core/ratchet.py', fake)(r),
+            pinned_gate(shas)(r),
+        ),
+    )
     git(clone, 'update-ref', f'refs/remotes/origin/{EPIC}', shas['H1'])
     try:
         done = gate(clone, shas, '--base', shas['F'], '--only', 'ratchet')
@@ -337,10 +394,47 @@ def test_a_remote_fork_point_that_is_not_the_pinned_one_is_refused(
     assert f'from origin/{EPIC} is {shas["H1"]}' in done.stderr
 
 
-def test_ci_never_sets_the_bootstrap_override() -> None:
-    assert 'SDM_GATE_BOOTSTRAP' not in (
-        ROOT / '.github/workflows/ci.yml'
-    ).read_text(encoding='utf-8')
+def test_the_pin_is_the_real_bootstrap_and_nothing_overrides_it() -> None:
+    r"""Codex's round 2 P2-1: the pin is one line of gate.sh, the real
+    package, phase, fork point and stand-in, read from no variable."""
+    text = GATE.read_text(encoding='utf-8')
+    assert text.count(PIN) == 1
+    assert 'SDM_GATE_BOOTSTRAP' not in text
+    assert text.count('"$bootstrap"') == 1
+
+
+def test_another_package_never_gets_the_stand_in(built: dict[str, Any]) -> None:
+    r"""Codex's round 2 P2-2: a candidate titled for another package on
+    the fork point, its first landing, and its phase push are refused."""
+    clone, shas = at_fork(built)
+    commit(clone, 'T2.7: another package', work_for(shas))
+    done = gate(clone, shas, '--base', f'origin/{PHASE2}', '--only', 'ratchet')
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "is not T2.0's commit: T2.7: another package" in done.stderr
+    landing(clone, shas['F'], package='T2.7')
+    done = gate(clone, shas, '--phase-push', shas['F'], '--only', 'ratchet')
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'stands in' not in done.stderr
+    # T2.0's own work under another package's landing.
+    git(clone, 'checkout', '-q', '--detach', shas['F'])
+    commit(clone, 'T2.0: the work', work_for(shas))
+    landing(clone, shas['F'], package='T2.7')
+    done = gate(clone, shas, '--phase-push', shas['F'], '--only', 'ratchet')
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "the first landing is not T2.0's" in done.stderr
+
+
+def test_a_first_landing_without_reviewed_by_is_refused(
+    built: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 2 P3-1: the first landing needs Reviewed-by
+    as every later landing does."""
+    clone, shas = at_fork(built)
+    commit(clone, 'T2.0: the work', work_for(shas))
+    landing(clone, shas['F'], reviewed=False)
+    done = gate(clone, shas, '--phase-push', shas['F'], '--only', 'ratchet')
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert 'the first landing has no Reviewed-by trailer' in done.stderr
 
 
 def test_the_real_bootstrap_on_the_real_history(tmp_path: Path) -> None:
@@ -376,17 +470,6 @@ def test_the_real_bootstrap_on_the_real_history(tmp_path: Path) -> None:
 # --- the epic branch's protected changes ---------------------------------------------
 
 
-def epic_check(
-    clone: Path, shas: dict[str, str]
-) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [sys.executable, str(RATCHET), 'check', '--repo', '.',
-         '--checkpoint', shas['L1']],
-        capture_output=True, text=True, check=False, cwd=clone,
-        env=env(), stdin=subprocess.DEVNULL,
-    )  # fmt: skip
-
-
 def row(text: str, status: str = 'approved by owner 2026-10-16') -> str:
     return (
         '# Phase 2 decisions\n\n| # | Decision | Reason | Status |\n'
@@ -394,97 +477,174 @@ def row(text: str, status: str = 'approved by owner 2026-10-16') -> str:
     )
 
 
-@pytest.fixture(scope='module')
-def epic(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    r"""The history above with a handoff commit H1 changing a protected
-    path, ``rust-core`` at the fork point."""
-    built = world(
-        tmp_path_factory.mktemp('t20-epic'),
-        handbook=write('scripts/rust_core/handoff_tool.py', 'print(1)\n'),
+def epic_world(
+    base: Path, decisions: Callable[[str], str] | None
+) -> dict[str, Any]:
+    r"""The fork point's world, then: ``rust-core`` takes U, adding a
+    protected path; Phase 2 lands L2, whose decisions are
+    ``decisions(U)``; ``rust-core`` merges L2 (``--no-ff``), its head M2."""
+    built = world(base)
+    work = base / 'work'
+    shas = dict(built['shas'])
+    git(work, 'checkout', '-q', EPIC)
+    shas['U'] = commit(
+        work, 'Update: a tool', write('scripts/rust_core/update_tool.py', 'x\n')
     )
-    return built
+    git(work, 'checkout', '-q', PHASE2)
 
-
-def epic_head(
-    epic: dict[str, Any], decisions: Callable[[str], str] | None
-) -> tuple[Path, dict[str, str]]:
-    r"""``rust-core``'s head, the remote tip: on the fork point, a commit
-    giving it T2.0's ratchet (a protected change), then one writing Phase
-    2's decisions, ``decisions(<that commit>)`` (no protected change)."""
-    clone, shas = epic['clone'], epic['shas']
-    git(clone, 'checkout', '-q', '--detach', shas['F'])
-    shas = dict(shas)
-    shas['T'] = commit(
-        clone,
-        'Handoff: the ratchet',
-        lambda r: (r / 'scripts/rust_core/ratchet.py').write_bytes(
+    def package(repo: Path) -> None:
+        (repo / 'scripts/rust_core/ratchet.py').write_bytes(
             RATCHET.read_bytes()
-        ),
-    )
-    if decisions is not None:
-        commit(
-            clone,
-            "Handoff: the owner's rows",
+        )
+        if decisions is not None:
             write(
                 'docs/design/rust-core/phase-2/decisions.md',
-                decisions(shas['T']),
-            ),
-        )
-    head = git(clone, 'rev-parse', 'HEAD')
-    git(clone, 'update-ref', f'refs/remotes/origin/{EPIC}', head)
-    return clone, shas
+                decisions(shas['U']),
+            )(repo)
+
+    shas['L2'] = helpers.land(
+        work, 'T2.0', package, protected='scripts/rust_core/**'
+    )
+    git(work, 'checkout', '-q', EPIC)
+    git(work, 'merge', '-q', '--no-ff', '-m', 'Merge T2.0', shas['L2'])
+    shas['M2'] = git(work, 'rev-parse', 'HEAD')
+    return {'work': work, 'shas': shas}
+
+
+def epic_check(
+    repo: Path, checkpoint: str, **environ: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(RATCHET), 'check', '--repo', '.',
+         '--checkpoint', checkpoint],
+        capture_output=True, text=True, check=False, cwd=repo,
+        env=env(GITHUB_EVENT_NAME='push', GITHUB_REF_NAME=EPIC, **environ),
+        stdin=subprocess.DEVNULL,
+    )  # fmt: skip
 
 
 def failures(done: subprocess.CompletedProcess[str]) -> list[str]:
     return [x for x in done.stdout.splitlines() if x.startswith('FAILS')]
 
 
-def test_an_unnamed_protected_change_on_rust_core_fails(
-    epic: dict[str, Any],
+@pytest.fixture(scope='module')
+def named(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    return epic_world(
+        tmp_path_factory.mktemp('t20-epic-named'),
+        lambda u: row(f'The update `{u[:10]}`'),
+    )
+
+
+def test_where_names_the_merged_landing_and_a_named_change_passes(
+    named: dict[str, Any],
 ) -> None:
-    clone, shas = epic_head(epic, None)
-    done = epic_check(clone, shas)
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    where = subprocess.run(
+        [sys.executable, str(RATCHET), 'where', '--repo', '.'],
+        capture_output=True, text=True, check=False, cwd=work,
+        env=env(GITHUB_EVENT_NAME='push', GITHUB_REF_NAME=EPIC),
+    )  # fmt: skip
+    assert where.stdout.split() == ['--base', shas['L2']], where.stderr
+    done = epic_check(work, shas['L2'])
+    assert done.returncode == 0, done.stdout
+    assert f'{shas["U"][:12]}: 1 protected paths, named' in done.stdout
+
+
+def test_an_unnamed_protected_change_fails(tmp_path: Path) -> None:
+    built = epic_world(tmp_path, None)
+    work, shas = built['work'], built['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    done = epic_check(work, shas['L2'])
     assert done.returncode == 1, done.stdout
     assert (
-        f'scripts/rust_core/handoff_tool.py: changed on the epic branch by '
-        f'{shas["H1"][:12]}' in done.stdout
+        'scripts/rust_core/update_tool.py: changed on the epic branch by '
+        f'{shas["U"][:12]}' in done.stdout
     ), done.stdout
 
 
-def test_a_row_naming_one_commit_names_it_and_no_other(
-    epic: dict[str, Any],
-) -> None:
-    h1 = epic['shas']['H1']
-    clone, shas = epic_head(epic, lambda _: row(f'The handoff `{h1[:10]}`'))
-    found = failures(epic_check(clone, shas))
-    assert not any(h1[:12] in x for x in found), found
-    assert any(shas['T'][:12] in x for x in found), found
-
-
-def test_a_row_that_is_not_the_owner_s_names_nothing(
-    epic: dict[str, Any],
-) -> None:
-    h1 = epic['shas']['H1']
-    clone, shas = epic_head(
-        epic,
-        lambda _: row(
-            f'The handoff `{h1[:10]}`', status='orchestrator, owner to confirm'
+def test_a_row_that_is_not_the_owner_s_names_nothing(tmp_path: Path) -> None:
+    built = epic_world(
+        tmp_path,
+        lambda u: row(
+            f'The update `{u[:10]}`', 'orchestrator, owner to confirm'
         ),
     )
-    found = failures(epic_check(clone, shas))
-    assert any(h1[:12] in x for x in found), found
-
-
-def test_an_epic_head_whose_protected_changes_a_range_names_passes(
-    epic: dict[str, Any],
-) -> None:
-    m = epic['shas']['M']
-    clone, shas = epic_head(
-        epic, lambda t: row(f'The handoff commits `{m[:10]}..{t[:10]}`')
+    work, shas = built['work'], built['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    assert any(
+        shas['U'][:12] in x for x in failures(epic_check(work, shas['L2']))
     )
-    done = epic_check(clone, shas)
-    assert done.returncode == 0, done.stdout
-    assert 'named by an owner-approved row' in done.stdout
+
+
+def test_a_row_the_head_adds_itself_approves_nothing(tmp_path: Path) -> None:
+    r"""Codex's round 2 P1-1: rows count only from the checkpoint L2."""
+    built = epic_world(tmp_path, None)
+    work, shas = built['work'], built['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    commit(
+        work,
+        'Handoff: approve it',
+        write(
+            'docs/design/rust-core/phase-2/decisions.md',
+            row(f'The update `{shas["U"][:10]}`'),
+        ),
+    )
+    found = failures(epic_check(work, shas['L2']))
+    assert any(shas['U'][:12] in x for x in found), found
+
+
+def test_a_landing_shaped_commit_after_the_checkpoint_is_judged(
+    named: dict[str, Any],
+) -> None:
+    r"""Codex's round 2 P1-2 and the reviewer's P2-3: after L2, a commit
+    titled and trailered as a landing changing a protected path, then an
+    ordinary head, or as the head itself: each fails."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    fake = commit(
+        work,
+        'Land T2.1: unreviewed guard change',
+        write('contract/protected-paths.txt', '# nothing\n'),
+        trailers={
+            'Reviewed-by': 'nobody',
+            'Protected-paths': 'contract/protected-paths.txt',
+            'Base-SHA': shas['L2'],
+            'Checkpoint-SHA': shas['L2'],
+        },
+    )
+    for head in ('as head', 'below an ordinary head'):
+        if head != 'as head':
+            commit(work, 'Handoff: a note', write('note.md', 'n\n'))
+        found = failures(epic_check(work, shas['L2']))
+        assert any(
+            f'contract/protected-paths.txt: changed on the epic branch by {fake[:12]}'
+            in x
+            for x in found
+        ), (head, found)
+
+
+def test_an_older_push_replayed_is_judged_as_that_push(
+    tmp_path: Path,
+) -> None:
+    r"""Codex's round 2 P1-3: the rule follows the run (a push to
+    rust-core), not whether origin/rust-core is still that commit."""
+    built = epic_world(tmp_path, None)
+    work, shas = built['work'], built['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    later = commit(work, 'Handoff: later', write('later.md', 'l\n'))
+    git(work, 'update-ref', f'refs/remotes/origin/{EPIC}', later)
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    found = failures(epic_check(work, shas['L2']))
+    assert any(shas['U'][:12] in x for x in found), found
+    # Control: off a push to rust-core there is no rule epic.
+    done = subprocess.run(
+        [sys.executable, str(RATCHET), 'check', '--repo', '.',
+         '--checkpoint', shas['L2']],
+        capture_output=True, text=True, check=False, cwd=work, env=env(),
+        stdin=subprocess.DEVNULL,
+    )  # fmt: skip
+    assert not any('epic' in x for x in failures(done)), done.stdout
 
 
 # --- a malformed phase setting is a named error (fix 1, P3) --------------------------

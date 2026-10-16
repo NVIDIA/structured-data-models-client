@@ -40,13 +40,15 @@ permissions:
 # it. land.py refuses a candidate whose newest run was cancelled, and
 # land.py verify asks for a rerun rather than a revert. Every phase alike
 # (T2.0), with no phase named: an expression has no pattern match, so a
-# phase branch is a name under rust-core-phase- holding no digit followed
-# by "-" (the prefix holds no digit, and every branch under a phase,
-# rust-core-phase-N-<name>, holds one), and a lane is one holding
-# "-lane-". The phase check's condition reads the phase branch alike.
+# phase branch is a name under rust-core-phase- that ends in a digit and
+# holds no digit followed by "-" (the prefix holds no digit, and every
+# branch under a phase, rust-core-phase-N-<name>, holds one), and a lane
+# is one holding "-lane-". The phase check's condition reads the phase
+# branch alike, and fails by name on a name this lets through that is no
+# phase branch (a letter before its last digit, or a leading zero).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !((startsWith(github.ref_name, 'rust-core-phase-') && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
+  cancel-in-progress: ${{ !((startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and the DuckDB
@@ -160,13 +162,14 @@ jobs:
       # without it a fork point is refused, by name. A phase branch as the
       # concurrency reads it, any N.
       - name: A push to the phase branch lands one package
-        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-')))
+        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-')))
         run: |
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
           if git ls-remote --exit-code --heads origin rust-core >/dev/null; then
             git fetch --quiet origin +refs/heads/rust-core:refs/remotes/origin/rust-core
           fi
           where=$(python3 scripts/rust_core/ratchet.py where)
+          [ -n "$where" ] || { echo "$GITHUB_REF_NAME is under rust-core-phase- but is no phase branch"; exit 1; }
           python3 scripts/rust_core/ratchet.py checkpoint --repo . $where
 
   lint:

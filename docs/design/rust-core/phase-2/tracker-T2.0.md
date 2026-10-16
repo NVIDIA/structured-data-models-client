@@ -16,8 +16,9 @@ It lands alone, first, on `rust-core-phase-2`, with two reviewers.
    A name that is no phase branch is refused by name, never replaced by the default.
    `ci.yml` names no phase.
    Its branch filters are patterns, and its step texts match `^rust-core-phase-(0|[1-9][0-9]*)` in bash.
-   The two expressions that can't match a pattern (the concurrency and the phase check's condition) read a phase branch as a name under `rust-core-phase-` that holds no digit followed by `-`.
+   The two expressions that can't match a pattern (the concurrency and the phase check's condition) read a phase branch as a name under `rust-core-phase-` that ends in a digit and holds no digit followed by `-`.
    The prefix holds no digit, and every branch under a phase (`rust-core-phase-N-<name>`) holds one, so this works for any N, multi-digit included (fix 1).
+   A name these let through that is no phase branch (a letter before the last digit, or a leading zero) fails the phase check by name, since `where` names no base for it (fix 2).
    `selftest.py`'s Phase 1 fixture and `test_t133_register.py` stay on Phase 1, as the brief asks.
    The `*-pending.json` files are left as they are.
    They record the test IDs their test authors wrote in Phase 1, every `pending` list is empty, and no check reads their `authored` lists against live tests.
@@ -40,11 +41,12 @@ It lands alone, first, on `rust-core-phase-2`, with two reviewers.
    So `rust-core` is judged like a moved landing of that phase's head, by that landing's harness, with every comparison as it was.
    `ci.yml`'s gate steps must run on `rust-core` too: an empty `where` there fails.
    `contract/tests/test_runners.py` reads `where` the same way.
-   On the epic branch no landing will name a protected change made after the merged phase's last landing, so the ratchet's rule `epic` (fix 1) fails each such change unless an owner-approved row names its commit.
-   The rule applies when the candidate is the tip of `origin/rust-core` and is no landing commit.
-   It covers every commit on the head's first-parent history after the merge that brought the checkpoint, and that merge for what it holds beyond the checkpoint.
-   The row is read from the epic head's own phase decisions files, since a commit made on the epic branch after the last landing can be named nowhere else.
-   It names a commit by a SHA prefix of 8 or more digits, or by a range `A..B` (git's meaning, first-parent), in backticks.
+   On the epic branch no landing will name a protected change made after the checkpoint L (the merged phase's last landing), so the ratchet's rule `epic` (fixes 1 and 2) fails each such change unless an owner-approved row names its commit.
+   - **When it applies:** to the head judged on a push to `rust-core` (`GITHUB_EVENT_NAME=push`, `GITHUB_REF_NAME=rust-core`), whether or not that head is still the remote tip, so a replay of an older push judges that push.
+   - **What it covers:** every commit in `L..HEAD` that changes a protected path, as `git log L..HEAD` over the protected patterns lists it, whatever the commit's subject or trailers. Nothing after L counts as a landing: a later landing reaches `rust-core` only by the owner's merge, which makes it the next checkpoint.
+   - **Where the rows come from:** only L's own phase decisions files, reviewed and landed, never the head being judged, so no push approves itself. A row added after L counts once a later reviewed landing carries it and the owner merges that landing.
+   - **How a row names a commit:** a SHA prefix of 8 or more digits, or a range `A..B` (git's meaning, first-parent), in backticks.
+   - **What runs it:** the rule is in T2.0's `ratchet.py`, and the gate runs the checkpoint's harness. Until the owner merges T2.0's landing into `rust-core`, `rust-core` is judged by `bd44b342`'s harness, which has no rule `epic`. A protected change pushed to `rust-core` before that merge is only a note. That is accepted: `rust-core` moves only by the owner, who is asked to merge T2.0's landing as soon as it lands.
 5. **`gate.sh --locked` for any phase.**
    `gate.sh --locked` reads its locked set as data from the judging harness's tree.
    Each phase has `docs/design/rust-core/phase-N/locked-set.yaml`, a protected path.
@@ -75,18 +77,20 @@ For this one checkpoint, `gate.sh` judges with the harness of Phase 1's last lan
 It hands that harness `--base bd44b342`, so the candidate is held to that landing's baselines, register, decisions, cases and protected list.
 Those equal the fork point's: the 13 handoff commits only add files, and none of them judging data.
 The gate prints that the stand-in judged.
-The substitution is pinned in `gate.sh` (`rust-core-phase-2`, `9604074a`, `bd44b342`), and `gate.sh` reads every condition from git itself, not from the candidate's `ratchet.py` (`bootstrap_problem`).
+The substitution is pinned on one line of `gate.sh` that nothing overrides (package `T2.0`, `rust-core-phase-2`, `9604074a`, `bd44b342`).
+`gate.sh` reads every condition from git itself, not from the candidate's `ratchet.py` (`bootstrap_problem`).
 It applies only when all of these hold:
 
 - The candidate's checkpoint is `9604074a`.
 - `9604074a` is `git merge-base origin/rust-core-phase-2 origin/rust-core`.
-- The candidate holds no landing commit after `9604074a`, but for itself as the first landing: an empty commit with one parent whose Base-SHA and Checkpoint-SHA are `9604074a`. That landing is judged as its parent's tree under its own trailers (`--protected-paths` from Reviewed-by and Protected-paths), which covers its phase push and every replay of it.
+- Every commit after `9604074a` is T2.0's: `T2.0: `, `T2.0 tests: `, `T2.0 fix <n>: ` or `T2.0 tracker: `.
+- The candidate holds no landing commit after `9604074a`, but for itself as T2.0's first landing: an empty `Land T2.0: ...` commit with one parent, a Reviewed-by trailer, and Base-SHA and Checkpoint-SHA `9604074a`. That landing is judged as its parent's tree under its own trailers (`--protected-paths` from Reviewed-by and Protected-paths), which covers its phase push and every replay of it.
 - `bd44b342` is a landing commit and the merged phase's last landing `9604074a` holds: the second parent of the newest merge on its first-parent history whose second parent is a landing.
 - `9604074a` only adds files to `bd44b342`'s tree, and none under the judging data: `contract/`, the register, every phase's decisions and locked set, `phase-0/`, `rust/`, and the harness's scripts.
 
 Any other non-landing checkpoint takes the normal path: its own harness resolves it again and refuses any other commit.
 Once T2.0 lands, every candidate holds T2.0's landing after `9604074a`, so the substitution can't apply again.
-`SDM_GATE_BOOTSTRAP` replaces the pin for the gate's own tests only, and `ci.yml` never sets it (a test holds it to that).
+The gate's tests run disposable copies of `gate.sh` with the pin line rewritten to their fixture, and a test holds the real line to the real pin.
 The negative controls are in `tests/test_t20_bootstrap.py`, and each fails if the conditions are removed:
 
 - a candidate above a landing given the fork point as its base (the reviewer's repro);
@@ -94,7 +98,9 @@ The negative controls are in `tests/test_t20_bootstrap.py`, and each fails if th
 - the same candidate naming the pinned fork point from above a landing;
 - a fork point that differs from the stand-in in a judging file;
 - a remote epic branch whose fork point is another;
-- a first landing recording another Checkpoint-SHA.
+- a first landing recording another Checkpoint-SHA;
+- another package's candidate, first landing and phase push (fix 2);
+- a first landing with no Reviewed-by (fix 2).
 
 **The landing.**
 `rust-core`'s `land.py` lands only on Phase 1, so T2.0 lands with its own `land.py`: `land.py ... --phase-branch rust-core-phase-2` from T2.0's worktree.
@@ -108,10 +114,10 @@ Once landed, the phase branch's head is T2.0's landing commit, which holds the n
 The next candidate is judged against it (see the probes).
 
 **For `rust-core` to go green**, the owner merges T2.0's landing commit into `rust-core` with `--no-ff`.
-`where` then names that landing as `rust-core`'s checkpoint, its harness T2.0's.
+That is the only route.
+`where` then names that landing as `rust-core`'s checkpoint, its harness T2.0's, with rule `epic`.
 The handoff commits are its ancestors, so they need no row.
-If `rust-core` is instead judged against `bd44b342` with T2.0's harness (T2.0 reaching it otherwise), rule `epic` needs an owner-approved row in the epic head's phase decisions file naming the 13 handoff commits, for example `` `91a00319..9604074a` `` (the first-parent commits after the Phase 1 merge, `98ae9bd2` to `9604074a`).
-On the real history, without such a row, rule `epic` fails on the 5 of those commits that change a protected path: `98ae9bd2`, `beef2082`, `345af5b2`, `6dc7b9f3` and `9604074a`.
+Before that merge, `rust-core` is judged by `bd44b342`'s harness and stays red on its approved differences, as since the Phase 1 merge.
 
 ### Probes
 
@@ -124,7 +130,7 @@ These were run on T2.0's tree before the first push.
   - `gate.sh --only coverage`: ok.
   - `gate.sh --only l0`: ok.
 
-  The first round passed here because protected changes on the epic branch were only notes, which round 1 found to be a hole: fix 1's rule `epic` now fails each unnamed one (see the bootstrap route for the row it needs).
+  The first round passed here because protected changes on the epic branch were only notes, which round 1 found to be a hole: rule `epic` (fixes 1 and 2) now fails each unnamed one once `rust-core`'s checkpoint is T2.0's landing or later.
   The comparisons themselves are the acceptance tests' (`contract/tests/test_t20_checkpoints.py`):
   - raw against the reference, the real `python-core` observations fail (the red runs reproduced);
   - held to `where`'s effective expectations, they pass;
@@ -168,3 +174,8 @@ These were run on T2.0's tree before the first push.
   - Protected changes on `rust-core` beyond the base landing were advisory. They now fail unless an owner row names their commits (rule `epic`).
   - `ci.yml`'s cap on phases 0 to 9 is gone.
   - P3s fixed: `land.py verify` infers the landing's phase; the phase error is named in `bridge_freeze.py` and `replay_jobs.py`; the Codex pane helper's default is restored; the watchdogs fail loudly with no tasks directory at all.
+- Round 2 (both reviewers):
+  - Rule `epic` now takes its rows only from the checkpoint, exempts no landing-shaped commit after it, and follows the run rather than the remote tip.
+  - The bootstrap's override variable is gone, and the bootstrap is restricted to T2.0's own commits and first landing, which must carry Reviewed-by.
+  - `ci.yml`'s phase predicate requires a final digit, and fails by name on what it still lets through.
+  - The tracker no longer claims rule `epic` runs before T2.0's landing is on `rust-core`.
