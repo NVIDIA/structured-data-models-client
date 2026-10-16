@@ -3473,17 +3473,9 @@ entries:
   cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, key.varchar-large-buffers]
   refs:
   - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-0-wide.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-10-wide.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-37.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.at-precision.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.both.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.negative.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.null-foreign.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.primary-only.* refusal INTERNAL_ERROR -> success'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3508,6 +3500,12 @@ entries:
     reviewers of T1.32g part 2b's review round 1 (Codex and the independent
     subagent), relayed by the orchestrator:
     APPROVE-P1B-33-first-admission-rows.
+    T2.0c: at the reference 6298913c (main's eb6c68eb reads a decimal key as
+    an integer or a float) no vector of decimal128-38-0-wide,
+    decimal128-38-10-wide, decimal128-38-37 or decimal-vectors' key groups
+    fails INTERNAL_ERROR any more, so those eight refs, which named no
+    vector, are taken out; the differences those vectors now make are
+    P2B-1's (KO2-45, until T2.17). For the reviewers.
   case_outcomes:
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -5819,6 +5817,7 @@ entries:
   - eb6c68eb
   - P1B-3
   - P1B-18
+  - P1B-53
   - P1B-31
   - P1B-33
   - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.tiny.decimal success -> refusal INVALID_REQUEST'
@@ -5886,13 +5885,16 @@ entries:
   - 'contract/decimal-vectors.json#target.sum.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.sum.d4-2.max success -> success'
   - 'contract/decimal-vectors.json#target.sum.d9-9.max success -> success'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
-    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16), a
-    blanket approval of T2.0c's temporary entries for refusals of inputs the
-    new reference answers; the reviewers check this entry fits it. Temporary:
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator): a blanket approval of
+    T2.0c's temporary entries for refusals of inputs the new reference
+    answers; the reviewers check this entry fits it. It also covers the
+    approved P1B-18 and P1B-53, whose refusal of decimal.class-target-38-18
+    (target_type) is now of an input the reference answers. Temporary:
     it lapses when T2.17 lands, and the final gate fails while it remains.
     The trace of every moved reference line and vector to eb6c68eb is in
     phase-2/tracker-T2.0c-recording.md; case_outcomes come from ratchet.py
@@ -5922,12 +5924,13 @@ entries:
     return.
   cases: [T2.0c]
   refs: [eb6c68eb]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
-    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16); the
-    reviewers check this entry fits it. Temporary: it lapses when T2.18
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator); the reviewers check
+    this entry fits it. Temporary: it lapses when T2.18
     lands, and the final gate fails while it remains. No case covers it
     yet; T2.18's test author adds one.
 
@@ -5954,12 +5957,13 @@ entries:
   - 1fc5a686
   - P1B-20
   - packages/structured-data-models-client/tests/t128a-payload-rules.json
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
-    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16); the
-    reviewers check this entry fits it. Temporary: it lapses when T2.8c
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator); the reviewers check
+    this entry fits it. Temporary: it lapses when T2.8c
     lands, and the final gate fails while it remains. P1B-20's old behavior
     (the reference's _check_entity_count) no longer holds at 6298913c; the
     re-recorded t128a vectors (base.regression.entities-1001,
@@ -5986,12 +5990,13 @@ entries:
     rows_per_call set.
   cases: [T2.0c]
   refs: [1fc5a686]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
-    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16); the
-    reviewers check this entry fits it. Temporary: it lapses when T2.8c
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator); the reviewers check
+    this entry fits it. Temporary: it lapses when T2.8c
     lands, and the final gate fails while it remains. No case covers it
     yet; T2.8c's test author adds one.
 
@@ -6023,13 +6028,14 @@ entries:
   - P1B-40
   - 'contract/sampled-null-key-vectors.json#mixed-null-decimal success -> success'
   - 'contract/key-inference-vectors.json#nulls-1-decimal.200 success -> success'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
-    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16), one of
-    T2.0c's temporary decimal differences; for the owner to confirm at the
-    next check-in that KO2-45 covers it, since it turns P1B-40's approved
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator), as one of T2.0c's
+    temporary decimal differences; for the owner to confirm at the next
+    check-in that KO2-45 covers it, since it turns P1B-40's approved
     answer to a reference failure into a difference from a reference
     success. Temporary: it lapses when T2.17 lands, and the final gate fails
     while it remains. Found by the recorder at 4f1c3247.
