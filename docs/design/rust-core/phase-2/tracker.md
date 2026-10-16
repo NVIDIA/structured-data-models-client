@@ -55,6 +55,7 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 | 4 | a416950e | CHANGES REQUIRED (15 of 15 fixed; 0 P1, 2 P2, 4 P3) | APPROVE (0 P1, 0 P2, 2 P3) | 0 | 2 | Fix 4: the locked-set file protected by T2.0a's landing; T2.1a's gate reads its `steps`, `ci_jobs` (by `--ci-run`) and `limits`; the case floor stated; T2.1a after T2.0a and re-estimated; stray lines from fix 3 |
 | 5 | 4b114203 | CHANGES REQUIRED (6 of 8 fixed; 0 P1, 2 P2, 6 P3) | APPROVE (0 P1, 0 P2, 2 P3) | 0 | 2 | Fix 5: the nine `edit.*` cases admitted by T2.12; CI checks locked by logical name and mapped to jobs by a protected `ci-checks.yaml`; the CI-check reader's seeded faults; the owner answers on the critical path; the P3s |
 | 6 | 1a983d25 | CHANGES REQUIRED (8 of 10 fixed; 0 P1, 2 P2, 2 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 2 | Fix 6: the locked set in T2.0's format (numbered `checks` over gate `steps`), all 52 S1 cases in it; CI checks as job-name patterns fixed now, no mapping file; skipped jobs fail; T2.4 judging for its CI jobs |
+| 7 | b4a78278 | CHANGES REQUIRED (3 of 5 fixed; 0 P1, 3 P2, 3 P3) | CHANGES REQUIRED (0 P1, 3 P2) | 0 | 6 | Fix 7: check 9 outside the gate; the `inventory` step and the `every` check (12) as T2.0's reader needs; CI patterns against `ci.yml`'s real job names; the `ci` step resolves an empty landing to its tested candidate's run as E131 does; per-check CI failures; the edit cases' interim gate retired |
 
 ## Carried rows (plan section 8)
 
