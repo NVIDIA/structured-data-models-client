@@ -1,8 +1,11 @@
 # Releasing
 
-Five distributions, one version, published together. A release is a tag and
-then an approval: the `pypi` environment has required reviewers, so the job
-that creates the GitHub Release and publishes to PyPI waits for one.
+Five distributions, one version, published together. A release is a tag, then
+an approval, then a publish. The tag builds everything. The `pypi` environment
+has required reviewers, so the job that creates the GitHub Release and attaches
+those distributions waits for one. Publishing them to PyPI is a third step,
+run by hand, because the service that owns those projects is not reachable
+from a public CI runner.
 
 The tag has to sit on a commit that is on `main` and whose CI run passed.
 The publish workflow checks both before it builds anything, so a tag on an
@@ -12,7 +15,8 @@ That check lives in the workflow, and a tag runs the workflow as it was at
 the tagged commit, so it cannot defend against a tag placed on a commit
 older than the check. Two repository settings do, and both are configured
 outside this tree: a tag ruleset limiting who may create `v*`, and required
-reviewers on the `pypi` environment, which hold the upload itself.
+reviewers on the `pypi` environment, which hold the artifacts back from being
+published on the Releases page at all.
 
 ## Before tagging
 
