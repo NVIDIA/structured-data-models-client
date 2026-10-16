@@ -80,7 +80,7 @@ jobs:
       # the Python leg reads the tree.
       #
       # `--no-deps` because the engine pins three siblings by exact version
-      # and those versions are not on PyPI until the release publishes, so
+      # and those versions are not on PyPI until someone publishes them, so
       # resolving them fails outright. `ci.yml` works around that by installing
       # the siblings from the tree first, which this job has no use for: the
       # dependencies are never imported, and what CodeQL needs is the compiler

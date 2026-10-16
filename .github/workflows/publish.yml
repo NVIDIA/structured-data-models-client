@@ -44,10 +44,12 @@ on:
 # Least privilege at the top: a job that needs more says so itself.
 permissions: {}
 
-# Two runs for one tag, say a tag push and a `workflow_dispatch`, would upload
-# assets from two different builds to one release, and each would then refuse
-# the other's files as stale. Not cancel-in-progress: a run that has started
-# publishing must finish and write its summary.
+# Two runs for one tag, say a tag push and a `workflow_dispatch`, would build
+# that version twice and attach the results to one release. Nothing would fail:
+# the second run finds the first's assets already there and leaves them, so the
+# release ends up holding one build while the other run's artifact holds
+# different bytes for the same filenames. Not cancel-in-progress: a run that
+# has started attaching has to finish, or the release keeps part of a build.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
