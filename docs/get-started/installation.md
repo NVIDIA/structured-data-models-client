@@ -24,8 +24,7 @@ Install into the notebook with `%pip`, then restart Python, each step in its own
 
 ```text
 import numpy
-major, minor = (int(part) for part in numpy.__version__.split('.')[:2])
-keep_numpy = f'numpy=={numpy.__version__}' if (major, minor) >= (1, 26) else 'numpy~=1.26.0'
+keep_numpy = f'numpy=={numpy.__version__}'
 ```
 
 ```text
@@ -36,13 +35,12 @@ keep_numpy = f'numpy=={numpy.__version__}' if (major, minor) >= (1, 26) else 'nu
 dbutils.library.restartPython()
 ```
 
-Four things differ from a laptop, each found by running on every LTS runtime and serverless environment, except the one path marked to be validated:
+Four things differ from a laptop, each found by running on every LTS runtime and serverless environment:
 
-- **Keep the runtime's own NumPy where it is 1.26 or later, and NumPy 1.26 where it is older.**
+- **Keep the runtime's own NumPy.**
   Databricks builds its preinstalled packages against the NumPy it ships.
-  Installing with NumPy left unbounded can let pandas take NumPy beneath them to a new major version, after which the Python process cannot start; within NumPy 1, a newer release still runs packages built against an older one.
-  Where the runtime ships NumPy 1.26 or later, pinning it leaves pip to choose a pandas that fits it.
-  Where it ships an older one (DBR 14.3 LTS and 15.4 LTS, serverless environments 1 and 2, each NumPy 1.23.5), the client's floor of 1.26 cannot be met by the runtime's own, so the install upgrades NumPy, and pandas and pyarrow with it; `numpy~=1.26.0` holds NumPy to the 1.26 line. Validated on DBR 14.3 LTS (x86_64, standard runtime) on 2026-10-15, job run 644976276138616: NumPy 1.26.4, pandas 2.3.3, pyarrow 25.0.1, the client and its native module installed and loading. 15.4 LTS, serverless 1 and 2, and ARM remain pending.
+  Installing can upgrade pandas and, through it, NumPy beneath them, after which the Python process cannot start.
+  Pinning NumPy to the version already there leaves pip to choose a pandas that fits it.
 - **Write version bounds with `~=`, not `<` or `>`.**
   A classic cluster's `%pip` reads its line through a shell, which takes `<` and `>` as redirections: `numpy<2` fails, and `pyarrow>=10` is silently dropped.
 - **Sampling through the notebook's own Spark needs Databricks Runtime 17.3 LTS or serverless environment 4.**

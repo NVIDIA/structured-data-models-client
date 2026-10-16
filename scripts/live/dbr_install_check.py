@@ -25,7 +25,7 @@ Widgets (job base parameters):
     extras     the client's extras to install (default: the guide's)
 
 It checks that NumPy is held where the guide's first cell puts it (the
-runtime's NumPy when that is 1.26 or newer, else 1.26.x), that the client's
+runtime's own NumPy, which meets the client's floor of 1.23.5), that the client's
 own floors for NumPy, pandas and pyarrow are met, that the client installed
 is the native wheel from ``wheel_dir`` and its ``sdm_client._native`` loads
 without test-only operations, that the runtime's own packages still import,
@@ -119,12 +119,7 @@ with open(
 # The guide's first cell, verbatim.
 import numpy
 
-major, minor = (int(part) for part in numpy.__version__.split('.')[:2])
-keep_numpy = (
-    f'numpy=={numpy.__version__}'
-    if (major, minor) >= (1, 26)
-    else 'numpy~=1.26.0'
-)
+keep_numpy = f'numpy=={numpy.__version__}'
 
 # Not in the guide: where the wheels are, since they are not on an index.
 install = (
@@ -198,10 +193,7 @@ after = {p: installed(p) for p in (*before, *FIRST_PARTY)}
 def numpy_held():
     runtime, now = before['numpy'], after['numpy']
     assert now is not None, 'numpy missing'
-    if runtime and numbers(runtime)[:2] >= (1, 26):
-        assert now == runtime, f'numpy moved from {runtime} to {now}'
-    else:
-        assert now.startswith('1.26.'), f'numpy {now}, not 1.26.x'
+    assert now == runtime, f'numpy moved from {runtime} to {now}'
     return now
 
 

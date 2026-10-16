@@ -3,7 +3,9 @@
 Task T0.5 of [Phase 0](design.md), part 3.
 This maps each cell of the first attempt's 20-cell Databricks job manifest, plus the cell owner decision J3 adds, through today's notebooks in `examples/databricks/`, to the public paths in [scope-python.yaml](scope-python.yaml) it exercises.
 The cell list is the historical one from the first attempt's `investigations/P95-ACCEPTANCE-PREPLAN.md` (section 4), which its decision DV55 adopted as the minimum; the old `matrix*.sh` scripts point at notebooks that no longer exist and are not used.
-The notebooks are `adventureworks_relational.ipynb` (Unity Catalog, over a SQL warehouse or over the notebook's Spark) and `lakebase_relational.ipynb` (Lakebase through `PostgresSource`).
+The notebooks are `kumo_relational_quickstart.ipynb` (Unity Catalog) and `lakebase_relational.ipynb` (Lakebase through `PostgresSource`).
+`main` replaced `adventureworks_relational.ipynb`, which read over a SQL warehouse or over the notebook's Spark, with `kumo_relational_quickstart.ipynb` in `18e26f1c`, and T2.0c brought that into the epic.
+The quickstart reads through the notebook's Spark only, so the SQL-warehouse cells (J01 to J09, J21) need their warehouse route set by the acceptance author.
 
 ## The cells
 
@@ -11,7 +13,7 @@ Python versions are as observed in the first attempt's job outputs (`~/.local/sh
 
 | Cell | Route | Runtime | Architecture | Python | Notebook | Data backend |
 |---|---|---|---|---|---|---|
-| J01 | Unity Catalog via SQL warehouse | DBR 14.3 LTS | x86_64 | 3.10.12 | adventureworks_relational, `warehouse_id` set | `databricks-sql` |
+| J01 | Unity Catalog via SQL warehouse | DBR 14.3 LTS | x86_64 | 3.10.12 | kumo_relational_quickstart, `warehouse_id` set | `databricks-sql` |
 | J02 | Unity Catalog via SQL warehouse | DBR 14.3 LTS | aarch64 | 3.10.12 | same | `databricks-sql` |
 | J03 | Unity Catalog via SQL warehouse | DBR 15.4 LTS | x86_64 | 3.11.11 | same | `databricks-sql` |
 | J04 | Unity Catalog via SQL warehouse | DBR 15.4 LTS | aarch64 | 3.11.11 | same | `databricks-sql` |
@@ -20,7 +22,7 @@ Python versions are as observed in the first attempt's job outputs (`~/.local/sh
 | J07 | Unity Catalog via SQL warehouse | Serverless env 1 | not proven (x86_64 observed) | 3.10.12 | same | `databricks-sql` |
 | J08 | Unity Catalog via SQL warehouse | Serverless env 2 | not proven | 3.11.10 | same | `databricks-sql` |
 | J09 | Unity Catalog via SQL warehouse | Serverless env 3 | not proven | 3.12.3 | same | `databricks-sql` |
-| J10 | Unity Catalog via Spark | DBR 17.3 LTS | x86_64 | 3.12.3 | adventureworks_relational, `warehouse_id` empty | `databricks-spark` |
+| J10 | Unity Catalog via Spark | DBR 17.3 LTS | x86_64 | 3.12.3 | kumo_relational_quickstart, `warehouse_id` empty | `databricks-spark` |
 | J11 | Unity Catalog via Spark | DBR 17.3 LTS | aarch64 | 3.12.3 | same | `databricks-spark` |
 | J12 | Unity Catalog via Spark | Serverless env 4 | not proven | 3.12.3 | same | `databricks-spark` |
 | J13 | Unity Catalog via Spark | Serverless env 5 | not proven | 3.12.3 | same | `databricks-spark` |
@@ -31,7 +33,7 @@ Python versions are as observed in the first attempt's job outputs (`~/.local/sh
 | J18 | Lakebase | Serverless env 4 | not proven | 3.12.3 | same | `lakebase` |
 | J19 | Lakebase | Serverless env 5 | not proven | 3.12.3 | same | `lakebase` |
 | J20 | Lakebase | Serverless env 6 | not proven | 3.12.3 | same | `lakebase` |
-| J21 | Unity Catalog via SQL warehouse | DBR 17.3 LTS or later (J3) | chosen by the acceptance author | 3.12.3 on 17.3 | adventureworks_relational, `warehouse_id` set | `databricks-sql` |
+| J21 | Unity Catalog via SQL warehouse | DBR 17.3 LTS or later (J3) | chosen by the acceptance author | 3.12.3 on 17.3 | kumo_relational_quickstart, `warehouse_id` set | `databricks-sql` |
 
 Serverless architecture is "not proven" because a serverless job does not choose it; the preplan requires each cell to record the observed architecture.
 
