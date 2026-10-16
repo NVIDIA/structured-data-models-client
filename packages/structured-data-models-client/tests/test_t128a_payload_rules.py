@@ -198,6 +198,12 @@ def test_the_recording_is_the_reference_s() -> None:
 
 
 CASES = RECORDED['cases']
+#: The cases past the core's 1,000-entity limit, with the reference's
+#: answer at 6298913c (register P2B-3).
+ENTITY_LIMIT = {
+    'base.regression.entities-1001': ('refused', 'INVALID_REQUEST'),
+    'many-1001.entities-1001': ('payload', None),
+}
 
 
 @pytest.mark.parametrize('spec', CASES, ids=[c['name'] for c in CASES])
@@ -220,6 +226,21 @@ def test_the_core_s_payload_rules_are_the_reference_s(
 
     if got['outcome'] == 'refused' and got.get('rule') in T128A_RULES:
         pytest.fail(_not_lifted(got))
+
+    if spec['name'] in ENTITY_LIMIT:
+        # The reference at 6298913c (main's 1fc5a686) takes up to 10,000
+        # entities: it refuses base.regression's 1,001 indices (8 users)
+        # INVALID_REQUEST for another reason and gathers many-1001's 1,001
+        # users. The core's own 1,000-entity limit refuses both first,
+        # UNSUPPORTED_REQUEST, by no rule it does not hold (register P2B-3,
+        # until T2.8c).
+        assert (expected['outcome'], expected.get('code')) == ENTITY_LIMIT[
+            spec['name']
+        ], expected
+        assert got['outcome'] == 'refused', 'accepted past the core limit'
+        assert not _not_held(got), got
+        assert got['code'] == 'UNSUPPORTED_REQUEST', got.get('message')
+        return
 
     if expected['outcome'] == 'refused':
         # The reference's refusal: its code, raised as (a subclass of) its
