@@ -49,3 +49,9 @@ Each table is `adventureworks_<name>` with the source file's columns (the order 
 
 Built in `ref-pandas3` (Python 3.12.13, pandas 3.0.6); a second build gave the same bytes.
 `contract/tests/test_refusal_map.py::test_the_fixture_holds_its_readme_s_rows_and_at_most_2000` holds the committed base to at most 2,000 rows, and to this table.
+
+## The notebook the cases were written from
+
+[`notebook-fa0637d4.ipynb`](notebook-fa0637d4.ipynb) is `examples/databricks/adventureworks_relational.ipynb` exactly as it was at `fa0637d4` (`git show fa0637d4:examples/databricks/adventureworks_relational.ipynb`).
+`main` deleted the notebook in `18e26f1c`, in favour of `kumo_relational_quickstart.ipynb`.
+`contract/tests/test_t133_adventureworks_cases.py` reads its `QUESTIONS` to hold the AdventureWorks cases to the questions they were written from, so T2.0c keeps it here, frozen, rather than in `examples/`.

@@ -100,12 +100,12 @@ def test_a_missing_or_unreadable_report_is_refused(
 def test_what_resolved_is_held_to_the_lane() -> None:
     floor, newest = smoke.LANES['floor'], smoke.LANES['newest']
     smoke.check_resolved(
-        floor, {'pyarrow': '14.0.1', 'pandas': '2.2.0', 'numpy': '1.26.4'}
+        floor, {'pyarrow': '14.0.1', 'pandas': '2.2.2', 'numpy': '1.23.5'}
     )
     smoke.check_resolved(newest, {'pandas': '3.0.6', 'numpy': '2.5.4'})
     for lane, versions in [
-        (floor, {'pyarrow': '14.0.2', 'pandas': '2.2.0', 'numpy': '1.26.4'}),
-        (floor, {'pandas': '2.2.0', 'numpy': '1.26.4'}),
+        (floor, {'pyarrow': '14.0.2', 'pandas': '2.2.2', 'numpy': '1.23.5'}),
+        (floor, {'pandas': '2.2.2', 'numpy': '1.23.5'}),
         (floor, {}),
         (newest, {'pandas': '2.3.3', 'numpy': '2.5.4'}),
         (newest, {'pandas': '3.0.6', 'numpy': '1.26.4'}),
