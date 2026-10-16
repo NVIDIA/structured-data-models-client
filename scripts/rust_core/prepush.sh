@@ -13,7 +13,8 @@
 #
 #   on a lane branch, that the package the worktree records owns every
 #   commit since the phase head, each subject starting "<ID>:" or
-#   "<ID> <part>:" and naming no other package (lane.py check; it refuses a
+#   "<ID> <part>:" and naming no other package, but main's commits one
+#   merge commit of the package brings in (lane.py check; it refuses a
 #   lane with no recorded package, and does nothing on any other branch);
 #   cargo fmt
 #   --check; the three clippy runs CI makes; l0_deps.py and l0_scan.py;

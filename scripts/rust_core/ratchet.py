@@ -64,7 +64,9 @@ checkpoint's files, read from git at ``--checkpoint``:
   still there, its semantic projection unchanged (:func:`semantic`); a line
   may be added; a changed or removed line passes only under an approved
   register entry naming its case on ``python-ref``, or with its case's
-  approved removal; a new reference commit is the owner's;
+  approved removal; a new reference commit is the owner's: a reference
+  file added is refused, naming it, unless a row of the checkpoint's
+  decisions approves its name (T2.0e, below);
 - ``cases``: a case removed, demoted from acceptance to diagnostic, or with
   its file changed passes only under an approved entry naming the case (for
   a removal or demotion, each baselined runner's exact old outcome and
@@ -145,8 +147,31 @@ the base as given, never the head's own trailers, and refuses any base but
 that landing; a harness that predates it refuses the flag, so ``rust-core``
 holding T2.0 but judged by an older landing fails closed.
 
-The decisions the rules read (owner approvals of relaxations) are every
-phase's: each ``docs/design/rust-core/phase-N/decisions.md`` of the
+A new reference commit (T2.0e): a candidate that adds a reference file
+``contract/reference/<NEW>.jsonl`` passes only when a row of the
+checkpoint's decisions approves ``NEW`` (:func:`approved_references`): its
+status is the owner's approval as :func:`owner_approved` reads it, and its
+Decision cell, the second, holds the word "reference" and exactly one full
+40-hex SHA in backticks, ``NEW`` (the form the phase decisions file's
+header states: ``Reference: `<NEW>` ...``). Only the checkpoint's rows
+count, never one the candidate adds, as for a relaxation: the owner's row
+lands before the package that re-records. Then, each named when it fails:
+``NEW`` is no recorded reference's name; it is the only file added, and
+the only one left (the old one removed); ``contract/reference-env.txt``
+names ``NEW`` in its one ``reference:`` line; no file outside ``docs/``
+(history) and ``contract/reference/`` cites the old SHA in full, and each
+that cited it at the checkpoint and is still there cites ``NEW``; every
+line of the new file records ``NEW`` as its reference commit; and the new
+recording carries every case the old one did, but one whose removal is
+approved. The per-case comparison does not apply across the change:
+instead every case whose semantic projection differs from its recorded
+line is listed in the notes, by case, for the reviewers, with the move
+itself and the row approving it; a case recorded alike is not listed. The
+landed file is then the one the per-case rules hold, and the row admits no
+further file: another commit needs its own row.
+
+The decisions the rules read (owner approvals of relaxations and of a new
+reference commit) are every phase's: each ``docs/design/rust-core/phase-N/decisions.md`` of the
 checkpoint, Phase 1's rows in force and each later phase's added; a file
 missing, unreadable or malformed fails the ``decisions`` rule by name
 (``capture_check.phase_decisions``, T2.0).
@@ -179,6 +204,8 @@ AVAILABILITY = 'contract/availability.yaml'
 PROTECTED = 'contract/protected-paths.txt'
 BASELINES = 'contract/baselines'
 REFERENCE = 'contract/reference'
+#: The reference environment, naming the reference commit (T1.13).
+ENV = 'contract/reference-env.txt'
 CASES = 'contract/cases'
 BASES = 'contract/bases.yaml'
 REGISTER = 'docs/design/rust-core/register.yaml'
@@ -1314,23 +1341,188 @@ def check_protected(
             )
 
 
+#: A full commit SHA in backticks, as a reference approval names it.
+APPROVED_SHA = re.compile(r'`([0-9a-f]{40})`')
+#: The word a reference approval's Decision cell holds.
+REFERENCE_WORD = re.compile(r'\breference\b', re.IGNORECASE)
+#: ``reference-env.txt``'s line naming the reference commit.
+ENV_LINE = re.compile(r'(?m)^reference: (.*)$')
+#: Where a citation of the reference SHA is history, never moved with it.
+HISTORY = ('docs/', f'{REFERENCE}/')
+
+
+def approved_references(decisions: str) -> dict[str, str]:
+    r"""The new reference commits the owner approved, each with its row's
+    ID (T2.0e): a row of a phase's decisions file whose status is the
+    owner's approval (:func:`owner_approved`) and whose Decision cell, its
+    second, holds the word "reference" and exactly one full SHA in
+    backticks (``Reference: `<40 hex>` ...``, the form the decisions file's
+    header states). An abbreviated SHA, a row naming two, or any other
+    status approves nothing."""
+    found: dict[str, str] = {}
+    for ident, (line, status) in (
+        capture_check().decision_rows(decisions).items()
+    ):
+        cells = [cell.strip() for cell in line.strip().strip('|').split('|')]
+        if len(cells) < 3 or not owner_approved(status):
+            continue
+        shas = set(APPROVED_SHA.findall(cells[1]))
+        if len(shas) == 1 and REFERENCE_WORD.search(cells[1]):
+            found.setdefault(shas.pop(), ident)
+    return found
+
+
+def citing(tree: Tree, sha: str) -> list[str]:
+    r"""The files of ``tree`` that cite ``sha`` in full, but those under
+    :data:`HISTORY`."""
+    done = subprocess.run(
+        ['git', '-C', str(tree.repo), 'grep', '-l', '-z', '-F', '-e', sha,
+         tree.sha, '--', '.', *(f':(exclude){p}' for p in HISTORY)],
+        capture_output=True,
+        encoding='utf-8',
+        check=False,
+    )  # fmt: skip
+    if done.returncode not in (0, 1):
+        raise Unreadable(f'git grep: {done.stderr.strip()}')
+    prefix = f'{tree.sha}:'
+    return sorted(
+        name.removeprefix(prefix) for name in done.stdout.split('\0') if name
+    )
+
+
+def listed(names: list[str], most: int = 10) -> str:
+    return ', '.join(names[:most]) + (
+        f' and {len(names) - most} more' if len(names) > most else ''
+    )
+
+
+def check_new_reference(
+    report: Report,
+    checkpoint: Tree,
+    candidate: Tree,
+    added: list[str],
+    removed: set[str],
+    decisions: str,
+) -> None:
+    r"""A candidate that adds a reference file: a new reference commit,
+    which only the owner's approval at the checkpoint admits (T2.0e)."""
+    before = checkpoint.files(REFERENCE)
+    after = candidate.files(REFERENCE)
+    olds = sorted(Path(path).stem for path in before)
+    approved = approved_references(decisions)
+    refused = [
+        path
+        for path in added
+        if Path(path).stem not in approved or Path(path).stem in olds
+    ]
+    for path in refused:
+        report.fail(
+            'reference',
+            f"a new reference commit replaces the recorded one: the owner's; "
+            f"{path} is named for a commit no row of the checkpoint's "
+            'decisions approved by the owner names as the reference '
+            '(Reference: `<its full SHA>`)',
+        )
+    if refused:
+        return
+    if len(added) != 1:
+        report.fail(
+            'reference',
+            f'{len(added)} new reference files ({listed(added)}): a new '
+            'reference commit is one recording',
+        )
+        return
+    (path,) = added
+    new = Path(path).stem
+    report.note(
+        'reference',
+        f'the reference moves from {listed(olds)} to {new}, approved by '
+        f'{approved[new]} at the checkpoint; each case is compared with its '
+        'recorded line below, and a case recorded differently is listed for '
+        'the reviewers',
+    )
+    for left in after:
+        if left != path:
+            report.fail(
+                'reference',
+                f'{left}: left beside the new reference {path}; a new '
+                'reference replaces the recorded one, one reference file '
+                'remains',
+            )
+    env = candidate.read(ENV)
+    named_env = ENV_LINE.findall(env or '')
+    if named_env != [new]:
+        report.fail(
+            'reference',
+            f'{ENV}: names {listed(named_env) or "no reference"}, not the new '
+            f'reference {new}',
+        )
+    stale: set[str] = set()
+    for old in olds:
+        stale.update(citing(candidate, old))
+        for name in citing(checkpoint, old):
+            text = candidate.read(name)
+            if text is not None and new not in text:
+                stale.add(name)
+    for name in sorted(stale):
+        report.fail(
+            'reference',
+            f'{name}: cites the recorded reference ({listed(olds)}) or not the '
+            f'new one {new}; every file citing the reference outside docs/ '
+            'names the new one',
+        )
+    lines = {
+        line.get('case'): line for line in jsonl(candidate.read(path), path)
+    }
+    other = sorted(
+        str(case)
+        for case, line in lines.items()
+        if at(line, 'identity.reference.commit.sha') != new
+    )
+    if other:
+        report.fail(
+            'reference',
+            f'{path}: the lines of {listed(other)} record another reference '
+            f"commit than {new}, the file's name",
+        )
+    policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
+    ordered = policy.get('ordered') if isinstance(policy, dict) else None
+    recorded = reference_lines(checkpoint)
+    for case, line in sorted(recorded.items(), key=lambda item: str(item[0])):
+        if case not in lines:
+            if case not in removed:
+                report.fail(
+                    'reference',
+                    f'{case}: its line removed: the new recording carries '
+                    'every case the recorded one did',
+                )
+        elif semantic(line, ordered) != semantic(lines[case], ordered):
+            report.note(
+                'reference',
+                f'{case}: recorded differently at the new reference {new[:12]}'
+                ': for the reviewers',
+            )
+    fresh = len(set(lines) - set(recorded))
+    if fresh:
+        report.note('reference', f'{fresh} case(s) recorded for the first time')
+
+
 def check_reference(
     report: Report,
     checkpoint: Tree,
     candidate: Tree,
     entries: list[dict[str, Any]],
     removed: set[str],
+    decisions: str = '',
 ) -> None:
     before = checkpoint.files(REFERENCE)
     if not before:
         return
     after = candidate.files(REFERENCE)
-    if [p for p in after if p not in before] and not [
-        p for p in before if p in after
-    ]:
-        report.fail(
-            'reference',
-            "a new reference commit replaces the recorded one: the owner's",
+    added = [p for p in after if p not in before]
+    if added:
+        check_new_reference(
+            report, checkpoint, candidate, added, removed, decisions
         )
         return
     policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
@@ -1903,8 +2095,10 @@ def check(
         check_protected(
             report, checkpoint, candidate, changed, trailer, bootstrap
         )
-        check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
+        check_reference(
+            report, checkpoint, candidate, entries, removed, decisions
+        )
         if epic:
             found_merge = epic_merge(repo, head)
             if (

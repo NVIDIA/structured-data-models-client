@@ -239,7 +239,6 @@ def test_a_refactor_reason_still_passes(h: History) -> None:
 # --- exit 3: the main reason --------------------------------------------------------
 
 
-@PENDING
 def test_main_is_a_documented_reason() -> None:
     r"""Exit 3: ``main`` is a reason, documented next to the others (the
     module docstring's list, and the declarations' ``about``)."""
@@ -248,7 +247,6 @@ def test_main_is_a_documented_reason() -> None:
     assert REASON in freeze.CHANGES_ABOUT
 
 
-@PENDING
 def test_a_main_commit_the_merge_brought_in_is_a_reason(h: History) -> None:
     r"""Exit 3: M1, on ``origin/main`` and brought in by the candidate's
     merge, is a valid reason for the entries it changed."""
@@ -258,7 +256,6 @@ def test_a_main_commit_the_merge_brought_in_is_a_reason(h: History) -> None:
     assert 'freeze: ok' in text
 
 
-@PENDING
 @pytest.mark.parametrize(
     'seed',
     [

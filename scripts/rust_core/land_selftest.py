@@ -178,6 +178,9 @@ class Fake:
             return land.Completed(0, self.status)
         if args[0] == 'fetch':
             return ok
+        if args[:2] == ['rev-list', '--merges']:
+            # The scripted history is linear: no merge of main (T2.0e).
+            return ok
         if args[0] == 'remote':
             return land.Completed(
                 0, 'git@github.com:NVIDIA/structured-data-models-client.git\n'

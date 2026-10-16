@@ -1,6 +1,6 @@
 {
   "format": "sdm-bridge-changes/1",
-  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
+  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
       "moved": "T1.32a: the entities' cast to the key's type moved into the core (sdm_engine::keys::cast); the bridge's table of the key types it cast to (_ARROW_TYPES) and its key_type refusal (_not_taken) are deleted, and it imports math for the host's own missing values"
