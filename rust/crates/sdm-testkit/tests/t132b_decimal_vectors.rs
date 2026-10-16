@@ -800,8 +800,39 @@ fn the_vectors_are_the_reference_s_and_not_vacuous() {
         );
         assert!(!vector["columns"].as_array().unwrap().is_empty(), "{id}");
     }
-    assert!(success > 120 && refusal > 40, "{success} {refusal}");
-    assert!(marked > 0 && marked < vectors.len());
+    assert!(success > 120, "{success} {refusal}");
+    // At 6298913c (main's eb6c68eb reads a DECIMAL column as int64 or
+    // float64 where its values fit) the reference refuses six, each by
+    // name: a sum past the declared precision of a decimal whose values do
+    // not fit int64 (kept as a decimal), and the four decimal time columns.
+    let refused: Vec<&str> = vectors
+        .iter()
+        .filter(|v| v["reference"]["outcome"]["result"] == "refusal")
+        .map(|v| v["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(refusal, refused.len());
+    let mut refused = refused;
+    refused.sort_unstable();
+    assert_eq!(
+        refused,
+        [
+            "overflow.d19-0.sum-past",
+            "overflow.d38-0.sum-past",
+            "time.epoch-declared",
+            "time.epoch-in-place",
+            "time.epoch-in-place-declared",
+            "time.yyyymmdd-declared",
+        ]
+    );
+    assert!(
+        vectors
+            .iter()
+            .filter(|v| v["reference"]["outcome"]["result"] == "refusal")
+            .all(|v| v["reference"]["outcome"]["code"] == "INVALID_REQUEST")
+    );
+    // None fails unnamed or with INTERNAL_ERROR, so none is marked; the
+    // comparison's test holds a marked vector, seeded.
+    assert_eq!(marked, 0);
 }
 
 #[test]
@@ -980,7 +1011,16 @@ fn the_payload_digest_and_columns_are_the_recorder_s() {
             }
         }
     }
-    assert_eq!(read, 2, "the two cases that reach a request");
+    // At 6298913c the decimal class target reaches predict too (main's
+    // eb6c68eb), beside the wide feature and the decimal target.
+    assert_eq!(read, 3, "the three cases that reach a request");
+    for case in [
+        "decimal.class-target-38-18",
+        "decimal.feature-38-0-wide",
+        "decimal.target-38-18",
+    ] {
+        assert!(!all["cases"][case]["payload"].is_null(), "{case}");
+    }
     // The wide decimal reached the model as text, every digit kept.
     let wide = &all["cases"]["decimal.feature-38-0-wide"]["columns"]["users.f"];
     let context = &wide["request"][0]["context"];
@@ -1076,7 +1116,7 @@ fn the_comparison_fails_closed() {
     assert_ne!(cells(&[("\"1e-9\"", 1)]), cells(&[("\"1e-09\"", 1)]));
     // A refusal: the same code and counts, and an unnamed one is never
     // matched.
-    let past = find("overflow.d4-0.sum-past");
+    let past = find("overflow.d38-0.sum-past");
     let named = wanted(&past);
     let mut refused = named.clone();
     assert!(agrees(&refused, &named));
@@ -1089,7 +1129,13 @@ fn the_comparison_fails_closed() {
     assert!(!agrees(&unnamed, &unnamed));
     // The transitions: an approved entry covers exactly the transition it
     // declares, for the vectors its glob names; a proposed one, nothing.
-    let marked = wanted(&find("class.static-three.d4-0"));
+    // class.static-three.d4-0 as the reference answered it at b413e9ad
+    // (INTERNAL_ERROR at materialize), seeded: no recorded vector fails so
+    // at 6298913c.
+    let mut seeded = find("class.static-three.d4-0");
+    seeded["reference"]["outcome"] =
+        json!({"result": "refusal", "stage": "materialize", "code": "INTERNAL_ERROR"});
+    let marked = wanted(&seeded);
     let mut core = marked.clone();
     core["code"] = json!("UNSUPPORTED_REQUEST");
     let entry = |status: &str, glob: &str, old: &str, new: &str| {
@@ -1131,17 +1177,17 @@ fn the_comparison_fails_closed() {
     assert!(!passes(id, &core, &marked, &wrong));
     // An unmarked vector, a sum past the declared precision refused by
     // name, is excused the same way only.
-    let taken = wanted(&find("overflow.d4-0.sum-at"));
-    assert!(!passes("overflow.d4-0.sum-past", &taken, &named, &[]));
+    let taken = wanted(&find("overflow.d38-0.sum-at"));
+    assert!(!passes("overflow.d38-0.sum-past", &taken, &named, &[]));
     let lifted = [entry(
         "approved",
         "overflow.*-past",
         "refusal INVALID_REQUEST",
         "success",
     )];
-    assert!(passes("overflow.d4-0.sum-past", &taken, &named, &lifted));
+    assert!(passes("overflow.d38-0.sum-past", &taken, &named, &lifted));
     let failed = json!({"outcome": "host failure"});
-    assert!(!passes("overflow.d4-0.sum-past", &failed, &named, &lifted));
+    assert!(!passes("overflow.d38-0.sum-past", &failed, &named, &lifted));
     // A declared success -> success still holds the counts.
     let same = [entry("approved", "feature.*", "success", "success")];
     let mut changed = want.clone();

@@ -380,15 +380,34 @@ def test_the_vectors_are_not_vacuous() -> None:
     outcomes = [a['outcome'] for a in answers.values()]
     successes = [o for o in outcomes if o['result'] == 'success']
     refusals = [o for o in outcomes if o['result'] == 'refusal']
-    assert len(successes) > 120 and len(refusals) > 40
+    assert len(successes) > 120
+    # At 6298913c (main's eb6c68eb reads a DECIMAL column as int64 or
+    # float64 where its values fit) the reference refuses six, each by
+    # name: a sum past the declared precision of a decimal whose values do
+    # not fit int64 (kept as a decimal), and the four decimal time columns.
+    assert sorted(
+        i for i, a in answers.items() if a['outcome']['result'] == 'refusal'
+    ) == [
+        'overflow.d19-0.sum-past',
+        'overflow.d38-0.sum-past',
+        'time.epoch-declared',
+        'time.epoch-in-place',
+        'time.epoch-in-place-declared',
+        'time.yyyymmdd-declared',
+    ]
+    assert {o['code'] for o in refusals} == {'INVALID_REQUEST'}
     for answer in answers.values():
         if answer['outcome']['result'] == 'success':
             assert answer['outcome']['stage'] == 'predict'
             assert answer['payload'] and answer['result']
         else:
             assert answer['payload'] is None
+    # None fails unnamed or with INTERNAL_ERROR at 6298913c, so none is
+    # marked; test_a_difference_passes_only_under_an_approved_transition
+    # holds the marking on a seeded vector.
     marked = [v for v in RECORDED['vectors'] if v['register']['required']]
-    assert 0 < len(marked) < len(RECORDED['vectors'])
+    assert marked == []
+    assert all(o['code'] != 'INTERNAL_ERROR' for o in outcomes)
     # The brief's spread: every type, as a feature on both tables and as a
     # summed target, with small values and values at the precision.
     for p, s in R.TYPES:
@@ -417,24 +436,30 @@ def test_the_vectors_are_not_vacuous() -> None:
         'time.',
     ):
         assert sum(i.startswith(prefix) for i in answers) >= 5, prefix
-    # The tracker's T1.27 note, measured: the reference's sum fails at the
-    # column's declared precision (DECIMAL(4, 0): 9999 + 1 refused,
-    # INVALID_REQUEST at materialize), and takes the same sum at it.
-    past = answers['overflow.d4-0.sum-past']['outcome']
+    # The tracker's T1.27 note, as the reference at 6298913c measures it:
+    # a sum past the declared precision of a decimal it reads as int64
+    # (DECIMAL(4, 0): 9999 + 1) is taken now (b413e9ad refused it
+    # INVALID_REQUEST), as is the sum at it; a DECIMAL(38, 0) whose values
+    # do not fit int64 stays a decimal, and its sum past 38 digits is still
+    # refused INVALID_REQUEST at materialize, the sum at it taken.
+    for vector_id in ('overflow.d4-0.sum-past', 'overflow.d4-0.sum-at'):
+        assert answers[vector_id]['outcome']['result'] == 'success', vector_id
+    target = _request('overflow.d4-0.sum-at', 'instance_table.TARGET')
+    assert '{"number":"9999.0"}' in target['context']['cells']
+    past = answers['overflow.d38-0.sum-past']['outcome']
     assert (past['result'], past['stage'], past['code']) == (
         'refusal',
         'materialize',
         'INVALID_REQUEST',
     )
-    assert answers['overflow.d4-0.sum-at']['outcome']['result'] == 'success'
-    target = _request('overflow.d4-0.sum-at', 'instance_table.TARGET')
-    assert '{"number":"9999.0"}' in target['context']['cells']
-    # A static decimal target fails the reference with INTERNAL_ERROR
-    # (P1B-18's class), and is marked.
-    for vector_id in answers:
-        if vector_id.startswith('class.static-three.'):
-            assert answers[vector_id]['outcome']['code'] == 'INTERNAL_ERROR'
-            assert BY_ID[vector_id]['register']['required']
+    assert answers['overflow.d38-0.sum-at']['outcome']['result'] == 'success'
+    # A static decimal target failed b413e9ad with INTERNAL_ERROR (P1B-18's
+    # class); at 6298913c the reference answers each, unmarked.
+    three = [i for i in answers if i.startswith('class.static-three.')]
+    assert len(three) >= 5
+    for vector_id in three:
+        assert answers[vector_id]['outcome']['result'] == 'success'
+        assert not BY_ID[vector_id]['register']['required']
     # How decimals reach the model: a DECIMAL(38, 0) past int64 as text,
     # every digit kept; a DECIMAL(4, 0) as int64 numbers; a scale as
     # float64 numbers; nulls as nulls.
@@ -534,7 +559,19 @@ def test_a_difference_passes_only_under_an_approved_transition(
     # register entries.
     module = sys.modules[__name__]
     plain = BY_ID['feature.users.d4-2.spread']
-    marked = BY_ID['class.static-three.d4-0']
+    # class.static-three.d4-0 as the reference answered it at b413e9ad
+    # (INTERNAL_ERROR at materialize), seeded: no recorded vector fails so
+    # at 6298913c. Its mark is the recorder's own, derived from it.
+    marked = copy.deepcopy(BY_ID['class.static-three.d4-0'])
+    marked['reference']['outcome'] = {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'StructuredDataError',
+        'code': 'INTERNAL_ERROR',
+    }
+    marked['reference']['payload'] = None
+    why = R.register(marked['reference'])
+    marked['register'] = {'required': bool(why), 'why': why}
     assert marked['register']['required']
     assert R.outcome_class(marked['reference']['outcome']) == (
         'refusal INTERNAL_ERROR'
@@ -583,9 +620,9 @@ def test_a_difference_passes_only_under_an_approved_transition(
     assert problem_of(marked, succeeded) is not None
     # An unmarked vector, a sum past the declared precision refused by
     # name, is held exactly, and excused only the same way.
-    past = BY_ID['overflow.d4-0.sum-past']
+    past = BY_ID['overflow.d38-0.sum-past']
     assert not past['register']['required']
-    taken = copy.deepcopy(BY_ID['overflow.d4-0.sum-at']['reference'])
+    taken = copy.deepcopy(BY_ID['overflow.d38-0.sum-at']['reference'])
     entries[:] = []
     assert problem_of(past, taken) is not None
     entries[:] = [
