@@ -97,16 +97,11 @@ INTERNAL_PATTERNS = (
     # a test talks to and stays; this is a path into a tree nobody outside
     # can open, which is what shipped in a docstring until it was removed.
     re.compile(r'\bkumo_rfm_nim\b', re.IGNORECASE),
-    # Internal build names for the servers behind a model id. A reader
-    # cannot look either up, and which build answers is not the client
-    # story. The public repository and the five distributions it publishes
-    # are all spelled ``structured-data-models-*``, so they are excluded.
+    # An internal build name for a server behind a model id. A reader cannot
+    # look it up, and which build answers is not the client story. The model
+    # package, structured-data-models, is public and is what the in-process
+    # extra installs, so it is named like any other dependency.
     re.compile(r'\bkumoml', re.IGNORECASE),
-    re.compile(
-        r'\bstructured-data-models\b'
-        r'(?!-(?:client|api|pql|connectors|relational-engine))',
-        re.IGNORECASE,
-    ),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has

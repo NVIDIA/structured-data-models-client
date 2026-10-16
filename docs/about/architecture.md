@@ -131,6 +131,7 @@ pip install structured-data-models-client                   # tabular, PQL, tran
 pip install 'structured-data-models-client[relational]'     # adds the native relational engine
 pip install 'structured-data-models-client[snowflake]'      # one backend (also duckdb/sqlite/postgres/databricks/s3)
 pip install 'structured-data-models-client[all]'            # relational + every backend
+pip install 'structured-data-models-client[in-process]'     # runs the models in this process
 ```
 
 `[explain]` and `[relbench]` are the engine's own extras, not the client's, so

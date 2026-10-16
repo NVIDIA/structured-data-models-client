@@ -1,0 +1,89 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""``kumo-tabular`` in process: one table, each row scored from its columns."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from sdm_client.in_process.columns import (
+    Context,
+    Shape,
+    declared,
+    key_columns,
+    labelled,
+    stype_of,
+)
+from sdm_client.in_process.refusal import refusal
+
+_READS = frozenset({'numerical', 'categorical'})
+
+
+class Tabular:
+    r"""Reads a ``kumo-tabular`` request into the model, as its NIM does."""
+
+    model_id = 'kumo-tabular'
+    outputs = {
+        'classification': ('prediction', 'probabilities'),
+        'regression': ('prediction', 'quantiles'),
+    }
+
+    @staticmethod
+    def load(device: Any) -> Any:
+        from sdm.models import KumoTabular
+
+        return KumoTabular(device=device)
+
+    @staticmethod
+    def accepts(model: Any) -> bool:
+        from sdm.models import KumoTabular
+
+        return isinstance(model, KumoTabular)
+
+    def context(self, payload: Mapping[str, Any]) -> Context:
+        schema = payload['schema']
+        if (
+            schema.get('related_tables')
+            or schema.get('relationships')
+            or payload['context'].get('related_tables')
+        ):
+            raise refusal(
+                'UNSUPPORTED_FEATURE',
+                f'related tables are not supported by model {self.model_id!r}',
+            )
+        spec = schema['instance_table']
+        table = payload['context']['instance_table']
+        declared(spec, table)
+        task = payload['task']
+        target = task['target']['column_name']
+        keys = key_columns(spec)
+        stypes = {
+            name: stype_of(name, spec['columns'][name])
+            for name in table['columns']
+            if name != target and name not in keys
+        }
+        unread = sorted(
+            name for name, stype in stypes.items() if stype not in _READS
+        )
+        if unread:
+            raise refusal(
+                'UNSUPPORTED_DTYPE',
+                f'Kumo Tabular does not support these feature columns: {unread}',
+            )
+        instance = Shape.of(spec, stypes)
+        y, encoded, labels = labelled(table, task, task['kind'] != 'regression')
+        return Context(
+            x=instance.tensor(table, 'the context'),
+            y=y,
+            instance=instance,
+            encoded=encoded,
+            labels=labels,
+        )
+
+    @staticmethod
+    def query(context: Context, payload: Mapping[str, Any]) -> tuple[Any, Any]:
+        table = payload['predict']['instance_table']
+        return context.instance.tensor(table, 'the rows to score'), None

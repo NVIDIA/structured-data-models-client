@@ -5,6 +5,17 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. All five distributions share one version and one entry.
 
+## Unreleased
+
+### Added
+
+- `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
+  Python process with structured-data-models, through the same calls as a NIM:
+  predictions, fitted sessions, rankings and forecasts. It loads each model
+  from its published weights on first use, or uses one passed in. The context
+  is fitted as the NIM fits it, and a request the NIM refuses is refused with
+  the same `NimRequestError`. Install it with the `in-process` extra.
+
 ## 1.0.0 - 2026-10-15
 
 First public release. The five distributions are versioned and published
