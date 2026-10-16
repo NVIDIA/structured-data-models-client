@@ -54,7 +54,7 @@ The gathered payloads (`contract/pinned/base.regression.core.json`, `t128w-paylo
 
 ### The re-recording, taken unchanged
 
-The recorder's commits are merged unchanged: `rust-core-phase-2-main-merge-recording` at `7a6658f1` (11 `T2.0c tests:` commits on `292f8d8a`, by a merge commit) and `rust-core-phase-2-main-merge-recording-2` at `4f1c3247` (3 commits on this branch, by a fast-forward).
+The recorder's commits are merged unchanged: `rust-core-phase-2-main-merge-recording` at `7a6658f1` (11 `T2.0c tests:` commits on `292f8d8a`, by a merge commit), `rust-core-phase-2-main-merge-recording-2` at `4f1c3247` (3 commits on this branch, by a fast-forward) and `rust-core-phase-2-main-merge-recording-3` at `da6fd15a` (5 commits on `c1d4f6e6`, by a merge commit: the class target's python-ref line, the key-cast marks for `eb6c68eb`'s casts with the `unfinished` transition, and the tests that rested on the old reference's refusals).
 Its trace of every moved line to a `main` commit is [tracker-T2.0c-recording.md](tracker-T2.0c-recording.md).
 After it, from this side:
 - The four decimal cases (`key.decimal-18-0`, `key.decimal-38-10`, `key.hugeint`, `decimal.class-target-38-18`) expect the new reference's success at predict, their `register` field naming P2B-1; `decimal.class-target-38-18`'s core section carries predict, as `key.decimal-18-0`'s does.
@@ -71,7 +71,7 @@ P1B-33's eight refs that name no vector at `6298913c` (no `decimal128-38-0-wide`
 
 | Entry | Difference | Cause | Retired by |
 |---|---|---|---|
-| P2B-1 | The core keeps exact decimals and refuses decimal keys, class targets, sums past 38 digits and inexact features the reference now answers; 65 vector transitions named | `eb6c68eb` | T2.17 |
+| P2B-1 | The core keeps exact decimals and refuses decimal keys, class targets, sums past 38 digits and inexact features the reference now answers; 76 vector transitions named | `eb6c68eb` | T2.17 |
 | P2B-2 | python-core refuses a column named with a dot, backtick or line break, which the reference leaves out with a warning (measured, both routes) | `eb6c68eb` | T2.18 |
 | P2B-3 | The core refuses 1,001 to 10,000 entities (measured: the old route gathers 1,001) | `1fc5a686` | T2.8c |
 | P2B-4 | The core refuses `rows_per_call` (measured: the old route gathers 8 users as 3 payloads) | `1fc5a686` | T2.8c |
@@ -111,6 +111,7 @@ CI runs on Linux x86_64, as the recording was made.
 - T2.0e (lane a): the reference rule and the `main` reason with fix 3 (the bridge freeze, and with it `l0_deps.py` and 22 self-test controls); then the baselines by `ratchet.py accept` (a trial accept moves python-old's four decimal cases off its baseline, which needs T2.0e's entry format) and the gate.
 - T2.0a: `phase-2/decisions.md`, which `register.py validate` needs for P2B-1 to P2B-5's `decision_ref`.
 - The reviewers: P2B-1 to P2B-5 fit KO2-45; P1B-33's eight refs taken out.
-- The recorder (`rust-core-phase-2-main-merge-recording-3`): `decimal.class-target-38-18`'s python-ref line at its case file; the marks for ten key-cast vectors eb6c68eb moved that are held exactly, whose transitions then join P2B-1.
-- The test author: `decimal128-18-0.exponent.huge.decimal`'s `unfinished` outcome in the transition form; `test_t136_refusal_codes.py`'s infinite constants against a decimal; `t128a_payload_rules.rs`'s 1,001 entities (the reference now says `INVALID_REQUEST`); the t132b vacuity checks.
 - The owner: `dates.json` and the two golden fixtures against T2.0e's rule (above); P2B-5.
+- The owner, not registered on purpose: `test_t136_refusal_codes.py::test_an_infinite_constant_elsewhere_materializes_alike` on `PREDICT ... users.d > 1.5`.
+  The core labels user 2 (`d = 2`, `DECIMAL(38, 0)`) false for `d > 1.5`, seemingly by rounding the constant to the column's scale; the reference since `eb6c68eb` labels it true, which is right.
+  Whether T2.0c fixes it or a temporary entry holds it until T2.17 is the owner's; the test is left failing until then.
