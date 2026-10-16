@@ -17,6 +17,7 @@ The orchestrator's brief names: the phase, the commit to review (full SHA), the 
 5. **The task table.** Each package has an output, an exit check, its dependencies and its lane. Judging-path changes land alone and first. Contract vocabulary is settled in one early package. It's the smallest table that reaches the exit; anything that grows the harness needs a missing, falsifiable check to justify it.
 6. **Owner decisions.** Every choice that is the owner's (new refusals of input the reference accepts, changed answers or model inputs, relaxed comparisons, new acceptance capabilities) is listed as a question with a recommendation, not decided silently.
 7. **Size and clarity.** It points at Phase 1 for everything unchanged and is short enough to be read whole.
+8. **Simplicity and portable interfaces.** Flag overengineering (a field, type, option or layer nothing uses yet) and any interface that would be awkward to express from another host language (Python, Java: plain data across the boundary, no language-specific idioms), per the owner's standing principle (Phase 2 decision KO2-46): P2 when it affects an interface, P3 otherwise.
 
 **Rules**
 - Review the named SHA, read-only. Change nothing in the repository or on GitHub.

@@ -11,28 +11,29 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.0 | Tooling phase-aware, first checkpoint, rust-core's CI green | A | landed | 292f8d8a; merged into `rust-core` as 3b81df85 (KO2-6) | [tracker-T2.0.md](tracker-T2.0.md) |
 | T2.0e | Gate rules for `main` first: the reference approval row, the bridge freeze's `main` reason, a merge of `main` landing | A | in progress | – | Split out of T2.0b (KO2-3, KO2-15) |
 | T2.0a | Design, decisions, tracker, locked-set file; learnings 17-22 | – | in review | Rounds below | Revised with the owner's answers (fix 12) |
-| T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | topic | in progress | – | Branch `rust-core-phase-2-main-merge`; waits for T2.0e and T2.0a to land |
+| T2.0f | The locked-set reader for Phase 2, and check 7's `main` ancestry | H | not started | – | Lands before T2.0a, so the lock reads with the checkpoint's reader |
+| T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | B | in progress | – | Lands from lane B after T2.0e and T2.0a (orchestrator's decision) |
 | T2.0d | Refusal census | H | not started | – | First run on DuckDB |
 | T2.0b | Carried tooling rows | H | not started | – | After T2.0e (both change `ratchet.py`) |
 | T2.1a | The S1 judging path, all cases on three databases | A | not started | – | |
 | T2.1b | Contract v26, with the table source | A | not started | – | |
 | T2.2 | SQLite | B | not started | – | |
-| T2.3 | Postgres | B | not started | – | Rust host by replay (KO2-20, owner to confirm) |
+| T2.3 | Postgres | B | not started | – | Rust host by replay (KO2-20) |
 | T2.4 | Full L4 and L5 | B | not started | – | |
 | T2.5 | Conformance kit | C | not started | – | |
 | T2.6 | In-memory fallback | C | not started | – | |
 | T2.7 | Non-SQL provider and swapped data layer | C | not started | – | |
 | T2.8a | Ranking, materialize side | D | not started | – | |
 | T2.8b | Ranking, predict side | D | not started | – | |
-| T2.8c | Multi-call `predict` | G | not started | – | `main`'s 1fc5a686; 6–8 h, beside T2.8a and T2.8b |
+| T2.8c | Multi-call `predict` | G | not started | – | `main`'s 1fc5a686; 6–8 h; first wave |
 | T2.9 | Forecasting | E | not started | – | |
 | T2.10 | PQL targets | E | not started | – | |
 | T2.13 | Query and option long tail | D | not started | – | |
 | T2.12 | Schema rules | F | not started | – | `float_nan` first |
 | T2.11 | Sampling options | F | not started | – | |
-| T2.17 | Exact decimals | G | not started | – | KO2-35 |
-| T2.18 | Any column name | E | not started | – | KO2-36 |
-| T2.19 | Two-path sampling | F | not started | – | `main`'s eb6c68eb; first in lane F |
+| T2.17 | Exact decimals | G | not started | – | KO2-35; first wave |
+| T2.18 | Any column name | E | not started | – | KO2-36; first wave |
+| T2.19 | Two-path sampling | F | not started | – | `main`'s eb6c68eb; first wave |
 | T2.14a | Bridge freeze widened | A | not started | – | |
 | T2.14b | Host clean-up | A | not started | – | |
 | T2.14c | Bridge freeze lowered | A | not started | – | |
@@ -66,6 +67,7 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 | 10 | 6dcfcecf | CHANGES REQUIRED (8 of 10 fixed; 0 P1, 1 P2, 3 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 1 | Fix 10: the reference's and the core's SQLite and Postgres drivers installed in T2.1a's judging landing with the service, and a seeded unreachable-service fault; no service in `cross-host*`; the kit's two sides share one fixture and one answers file; check 5 names the jobs that run each side |
 | 11 | 6ba078b4 | APPROVE (0 P1, 0 P2, 3 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 0 | Both approve 6ba078b4. Closure fixes: check 5's single Python-kit cell justified; the Postgres-required tests named; the kit fixture's path. Then one closure check |
 | 12 | f6eb5f05 | – | APPROVE (closure check) | 0 | 0 | Fix 11's P3s confirmed; the design approved |
+| 13 | f9324e51 | CHANGES REQUIRED (0 P1, 7 P2, 11 P3) | CHANGES REQUIRED (0 P1, 3 P2, 2 P3) | 0 | 10 | Fix 13, below |
 
 ## Carried rows (plan section 8)
 
@@ -102,3 +104,4 @@ Each revision is reviewed by both reviewers (KO2-9) before T2.0a lands.
 | Fix | What changed | Why |
 |---|---|---|
 | 12 | decisions.md: the owner's answers of 2026-10-16 as KO2-1 to KO2-44 (KO2-20, Q2.2, owner to confirm), the reference approval format T2.0e reads, and only owner rows from now on (KO2-14). design.md: `main` first (T2.0e, T2.0c); two reviewers every round, checkpoints every 4 or 5 landings, a case lands with its code by its test author; every case on all three databases in per-database CI jobs; new packages T2.17 (exact decimals), T2.18 (any column name), T2.19 (two-path sampling, early) and CI7 (aarch64 wheels, runtime cells); T2.8c resized and unchained from T2.8b; the table source in v26 (choice 12); the Phase 5 release note; lanes G and H; critical path about 49 to 50 hours, 34 landings; question Q-I. locked-set.yaml written whole, with per-database job patterns, aarch64 and the runtime cells. migration-plan.md: `main` reaches the epic only through a phase branch (KO2-7) and the floors of KO2-37. The handbook: two reviewers on confirmations (KO2-9) | The owner's answers to the kickoff questions and to the six audits of `main`'s 20 commits (KO2-1 to KO2-44) |
+| 13 | All 10 P2s of round 13. The table source's carrier stated: `Relation` replaces the schema's `source: String` and each request's `table: String` (Claude P2-1). KO2-39 and KO2-22 limited to what the owner wrote; check 2 met by a later owner answer quoting the census counts (Claude P2-2, P2-3). The first wave (T2.17, T2.18, T2.8c, T2.19) right after T2.1b at the owner's request, DuckDB legs gating their landings and the SQLite and Postgres legs exits of T2.2 and T2.3 (Codex P2-2, Claude P2-4). Reference lines for SQLite and Postgres keyed `<case>@<database>` (Claude P2-5). T2.0c from lane B; reference rows read only at the checkpoint, so T2.0a lands before T2.0c (Claude P2-6). New package T2.0f: the reader for the locked set, landed before the lock, and check 7's `main` ancestry check (Codex P2-3, Claude P2-7). The type map uses each engine's own type; L2 and L5 separated; Q-L5 asks the owner how three-driver identity reads where an engine can't store a type (Codex P2-1). P3s taken: the protected-path wording, T2.19 out of the interim refusals, migration-plan's reviewer row, cell and job names held to the locked set, `rust-test` in the timings, `.gitlab-ci.yml` left, KO2-10's and KO2-33's wording, T2.0a on the path, the kit under `contract/fixtures/provider-kit/`, decisions.md as judging data (Claude P3-1 to P3-11, Codex P3-1, P3-2); none skipped. Owner rows KO2-20 (approved), KO2-45 (Q-I) and KO2-46 (simplicity and portable interfaces); both reviewer briefs check KO2-46. Under KO2-46, cut from the table source: `columns`, `filter`, `SqlText`, the `ColumnFrom` enum, the `derived_relations` capability and the `FailureClass` field, since Phase 2 would only define and refuse them, a Rust enum with data is awkward to mirror in Java, and Phase 3 adds them as optional fields; kept: `Relation { source: Vec<String> }`, the one field whose type must change, plain data from any host. Critical path about 47 to 48 hours, 35 landings | Round 13's findings; the owner's later answers and design principle |
