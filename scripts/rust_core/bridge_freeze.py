@@ -242,7 +242,6 @@ COVERED: dict[Path, tuple[str, ...]] = {
     ),
     _CLIENT / 'materializers/relational.py': (
         'RelationalMaterializer.__init__',
-        'RelationalMaterializer._check_entity_count',
         'RelationalMaterializer._check_limits',
         'RelationalMaterializer._check_shape',
         'RelationalMaterializer._gather',
