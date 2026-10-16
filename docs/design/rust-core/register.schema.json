@@ -25,7 +25,7 @@
       "additionalProperties": false,
       "required": ["case", "cell", "runner", "old", "new", "summary"],
       "properties": {
-        "case": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*$"},
+        "case": {"description": "The line's key, as the observation schema's key: the bare case ID on DuckDB, <case>@sqlite or <case>@postgres on another database (T2.0f); the part before @ a corpus case.", "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]*(@(sqlite|postgres))?$"},
         "cell": {"enum": ["ref-pandas3", "dbr17-pandas2", "floor-pandas2.2"]},
         "runner": {"enum": ["python-ref", "python-core", "python-old", "rust-host"]},
         "old": {"$ref": "#/$defs/outcome"},

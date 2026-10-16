@@ -242,7 +242,10 @@ def _outcome_problems(
 ) -> list[str]:
     where = f'{entry["id"]}: {outcome["case"]} on {outcome["runner"]}'
     found = []
-    if outcome['case'] not in corpus and outcome['new'] != 'removed':
+    # The item names a line's key (``X``, ``X@sqlite``, ``X@postgres``):
+    # the part before ``@`` is the corpus case.
+    case = outcome['case'].partition('@')[0]
+    if case not in corpus and outcome['new'] != 'removed':
         found.append(f'{where}: not a corpus case')
     old, new = parse_outcome(outcome['old']), parse_outcome(outcome['new'])
     if new is not None and new['code'] == PANIC:

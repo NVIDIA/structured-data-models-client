@@ -3,10 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 r"""T2.0f's own seeded faults for the ``main`` step (the implementer's,
-beside the test author's ``tests/test_t20f_gate.py``, whose fixtures they
+beside the test author's ``contract/tests/test_t20f_gate.py``, whose fixtures they
 reuse): ``contract/reference-env.txt`` naming no reference commit, and a
 reference commit the clone does not hold, each fail the step by name, so
-the rule fails on its evidence missing, not only on main moved.
+the rule fails on its evidence missing, not only on main moved. It runs a
+real gate.sh, which needs the built native core, so it lives under
+contract/tests, run in the core's contract-python job.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from typing import Any
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def _module(path: Path, name: str) -> ModuleType:
@@ -34,7 +36,9 @@ def _module(path: Path, name: str) -> ModuleType:
     return module
 
 
-gate = _module(ROOT / 'tests/test_t20f_gate.py', 't20f_main_seeds_gate')
+gate = _module(
+    ROOT / 'contract/tests/test_t20f_gate.py', 't20f_main_seeds_gate'
+)
 GM = gate.GM
 origin = GM.origin
 observed = GM.observed

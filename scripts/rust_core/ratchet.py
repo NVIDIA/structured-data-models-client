@@ -938,7 +938,9 @@ def authorized(
     owner: bool = False,
 ) -> bool:
     r"""An approved entry states this case's change, by the owner where
-    ``owner``; a None part matches any."""
+    ``owner``; a None part matches any. ``case`` is a line's key, and an
+    outcome item names it as the line does (``X``, ``X@sqlite``,
+    ``X@postgres``), so approving one database's line moves no other's."""
     for entry in entries:
         if owner and entry.get('approved_by') != 'owner':
             continue
@@ -1226,7 +1228,8 @@ def effective_document(
 
 
 def proposal(case: str, runner: str, old: str, new: str) -> str:
-    r"""The ``case_outcomes`` item an entry would need, as generated text."""
+    r"""The ``case_outcomes`` item an entry would need, as generated text;
+    ``case`` is the line's key (:func:`authorized`)."""
     return (
         f'{{case: {case}, cell: {CELL}, runner: {runner}, '
         f"old: '{old}', new: '{new}', summary: ...}}"
@@ -1363,7 +1366,7 @@ def check_reference(
             if new.get(case) == line:
                 continue
             if case not in new:
-                if case_of(case) not in removed:
+                if not isinstance(case, str) or case_of(case) not in removed:
                     report.fail('reference', f'{case}: its line removed')
             elif semantic(line, ordered) != semantic(new[case], ordered):
                 if not authorized(entries, case, 'python-ref', None, None):
@@ -2094,7 +2097,16 @@ def accept(
     marks = (_yaml(tree.read(AVAILABILITY), AVAILABILITY) or {})['runners']
     observed = observations(observation_files)
     found: dict[str, list[dict[str, Any]]] = {runner: [] for runner in observed}
-    for case in sorted(cases(tree)):
+    corpus = cases(tree)
+    # Each key observed of a corpus case: the bare ID on DuckDB, and
+    # <case>@<database> on another database.
+    keys = {
+        key
+        for by_case in observed.values()
+        for key in by_case
+        if case_of(key) in corpus
+    }
+    for case in sorted(keys):
         ref = reference.get(case)
         for runner, by_case in observed.items():
             observation = by_case.get(case)

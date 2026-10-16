@@ -479,19 +479,19 @@ def ci_problem(patterns, checks):
     # check of the half that holds the ci step, and every such check given.
     if not isinstance(patterns, dict) or not patterns:
         return 'ci maps check numbers to job-name patterns'
-    for check, listed in patterns.items():
+    for check, given in patterns.items():
         if not isinstance(check, str) or check not in checks:
             return f'ci: patterns for check {shown(check) if not isinstance(check, str) else check}, ' \
                 'which the half does not have'
         if 'ci' not in checks[check]:
             return f'ci: patterns for check {check}, which holds no ci step'
-        if not isinstance(listed, list) or not listed:
+        if not isinstance(given, list) or not given:
             return f'ci: check {check}\'s patterns are a non-empty list'
-        for pattern in listed:
+        for pattern in given:
             if not isinstance(pattern, str) or not pattern.strip() or pattern != pattern.strip() \
                     or not pattern.isprintable():
                 return f'ci: check {check}: {shown(pattern)} is not a job-name pattern'
-        if len(set(listed)) != len(listed):
+        if len(set(given)) != len(given):
             return f'ci: check {check} lists a pattern twice'
     bare = [n for n, steps in checks.items() if 'ci' in steps and n not in patterns]
     if bare:
@@ -868,12 +868,16 @@ main_merged() {
     echo 'no fetched origin/main (refs/remotes/origin/main): fetch it; a local main is not read'
     return 1
   }
-  reference=$("${g[@]}" show "$head:contract/reference-env.txt" 2>/dev/null |
-    sed -n 's/^reference: \([0-9a-f]\{40\}\)$/\1/p')
-  if [ "$(printf '%s\n' "$reference" | grep -c .)" != 1 ]; then
-    echo 'contract/reference-env.txt names no one reference commit (a line "reference: <sha>")'
+  # Every reference field, well formed or not: exactly one, naming a full
+  # commit SHA, or the step cannot say which commit the reference is.
+  reference=$("${g[@]}" show "$head:contract/reference-env.txt" 2>/dev/null | grep '^reference:')
+  if [ "$(printf '%s\n' "$reference" | grep -c .)" != 1 ] ||
+    ! [[ "$reference" =~ ^reference:\ [0-9a-f]{40}$ ]]; then
+    echo 'contract/reference-env.txt names no one reference commit: it needs exactly one'
+    echo 'reference field, "reference: <40-hex sha>"'
     return 1
   fi
+  reference=${reference#reference: }
   if ! "${g[@]}" cat-file -e "$reference^{commit}" 2>/dev/null; then
     echo "the reference commit $reference that contract/reference-env.txt names is not in this clone: fetch it"
     return 1

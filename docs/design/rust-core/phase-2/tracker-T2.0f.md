@@ -52,13 +52,18 @@ Design: the T2.0f row, architecture choice 2 and "Locked acceptance checks" on `
      The acceptance-case baseline rule now runs over the keys observed: each runner observed on a database (that is, holding a `<case>@<database>` observation) needs a proposed baseline under that key.
      A reference line on a database where the core has no observation needs no baseline.
      `check_availability` looks a database line's case up by its case part.
+     `ratchet.py accept` writes a baseline under each key observed of a corpus case, so its output passes `check` (fix 1).
+   - A register entry approves a database line by naming its key: the register schema's `case_outcome.case` takes the observation schema's key form, and `register.py`'s corpus check reads the case part (fix 1).
+     A case outcome names one line, so approving a Postgres move leaves the DuckDB and SQLite expectations as they were.
+     The entry's `cases` list still names bare cases.
 
 ### Tests and probes
 
-- Acceptance tests (the test author's): `tests/test_t20f_case_keys.py` and `tests/test_t20f_gate.py`.
+- Acceptance tests (the test author's): `tests/test_t20f_case_keys.py` and `contract/tests/test_t20f_gate.py`.
+  The gate tests run a real `gate.sh`, which needs the built native core, so they run in the core's `contract-python` job.
   All 38 pass, with the `PENDING` marker and its uses removed in the commit that implements them.
 - The implementer's seeded faults:
-  - `tests/test_t20f_main_seeds.py`: a `reference-env.txt` with no reference line, and a reference commit missing from the clone, each fail the `main` step and check 7 by name.
+  - `contract/tests/test_t20f_main_seeds.py` (beside the gate tests, for the same reason): a `reference-env.txt` with no reference line, and a reference commit missing from the clone, each fail the `main` step and check 7 by name.
   - `tests/test_t20f_key_seeds.py`: a baseline keyed `@oracle`, a baseline of no case, and a reference line whose key is an integer each fail `check_keys` by name, while the twin passes.
 - Outside-input probe on the reader: in Phase 2's file, a limit and a CI pattern were each nested 5,000 and 100,000 levels deep.
   Each is refused by name ("not a locked set it reads") with no traceback.
@@ -66,9 +71,25 @@ Design: the T2.0f row, architecture choice 2 and "Locked acceptance checks" on `
   A check with 200,000 CI patterns is read.
 - Route differential: not applicable, since no route changes.
 
+### Fix rounds
+
+- Fix 1 (round 1, both reviewers):
+  - The `main` step now requires exactly one `reference:` field naming a 40-hex SHA. Before, a malformed second field was ignored.
+  - The reader's shadowed `listed` loop variable is renamed, so a check that holds `ci` with no patterns is refused by name instead of with a traceback.
+  - `accept` writes database baselines.
+  - A register entry can name a database line's key.
+  - `check_reference` guards a key that is not a string.
+  - The test author's round 1 seeds (4d8a4a42, 09508907, cherry-picked unchanged) cover each of these. They are: an ambiguous reference field; a `ci` check with no patterns; the `accept`-then-`check` round trip; the ratchet's suggested entry approving an `@postgres` baseline move; and an entry in the same form approving a changed `@postgres` reference line.
+  - The test author's re-recording test stays gated until the rebase onto T2.0e's landing.
+    There, T2.0e's `check_new_reference` also reads the case part of a removed key.
+
 ### Deviations and notes
 
 - `tests/test_contract_reference.py` still requires exactly one reference line per case.
   T2.1a, which records the first database lines, has to teach it the keys.
   That test is outside this package's row.
-- Judging-path files touched: `scripts/rust_core/gate.sh`, `scripts/rust_core/compare.py`, `scripts/rust_core/ratchet.py` and `contract/observation.schema.json`.
+- Not done here (round 1 P3s):
+  - `compare.py` comparing database lines stays T2.1a's job. The note it prints names T2.1a.
+  - Fetching `origin/main` right before the locked run belongs to T2.16's runbook. The step prints the tip it judged.
+  - A removal's approval states the bare line's outcome. Its database lines are removed with it under the same entry, as the acceptance tests set out.
+- Judging-path files touched: `scripts/rust_core/gate.sh`, `scripts/rust_core/compare.py`, `scripts/rust_core/ratchet.py`, `scripts/rust_core/register.py`, `contract/observation.schema.json` and `docs/design/rust-core/register.schema.json`.

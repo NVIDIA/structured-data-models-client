@@ -59,11 +59,6 @@ compare`` passes. Seeded: a runner's line for no case, an unknown
 database, ``@duckdb``, an empty part, two suffixes, upper case, and a
 reference line for no case each fail it, named by key or by the file and
 line. Control: the bare IDs pass as before.
-
-Gating: the tests that need the feature are marked :data:`PENDING`, a
-strict xfail; the implementer deletes the marker (its one definition below)
-in the commit that makes them pass. Unmarked tests are controls that pass
-on the base and must keep passing.
 """
 
 from __future__ import annotations
@@ -543,7 +538,6 @@ def _second_reference(where: str, line: str) -> Callable[[Path], None]:
     return edit
 
 
-@PENDING
 @pytest.mark.parametrize(
     ('where', 'extra'),
     [
