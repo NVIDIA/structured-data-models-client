@@ -480,7 +480,6 @@ def test_the_new_recording_is_exactly_the_sha_s_jsonl(
 GOLDEN = 'tests/golden/t132g-fixture-cases/python-ref.jsonl'
 
 
-@PENDING
 @pytest.mark.parametrize(
     'seed',
     [
@@ -517,7 +516,6 @@ def test_a_vector_file_that_is_no_longer_json_is_refused(
     assert any(VECTORS in p for p in found), found
 
 
-@PENDING
 @pytest.mark.parametrize(
     ('field', 'left'),
     [
@@ -567,7 +565,6 @@ def test_a_later_line_of_a_json_lines_file_is_checked(
     assert any(GOLDEN in p for p in found), found
 
 
-@PENDING
 def test_a_citing_file_with_dots_and_brackets_in_its_keys_passes(
     repo: Path,
 ) -> None:

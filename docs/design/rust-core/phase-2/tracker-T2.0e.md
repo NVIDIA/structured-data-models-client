@@ -28,8 +28,8 @@ The package does not rely on its own judging change for its gate: its candidate 
    - `NEW` is a recorded reference's name, or more than one file is added;
    - a reference file other than the new one is left (the old one must be removed);
    - `contract/reference-env.txt`'s one `reference:` line does not name `NEW`;
-   - a file outside `docs/` and `contract/reference/` still cites the old SHA in full (read with `git grep -F` on the candidate, so no list of vector files to keep);
-   - a file that cited the old SHA at the checkpoint is gone, or a field of it that held the old SHA, found by its JSON path (on every line of a JSON-lines file), does not hold `NEW` now: `NEW` itself where it was the SHA itself (`reference`, `recorded.reference`, `identity.reference.commit.sha`, the fields the consistency tests read), else a text holding `NEW` and not the old SHA (fix 2);
+   - a file outside `docs/` and `contract/reference/` still cites the old SHA in full (read with `git grep -F` on the candidate);
+   - a file of `ratchet.CITATIONS`, one explicit table of the 21 files and the exact field each cites the reference in (the fields the reference SHA consistency tests read: `reference`, `recorded` then `reference`, and the goldens' `identity`, `reference`, `commit`, `sha`), is gone, empty or blank, not JSON (each line of a JSON-lines file), or its field (keys taken as written) is not `NEW`, on every line of a JSON-lines file; each refused by file and line (fix 3, replacing fix 2's discovery of fields);
    - a line of the new file, read and judged as written before any line is indexed, names no case, records another reference commit than `NEW`, or repeats a case (refused by file and line, fix 2);
    - a case of the old recording is missing from the new one, unless its removal is approved.
 
@@ -44,8 +44,7 @@ The package does not rely on its own judging change for its gate: its candidate 
    An abbreviated SHA, another SHA, a row without the word, two SHAs in one row, and a row outside a `phase-*/decisions.md` approve nothing.
 3. **The bridge freeze takes `main` as a reason.**
    `bridge_freeze.py` adds `{"main": "<the full SHA of a commit of main> <its title>"}`, documented in its docstring beside the other reasons and in `CHANGES_ABOUT` (and the `about` of `bridge_changes.json`).
-   `main_judge` holds it, from git: 40 lower-case hex digits, a space and the commit's own subject; the commit exists, is an ancestor of `refs/remotes/origin/main` (never a local branch) and of HEAD, is not an ancestor of the merge base, is brought in by a merge commit of the candidate (reached from a parent other than its first), changes the entry against its first parent, and left the entry exactly as the candidate holds it, by its fingerprint (fix 2).
-   So a declaration names the last commit of `main` that changed the entry, and a change of the candidate's own, to that entry or another, is not `main`'s.
+   `main_judge` holds it, from git: 40 lower-case hex digits, a space and the commit's own subject; the commit exists, is an ancestor of `refs/remotes/origin/main` (never a local branch) and of HEAD, is not an ancestor of the merge base, is brought in by a merge commit of the candidate (reached from a parent other than its first), changes the entry against its first parent, and the candidate holds the entry as the merge commit bringing it in holds it, by its fingerprint (fix 3): `main`'s change merged with the phase's, so an entry both sides changed passes, and a change the candidate made after the merge, or to an entry the named commit didn't change, is refused.
    The freeze reads `refs/remotes/origin/main` as it stands; CI's checkout fetches it, so CI's run, which a landing stands on, reads the remote's `main`, and the merge-commit condition keeps a commit on the candidate's own first-parent line from passing even under a ref moved by hand.
    A `main` reason may also declare an entry gone.
    A spent `main` declaration behaves like any spent one: held as it stands on the phase branch after the landing, and refused as the reason for a later change.
@@ -72,7 +71,7 @@ The package does not rely on its own judging change for its gate: its candidate 
 
 ### Tests
 
-- The three T2.0e files: 81 passed, no `PENDING` mark left.
+- The three T2.0e files: all pass, no `PENDING` mark left (fix 3 with round 2's tests `4e5aae88` and `9b08c647`, cherry-picked unchanged).
   The test author's later commits are cherry-picked unchanged: `750cce57` (a row the candidate writes itself), `d8ed10f0` (the post-landing edit anchored), `66af6c14` (round 1's reference seeds) and `5198dc1d` (main's own merges; its one conflict, the `@PENDING` line of a test this lane had already unmarked, resolved by keeping that line out).
 - `land_selftest.py` 194 of 194, `lane_selftest.py` 69 of 69, `selftest.py --no-clippy` with the three new freeze cases.
 
@@ -88,3 +87,6 @@ The package does not rely on its own judging change for its gate: its candidate 
   The P1s were false accepts of the reference rule: a duplicate case line naming another commit before its valid twin, a vector file's `reference` field moved elsewhere with `NEW` only in a note (or the file deleted), and the recording under another extension.
   The P2: a merge of `main` holding `main`'s own pull-request merge was refused.
   P3s taken: the `main` reason checked against the entry and the merge, the changed cases listed with their fields, docstrings rewrapped; the `WITHDRAWN` denylist stays T2.0b's U4.
+- Round 2 (both reviewers, changes required): the citation check had failed review twice through different holes in discovering the fields that held the old SHA (empty or malformed files, fields only on later lines, keys with dots), so by the stop rule the method changed in fix 3 to the explicit `CITATIONS` table, and the discovery code is deleted.
+  The `main` reason refused every entry both the phase and `main` changed (fix 2 compared with the `main` commit's own version); fix 3 compares with the merge commit's.
+  Checked against T2.0c's 14 `main` declarations on its merge (`4f1c3247` with the merger's working `bridge_changes.json`, judged by this lane's `main_judge` in a scratch worktree): all 14 pass.
