@@ -164,17 +164,19 @@ one ``reference:`` line; no file outside ``docs/`` (history) and
 :data:`CITATIONS` lists, the files and fields the reference SHA consistency
 tests read, is there, is not empty, parses as JSON (each line of a
 JSON-lines file), and its listed field equals ``NEW`` (on every line of a
-JSON-lines file), each failure named by file and line; every line of the new
-file, read as written before any is indexed, names a case, names it once (a
-second line of a case is refused by file and line) and records ``NEW`` as
-its reference commit; and the new recording carries every case the old one
-did, but one whose removal is approved. The per-case comparison does not
-apply across the change: instead every case whose semantic projection
-differs from its recorded line is listed in the notes, by case and with the
-fields that differ (named, never their values), for the reviewers, with the
-move itself and the row approving it; a case recorded alike is not listed.
-The landed file is then the one the per-case rules hold, and the row admits
-no further file: another commit needs its own row.
+JSON-lines file), each failure named by file and line; any other file that
+cited the old SHA and is still there names ``NEW`` (provenance prose, never
+a third commit in its place); every line of the new file, read as written
+before any is indexed, names a case, names it once (a second line of a case
+is refused by file and line) and records ``NEW`` as its reference commit;
+and the new recording carries every case the old one did, but one whose
+removal is approved. The per-case comparison does not apply across the
+change: instead every case whose semantic projection differs from its
+recorded line is listed in the notes, by case and with the fields that
+differ (named, never their values), for the reviewers, with the move itself
+and the row approving it; a case recorded alike is not listed. The landed
+file is then the one the per-case rules hold, and the row admits no further
+file: another commit needs its own row.
 
 The decisions the rules read (owner approvals of relaxations and of a new
 reference commit) are every phase's: each
@@ -1572,6 +1574,18 @@ def check_new_reference(
         for problem in citation_problems(name, candidate.read(name), new):
             report.fail('reference', problem)
     for old in olds:
+        # A file outside the table that cited the old SHA (provenance prose)
+        # names the new one now, never a third commit in its place.
+        for name in citing(checkpoint, old):
+            if name in CITATIONS or name == ENV:
+                continue
+            text = candidate.read(name)
+            if text is not None and new not in text:
+                report.fail(
+                    'reference',
+                    f'{name}: cited the recorded reference {old[:12]} and '
+                    f'does not name the new one {new}',
+                )
         for name in citing(candidate, old):
             report.fail(
                 'reference',

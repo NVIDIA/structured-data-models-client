@@ -52,17 +52,22 @@ for it are gone), must be declared in ``bridge_changes.json`` under
   the commit's own subject; the commit is an ancestor of ``main`` as last
   fetched (``refs/remotes/origin/main``, never a local branch) and of HEAD,
   is not an ancestor of the merge base (a commit the base already holds was
-  judged when it came in), is brought in by a merge commit of the candidate
-  (reached from a parent other than its first), changes the entry against
-  its first parent, and the candidate holds the entry as that merge commit
-  holds it (by its fingerprint; an entry gone, gone there too): ``main``'s
-  change merged with the phase's, so an entry both changed passes, and a
-  change the candidate made after the merge does not. ``main`` is read from
-  the remote-tracking ref as it stands: CI's checkout fetches it, so CI's
-  run, the evidence a landing stands on, reads the remote's ``main``; a
-  local run reads the ref as last fetched. Review judges, as for the others,
-  whether ``main``'s rule belongs in the bridge; the port of a ``main`` rule
-  into Rust is its own package's ``moved``.
+  judged when it came in), is brought in by the package's merge commit of
+  ``main`` on the phase's first-parent history (reached from a parent other
+  than its first; a merge inside ``main`` never counts), changes the entry
+  against its first parent (entries compared by fingerprint; an entry gone,
+  gone there too), the merge's first parent holds the entry as the merge
+  base does (no change of the candidate's own before the merge), the
+  candidate holds the entry as that merge commit holds it, and, where git
+  merges the file cleanly (``git merge-tree``), the merge commit holds git's
+  merge of it (a conflict's resolution is review's): ``main``'s change
+  merged with the phase's, so an entry both changed passes, and a change the
+  candidate made after the merge does not. ``main`` is read from the
+  remote-tracking ref as it stands: CI's checkout fetches it, so CI's run,
+  the evidence a landing stands on, reads the remote's ``main``; a local run
+  reads the ref as last fetched. Review judges, as for the others, whether
+  ``main``'s rule belongs in the bridge; the port of a ``main`` rule into
+  Rust is its own package's ``moved``.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale), unless the merge base's declarations hold it as it stands,
@@ -897,11 +902,17 @@ def main_judge(
                 f'{sha[:12]} is already in the merge base {merge_base[:12]}, '
                 'so this change did not bring it in'
             )
+        # Only the package's own merges, on the phase's first-parent
+        # history: a merge inside main (a pull request's) is never one.
         merges = ask(
-            'rev-list', '--merges', '--parents', f'{merge_base}..HEAD'
+            'rev-list',
+            '--first-parent',
+            '--merges',
+            '--parents',
+            f'{merge_base}..HEAD',
         ).stdout.splitlines()
         bringing = [
-            line.split()[0]
+            (line.split()[0], line.split()[1], line.split()[2:])
             for line in merges
             if len(parents := line.split()[1:]) >= 2
             and ask('merge-base', '--is-ancestor', sha, parents[0]).returncode
@@ -933,12 +944,36 @@ def main_judge(
             return f'{sha[:12]} does not change the entry {name}'
         # The entry as the merge bringing the commit in holds it: main's
         # change merged with the phase's, which no main commit alone made.
-        if not any(entry_at(merge, rel, name) == now for merge in bringing):
+        held = entry_at(merge_base, rel, name)
+        merge, first, others = bringing[0]
+        if entry_at(first, rel, name) != held:
+            return (
+                f'the entry {name} changed on the phase side before the merge '
+                f"of main ({merge[:12]}): a change of the candidate's own "
+                'is declared by its own reason, not main'
+            )
+        merged = entry_at(merge, rel, name)
+        if merged != now:
             return (
                 f'the entry {name} is not as the merge of main bringing '
-                f'{sha[:12]} in ({bringing[0][:12]}) holds it: the candidate '
+                f'{sha[:12]} in ({merge[:12]}) holds it: the candidate '
                 'changed it after the merge'
             )
+        # Where git merges the file cleanly, the merge commit holds git's
+        # merge of it; a conflict's resolution is review's, as a refactor.
+        found = ask(
+            'merge-tree', '--write-tree', '--name-only', first, *others
+        ).stdout.split('\n')
+        conflicted = set(
+            found[1 : found.index('')] if '' in found else found[1:]
+        )
+        if found[0] and rel not in conflicted:
+            if entry_at(found[0], rel, name) != merged:
+                return (
+                    f'the entry {name} in the merge of main ({merge[:12]}) '
+                    "is not git's clean merge of its parents: the merge "
+                    'commit itself changed it'
+                )
         return None
 
     return judge
