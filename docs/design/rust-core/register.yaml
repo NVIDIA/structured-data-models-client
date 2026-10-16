@@ -5820,6 +5820,17 @@ entries:
   - P1B-53
   - P1B-31
   - P1B-33
+  - 'contract/key-cast-vectors.json#decimal128-18-0.text.decimal-point refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.text.exponent refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.text.decimal-point refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.text.exponent refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.huge.decimal unfinished -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.float.half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.numpy.float64-half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.decimal.half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.own.decimal success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.own.float success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-exponent.mixed.float-text success -> success'
   - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.tiny.decimal success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-18-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
