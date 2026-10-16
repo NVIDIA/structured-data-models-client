@@ -32,6 +32,9 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 - **Test author**: a fresh agent per package. It writes the acceptance tests and reference-recorded vectors first, in `<ID> tests: ...` commits. Owner rule: the agent that writes the code never writes its own acceptance tests.
 - **Implementer**: a fresh agent per package. It makes the tests pass without editing them, pushes and reports its SHA. It never watches CI.
 - **Two reviewers per substantive round**: a fresh Claude subagent and Codex (in a herdr pane, or headless `codex exec`). Both get the same brief and review the exact SHA.
+  Codex in a herdr pane doesn't notify the orchestrator when it finishes, so every prompt gets a background waiter in the same turn:
+  `herdr --session <s> agent prompt <pane> "<brief, naming the report file>"`, then, run in the background, `sleep 5; herdr --session <s> agent wait <pane> --timeout 3000000 >/dev/null 2>&1; ls -la <report file>`.
+  If the wait returns with no report (it can return before Codex starts working), check `herdr --session <s> pane list` and re-arm it. Re-prompt after a capacity error.
 - **The owner**: answers product questions, approves register entries reviewers can't, and merges each phase into `rust-core`.
 
 ## Every phase starts with its design

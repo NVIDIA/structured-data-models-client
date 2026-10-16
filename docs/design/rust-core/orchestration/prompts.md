@@ -5,7 +5,7 @@ Replace `<...>` before pasting.
 
 1. **Setup**: check the machine.
 2. **Take over**: read the light set, save memories, report back.
-3. **Watchdogs**: start them before any agent runs.
+3. **Watchdogs**: start them before any agent runs, from the exact texts below.
 4. **Phase 2 design**: bring learnings.md up to date, write the design, review it until both reviewers approve, send the owner's questions. It stops there.
 5. **Run Phase 2**: only after the owner has seen the design and answered.
 
@@ -40,10 +40,42 @@ Then:
 ## 3. Watchdogs
 
 ```text
-Set up the watchdogs for this phase (session-only, nothing that outlives the session):
-1. A silent background loop around scripts/rust_core/orchestration/stuck_agents.py and rule_watch.py on this session's task-output directory, which only notifies me when an agent is blocked or breaks a rule. When an agent is flagged, stop it and resume it with the blocking command named and an alternative.
-2. A heartbeat every 3 hours: check for stuck agents, red CI on the phase and lane branches, queued landings and idle lanes, and act on what you find. If nothing needs doing, say so in one line.
-3. A daily cleanup: scripts/rust_core/orchestration/clean_tmp.sh as a dry run first. Rerun it with --apply only if nothing it lists is still needed (the owner's standing approval, see the handbook's "The owner"); otherwise ask me before removing anything.
+Set up the watchdogs for this phase, session-only (nothing that outlives the session). Use the exact texts in prompts.md's "Watchdog texts", with <TASKS> replaced by this session's task-output directory and <LOG> by the run log in $SDM_ORCH_STATE/logs/:
+1. The silent stuck-agent loop, as a background command (not a cron: a frequent cron floods your context).
+2. The heartbeat, as two session crons offset by 90 minutes (each every 3 hours), so a missed one doesn't leave a 6-hour gap.
+3. The daily cleanup, as a session cron.
+Confirm with the list of crons and the loop's task id.
+```
+
+### Watchdog texts
+
+**Stuck-agent loop** (background command; it notifies only when it exits, that is when something is blocked or breaks a rule):
+
+```bash
+B=scripts/rust_core/orchestration; T=<TASKS>
+while true; do
+  OUT=$({ python3 $B/stuck_agents.py $T 40 | grep POSSIBLY-BLOCKED; python3 $B/rule_watch.py $T 6 | grep VIOLATION; } 2>/dev/null)
+  [ -n "$OUT" ] && { echo "$OUT" | cut -c1-300; break; }
+  sleep 300
+done
+```
+
+When it fires: for each agent still running, stop it and resume it naming the blocking command and an alternative (never `rm -rf`, `--force` or `sudo`); add acknowledged false alarms to `$SDM_ORCH_STATE/rule_watch.ignore`; then restart the loop.
+
+**Heartbeat** (cron `17 0-23/3 * * *` and `47 1-23/3 * * *`):
+
+```text
+[Heartbeat, automated, not from the owner] Phase keep-alive check. Do only what is needed:
+1. If a subagent, Codex review, background waiter or CI watch is still running and you will be notified when it finishes, do nothing more and end your turn with one line saying what you're waiting on.
+2. Otherwise, re-orient: read the tail of <LOG>, check `git log -3 --oneline origin/$SDM_PHASE_BRANCH`, the queue in $SDM_ORCH_STATE/land-queue, idle lanes (scripts/rust_core/orchestration/lane_idle.py) and red CI on the phase and lane branches. Look for finished but unprocessed work: review reports and implementer results. Then continue under the handbook's rules. Don't duplicate work in flight; if a lane is idle, start its next package.
+3. Go to the owner only if a decision is genuinely theirs; otherwise decide and log it.
+Log any action you take in <LOG>.
+```
+
+**Daily cleanup** (cron `23 4 * * *`):
+
+```text
+[Daily cleanup, automated, owner-approved in Phase 1] Run scripts/rust_core/orchestration/clean_tmp.sh (a dry run). If nothing it lists is still needed, rerun it with --apply; otherwise ask the owner. Log its last line (disk free) in <LOG>. Reply with one line.
 ```
 
 ## 4. Phase 2 design
