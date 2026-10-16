@@ -117,8 +117,8 @@ jobs:
           done
 
       # The engine pins its siblings by exact version, and at this point in
-      # a release those versions exist only in dist/, not on PyPI
-      # yet, and will not be until the `release` job runs. cibuildwheel's test
+      # a release those versions exist only in dist/, not on PyPI yet, and
+      # will not be until someone publishes them. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
       # the smoke test fails with "structured-data-models-api was not found" and the release stops
       # before it can publish anything. cibuildwheel copies the directory it
