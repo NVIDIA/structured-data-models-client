@@ -33,19 +33,52 @@
       "moved": "T1.36 fix 21: a forecast's steps predicted and merged by the core in one run: each step's payload and query passed as RequestState.forecast, the endpoint's refusal noted with the call (the step) it answered, and the answer marked as naming its step; fix 24: each later step's call given its own request id, drawn with _request_id as the adapter draws one per call"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
-      "moved": "T1.36 fix 21: a forecast the core gathered is predicted by the core in one run, its refusal said of the step the core names (about_the_part), as each part's was"
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "moved": "T1.36 fix 21: imports dataclasses and FORECAST, and adds _in_steps_on_the_core, which keeps the core's steps as the parts _in_parts kept, now that the core splits a forecast"
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
       "moved": "T1.36 fix 21: on the core route a forecast goes to the core, which splits it into its steps, rather than to _in_parts"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
-      "moved": "T1.36 fix 21: parts_of's new on_the_core keyword, the core splitting a forecast on its route"
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::parts_of": {
       "moved": "T1.36 fix 21: on the core route a forecast is not split here, the core splitting it; the refusals before anything is gathered (top_k, more steps than MOST_PARTS) stay the client's, worded as before"
+    },
+    "packages/structured-data-models-client/src/sdm_client/base.py::check_request_against_model": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::<module>": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_entity_count": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_limits": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._gather": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._in_parts": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
+      "main": "eb6c68eb1d5aef8c1315d9ccfd44989b2e767df2 Make Databricks metric views work across real-world configurations (#8)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
+      "main": "eb6c68eb1d5aef8c1315d9ccfd44989b2e767df2 Make Databricks metric views work across real-world configurations (#8)"
     }
   }
 }
