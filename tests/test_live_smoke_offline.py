@@ -24,6 +24,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/live/rfm_smoke.py'
+# A Databricks token's shape, put together at run time as main's adbe935b
+# does, so no credential-shaped literal is left in the tree for a secret
+# scanner to report.
+_TOKEN = 'dapi' + '0123456789abcdef' * 2
 
 
 def _smoke() -> ModuleType:
@@ -67,7 +71,7 @@ def test_redaction_removes_secrets_and_anything_shaped_like_one() -> None:
     said = redact(
         'calling my-serving-endpoint (profile my-profile) at '
         'https://adb-1234567890123456.7.azuredatabricks.net/serving with '
-        'Bearer abc.def and dapi0123456789abcdef0123456789abcdef as '
+        f'Bearer abc.def and {_TOKEN} as '
         'someone@example.com on dbc-a1b2c3d4-e5f6.cloud.databricks.com'
     )
     for secret in (
@@ -98,7 +102,7 @@ def test_a_failure_is_reported_redacted_with_no_traceback(
         raise RuntimeError(
             'could not reach my-serving-endpoint at '
             'https://dbc-a1b2c3d4-e5f6.cloud.databricks.com with token '
-            'dapi0123456789abcdef0123456789abcdef'
+            f'{_TOKEN}'
         )
 
     monkeypatch.setattr(smoke, 'build_request', failing)
