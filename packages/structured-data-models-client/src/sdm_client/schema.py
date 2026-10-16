@@ -36,7 +36,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from collections.abc import Set as AbstractSet
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar
 
 import pandas as pd
@@ -542,8 +542,7 @@ class _TableShape:
                 f'The name {name!r} must be a non-empty string.',
                 code='INVALID_REQUEST',
             )
-        invalid_chars = ['`', '\n', '\r', '.']
-        name_invalid_chars = [char for char in invalid_chars if char in name]
+        name_invalid_chars = _invalid_name_chars(name)
         if len(name_invalid_chars) > 0:
             raise StructuredDataError(
                 f'The name {name!r} contains '
@@ -868,6 +867,7 @@ class Schema:
         # The engine's own reading of the source's tables, kept so that each
         # question does not read them again. Set by the first read.
         self._engine_tables: Any = None
+        self._conversion_notes: tuple[str, ...] = ()
 
     @property
     def source(self) -> Source | None:
@@ -877,6 +877,27 @@ class Schema:
         because sampling runs against one: see :meth:`from_source`.
         """
         return self._source
+
+    @property
+    def conversion_notes(self) -> tuple[str, ...]:
+        r"""How :meth:`from_source` read a semantic model where nothing was
+        lost, for a person to read.
+
+        For a Databricks metric view, one note each: the predictive query
+        aggregation that matches a simple measure, such as
+        ``'revenue' is SUM(order_lines.LineTotal, 0, 30, days)``, the time
+        column taken in place of a date the view truncates, unless
+        ``time_columns`` named another, and a parameter read as its default.
+        Tables are named as the schema names them. What a model loses is
+        said in an :class:`SDMWarning` instead, and a time column taken in
+        place of a truncated date is said in the warning on how time columns
+        were inferred as well, with the override that names another. Empty
+        for every other schema.
+
+        The wording of a note is not part of the contract, so do not parse
+        it.
+        """
+        return self._conversion_notes
 
     def __setattr__(self, key: str, value: Any) -> None:
         r"""Hold an assigned relationship to the same standard as a passed one.
@@ -922,7 +943,14 @@ class Schema:
         schema of frames.
         """
         object.__setattr__(
-            self, '__dict__', {'_source': None, '_engine_tables': None, **state}
+            self,
+            '__dict__',
+            {
+                '_source': None,
+                '_engine_tables': None,
+                '_conversion_notes': (),
+                **state,
+            },
         )
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', SDMWarning)
@@ -976,6 +1004,7 @@ class Schema:
         # What the engine read of the source is shared, not copied: it is what
         # the tables are, and every gather is given its own copy of it.
         copied._engine_tables = self._engine_tables
+        copied._conversion_notes = self._conversion_notes
         return copied
 
     @classmethod
@@ -1114,7 +1143,14 @@ class Schema:
         >>> schema = Schema.from_source(source.semantic_model('sales_metrics'))
 
         Its keys and relationships come from the model, and its tables are
-        named as the model names them.
+        named as the model names them. No relationship is inferred from
+        column names beside the model's own joins, which would give a table
+        a second path the model never declared. ``relationships=`` replaces
+        the model's own, so to add one, pass them with it:
+        ``relationships=[*Schema.from_source(model).relationships, extra]``.
+        What the model has that a schema cannot hold is said in one
+        :class:`SDMWarning`, and how it was read where nothing was lost, such
+        as the aggregation each measure is, is in :attr:`conversion_notes`.
 
         Everything that differs between warehouses belongs to the source, so
         this reads the same whichever one the tables are in. A schema has
@@ -1131,8 +1167,9 @@ class Schema:
             primary_keys: Overrides for a table's key.
             time_columns: Overrides for a table's time column. ``None``
                 says the table has none.
-            relationships: Overrides for the relationships. Pass an empty
-                sequence to assert there are none.
+            relationships: Replaces the relationships, a semantic model's
+                own included. Pass an empty sequence to assert there are
+                none.
             check_keys: Count each key's repeats and missing values in the
                 source. ``False`` skips the scan, and the checks with it, and
                 leaves :attr:`SourceTable.duplicate_keys` ``None``. The tables
@@ -1149,6 +1186,11 @@ class Schema:
                 or a named key has no value in some row.
             MissingExtraError: If the relational engine, which reads the
                 source, is not installed.
+            GraphConstructionError: The relational engine's, if the
+                warehouse fails while a semantic model is read, with the
+                driver's error as its ``__cause__``.
+            EmptyTableError: The relational engine's, a ``RuntimeError``, if
+                a semantic model's source table holds no rows.
         """
         from sdm_client.materializers.sources import (
             EngineTables,
@@ -1164,6 +1206,7 @@ class Schema:
         read = EngineTables()
         engine_tables: dict[str, Any] | None = None
         chose: dict[str, TimeColumnChoice | None] = {}
+        notes: tuple[str, ...] = ()
         if is_semantic_model(source):
             graph = semantic_model_graph(source)
             read.keep({name: graph[name] for name in graph.tables})
@@ -1213,6 +1256,8 @@ class Schema:
             for name, table in built.items()
         }
         _apply_keys_and_times(built, primary_keys, time_columns)
+        if is_semantic_model(source):
+            notes = _schema_notes(graph.conversion_notes, built, as_named)
         if check_keys and engine_tables is not None:
             # Before relationships are inferred: a declined key is one no
             # relationship can point at.
@@ -1231,11 +1276,16 @@ class Schema:
             covered = {
                 (link.source_table, link.source_column) for link in declared
             }
-            by_name = [
-                link
-                for link in _infer_relationships(built)
-                if (link.source_table, link.source_column) not in covered
-            ]
+            # A semantic model's joins are all the links it means.
+            by_name = (
+                []
+                if is_semantic_model(source)
+                else [
+                    link
+                    for link in _infer_relationships(built)
+                    if (link.source_table, link.source_column) not in covered
+                ]
+            )
             links = _joinable_inferred_links(built, declared + by_name)
         else:
             links = _checked_links(built, relationships)
@@ -1245,6 +1295,7 @@ class Schema:
             warnings.simplefilter('ignore', SDMWarning)
             schema = cls(built, links, source=source)
         schema._engine_tables = read
+        schema._conversion_notes = notes
         schema._mark_key_columns()
         _warn_how_time_columns_were_inferred(schema, chose, time_columns)
         _warn_two_ways_to_reach_one_table(built, schema.relationships)
@@ -1345,6 +1396,41 @@ def _require_table(tables: Mapping[str, _T], name: str) -> _T:
             code='INVALID_REQUEST',
         )
     return tables[name]
+
+
+def _schema_notes(
+    notes: Sequence[Any],
+    built: Mapping[str, _TableShape],
+    as_named: Mapping[str, str],
+) -> tuple[str, ...]:
+    r"""A semantic model's conversion notes as text, naming its tables as
+    the schema names them.
+
+    A note about a table the schema leaves out, or about a time column its
+    table no longer has, says nothing the schema holds, so it is left out.
+
+    Args:
+        notes: The engine's notes on how it read the model.
+        built: The schema's tables, by name.
+        as_named: The schema's name for each of the model's tables it holds.
+    """
+    from sdm_relational_engine.rfm.view_conversion import (
+        MeasureNote,
+        TimeColumnNote,
+    )
+
+    said: list[str] = []
+    for note in notes:
+        if isinstance(note, MeasureNote | TimeColumnNote):
+            name = as_named.get(note.table)
+            if name is None or (
+                isinstance(note, TimeColumnNote)
+                and built[name].time_column != note.column
+            ):
+                continue
+            note = replace(note, table=name)
+        said.append(str(note))
+    return tuple(said)
 
 
 def _apply_keys_and_times(
@@ -1631,6 +1717,15 @@ def _require_one_kind_of_table(
         _require_a_source(source)
 
 
+# What a name in a predictive query cannot hold: `table.column` splits at the
+# dot, and a backtick or line break ends the name.
+_INVALID_NAME_CHARS = ('`', '\n', '\r', '.')
+
+
+def _invalid_name_chars(name: str) -> list[str]:
+    return [char for char in _INVALID_NAME_CHARS if char in name]
+
+
 def _describe_source_table(
     engine_table: Any, source_name: str, *, name: str | None = None
 ) -> SourceTable:
@@ -1640,13 +1735,18 @@ def _describe_source_table(
     binary or a duration, is left out and named, rather than refusing the
     whole table:
     the caller cannot change a warehouse table's columns to suit a request, and
-    the engine then leaves it unread as well.
+    the engine then leaves it unread as well. So is a column whose name a
+    predictive query cannot say, such as a metric view's dimension `a.b`.
     """
     from sdm_client.materializers.sources import wire_dtype
 
     columns: dict[str, Column] = {}
     unreadable: list[str] = []
+    unnamable: list[str] = []
     for engine_column in engine_table.columns:
+        if _invalid_name_chars(engine_column.name):
+            unnamable.append(repr(engine_column.name))
+            continue
         dtype = wire_dtype(engine_column.dtype)
         stype = str(getattr(engine_column.stype, 'value', engine_column.stype))
         if dtype is None or stype not in SEMANTIC_TYPES:
@@ -1657,6 +1757,14 @@ def _describe_source_table(
         warnings.warn(
             f'{name or engine_table.name} leaves out {", ".join(unreadable)}: a '
             f'request carries one scalar value per cell, and these hold none',
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    if unnamable:
+        warnings.warn(
+            f'{name or engine_table.name} leaves out {", ".join(unnamable)}: '
+            f'a predictive query cannot name a column holding a dot, a '
+            f'backtick or a line break',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )
@@ -2197,6 +2305,17 @@ def _warn_how_time_columns_were_inferred(
             continue
         column = table.time_column
         if column is not None and column == choice.column:
+            if choice.instead_of:
+                one = len(choice.instead_of) == 1
+                lines.append(
+                    f'{name}.{column} was taken as the time column rather '
+                    f'than {_and_list(choice.instead_of)}, which '
+                    f'{"truncates or casts" if one else "truncate or cast"} '
+                    f'it, since it says when a row happened more precisely. '
+                    f'If a question should count by '
+                    f'{"it" if one else "one of those"}, name it: '
+                    f'time_columns={{{name!r}: {choice.instead_of[0]!r}}}.'
+                )
             if choice.how == 'earliest':
                 others = [other for other in choice.among if other != column]
                 lines.append(

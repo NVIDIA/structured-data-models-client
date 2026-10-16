@@ -90,7 +90,7 @@ from sdm_relational_engine.utils.progress_logger import ProgressLogger
 
 _RANDOM_SEED = 42
 
-_MAX_PRED_SIZE: dict[TaskType, int] = defaultdict(lambda: 1_000)
+_MAX_PRED_SIZE: dict[TaskType, int] = defaultdict(lambda: 10_000)
 _MAX_PRED_SIZE[TaskType.TEMPORAL_LINK_PREDICTION] = 200
 
 _MAX_TEST_SIZE: dict[TaskType, int] = defaultdict(lambda: 2_000)
@@ -113,13 +113,18 @@ _DEFAULT_NUM_NEIGHBORS = {
 _MAX_SIZE = 30 * 1024 * 1024
 _SIZE_LIMIT_MSG = (
     'Context size exceeds the 30MB limit. {stats}\nPlease '
-    'reduce either the number of tables in the graph, their '
+    'reduce either {entities}the number of tables in the graph, their '
     'number of columns (e.g., large text columns), '
     'neighborhood configuration, or the run mode. If none of '
     'this is possible, please create a feature request at '
     "'https://github.com/NVIDIA/structured-data-models-client' if you must go "
     'beyond this for your use-case.'
 )
+
+#: Offered only where the batch has more than one entity in it. A batch of one
+#: cannot be split, so advising fewer per call names a remedy that has nothing
+#: left to divide.
+_FEWER_ENTITIES = 'the number of entities predicted at once, '
 
 _SESSION_UNSUPPORTED_STATUS = frozenset({404, 405, 501})
 
@@ -1494,7 +1499,12 @@ class KumoRelational:
                 )
             if request_size > _MAX_SIZE:
                 stats = context_size_stats(context)
-                raise ValueError(_SIZE_LIMIT_MSG.format(stats=stats))
+                raise ValueError(
+                    _SIZE_LIMIT_MSG.format(
+                        stats=stats,
+                        entities=_FEWER_ENTITIES if stop - start > 1 else '',
+                    )
+                )
             validate_payload_table_rows(payload, batch_index=batch_index)
             materialized = MaterializedPredictionRequest(
                 payload=payload,

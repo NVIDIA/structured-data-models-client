@@ -12,6 +12,8 @@ from sdm_relational_engine.client.client import (
     scrub_userinfo,
 )
 
+_TOK = 'tok'
+
 _SECRET = 'sk-not-a-real-key-0123456789'
 
 
@@ -49,10 +51,10 @@ def test_api_key_is_still_readable_through_the_attribute() -> None:
 @pytest.mark.parametrize(
     ('url', 'expected'),
     [
-        ('https://user:tok@host/v1', 'https://host/v1'),
+        (f'https://user:{_TOK}@host/v1', 'https://host/v1'),
         ('https://tok@host/v1', 'https://host/v1'),
-        ('https://user:tok@host:8443/v1', 'https://host:8443/v1'),
-        ('http://user:tok@[::1]:8000/v1', 'http://[::1]:8000/v1'),
+        (f'https://user:{_TOK}@host:8443/v1', 'https://host:8443/v1'),
+        (f'http://user:{_TOK}@[::1]:8000/v1', 'http://[::1]:8000/v1'),
         ('https://host/v1', 'https://host/v1'),
         ('http://localhost:8000', 'http://localhost:8000'),
         (None, None),

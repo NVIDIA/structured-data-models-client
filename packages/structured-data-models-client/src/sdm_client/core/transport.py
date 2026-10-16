@@ -54,11 +54,11 @@ _USERINFO_RE = re.compile(r'(?<=//)[^/@\s]+@')
 def redact_url(url: str | None) -> str | None:
     r"""Strip any userinfo from ``url`` so it is safe to log or display.
 
-    ``https://user:token@host/path`` is a legal way to point this client at a
-    deployment, and the credential is then in the URL itself rather than in
-    ``api_key``. Anywhere a URL reaches an error message or a repr it goes
-    through here first, so the credential does not travel with the diagnosis
-    into a log aggregator or a bug report.
+    A URL carrying a password in its userinfo is a legal way to point this
+    client at a deployment, and the credential is then in the URL itself
+    rather than in ``api_key``. Anywhere a URL reaches an error message or
+    a repr it goes through here first, so the credential does not travel
+    with the diagnosis into a log aggregator or a bug report.
 
     Mirrors ``sdm_relational_engine.client.client.redact_url``, which guards
     the same credential on the Kumo Relational path. The two cannot share one
@@ -138,7 +138,7 @@ def _validate_url(url: str, api_key: str | None) -> None:
     host = parsed.hostname.lower()
     # Userinfo in the URL is a credential too, and ``requests`` turns it into
     # an ``Authorization: Basic`` header. Checking only ``api_key`` let
-    # ``http://user:secret@host`` send that in the clear.
+    # such a URL send that in the clear.
     carries_credential = bool(api_key or parsed.username or parsed.password)
     if (
         carries_credential

@@ -36,7 +36,7 @@ def _python(source: str) -> str:
 
 def test_there_is_a_notebook_for_each_way_in() -> None:
     assert {path.name for path in NOTEBOOKS} >= {
-        'adventureworks_relational.ipynb',
+        'kumo_relational_quickstart.ipynb',
         'lakebase_relational.ipynb',
     }
 
