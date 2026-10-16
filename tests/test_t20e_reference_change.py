@@ -36,6 +36,9 @@ Review round 1 added: a duplicate line naming another reference commit,
 named by file and line; a vector file whose reference field names another
 SHA (the approved one only in a note), or which is deleted, named; the new
 recording under any path but ``contract/reference/<SHA>.jsonl``, refused.
+Review round 2 added: a vector file truncated, blank or malformed, and a
+JSON-lines file whose later line still cites another SHA, each named; a
+citing file with dots and brackets in its keys, moved whole, passes.
 Exit 2 (seeded faults): a row without the SHA, a row naming another SHA, a
 row that is not an owner approval, an abbreviated SHA, a row without the
 word "reference", a row outside a ``phase-*/decisions.md``, a row the
@@ -470,6 +473,124 @@ def test_the_new_recording_is_exactly_the_sha_s_jsonl(
     assert not (repo / REFERENCE / f'{NEW}.jsonl').exists()
     found = run(repo, checkpoint).problems
     assert RULE in rules(found), found
+
+
+#: A JSON-lines file the reference consistency tests read, citing the
+#: reference on every line (``identity.reference.commit.sha``).
+GOLDEN = 'tests/golden/t132g-fixture-cases/python-ref.jsonl'
+
+
+@PENDING
+@pytest.mark.parametrize(
+    'seed',
+    [
+        'empty',
+        'whitespace only',
+        'malformed JSON naming the new SHA',
+        'malformed JSON without it',
+    ],
+)
+def test_a_vector_file_that_is_no_longer_json_is_refused(
+    repo: Path, seed: str
+) -> None:
+    r"""Exit 1 (review round 2): a citing vector file that was JSON at the
+    checkpoint and is not after an approved re-record (truncated, blank,
+    or malformed, whether or not its text names the new SHA) is refused,
+    naming the file: its reference field can't be read, so it can't
+    agree."""
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+    text = {
+        'empty': '',
+        'whitespace only': '  \n\t\n',
+        'malformed JSON naming the new SHA': (
+            f'{{"reference": "{OTHER}", "note": "moved to {NEW}", }}\n'
+        ),
+        'malformed JSON without it': f'{{"reference": "{OTHER}",\n',
+    }[seed]
+
+    def broken(r: Path) -> None:
+        (r / VECTORS).write_text(text)
+
+    commit(repo, f'T2.0c: {seed}', then(rerecord(NEW), broken))
+    found = run(repo, checkpoint).problems
+    assert any(VECTORS in p for p in found), found
+
+
+@PENDING
+@pytest.mark.parametrize(
+    ('field', 'left'),
+    [
+        ('identity.reference.commit.sha', 'the old SHA'),
+        ('identity.reference.commit.sha', 'another SHA'),
+        ('recorded.reference, on line 2 only', 'the old SHA'),
+    ],
+)
+def test_a_later_line_of_a_json_lines_file_is_checked(
+    repo: Path, field: str, left: str
+) -> None:
+    r"""Exit 1 (review round 2): a JSON-lines citing file is judged line by
+    line, after an approved re-record that moved its first line. Refused,
+    naming the file: line 2's ``identity.reference.commit.sha`` (the field
+    every line holds) still naming the old SHA or naming another; and a
+    citation only line 2 holds (``recorded.reference``, added at the
+    checkpoint) still naming the old SHA."""
+    old = old_sha(repo)
+    value = old if left == 'the old SHA' else OTHER
+    only_later = field.startswith('recorded.reference')
+
+    def add_later_field(r: Path) -> None:
+        path = r / GOLDEN
+        lines = [json.loads(x) for x in path.read_text().splitlines()]
+        lines[1]['recorded'] = {'reference': old}
+        path.write_text(''.join(json.dumps(x) + '\n' for x in lines))
+
+    if only_later:
+        land(repo, 'T2.0b', add_later_field)
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+
+    def later(r: Path) -> None:
+        path = r / GOLDEN
+        lines = [json.loads(x) for x in path.read_text().splitlines()]
+        assert len(lines) > 1
+        assert lines[0]['identity']['reference']['commit']['sha'] == NEW
+        if only_later:
+            assert 'recorded' not in lines[0]
+            lines[1]['recorded']['reference'] = value
+        else:
+            lines[1]['identity']['reference']['commit']['sha'] = value
+        path.write_text(''.join(json.dumps(x) + '\n' for x in lines))
+
+    commit(repo, f'T2.0c: line 2 left at {left}', then(rerecord(NEW), later))
+    found = run(repo, checkpoint).problems
+    assert any(GOLDEN in p for p in found), found
+
+
+@PENDING
+def test_a_citing_file_with_dots_and_brackets_in_its_keys_passes(
+    repo: Path,
+) -> None:
+    r"""Exit 1 (review round 2), a legitimate case: a citing file whose
+    JSON keys hold dots or brackets (``"reference.note"``,
+    ``"cases[0]"``) and cite the old SHA in their text, every citation
+    moved to the new SHA by the re-record, passes with no problem."""
+    old = old_sha(repo)
+
+    def keys(r: Path) -> None:
+        path = r / VECTORS
+        data = json.loads(path.read_text())
+        data['reference.note'] = f'Recorded at {old}'
+        data['cases[0]'] = f'Recorded at {old}'
+        path.write_text(json.dumps(data, indent=2) + '\n')
+
+    land(repo, 'T2.0b', keys)
+    checkpoint = approved_checkpoint(repo)
+    commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
+    data = json.loads((repo / VECTORS).read_text())
+    assert data['reference.note'] == data['cases[0]'] == f'Recorded at {NEW}'
+    found = run(repo, checkpoint).problems
+    assert found == [], found
 
 
 # --- exit 2: the approval can't be forged ------------------------------------------
