@@ -4425,12 +4425,12 @@
    "TimeZone_UTC": "timestamp[ns]"
   },
   "TIMESTAMPTZ": {
-   "default": "timestamp[us, tz=Etc/UTC]",
-   "arrow_lossless_conversion": "timestamp[us, tz=Etc/UTC]",
-   "arrow_large_buffer_size": "timestamp[us, tz=Etc/UTC]",
-   "string_views": "timestamp[us, tz=Etc/UTC]",
-   "list_views": "timestamp[us, tz=Etc/UTC]",
-   "arrow_output_version_1.5": "timestamp[us, tz=Etc/UTC]",
+   "default": "timestamp[us, tz=America/Los_Angeles]",
+   "arrow_lossless_conversion": "timestamp[us, tz=America/Los_Angeles]",
+   "arrow_large_buffer_size": "timestamp[us, tz=America/Los_Angeles]",
+   "string_views": "timestamp[us, tz=America/Los_Angeles]",
+   "list_views": "timestamp[us, tz=America/Los_Angeles]",
+   "arrow_output_version_1.5": "timestamp[us, tz=America/Los_Angeles]",
    "TimeZone_UTC": "timestamp[us, tz=UTC]"
   },
   "INTERVAL": {
