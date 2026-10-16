@@ -17,9 +17,12 @@
 //!   column left out).
 //! - Exit "python-core and rust-host public outcomes match for context
 //!   leakage and limits": the leakage fields above, and the entity count's
-//!   limit, 1,001 entities refused as the reference refuses them
-//!   (`UNSUPPORTED_REQUEST`), which `python-core` is held to by the same
-//!   recorded case.
+//!   limit. The reference at b413e9ad refused 1,001 entities
+//!   `UNSUPPORTED_REQUEST`; since main's 1fc5a686 (6298913c) it takes up to
+//!   10,000, so on `base.regression` (8 users) it refuses the 1,001 indices
+//!   `INVALID_REQUEST` for another reason, while the core's 1,000-entity
+//!   limit, field `indices`, still refuses them first, `UNSUPPORTED_REQUEST`
+//!   (register P2B-3, until T2.8c); `python-core` is held to the same.
 //!
 //! Before T1.28a the core refuses both classification cases by its rule
 //! `classification_task`, and these tests say so.
@@ -189,12 +192,15 @@ fn base_multiclass_s_classification_payload_and_leakage_are_the_reference_s() {
 }
 
 #[test]
-fn more_entities_than_the_endpoint_scores_are_refused_as_the_reference_refuses_them() {
+fn more_entities_than_the_core_takes_are_refused_by_its_limit() {
     // The entity count's limit (1,000), on base.regression with 1,001
-    // entities: the reference's UNSUPPORTED_REQUEST, which python-core is
-    // held to by the same recorded case.
+    // entities. The reference at 6298913c (main's 1fc5a686) has no such
+    // limit and refuses these indices INVALID_REQUEST for another reason;
+    // the core's own limit refuses them first, UNSUPPORTED_REQUEST naming
+    // `indices` (register P2B-3, until T2.8c, which takes up to 10,000).
     let want = expected("base.regression.entities-1001");
     assert_eq!(want["outcome"], "refused");
+    assert_eq!(want["code"], "INVALID_REQUEST");
     let (mut case, bases) = the_case("base.regression");
     let materialize = case
         .core
@@ -212,5 +218,25 @@ fn more_entities_than_the_endpoint_scores_are_refused_as_the_reference_refuses_t
     // The core's own limit, not a rule it does not hold yet (`not_yet`
     // names one), which would refuse with the same code for another reason.
     assert_eq!(fields.get("rule"), None, "refused by a rule not held yet");
-    assert_eq!(Some(code.as_str()), want["code"].as_str());
+    assert_eq!(code, "UNSUPPORTED_REQUEST");
+    assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
+    // At the limit itself the core takes them: 1,000 of base.regression's
+    // entities are not refused by the limit.
+    let (mut case, bases) = the_case("base.regression");
+    let materialize = case
+        .core
+        .as_mut()
+        .and_then(|core| core.materialize.as_mut())
+        .unwrap();
+    materialize.indices = (0..1000)
+        .map(|i| json!({"t": "i64", "v": i.to_string()}))
+        .collect();
+    let observed = host::run(&case, &bases).unwrap();
+    if let Answer::Error { code, fields, .. } = &observed.answer {
+        assert!(
+            !(code == "UNSUPPORTED_REQUEST"
+                && fields.get("field").map(String::as_str) == Some("indices")),
+            "1,000 entities refused by the limit"
+        );
+    }
 }
