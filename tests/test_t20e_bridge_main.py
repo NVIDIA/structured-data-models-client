@@ -31,6 +31,10 @@ holds. The reason is documented next to the others.
 Review round 2 added: the phase changed the frozen file before the merge
 too (a module statement, or a function), the merge is clean, and the
 ``<module>`` both changed, declared ``main`` naming M1, passes.
+Review round 3 added: a change of the package's before its merge, and a
+change back to a version a merge inside main held, each declared ``main``,
+are refused; T2.0c's shape (the merge's first parent the checkpoint)
+passes.
 Exit 5: after the landing (the base branch at the candidate), the
 declarations are held as they stand, and a later change to an entry the
 spent ``main`` declaration covers must state its own reason.
@@ -147,6 +151,7 @@ class History:
     m1: str
     m3: str
     p0: str
+    #: The package's commit before the merge ('' when there is none).
     prep: str
     merge: str
     local_main: str
@@ -163,14 +168,11 @@ class History:
         return self.reason(f'{sha} {self.title(sha)}')
 
 
-def history(tmp: Path, phase: str | None = None) -> History:
-    r"""The history in the module docstring, HEAD at the merge, nothing
-    declared yet; with ``phase``, P0 also inserts that text after the
-    frozen file's ``from __future__`` import, with its baseline (the phase
-    changed the file too, apart from main's change, so they merge
-    cleanly)."""
+def start(tmp: Path) -> tuple[Path, str]:
+    r"""A repository holding this checkout's frozen files, their baseline
+    and no declarations, committed as M0 on main's side; with M0."""
     repo = tmp / 'repo'
-    repo.mkdir()
+    repo.mkdir(parents=True)
     git(repo, 'init', '-q', '-b', 'trunk')
     for rel in freeze.FROZEN:
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +181,29 @@ def history(tmp: Path, phase: str | None = None) -> History:
     shutil.copy2(ROOT / freeze.CHANGES, repo / freeze.CHANGES)
     declare(repo, {})
     freeze.write(repo)
-    m0 = commit(repo, 'Start the client (#1)')
+    return repo, commit(repo, 'Start the client (#1)')
+
+
+def after_future(path: Path, text: str) -> None:
+    r"""Inserts ``text`` after the frozen file's ``from __future__``
+    import, far from where main's commit appends."""
+    source = path.read_text()
+    assert source.count(FUTURE) == 1
+    path.write_text(source.replace(FUTURE, FUTURE + text))
+
+
+def history(
+    tmp: Path, phase: str | None = None, prep: str | None = ''
+) -> History:
+    r"""The history in the module docstring, HEAD at the merge, nothing
+    declared yet; with ``phase``, P0 also inserts that text after the
+    frozen file's ``from __future__`` import, with its baseline (the phase
+    changed the file too, apart from main's change, so they merge
+    cleanly). ``prep`` is the package's commit before the merge: empty
+    (``''``), inserting that text after the import (the package's own
+    change, before its merge), or none (``None``: the merge's first parent
+    is the checkpoint, as T2.0c's is)."""
+    repo, m0 = start(tmp)
     # Main: a rule added to a frozen bridge file, then more of main.
     target = repo / TARGET
     target.write_text(target.read_text() + ADDED_SOURCE)
@@ -190,9 +214,7 @@ def history(tmp: Path, phase: str | None = None) -> History:
     # The phase branch, forked at M0.
     git(repo, 'checkout', '-q', '-b', 'lane', m0)
     if phase is not None:
-        source = target.read_text()
-        assert source.count(FUTURE) == 1
-        target.write_text(source.replace(FUTURE, FUTURE + phase))
+        after_future(target, phase)
         freeze.write(repo)
     p0 = commit(repo, 'Land T2.0: the phase base')
     git(repo, 'update-ref', f'refs/remotes/{BASE}', p0)
@@ -201,11 +223,16 @@ def history(tmp: Path, phase: str | None = None) -> History:
     git(repo, 'checkout', '-q', 'main')
     local_main = commit(repo, 'Only on the local main (#5)')
     git(repo, 'checkout', '-q', 'lane')
-    prep = commit(repo, 'T2.0c: before the merge')
+    if prep is None:
+        before = ''
+    else:
+        if prep:
+            after_future(target, prep)
+        before = commit(repo, 'T2.0c: before the merge')
     git(repo, 'merge', '-q', '--no-ff', '-m', 'T2.0c: merge main', m2)
     merge = git(repo, 'rev-parse', 'HEAD')
     freeze.write(repo)
-    return History(repo, m0, m1, m3, p0, prep, merge, local_main)
+    return History(repo, m0, m1, m3, p0, before, merge, local_main)
 
 
 @pytest.fixture
@@ -336,6 +363,142 @@ def test_an_entry_the_phase_and_main_both_changed_takes_main_s_reason(
     code, text = run(h.repo)
     assert code == 0, text
     assert 'freeze: ok' in text
+
+
+def module_key() -> str:
+    return f'{TARGET}::{freeze.MODULE}'
+
+
+@PENDING
+def test_the_merge_s_first_parent_at_the_checkpoint_passes(
+    tmp_path: Path,
+) -> None:
+    r"""Control (review round 3; T2.0c's shape, its merge's first parent
+    the checkpoint): with no package commit before the merge, the entries
+    main changed, declared ``main`` naming M1, pass."""
+    h = history(tmp_path, prep=None)
+    assert git(h.repo, 'rev-parse', f'{h.merge}^1') == h.p0
+    declared(h, h.main_reason(h.m1))
+    code, text = run(h.repo)
+    assert code == 0, text
+
+
+@PENDING
+def test_the_package_s_change_before_its_merge_is_not_main_s(
+    tmp_path: Path,
+) -> None:
+    r"""Exit 3 (review round 3): the package changes ``<module>`` before
+    merging main (``_SMUGGLED_RULE = 1``), main also changed it, the merge
+    is clean, and the entry is declared ``main`` naming M1: refused,
+    naming the entry, since the merge's first parent does not hold it as
+    the merge base did. The twin (the same, with an empty commit before
+    the merge) passes first."""
+    twin = history(tmp_path / 'twin')
+    declared(twin, twin.main_reason(twin.m1))
+    code, text = run(twin.repo)
+    assert code == 0, text
+    h = history(tmp_path / 'seeded', prep='\n_SMUGGLED_RULE = 1\n')
+    assert '_SMUGGLED_RULE' in git(h.repo, 'show', f'{h.merge}:{TARGET}')
+    declared(h, h.main_reason(h.m1))
+    code, text = run(h.repo)
+    assert code == 1 and module_key() in text, text
+
+
+@dataclass
+class PrHistory:
+    repo: Path
+    feature: str
+    pr_merge: str
+    later: str
+    merge: str
+
+
+def pr_history(tmp: Path) -> PrHistory:
+    r"""Main adds the rule on a feature branch (F1, returning ``value``),
+    merges it through a pull request's merge commit, then changes it to
+    return ``value + 1`` (M4, main's tip); the package merges main's tip
+    onto the phase (its merge's first parent the checkpoint). HEAD at the
+    package's merge, the baseline written, nothing declared."""
+    repo, m0 = start(tmp)
+    target = repo / TARGET
+    git(repo, 'checkout', '-q', '-b', 'feature', m0)
+    target.write_text(target.read_text() + ADDED_SOURCE)
+    feature = commit(repo, 'Add a rule to the bridge')
+    git(repo, 'checkout', '-q', 'trunk')
+    commit(repo, 'Fix a typo (#2)')
+    git(
+        repo, 'merge', '-q', '--no-ff', '-m',
+        'Merge pull request #3 from feature', 'feature',
+    )  # fmt: skip
+    pr_merge = git(repo, 'rev-parse', 'HEAD')
+    source = target.read_text()
+    assert source.count(ADDED_SOURCE) == 1
+    target.write_text(
+        source.replace(
+            ADDED_SOURCE,
+            ADDED_SOURCE.replace('return value', 'return value + 1'),
+        )
+    )
+    later = commit(repo, 'Count one more (#4)')
+    git(repo, 'update-ref', MAIN_REF, later)
+    git(repo, 'checkout', '-q', '-b', 'lane', m0)
+    p0 = commit(repo, 'Land T2.0: the phase base')
+    git(repo, 'update-ref', f'refs/remotes/{BASE}', p0)
+    git(repo, 'merge', '-q', '--no-ff', '-m', 'T2.0c: merge main', later)
+    merge = git(repo, 'rev-parse', 'HEAD')
+    freeze.write(repo)
+    return PrHistory(repo, feature, pr_merge, later, merge)
+
+
+def said(repo: Path, sha: str) -> str:
+    return f'{sha} ' + git(repo, 'log', '-1', '--format=%s', sha)
+
+
+@PENDING
+def test_a_merge_inside_main_is_not_the_package_s_merge(
+    tmp_path: Path,
+) -> None:
+    r"""Exit 3 (review round 3): main merged the rule's pull request and
+    later changed the rule; the package merges main's tip, then changes
+    the rule back to the feature's version and declares the feature commit
+    its reason. Refused, naming the entry: only the package's own merge
+    onto the phase's first-parent history is compared, never a merge
+    inside main, which held that version. The twin (each entry declared
+    by the main commit that last changed it, no change of the package's)
+    passes first."""
+    h = pr_history(tmp_path)
+    added = f'{TARGET}::{ADDED}'
+    honest = {
+        module_key(): {REASON: said(h.repo, h.feature)},
+        added: {REASON: said(h.repo, h.later)},
+    }
+    declare(h.repo, honest)
+    commit(h.repo, 'T2.0c: the freeze declares what main changed')
+    code, text = run(h.repo)
+    assert code == 0, text
+    git(h.repo, 'reset', '-q', '--hard', h.merge)
+    target = h.repo / TARGET
+    target.write_text(
+        target.read_text().replace(
+            ADDED_SOURCE.replace('return value', 'return value + 1'),
+            ADDED_SOURCE,
+        )
+    )
+    # Not vacuous: the package's version is the one the PR merge held.
+    pr_text = git(h.repo, 'show', f'{h.pr_merge}:{TARGET}') + '\n'
+    assert ADDED_SOURCE in pr_text and ADDED_SOURCE in target.read_text()
+    freeze.write(h.repo)
+    commit(h.repo, 'T2.0c: the rule as the feature had it')
+    declare(
+        h.repo,
+        {
+            module_key(): {REASON: said(h.repo, h.feature)},
+            added: {REASON: said(h.repo, h.feature)},
+        },
+    )
+    commit(h.repo, 'T2.0c: the freeze declares it main')
+    code, text = run(h.repo)
+    assert code == 1 and added in text, text
 
 
 # --- exit 5: after the landing -------------------------------------------------------
