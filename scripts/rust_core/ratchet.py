@@ -8,12 +8,13 @@ r"""The ratchet: a candidate judged against its checkpoint (design,
 H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
 
     ratchet.py checkpoint [--repo DIR] (--base REV | --phase-push BEFORE)
-        [--epic REF]
-    ratchet.py check [--repo DIR] --checkpoint SHA [--protected-paths TEXT]
+        [--epic] [--epic-ref REF]
+    ratchet.py check [--repo DIR] --checkpoint SHA [--epic]
+        [--protected-paths TEXT]
         [--observations FILE]... [--effective-out FILE]
     ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
     ratchet.py effective [--repo DIR] (--base REV | --phase-push BEFORE)
-        [--epic REF] --out FILE
+        [--epic] [--epic-ref REF] --out FILE
     ratchet.py where [--repo DIR]
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
@@ -41,7 +42,7 @@ first checkpoint, the commit the phase branch was cut at from the epic
 branch ``rust-core``, its fork point ``git merge-base PHASE EPIC`` (PHASE
 ``origin/<phase branch>``, else the local branch, the phase branch as
 ``phases.py`` names it for CI's branch or the branch checked out; EPIC
-``--epic``, else ``origin/rust-core``, else ``rust-core``). The owner put
+``--epic-ref``, else ``origin/rust-core``, else ``rust-core``). The owner put
 that commit there, by merging the previous phase and committing to the
 epic branch, which is judged against the merged phase's last landing
 (``where`` below). Any other commit that is no landing commit, a phase's
@@ -73,12 +74,13 @@ checkpoint's files, read from git at ``--checkpoint``:
   checkpoint's register authorizes (:func:`in_this_change`, T1.29): an entry
   approved by an earlier landing authorized that landing's change, not
   every later one to the same case or base;
-- ``epic``: on a push to the epic branch (``GITHUB_EVENT_NAME`` push and
-  ``GITHUB_REF_NAME`` ``rust-core``), each commit after the checkpoint
-  that changes a protected path to what the head holds is named by an
-  owner-approved row of the checkpoint's own decisions (by a SHA prefix of
-  8 or more digits, or a range ``A..B``, in backticks), whatever its
-  subject or trailers, since no landing will (T2.0);
+- ``epic``: with ``--epic`` (the epic branch's head, as ``where`` names it
+  for a push to ``rust-core``), each commit after the phase merge that
+  brought the checkpoint in, and that merge, that changes a protected path
+  is named by an owner-approved row of the checkpoint's own decisions (by a
+  SHA prefix of 8 or more digits, or a range ``A..B``, in backticks),
+  whatever its subject or trailers, since no landing will
+  (:func:`check_epic`, T2.0; its threat model is honest drift);
 - ``register``: ``register.py validate``, with the checkpoint's register for
   never-reused IDs; entries added or changed are listed, ``approved_by:
   owner`` ones first, for the owner's check-ins;
@@ -135,8 +137,14 @@ it is in, from GitHub's environment, or nothing outside the phase branches
 and the epic branch (:func:`ci_base`): on a push to a phase branch
 (``rust-core-phase-N``, any N) ``--phase-push``, on a branch under one
 ``--base origin/<that phase branch>``, and on a push to ``rust-core``
-``--base`` the merged phase's last landing, so the epic branch is judged
-like a moved landing of that phase's head (T2.0).
+``--base`` the merged phase's last landing and ``--epic``, so the epic
+branch is judged like a moved landing of that phase's head, with rule
+``epic`` (T2.0). The landing is the second parent of a phase merge on the
+head's first-parent history, never a landing-shaped commit elsewhere, and
+its record must carry Reviewed-by (:func:`epic_merge`). ``--epic`` takes
+the base as given, never the head's own trailers, and refuses any base but
+that landing; a harness that predates it refuses the flag, so ``rust-core``
+holding T2.0 but judged by an older landing fails closed.
 
 The decisions the rules read (owner approvals of relaxations) are every
 phase's: each ``docs/design/rust-core/phase-N/decisions.md`` of the
@@ -205,7 +213,7 @@ def _phases() -> ModuleType:
 PHASES = _phases()
 #: A landing commit's subject, as land.py writes it.
 LANDING = re.compile(rf'Land ({PHASES.PACKAGE_ID.pattern}): ')
-#: The epic branch's ref the fork point is read from when ``--epic`` names
+#: The epic branch's ref the fork point is read from when ``--epic-ref`` names
 #: none: the remote's, else a local branch.
 EPIC_REFS = (f'refs/remotes/origin/{PHASES.EPIC}', f'refs/heads/{PHASES.EPIC}')
 #: An owner's approval, as a decisions row's status (its last column) reads
@@ -392,17 +400,33 @@ def landed_on(repo: Path, sha: str, base: str) -> str | None:
     return None
 
 
-def epic_checkpoint(repo: Path, sha: str) -> str | None:
-    r"""The merged phase's last landing as ``sha`` holds it (T2.0): the
-    second parent of the newest merge on ``sha``'s first-parent history,
-    ``sha`` included, whose second parent is a landing commit; None when
-    there is none."""
+def epic_merge(repo: Path, sha: str) -> tuple[str, str] | None:
+    r"""The newest phase merge ``sha``'s first-parent history holds (T2.0),
+    ``sha`` included: a merge whose second parent is a landing commit, and
+    that landing, the merged phase's last; None when there is none. Only a
+    merge's second parent counts, never a landing-shaped commit elsewhere
+    in the history, and the landing's record must carry Reviewed-by, as
+    every landing ``land.py`` makes does: one without it fails here, by
+    name, never giving way to an older merge."""
     out = git(repo, 'rev-list', '--first-parent', '--parents', sha)
     for line in out.splitlines():
-        parents = line.split()[1:]
+        merge, *parents = line.split()
         if len(parents) >= 2 and is_landing(repo, parents[1]):
-            return parents[1]
+            if not trailers(repo, parents[1]).get('Reviewed-by'):
+                raise Unreadable(
+                    f'the phase merge {merge[:12]} brings in {parents[1][:12]}, '
+                    'a landing record with no Reviewed-by: no reviewed '
+                    'landing to judge the epic branch against'
+                )
+            return merge, parents[1]
     return None
+
+
+def epic_checkpoint(repo: Path, sha: str) -> str | None:
+    r"""The merged phase's last landing as ``sha`` holds it
+    (:func:`epic_merge`); None when there is none."""
+    found = epic_merge(repo, sha)
+    return found[1] if found else None
 
 
 def epic_tip(repo: Path, epic: str | None) -> tuple[str, str] | None:
@@ -470,12 +494,37 @@ def resolve(
     phase_push: str | None = None,
     epic: str | None = None,
     phase: str | None = None,
+    epic_mode: bool = False,
 ) -> tuple[Checkpoint | None, list[str]]:
     r"""The candidate's checkpoint, or the problems that leave it none;
     ``epic`` the epic branch's ref and ``phase`` the phase branch
-    (:func:`phase_name` by default) the fork point is read from."""
+    (:func:`phase_name` by default) the fork point is read from.
+    ``epic_mode`` (``--epic``, which ``where`` prints for a push to the
+    epic branch): the candidate is the epic branch's head, judged against
+    ``base``, which must be the merged phase's last landing the head holds
+    (:func:`epic_merge`), whatever the head's own subject or trailers say."""
     candidate = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
     notes: list[str] = []
+    if epic_mode:
+        if base is None or phase_push is not None:
+            return None, ['--epic judges the epic branch against --base']
+        given = git(repo, 'rev-parse', f'{base}^{{commit}}').strip()
+        found_merge = epic_merge(repo, candidate)
+        if found_merge is None or found_merge[1] != given:
+            return None, [
+                f"--epic: the base {given[:12]} is not the merged phase's "
+                'last landing the head holds ('
+                + (found_merge[1][:12] if found_merge else 'none')
+                + ')'
+            ]
+        notes.append(
+            f"the epic branch, judged against the merged phase's last "
+            f'landing {given[:12]}'
+        )
+        bootstrap = (
+            Tree(repo, given).read('scripts/rust_core/ratchet.py') is None
+        )
+        return Checkpoint(given, given, candidate, bootstrap, notes), []
     # A base the run read from the live phase branch, which may move while
     # it runs, rather than one recorded in a commit (E131).
     live = phase_push is None
@@ -1476,18 +1525,6 @@ def check_relaxations(
             report.note(rule, f'{change}: approved by {decision}')
 
 
-def epic_run(environ: dict[str, str] | None = None) -> bool:
-    r"""The head judged is a push to the epic branch (T2.0): GitHub's
-    ``GITHUB_EVENT_NAME`` ``push`` and ``GITHUB_REF_NAME`` ``rust-core``,
-    the run's own, whatever the remote tip is now, so a replay of an older
-    push judges that push."""
-    environ = dict(os.environ) if environ is None else environ
-    return (
-        environ.get('GITHUB_EVENT_NAME') == 'push'
-        and environ.get('GITHUB_REF_NAME') == PHASES.EPIC
-    )
-
-
 #: A commit an owner's row names: a SHA prefix of at least 8 hex digits, or
 #: a range ``A..B`` (git's: the first-parent commits after A up to B), each
 #: in backticks.
@@ -1515,50 +1552,90 @@ def owner_named(repo: Path, decisions: str, commit: str) -> bool:
     return False
 
 
+#: git's empty tree, the parent a root commit's change is read against.
+EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+
+
+def changed_paths(repo: Path, before: str, after: str) -> list[str]:
+    r"""The paths ``after`` changes against ``before``, read NUL-separated
+    so a name past ASCII or holding a control character is its own, never
+    git's quoting."""
+    out = git(repo, 'diff', '--name-only', '--no-renames', '-z', before, after)
+    return [path for path in out.split('\0') if path]
+
+
 def check_epic(
     report: Report, repo: Path, checkpoint: Tree, head: str, decisions: str
 ) -> None:
-    r"""On a push to the epic branch, no landing will name a protected
-    change made after the checkpoint L, the merged phase's last landing
-    (T2.0, rule ``epic``): each commit in ``L..HEAD`` that changes a
-    protected path (as ``git log L..HEAD`` over the protected patterns
-    lists it) fails unless an owner-approved row of L's own decisions
-    names it. Nothing after L is a
-    landing here, whatever its subject or trailers: a later landing reaches
-    the epic branch only by the owner's merge, which makes it the next
-    checkpoint. The rows are L's alone, reviewed and landed, never the
-    head's, so no push approves itself."""
-    text = checkpoint.read(PROTECTED)
-    rules = patterns(text)
-    # Every commit in L..HEAD that changes a protected path, a change later
-    # undone included: git log over the protected patterns as pathspecs
-    # (history simplified, so a merge taking L's side brings in nothing),
-    # each commit's files held to the patterns exactly.
-    specs = [
-        (':(exclude,glob)' + line[1:])
-        if line.startswith('!')
-        else (':(glob)' + line)
-        for line in (raw.strip() for raw in (text or '').splitlines())
-        if line and not line.startswith('#')
-    ]
-    out = git(
-        repo,
-        'log',
-        '--cc',
-        '--name-only',
-        '--format=%x00%H',
-        f'{checkpoint.sha}..{head}',
-        '--',
-        *specs,
-    )
+    r"""Rule ``epic`` (T2.0), run on the epic branch's head (``--epic``,
+    which ``where`` prints for a push to ``rust-core``): no landing will
+    name a protected change made on the epic branch after the merged
+    phase's last landing L, the checkpoint, so an owner-approved row of L's
+    own decisions must name each commit that makes one.
+
+    The commits judged: what the phase merge M that brought L in (the
+    merge on the head's first-parent history whose second parent is L)
+    holds beyond L, each path the change of the epic-side commits that made
+    it (``L..M^1``, each against its first parent) or else of M itself; and
+    every commit after M (``git rev-list M..HEAD``), each against its first
+    parent, a merge included, so a merge taking a protected file from any
+    older parent is seen, and a change a later commit undoes still
+    counts. Nothing after L is a landing here, whatever
+    its subject or trailers: a later landing reaches the epic branch only
+    by the owner's merge, which makes it the next checkpoint. The rows are
+    L's alone, reviewed and landed, never the head's, so no push approves
+    itself.
+
+    Threat model (as decision E56(b) states it for the L0 guards): honest
+    drift. CI on ``rust-core`` runs the pushed head's own ``ci.yml`` and
+    ``gate.sh``, so a push crafted to evade the rule (changing either) can;
+    only the owner pushes ``rust-core``, and this rule catches an honest
+    protected change no reviewed landing names."""
+    rules = patterns(checkpoint.read(PROTECTED))
+    merge = None
+    for line in git(
+        repo, 'rev-list', '--first-parent', '--parents', head
+    ).splitlines():
+        parents = line.split()
+        if parents[2:3] == [checkpoint.sha]:
+            merge = parents[0]
+            break
+    if merge is None:
+        report.fail(
+            'epic',
+            f'the checkpoint {checkpoint.sha[:12]} is no landing a phase '
+            "merge on the head's first-parent history brings in",
+        )
+        return
     makers: dict[str, list[str]] = {}
-    for block in out.split('\0')[1:]:
-        lines = block.strip().splitlines()
-        if not lines:
-            continue
-        paths = [p for p in lines[1:] if p and protects(rules, p)]
+
+    def made(commit: str, paths: list[str]) -> None:
         if paths:
-            makers[lines[0]] = paths
+            makers.setdefault(commit, []).extend(paths)
+
+    def protected_between(before: str, after: str) -> list[str]:
+        return [
+            path
+            for path in changed_paths(repo, before, after)
+            if protects(rules, path)
+        ]
+
+    # The merge, for what it brings beyond L: each such path is the change
+    # of the commits on the epic branch's side that made it (each against
+    # its first parent), and the merge's own where none did.
+    brought = set(protected_between(checkpoint.sha, merge))
+    for commit in git(repo, 'rev-list', f'{checkpoint.sha}..{merge}^1').split():
+        parent = git(repo, 'rev-list', '--parents', '-n', '1', commit).split()
+        before = parent[1] if len(parent) > 1 else EMPTY_TREE
+        mine = [p for p in protected_between(before, commit) if p in brought]
+        made(commit, mine)
+    made(
+        merge,
+        sorted(brought - {p for paths in makers.values() for p in paths}),
+    )
+    # Every commit after the merge, a merge against its first parent.
+    for commit in git(repo, 'rev-list', f'{merge}..{head}').split():
+        made(commit, protected_between(f'{commit}^1', commit))
     for commit, paths in sorted(makers.items()):
         if owner_named(repo, decisions, commit):
             report.note(
@@ -1816,6 +1893,7 @@ def check(
     protected_text: str | None = None,
     bootstrap: bool = False,
     effective_out: Path | None = None,
+    epic: bool = False,
 ) -> Report:
     r"""Every rule's problems; ``effective_out`` receives the effective
     expectations (:func:`effective`) for the comparator."""
@@ -1877,7 +1955,7 @@ def check(
         )
         check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
-        if epic_run():
+        if epic:
             check_epic(report, repo, checkpoint, head, decisions)
         old_policy = _yaml(checkpoint.read(POLICY), POLICY)
         new_policy = _yaml(candidate.read(POLICY), POLICY)
@@ -2073,7 +2151,7 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     the push's previous tip (from the event file); on a push to a lane or
     another branch under one, ``--base`` that phase branch's remote tip; on
     a push to the epic branch, ``--base`` the merged phase's last landing
-    ``repo``'s ``HEAD`` holds (:func:`epic_checkpoint`; T2.0), so the epic
+    ``repo``'s ``HEAD`` holds and ``--epic`` (:func:`epic_merge`; T2.0), so the epic
     branch is judged like a moved landing of that phase's head, and with
     none it fails; with no CI environment (a local replay), ``--base`` the
     remote tip of the phase branch ``phases.phase_branch`` names for the
@@ -2098,7 +2176,7 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
                 f'{PHASES.EPIC} holds no merged phase: no merge on its '
                 'first-parent history has a landing commit as second parent'
             )
-        return f'--base {landing}'
+        return f'--base {landing} --epic'
     phase = PHASES.phase_of(ref)
     if phase is None:
         return ''
@@ -2133,7 +2211,8 @@ def main(argv: list[str] | None = None) -> int:
     where = point.add_mutually_exclusive_group(required=True)
     where.add_argument('--base')
     where.add_argument('--phase-push')
-    point.add_argument('--epic')
+    point.add_argument('--epic-ref')
+    point.add_argument('--epic', action='store_true')
     judge = commands.add_parser('check')
     judge.add_argument('--repo', type=Path, default=Path('.'))
     judge.add_argument('--checkpoint', required=True)
@@ -2141,6 +2220,7 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--bootstrap', action='store_true')
     judge.add_argument('--observations', type=Path, action='append', default=[])
     judge.add_argument('--effective-out', type=Path)
+    judge.add_argument('--epic', action='store_true')
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
     expect = commands.add_parser('effective')
@@ -2148,7 +2228,8 @@ def main(argv: list[str] | None = None) -> int:
     among = expect.add_mutually_exclusive_group(required=True)
     among.add_argument('--base')
     among.add_argument('--phase-push')
-    expect.add_argument('--epic')
+    expect.add_argument('--epic-ref')
+    expect.add_argument('--epic', action='store_true')
     expect.add_argument('--out', type=Path, required=True)
     take = commands.add_parser('accept')
     take.add_argument('--repo', type=Path, default=Path('.'))
@@ -2166,7 +2247,8 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.repo,
                 arguments.base,
                 arguments.phase_push,
-                arguments.epic,
+                arguments.epic_ref,
+                epic_mode=arguments.epic,
             )
             for problem in problems:
                 print(f'checkpoint: {problem}', file=sys.stderr)
@@ -2185,7 +2267,8 @@ def main(argv: list[str] | None = None) -> int:
                 arguments.repo,
                 arguments.base,
                 arguments.phase_push,
-                arguments.epic,
+                arguments.epic_ref,
+                epic_mode=arguments.epic,
             )
             if found is not None:
                 problems = write_effective(
@@ -2216,6 +2299,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.protected_paths,
             arguments.bootstrap,
             arguments.effective_out,
+            arguments.epic,
         )
     except Unreadable as error:
         print(f'ratchet: {error}\nratchet: FAIL')

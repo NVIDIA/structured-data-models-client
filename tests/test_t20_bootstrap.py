@@ -521,15 +521,25 @@ def epic_world(
     return {'work': work, 'shas': shas}
 
 
-def epic_check(
-    repo: Path, checkpoint: str, **environ: str
-) -> subprocess.CompletedProcess[str]:
+def epic_check(repo: Path, checkpoint: str) -> subprocess.CompletedProcess[str]:
+    r"""The ratchet's check in the epic mode, as ``where`` names it for a
+    push to rust-core (``--epic``), from no CI environment at all: a local
+    replay runs rule epic too."""
     return subprocess.run(
         [sys.executable, str(RATCHET), 'check', '--repo', '.',
-         '--checkpoint', checkpoint],
-        capture_output=True, text=True, check=False, cwd=repo,
-        env=env(GITHUB_EVENT_NAME='push', GITHUB_REF_NAME=EPIC, **environ),
+         '--checkpoint', checkpoint, '--epic'],
+        capture_output=True, text=True, check=False, cwd=repo, env=env(),
         stdin=subprocess.DEVNULL,
+    )  # fmt: skip
+
+
+def ratchet_run(
+    repo: Path, *arguments: str, **environ: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(RATCHET), *arguments],
+        capture_output=True, text=True, check=False, cwd=repo,
+        env=env(**environ), stdin=subprocess.DEVNULL,
     )  # fmt: skip
 
 
@@ -555,7 +565,9 @@ def test_where_names_the_merged_landing_and_a_named_change_passes(
         capture_output=True, text=True, check=False, cwd=work,
         env=env(GITHUB_EVENT_NAME='push', GITHUB_REF_NAME=EPIC),
     )  # fmt: skip
-    assert where.stdout.split() == ['--base', shas['L2']], where.stderr
+    assert where.stdout.split() == ['--base', shas['L2'], '--epic'], (
+        where.stderr
+    )
     done = epic_check(work, shas['L2'])
     assert done.returncode == 0, done.stdout
     assert f'{shas["U"][:12]}: 1 protected paths, named' in done.stdout
@@ -637,8 +649,8 @@ def test_a_landing_shaped_commit_after_the_checkpoint_is_judged(
 def test_an_older_push_replayed_is_judged_as_that_push(
     tmp_path: Path,
 ) -> None:
-    r"""Codex's round 2 P1-3: the rule follows the run (a push to
-    rust-core), not whether origin/rust-core is still that commit."""
+    r"""Codex's round 2 P1-3: the rule follows the run (``--epic``), not
+    whether origin/rust-core is still that commit."""
     built = epic_world(tmp_path, None)
     work, shas = built['work'], built['shas']
     git(work, 'checkout', '-q', '--detach', shas['M2'])
@@ -647,14 +659,143 @@ def test_an_older_push_replayed_is_judged_as_that_push(
     git(work, 'checkout', '-q', '--detach', shas['M2'])
     found = failures(epic_check(work, shas['L2']))
     assert any(shas['U'][:12] in x for x in found), found
-    # Control: off a push to rust-core there is no rule epic.
+    # Control: without --epic (a lane's run) there is no rule epic.
+    done = ratchet_run(work, 'check', '--repo', '.', '--checkpoint', shas['L2'])
+    assert not any('epic' in x for x in failures(done)), done.stdout
+
+
+@pytest.mark.parametrize('name', ['café.py', 'tab\there.py'])
+def test_a_protected_path_with_an_unusual_name_is_seen(
+    named: dict[str, Any], name: str
+) -> None:
+    r"""Codex's round 3 P1-1: a path git would quote (past ASCII, or a
+    control character) is read as itself and fails unnamed."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    bad = commit(
+        work, 'Handoff: a tool', write(f'scripts/rust_core/{name}', 'x\n')
+    )
+    found = failures(epic_check(work, shas['L2']))
+    assert any(
+        f'scripts/rust_core/{name}: changed on the epic branch by {bad[:12]}'
+        in x
+        for x in found
+    ), found
+
+
+def test_a_merge_taking_an_older_parent_s_protected_file_is_seen(
+    named: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 3 P2-1: a merge whose tree takes ratchet.py
+    from an older parent (Phase 1's last landing) changes it against its
+    first parent, and fails unnamed."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    git(
+        work, 'checkout', '-q', shas['L1'], '--', 'scripts/rust_core/ratchet.py'
+    )
+    tree = git(work, 'write-tree')
+    git(work, 'reset', '-q', '--hard', shas['M2'])
+    merge = git(
+        work, 'commit-tree', tree, '-p', shas['M2'], '-p', shas['L1'],
+        '-m', 'Merge an older harness',
+    )  # fmt: skip
+    git(work, 'checkout', '-q', '--detach', merge)
+    found = failures(epic_check(work, shas['L2']))
+    assert any(
+        f'scripts/rust_core/ratchet.py: changed on the epic branch by {merge[:12]}'
+        in x
+        for x in found
+    ), found
+
+
+def test_a_landing_shaped_head_never_chooses_its_own_base(
+    named: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 3 P1-1 (a): a head titled and trailered as a
+    landing on Phase 1's last landing is still judged, with --epic,
+    against the merged phase's last landing where names, and its change
+    fails; a base other than that landing is refused."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    commit(
+        work,
+        'Land T9.9: old base',
+        write('contract/protected-paths.txt', '# nothing\n'),
+        trailers={
+            'Reviewed-by': 'nobody',
+            'Protected-paths': 'contract/ scripts/',
+            'Base-SHA': shas['L1'],
+            'Checkpoint-SHA': shas['L1'],
+        },
+    )
+    where = ratchet_run(
+        work,
+        'where',
+        '--repo',
+        '.',
+        GITHUB_EVENT_NAME='push',
+        GITHUB_REF_NAME=EPIC,
+    )
+    assert where.stdout.split() == ['--base', shas['L2'], '--epic'], (
+        where.stderr
+    )
+    done = ratchet_run(work, 'checkpoint', '--repo', '.', *where.stdout.split())
+    assert done.stdout.split()[:1] == [shas['L2']], done.stdout + done.stderr
+    assert failures(epic_check(work, shas['L2']))
+    done = ratchet_run(
+        work, 'checkpoint', '--repo', '.', '--base', shas['L1'], '--epic'
+    )
+    assert done.returncode == 1, done.stdout
+    assert "is not the merged phase's last landing" in done.stderr
+
+
+def test_a_landing_record_without_reviewed_by_is_no_epic_base(
+    named: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 3 P1-1 (b): a landing-shaped commit with no
+    Reviewed-by, merged as a phase merge's second parent, is refused as
+    the epic branch's base, by name, never skipped for an older one."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['L2'])
+    fake = commit(
+        work,
+        'Land T9.9: fake',
+        write('contract/protected-paths.txt', '# nothing\n'),
+        trailers={'Base-SHA': shas['L2'], 'Checkpoint-SHA': shas['L2']},
+    )
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    git(work, 'merge', '-q', '--no-ff', '-m', 'Merge the fake', fake)
+    where = ratchet_run(
+        work,
+        'where',
+        '--repo',
+        '.',
+        GITHUB_EVENT_NAME='push',
+        GITHUB_REF_NAME=EPIC,
+    )
+    assert where.returncode == 1, where.stdout
+    assert 'a landing record with no Reviewed-by' in where.stdout + where.stderr
+
+
+def test_a_local_replay_through_the_gate_runs_rule_epic(
+    named: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 3 P3-2: gate.sh --epic, from no CI environment,
+    judges rule epic; the unnamed change fails the gate."""
+    work, shas = named['work'], named['shas']
+    git(work, 'checkout', '-q', '--detach', shas['M2'])
+    bad = commit(
+        work, 'Handoff: a tool', write('scripts/rust_core/other.py', 'x\n')
+    )
     done = subprocess.run(
-        [sys.executable, str(RATCHET), 'check', '--repo', '.',
-         '--checkpoint', shas['L2']],
+        [str(work / 'scripts/rust_core/gate.sh'), '--base', shas['L2'],
+         '--epic', '--only', 'ratchet'],
         capture_output=True, text=True, check=False, cwd=work, env=env(),
         stdin=subprocess.DEVNULL,
     )  # fmt: skip
-    assert not any('epic' in x for x in failures(done)), done.stdout
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert f'changed on the epic branch by {bad[:12]}' in done.stdout
 
 
 # --- a malformed phase setting is a named error (fix 1, P3) --------------------------

@@ -7,7 +7,7 @@
 # H3), minimal as T1.14 builds it: the candidate, this worktree's committed
 # HEAD, judged by its checkpoint's harness from the checkpoint's own worktree.
 #
-#   scripts/rust_core/gate.sh (--base REV | --phase-push BEFORE)
+#   scripts/rust_core/gate.sh (--base REV | --phase-push BEFORE) [--epic]
 #       [--protected-paths TEXT] [--run RUNNERS] [--observations FILE]...
 #       [--out DIR] [--no-l0]
 #       [--only CHECK | --locked HALF [--evidence DIR]
@@ -134,6 +134,7 @@ usage() {
 }
 
 where=()
+epic=()
 protected=()
 runs=''
 observations=()
@@ -167,6 +168,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       mkdir -p "$2" && out=$(cd "$2" && pwd); for_harness+=("$1" "$out"); shift 2 ;;
     --no-l0) l0=0; for_harness+=("$1"); shift ;;
+    # The epic branch's head, judged against --base, the merged phase's
+    # last landing, with ratchet.py's rule epic (T2.0; where prints it for
+    # a push to rust-core). A harness that predates it refuses it.
+    --epic) epic=(--epic); for_harness+=("$1"); shift ;;
     --only | --locked)
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       if [ "$1" = --only ]; then only=$2; else locked=$2; fi
@@ -313,7 +318,7 @@ if [ "$harness" = 0 ]; then
     exit 2
   fi
   resolved=$("$PYTHON" "$candidate/scripts/rust_core/ratchet.py" checkpoint \
-    --repo "$candidate" "${where[@]}") || exit 1
+    --repo "$candidate" "${where[@]}" "${epic[@]+"${epic[@]}"}") || exit 1
   read -r checkpoint _ kind <<<"$resolved"
   # The bootstrap only where the checkpoint's own tree has no ratchet.py
   # (T1.18): a ratchet that reads it otherwise does not skip the harness.
@@ -384,7 +389,7 @@ fi
 # --- the harness: $here judges $candidate ---------------------------------------
 
 resolved=$("$PYTHON" "$here/scripts/rust_core/ratchet.py" checkpoint \
-  --repo "$candidate" "${where[@]}") || exit 1
+  --repo "$candidate" "${where[@]}" "${epic[@]+"${epic[@]}"}") || exit 1
 read -r checkpoint base kind <<<"$resolved"
 head=$(git -C "$candidate" rev-parse HEAD)
 bootstrap=()
@@ -628,7 +633,7 @@ judge_ratchet() {
   fi
   "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
     --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
-    --effective-out "$scratch/effective.json" \
+    --effective-out "$scratch/effective.json" "${epic[@]+"${epic[@]}"}" \
     "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
 }
 want ratchet && step ratchet judge_ratchet
@@ -638,7 +643,7 @@ judge_compare() {
     prepare || return 1
     [ ${#given[@]} -gt 0 ] || { no_evidence; return 1; }
     "$PYTHON" "$here/scripts/rust_core/ratchet.py" effective --repo "$candidate" \
-      "${where[@]}" --out "$scratch/effective.json" || return 1
+      "${where[@]}" "${epic[@]+"${epic[@]}"}" --out "$scratch/effective.json" || return 1
   fi
   "$PYTHON" "$here/scripts/rust_core/compare.py" \
     --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
