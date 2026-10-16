@@ -1,47 +1,67 @@
 # Phase 2 decisions
 
-Decisions made for Phase 2, newest last.
+The owner's decisions for Phase 2, newest last.
+Under KO2-14 (Q-G9), this file records only the owner's own decisions; implementers' and the orchestrator's choices go in [design.md](design.md) and each package's `tracker-<ID>.md`.
 Phase 1's rows ([phase-1/decisions.md](../phase-1/decisions.md)) stay in force unless a row here changes them; cite them by ID, never copy them.
-Rows marked "approved by owner" record the owner's written answers; an agent never writes that status for itself (plan section 2, decision 12).
+A status `approved by owner <date>` records an answer the owner wrote; an agent never writes that status for itself (plan section 2, decision 12).
+A row the orchestrator proposes that the owner has not yet answered reads `orchestrator, owner to confirm`; work that depends on it proceeds as proposed until the owner answers.
 Only these wait for the owner: a new refusal of an input the reference accepts, relaxing a comparison rule, adding an exclusion, a new acceptance capability, register entries the reviewers can't approve, a third change to the locked checks, lifting a stop rule, and the phase's go and merge (handbook, "The owner").
-Each lane writes only in its own sub-table below, with IDs from its block; a row is at most 1,000 characters, with evidence in the package's notes.
-The design is updated in the same change as a row that changes it.
+A row is at most 1,000 characters; the design is updated in the same change as a row that changes it.
+Row IDs start `KO2-`: a capital letter, as `capture_check.py` and `coverage.py` read IDs, and a `2` so they never collide with Phase 1's (`C1`, `E1`, ...) once every phase's decisions file is read (T2.0).
 
-## Kickoff answers
+**Reference approvals.**
+A row approves a new reference commit when its status is the owner's approval as `ratchet.owner_approved` reads it (exactly `approved by owner YYYY-MM-DD`, optionally followed by ` (` or `; ` and a note that withdraws nothing) and its Decision cell begins `Reference: ` followed by the commit's full 40-hex SHA in backticks.
+T2.0e's ratchet rule accepts a replaced `contract/reference/<sha>.jsonl` only when the new file's name, `contract/reference-env.txt` and such a row name the same SHA; an abbreviated SHA, another SHA, or any other status does not count.
+T2.0e documents which tree's decisions it reads (the checkpoint's or the candidate's).
 
-The owner's answers to the questions in [design.md](design.md), "Owner questions".
-Rows `KO2-1` onward; none yet.
-Phase 2's row IDs carry `2-` so they never collide with Phase 1's (`C1`, `E1`, ...) once every phase's decisions file is read (T2.0), and start with a capital letter, as `capture_check.py` and `coverage.py` read row IDs.
+## Kickoff and `main` answers (2026-10-16)
 
-| # | Decision | Reason | Status |
-|---|---|---|---|
-
-## Lane A (rows A2-1 to A2-19)
-
-| # | Decision | Reason | Status |
-|---|---|---|---|
-
-## Lane B (rows B2-1 to B2-19)
+Sources: the owner's answers in the orchestrator's chat on 2026-10-16, to the T2.0 landing questions (Q30 to Q32, Q12), the kickoff page's questions 1 to 29 ("Kickoff questions: all as recommended except" questions 2, 3, 6, 13, 14 and 15), and the six audits of `main`'s 20 commits since fa0637d4.
+Quotes are the owner's words; "as recommended" means the kickoff page's recommendation, restated in the Decision cell.
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
-
-## Lane C (rows C2-1 to C2-19)
-
-| # | Decision | Reason | Status |
-|---|---|---|---|
-
-## Lane D (rows D2-1 to D2-19)
-
-| # | Decision | Reason | Status |
-|---|---|---|---|
-
-## Lane E (rows E2-1 to E2-19)
-
-| # | Decision | Reason | Status |
-|---|---|---|---|
-
-## Lane F (rows F2-1 to F2-19)
-
-| # | Decision | Reason | Status |
-|---|---|---|---|
+| KO2-1 | Reference: `6298913c3b66da9459bb605d0127f8493adaa1fc` is Phase 2's reference commit: `rust-core-reference` moved to it (b413e9ad plus `main`'s 20 commits to 327fda03, merged with no conflict, the determinism fixes kept), tagged `reference-baseline-6298913`; T2.0c re-records the reference and every vector file citing it, in one landing | K2 (kickoff question 13); the owner pushed the branch and the tag and wrote "approved: reference 6298913c" | approved by owner 2026-10-16 |
+| KO2-2 | The reference is re-recorded on the Linux orchestration machine, where every later comparison runs; the macOS `reference-baseline-*` tag stays as history, and the move of platform is the stated reason every line's identity changes | Audit question, record on Linux and keep the macOS tag: "Yes" | approved by owner 2026-10-16 |
+| KO2-3 | `main` is accounted for first: T2.0e (the gate rules) and T2.0c (`main` 327fda03 merged into the phase branch, the reference re-recorded, one landing) come before the rest of Phase 2 | K2 (13): "There have been LOTS of commits merged into main ... It's certainly better to account for these commits, and maybe we should even do it now as part of phase 2 planning before anything else. ... We should prioritize this, launch subagents to audit, and propose a plan." The audits ran and the plan was accepted | approved by owner 2026-10-16 |
+| KO2-4 | Q32: T2.0 is recorded on lane a's worktree by the two `git config` commands the owner ran | "Done" | approved by owner 2026-10-16 |
+| KO2-5 | Q30: one-time H2 stand-in: T2.0's own gate was judged with `bd44b342`'s harness, since the checkpoint held no harness that reads Phase 2 | "OK" | approved by owner 2026-10-16 |
+| KO2-6 | Q12 (K7): the owner merges T2.0's landing into `rust-core` with `--no-ff` as soon as it lands (done: `rust-core` at 3b81df85); the 13 handoff commits on `rust-core` after Phase 1's merge, 98ae9bd2 to 9604074a, are owner-authorized | "OK" | approved by owner 2026-10-16 |
+| KO2-7 | Q31: rule `epic` is tree equality of the protected paths: no direct protected commit on `rust-core`; the owner merges a phase branch into it with `--no-ff` only; `main` reaches `rust-core` only through a phase branch (a phase package merges `main` into the phase branch, as T2.0c does); a merge combining a direct epic edit with a landing's edit is refused; migration-plan.md's "updated from `main` at each slice gate" is reworded to match | "Yes" | approved by owner 2026-10-16 |
+| KO2-8 | Q-G1 (1): "one day" is 24 hours of wall clock with agents running overnight; preparation time does not count | As recommended | approved by owner 2026-10-16 |
+| KO2-9 | Q-G3 (2): two reviewers, a fresh Claude subagent and Codex, on every review round of every package, first rounds, fix rounds, confirmations and docs included; a round passes only when both approve the same SHA. Replaces the handbook's one-reviewer confirmations and closes E25's open point for Phase 2 and later | The owner, against the recommendation of one reviewer for confirmations: "I say no – do the two rounds, we want both agents to give signoff." | approved by owner 2026-10-16 |
+| KO2-10 | Q-G4 (3): a design-checkpoint review of the landed range every 4 or 5 landings, by both reviewers, against learnings.md; its corrections are their own package | The owner, against the recommendation of two checkpoints: "Every 4 or 5 packages is better" | approved by owner 2026-10-16 |
+| KO2-11 | Q-G6 (4): reviewers may approve a register entry of class (a) a reference crash becoming a named error or a correct answer, (b) a success with the same outcome, (c) an identical payload; (d) everything else goes to the owner, batched at every check-in | As recommended | approved by owner 2026-10-16 |
+| KO2-12 | Q-G7 (5): with several lanes, a check failing twice the same way goes to the owner while other lanes continue; a registry or quota error that passes on a rerun does not count | As recommended | approved by owner 2026-10-16 |
+| KO2-13 | Q-G8 (6): a new case lands in one landing with the code it judges, its expected results recorded from the reference and committed first, written by a different agent than the code's author (the package's test author, never the implementer) | The owner: "Yes we should add a new test case in one landing, but it should be written by different agent, i.e. not the author of the code. This way we're more likely to catch mistakes." | approved by owner 2026-10-16 |
+| KO2-14 | Q-G9 (7): designs of about 3 pages; decisions.md holds only the owner's decisions | As recommended | approved by owner 2026-10-16 |
+| KO2-15 | K1 (8): tooling beyond bug fixes (E49(a), E56(a)) for T2.0b, CI5 and CI6, and for T2.0e split out of T2.0b; each reviewed and landed alone | As recommended | approved by owner 2026-10-16 |
+| KO2-16 | K3 (9): a cache-warming workflow on `main`, the only change Phase 2 makes to `main` | As recommended | approved by owner 2026-10-16 |
+| KO2-17 | K4 (10): one tracker file per package | As recommended | approved by owner 2026-10-16 |
+| KO2-18 | K5 (11): the refusal census (T2.0d) and the offline L7 tool (T2.15) are new acceptance infrastructure | As recommended | approved by owner 2026-10-16 |
+| KO2-19 | Q2.1 (14): every S1 case runs on all three databases, DuckDB, SQLite and Postgres, in parallel GitHub Actions jobs, one per database; replaces the recommended subset | The owner: "We should run all cases on all three databases – but do it in parallel. We should leverage github actions CI for this." | approved by owner 2026-10-16 |
+| KO2-20 | Q2.2 (15): the pure-Rust host reads Postgres by replaying the reference's recorded fetch results, not through a Rust Postgres driver | The owner asked for a simpler explanation and has not answered yet; replay saves about half a day of risky work, and a real driver would prove more for that half day | orchestrator, owner to confirm |
+| KO2-21 | Q2.3 (16): the dataframe-engine comparison is waived, since Phase 1 reached parity on plain Arrow kernels; each new data algorithm gets a `dependencies.md`-style row | As recommended | approved by owner 2026-10-16 |
+| KO2-22 | Q2.4 (17): Phase 2 lifts the 35 of E92's 37 rules S1 reaches, each in the package the design names; `model` and `text_time_rules` are kept until Phase 4, provisionally: a non-zero real-data census count for either on any database goes back to the owner | As recommended | approved by owner 2026-10-16 |
+| KO2-23 | Q2.5 (18): unseeded SQLite sampling (`ORDER BY RANDOM()`) is compared on common inputs only | As recommended | approved by owner 2026-10-16 |
+| KO2-24 | Q2.6 (19): whether RS-6's approval covers the warehouse routes is decided in Phase 3 | As recommended | approved by owner 2026-10-16 |
+| KO2-25 | Q2.7 (20): ASan and LSan move to Phase 5's L8; expression columns are rendered in Phase 3 with metric views (their contract shape is in v26, KO2-39); the Postgres common-input comparison (H24) stays a gating check | As recommended | approved by owner 2026-10-16 |
+| KO2-26 | Q2.8 (21): L3 is the existing `differential.py`, about 200 seeds per database, with the held-out set's pass threshold | As recommended | approved by owner 2026-10-16 |
+| KO2-27 | Q2.9 (22): an accuracy benchmark runs only when a ranking or forecast result differs from the reference's, and only on real data | As recommended | approved by owner 2026-10-16 |
+| KO2-28 | Q-C (23): a census refusal outside E92's 37 is lifted by the package owning the code, or comes to the owner at the next check-in as owner-pending; it never waits for the gate | As recommended | approved by owner 2026-10-16 |
+| KO2-29 | K6 (24): L7's limits: the median scenario's CPU at most 1.0 times the reference's and every scenario's at most 1.1 times; import time at most the reference client's in the same cell; native library at most 1.25 times Phase 1's merged wheel; in-memory boundary overhead at most 5% of the run's CPU or 2 ms, whichever is larger | As recommended | approved by owner 2026-10-16 |
+| KO2-30 | Q-L7 (25): offline L7 in Phase 2, on recorded runs only | As recommended | approved by owner 2026-10-16 |
+| KO2-31 | Q-FX3 (26): FX-3 (one value over 2 GiB) is deferred to Phase 4 | As recommended | approved by owner 2026-10-16 |
+| KO2-32 | Q-W (27): the host wording rows G15, M4, FX-1 and FX-4 are fixed in Phase 2 (T2.14b) | As recommended | approved by owner 2026-10-16 |
+| KO2-33 | Q-M (28): from `main`'s update, keep the client's `pyarrow>=14.0.1`, take `main`'s other bounds (made precise by KO2-37), and match `main`'s two-path sampling and multi-call `predict`; its decimal part is replaced by KO2-35 | As recommended, then refined by the owner's audit answers | approved by owner 2026-10-16 |
+| KO2-34 | Java (29): deferred until S2 is switched for Python | As recommended | approved by owner 2026-10-16 |
+| KO2-35 | Decimals: the core keeps exact decimals end to end, never merges distinct keys, and lifts its three refusals (decimal class targets, decimal sums past 38 digits, decimal features a float64 can't hold exactly, each sent as its nearest value), so it answers everything `main` answers (T2.17); registered differences from `main`: an id with decimal places comes back as text; feature values exact where `main`'s are one unit in the last place off; lookups by decimal key correct where `main` merges keys | The owner: "we should aim to be better than main in general, not just aim for parity"; then, on this design: "Decimals: sure" | approved by owner 2026-10-16 |
+| KO2-36 | Column names: any name works. Step 1: every column is kept as data whatever its name (a dot, a backtick, a line break). Step 2: a query can name any column with backtick quoting, table and column carried separately, a doubled backtick inside a quoted name. Both in Phase 2 (T2.18), registered as differences from `main`, which leaves such a column out | The owner: "Preference is that column names shouldn't matter, since that implies code bug. But metric views are a different thing... but maybe we can engineer it better while keeping it simple"; then: "Odd column names: Yes sounds good" | approved by owner 2026-10-16 |
+| KO2-37 | Dependencies, revising E16: `pandas>=2.2.2` (`main`'s) wherever the epic names pandas; NumPy floor lowered from 1.26 to `>=1.23.5`, since DBR 14.3 and 15.4 and serverless 1 and 2 ship NumPy 1.23.5 and the install guide pins it (pandas itself still needs 1.26 on Python 3.12 and later); the client's `pyarrow>=14.0.1` kept; `main`'s PyYAML and Snowflake bounds and its unbounded pyarrow in the connectors taken; the floor CI cell, `wheel_smoke.py`'s floor and the release-contract test move with them in T2.0c | The owner: "numpy, sure. pandas: sure upgrade it." | approved by owner 2026-10-16 |
+| KO2-38 | Offline CI cells copy each promised Databricks runtime's preinstalled versions, six cells covering the ten runtimes, each running the documented install line (CI7); the live Databricks job matrix is re-run on the epic before it merges | The owner's dependency answer, with KO2-37 | approved by owner 2026-10-16 |
+| KO2-39 | Metric-view groundwork goes into Phase 2's single contract bump (T2.1b): the table source of design.md, simple and extensible; rendering its derived columns and filter, and converting views, stay in Phase 3 | The owner: "Yes, add to phase 2's contract update. This needs a lot of thought – we need to keep it simple and extensible. Simplicity and correct interfaces matter most." | approved by owner 2026-10-16 |
+| KO2-40 | aarch64 native client wheels are built and smoke-tested in Phase 2 (CI7) | "Yes" | approved by owner 2026-10-16 |
+| KO2-41 | The AdventureWorks notebook `main` deleted is kept as a frozen contract fixture for the test that reads it; `main`'s quickstart notebook may also be used | "Yes, but we still have the modified get started ipynb notebook in latest `main` and could also use that." | approved by owner 2026-10-16 |
+| KO2-42 | Release work (per-platform publishing, Rust in the licence inventory and SBOM, and the rest of design.md's Phase 5 note) waits for Phase 5, with that note | "Yes leave it for the end, but maybe make a note." | approved by owner 2026-10-16 |
+| KO2-43 | GitHub only: `main`'s `.gitlab-ci.yml` is left as `main` has it and is never made to build Rust | "We should only be using the structured-data-models-client library which is in github." | approved by owner 2026-10-16 |
+| KO2-44 | No fixes are made on `main` from Phase 2's audits; what they found is part of the epic's work | "Nah don't fix on main today, just part of our work" | approved by owner 2026-10-16 |

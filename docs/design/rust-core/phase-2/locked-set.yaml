@@ -1,0 +1,136 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Phase 2's locked acceptance checks (design.md, "Locked acceptance checks"),
+# as scripts/rust_core/gate.sh --locked 2a reads them from the judging
+# harness's tree. The half lists the 52 S1 cases, each run on DuckDB, SQLite
+# and Postgres (decision KO2-19); its steps beyond the runners, observations,
+# ratchet, compare, coverage, l0 and l1 every locked run makes; its numbered
+# checks and the steps each holds (check 9, the held-out run, is outside the
+# gate, and 12 is the every check); the L7 limits (KO2-29); and, per check
+# run in CI, the job-name patterns whose jobs must all have concluded
+# success on the judged run. T2.0's reader refuses this half by name until
+# T2.1a teaches it the steps census, coverage-s1, l3, l7 and ci and the keys
+# limits and ci. A protected path (contract/protected-paths.txt) from T2.0a's
+# landing: a change lands under its trailer, and a third change to the checks
+# is the owner's.
+format: sdm-locked-set/1
+halves:
+  2a:
+    cases:
+      - base.adventureworks
+      - base.adventureworks.churn
+      - base.adventureworks.color
+      - base.binary
+      - base.multiclass
+      - base.regression
+      - decimal.class-target-38-18
+      - decimal.feature-38-0-wide
+      - decimal.target-38-18
+      - edit.accepted-meaning-key-links
+      - edit.key-missing-column
+      - edit.key-time-column
+      - edit.leave-out-the-key
+      - edit.link-not-the-key
+      - edit.meaning-not-carried
+      - edit.meaning-unknown
+      - edit.time-column-not-a-time
+      - edit.time-column-text
+      - empty.entity-without-facts
+      - empty.fact-table
+      - empty.indices
+      - feature.bool
+      - key.decimal-18-0
+      - key.decimal-38-10
+      - key.declared-int32
+      - key.hugeint
+      - key.uint64-above-int64-max
+      - key.uint64-small
+      - key.uint8
+      - key.varchar
+      - key.varchar-large-buffers
+      - nested.fixed-array
+      - nested.list-int
+      - nested.map
+      - nested.struct
+      - nested.union
+      - null.feature-all-null
+      - null.some-foreign-keys
+      - null.some-times
+      - null.target-all-null
+      - refuse.unknown-column
+      - time.date
+      - time.feature-date-and-timestamp-with-null
+      - time.feature-interval
+      - time.feature-time-of-day
+      - time.text-declared
+      - time.text-iso-date
+      - time.text-one-bad-value
+      - time.text-us-date
+      - time.timestamp-ns
+      - time.timestamp-s
+      - time.timestamptz
+    steps: [inventory, seeded, census, coverage-s1, l3, l7, ci]
+    checks:
+      '1': [runners, observations, ratchet, compare, coverage, coverage-s1, l1, inventory, ci]
+      '2': [ratchet, census]
+      '3': [ci]
+      '4': [ci]
+      '5': [ci]
+      '6': [l3]
+      '7': [ratchet]
+      '8': [ci]
+      '10': [l0, seeded, ci]
+      '11': [l7]
+    every: '12'
+    limits:
+      statements: equal
+      cpu-median-ratio: 1.0
+      cpu-max-ratio: 1.1
+      import-time-ratio: 1.0
+      native-size-ratio: 1.25
+      native-size-baseline: 91a00319
+      boundary-overhead-fraction: 0.05
+      boundary-overhead-floor-ms: 2
+    ci:
+      '1':
+        - contract-python (ref-pandas3, duckdb*)
+        - contract-python (ref-pandas3, sqlite*)
+        - contract-python (ref-pandas3, postgres*)
+        - contract-python (dbr17-pandas2, duckdb*)
+        - contract-python (dbr17-pandas2, sqlite*)
+        - contract-python (dbr17-pandas2, postgres*)
+        - contract-python (floor-pandas2.2, duckdb*)
+        - contract-python (floor-pandas2.2, sqlite*)
+        - contract-python (floor-pandas2.2, postgres*)
+        - cross-host (duckdb*)
+        - cross-host (sqlite*)
+        - cross-host (postgres*)
+      '3':
+        - l4-goldens (duckdb*)
+        - l4-goldens (sqlite*)
+        - l4-goldens (postgres*)
+      '4':
+        - l5-conversion*
+      '5':
+        - rust-test*
+        - contract-python (ref-pandas3, duckdb*)
+        - contract-python (ref-pandas3, sqlite*)
+        - contract-python (ref-pandas3, postgres*)
+      '8':
+        - contract-python (*)
+        - cross-host (*)
+        - rust-lint
+      '10':
+        - rust-lint
+        - rust-test*
+        - wheel-smoke (*)
+        - wheel-smoke (aarch64*)
+        - installed-wheel
+        - runtime-install (dbr14.3*)
+        - runtime-install (dbr15.4*)
+        - runtime-install (dbr16.4*)
+        - runtime-install (dbr17.3*)
+        - runtime-install (serverless5*)
+        - runtime-install (serverless6*)

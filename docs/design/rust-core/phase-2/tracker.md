@@ -8,35 +8,40 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 
 | ID | Package | Lane | Status | Evidence | Notes |
 |---|---|---|---|---|---|
-| T2.0 | Tooling phase-aware, first checkpoint, rust-core's CI green | A | in progress | – | [tracker-T2.0.md](tracker-T2.0.md) |
-| T2.0a | Design, decisions, tracker; learnings 17-22 | – | in review | Rounds below | Judging data: the locked-set file |
-| T2.0b | Carried tooling rows, reference-replacement rule | A | not started | – | Waits for K1 |
-| T2.0c | Update from `main`, reference rerun | ref | not started | – | Waits for T2.0b and K2's pushes |
-| T2.0d | Refusal census | A | not started | – | Waits for K5; its first run (DuckDB) precedes Q2.4's answer; other backends unmeasured until T2.2 and T2.3 |
-| T2.1a | The S1 judging path | A | not started | – | |
-| T2.1b | Contract v26 | A | not started | – | |
+| T2.0 | Tooling phase-aware, first checkpoint, rust-core's CI green | A | landed | 292f8d8a; merged into `rust-core` as 3b81df85 (KO2-6) | [tracker-T2.0.md](tracker-T2.0.md) |
+| T2.0e | Gate rules for `main` first: the reference approval row, the bridge freeze's `main` reason, a merge of `main` landing | A | in progress | – | Split out of T2.0b (KO2-3, KO2-15) |
+| T2.0a | Design, decisions, tracker, locked-set file; learnings 17-22 | – | in review | Rounds below | Revised with the owner's answers (fix 12) |
+| T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | topic | in progress | – | Branch `rust-core-phase-2-main-merge`; waits for T2.0e and T2.0a to land |
+| T2.0d | Refusal census | H | not started | – | First run on DuckDB |
+| T2.0b | Carried tooling rows | H | not started | – | After T2.0e (both change `ratchet.py`) |
+| T2.1a | The S1 judging path, all cases on three databases | A | not started | – | |
+| T2.1b | Contract v26, with the table source | A | not started | – | |
 | T2.2 | SQLite | B | not started | – | |
-| T2.3 | Postgres | B | not started | – | |
+| T2.3 | Postgres | B | not started | – | Rust host by replay (KO2-20, owner to confirm) |
 | T2.4 | Full L4 and L5 | B | not started | – | |
 | T2.5 | Conformance kit | C | not started | – | |
 | T2.6 | In-memory fallback | C | not started | – | |
 | T2.7 | Non-SQL provider and swapped data layer | C | not started | – | |
 | T2.8a | Ranking, materialize side | D | not started | – | |
 | T2.8b | Ranking, predict side | D | not started | – | |
-| T2.8c | Multi-call `predict` | D | not started | – | `main`'s 1fc5a686 |
+| T2.8c | Multi-call `predict` | G | not started | – | `main`'s 1fc5a686; 6–8 h, beside T2.8a and T2.8b |
 | T2.9 | Forecasting | E | not started | – | |
 | T2.10 | PQL targets | E | not started | – | |
-| T2.13 | Query and option long tail | E | not started | – | Scope from Q2.4 |
+| T2.13 | Query and option long tail | D | not started | – | |
 | T2.12 | Schema rules | F | not started | – | `float_nan` first |
 | T2.11 | Sampling options | F | not started | – | |
+| T2.17 | Exact decimals | G | not started | – | KO2-35 |
+| T2.18 | Any column name | E | not started | – | KO2-36 |
+| T2.19 | Two-path sampling | F | not started | – | `main`'s eb6c68eb; first in lane F |
 | T2.14a | Bridge freeze widened | A | not started | – | |
 | T2.14b | Host clean-up | A | not started | – | |
 | T2.14c | Bridge freeze lowered | A | not started | – | |
-| T2.15 | Offline L7 | C | not started | – | Waits for Q-L7, K5 and K6 |
+| T2.15 | Offline L7 | C | not started | – | |
 | T2.16 | The slice gate | A | not started | – | |
 | HO2 | The new held-out set | orchestrator | not started | – | Not a landing; frozen after T2.1a |
-| CI5 | Faster CI | A | not started | – | Waits for K1 |
-| CI6 | Merge-queue landing | A | not started | – | Waits for K1 |
+| CI5 | Faster CI | H | not started | – | |
+| CI6 | Merge-queue landing | H | not started | – | |
+| CI7 | aarch64 wheels and runtime cells | H | not started | – | KO2-38, KO2-40 |
 
 ## Stop-rule counters
 
@@ -60,6 +65,7 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 | 9 | e852d2b8 | CHANGES REQUIRED (5 of 7 fixed; 0 P1, 2 P2, 4 P3) | CHANGES REQUIRED (0 P1, 1 P2, 3 P3) | 0 | 3 | Fix 9: the kit run against the Python providers in `contract-python (*)`, with seeded faults per host; the Postgres CI service moved into T2.1a with `SDM_REQUIRE_POSTGRES`; the `pyo3` tree check under `rust-test*`; the interim edit gate retired only with shown replacements; the landing count |
 | 10 | 6dcfcecf | CHANGES REQUIRED (8 of 10 fixed; 0 P1, 1 P2, 3 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 1 | Fix 10: the reference's and the core's SQLite and Postgres drivers installed in T2.1a's judging landing with the service, and a seeded unreachable-service fault; no service in `cross-host*`; the kit's two sides share one fixture and one answers file; check 5 names the jobs that run each side |
 | 11 | 6ba078b4 | APPROVE (0 P1, 0 P2, 3 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 0 | Both approve 6ba078b4. Closure fixes: check 5's single Python-kit cell justified; the Postgres-required tests named; the kit fixture's path. Then one closure check |
+| 12 | f6eb5f05 | – | APPROVE (closure check) | 0 | 0 | Fix 11's P3s confirmed; the design approved |
 
 ## Carried rows (plan section 8)
 
@@ -68,23 +74,31 @@ Each row is fixed in the package named, or closed by the decision named; T2.16 t
 | Row | Package or decision |
 |---|---|
 | FR2 P3-1 `float_nan` | T2.12, first |
-| G15, M4, FX-1, FX-4 | T2.14b if Q-W keeps them in Phase 2 |
+| G15, M4, FX-1, FX-4 | T2.14b (KO2-32) |
 | C1 | Closed: fixed at 47cdd99e (`tests/test_t132b_cell_claims.py`) |
 | C2, C5, C22, C28, G4, G10, U3, U4, U13, M5, FX-6, FR P3-7 (ratchet parts) | T2.0b |
 | C4 | CI5 |
 | C6, C18 | T2.1a |
 | C7, C11, G2 | The lane that next touches the file, else T2.16 |
 | C8, C9(1), C9(2), FX-2, M7, C16 (rest) | Test-author batch |
-| U14 | Closed in T2.0b's landing once both reviewers confirm no job pulls from a public registry (the CI images moved to ghcr.io, `ci.yml`), recorded as a lane A row |
+| U14 | Closed in T2.0b's landing once both reviewers confirm no job pulls from a public registry (the CI images moved to ghcr.io, `ci.yml`), recorded in `tracker-T2.0b.md` (KO2-14) |
 | M1, M2, M3 | T2.1b |
 | M9, G5 | T2.5 |
 | M10 | T2.8b |
 | G6, U12 | T2.2 |
 | G12, G16, G17, M8 | T2.1a |
 | M6 | T2.11 |
-| FX-3 | T2.12 if Q-FX3 keeps it in Phase 2 |
+| FX-3 | Phase 4 (KO2-31) |
 | FR P3-8 | T2.12 |
 | FR P3-2 | T2.14a |
 | FR P3-7 (packet parts) | T2.16 |
 | U1 | T2.13 |
 | G8 | Before any live rerun; T2.16 if live evidence is used |
+
+## Revisions after approval (T2.0a)
+
+Each revision is reviewed by both reviewers (KO2-9) before T2.0a lands.
+
+| Fix | What changed | Why |
+|---|---|---|
+| 12 | decisions.md: the owner's answers of 2026-10-16 as KO2-1 to KO2-44 (KO2-20, Q2.2, owner to confirm), the reference approval format T2.0e reads, and only owner rows from now on (KO2-14). design.md: `main` first (T2.0e, T2.0c); two reviewers every round, checkpoints every 4 or 5 landings, a case lands with its code by its test author; every case on all three databases in per-database CI jobs; new packages T2.17 (exact decimals), T2.18 (any column name), T2.19 (two-path sampling, early) and CI7 (aarch64 wheels, runtime cells); T2.8c resized and unchained from T2.8b; the table source in v26 (choice 12); the Phase 5 release note; lanes G and H; critical path about 49 to 50 hours, 34 landings; question Q-I. locked-set.yaml written whole, with per-database job patterns, aarch64 and the runtime cells. migration-plan.md: `main` reaches the epic only through a phase branch (KO2-7) and the floors of KO2-37. The handbook: two reviewers on confirmations (KO2-9) | The owner's answers to the kickoff questions and to the six audits of `main`'s 20 commits (KO2-1 to KO2-44) |
