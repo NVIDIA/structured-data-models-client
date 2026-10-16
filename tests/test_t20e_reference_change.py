@@ -1,0 +1,554 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""T2.0e's acceptance tests for exits 1, 2 and 5 (the independent test
+author's): the ratchet accepts a new reference recording only on the
+owner's recorded approval, an agent can't forge that approval, and the
+rule passes in its post-landing state.
+
+Each test runs ``ratchet.py``'s checks on a real git history, built as
+``tests/test_contract_ratchet.py`` builds it (its helpers, reused): the
+harness, cases, reference and register copied from this checkout and
+committed as landings, plus every other file of this checkout that cites
+the reference SHA in full outside ``docs/`` (the vector files the
+reference SHA consistency tests check, wherever they are), so the
+temporary repository holds every citation the real one does. A test lands
+an owner row in ``phase-2/decisions.md`` (the checkpoint, which every
+candidate also holds, so the tests stand whichever of the two the
+implementation reads), then commits a candidate that re-records the
+reference under a fake new SHA: the old file replaced by one named for the
+new SHA, its lines' identity moved to the new SHA, and every citation of
+the old SHA outside ``docs/`` (``reference-env.txt`` and the vector files)
+moved with it. ``docs/`` keeps the old SHA: it is history (Phase 1's
+evidence), which no consistency test checks.
+
+Every seeded fault is shown on a candidate whose unseeded twin passes, so
+a refusal is the seed's (the ratchet tests' rule).
+
+Exit 1: an owner row naming the full new SHA and the word "reference"
+admits the replacement; without one, today's refusal stays by name; the
+file's name, ``reference-env.txt`` and every vector file must agree, each
+disagreement named; the old file must be gone (one reference file); the new
+recording carries every case the old one did, a dropped case named; a case
+whose recording differs is named in the report for the reviewers.
+Exit 2 (seeded faults): a row without the SHA, a row naming another SHA, a
+row that is not an owner approval, an abbreviated SHA, a row without the
+word "reference", a row outside a ``phase-*/decisions.md``, two reference
+files left behind.
+Exit 5: after the change lands, the next package passes, the per-case rules
+hold the new recording, and the row does not admit a further replacement.
+
+Gating: the tests that need the feature are marked :data:`PENDING`, a
+strict xfail, so CI stays green until the implementation lands and turns
+red if one passes before it (a vacuous test). The implementer deletes the
+``PENDING`` marker (the one definition below) in the commit that makes them
+pass. The unmarked tests are controls that pass on the base and must keep
+passing.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import re
+import shutil
+import subprocess
+import sys
+from collections.abc import Callable
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+#: The marker the implementer deletes (see the module docstring).
+PENDING = pytest.mark.xfail(
+    strict=True,
+    reason='T2.0e: the owner-approved reference change is not implemented yet',
+)
+
+# --- the interface assumed (the implementer matches it, or asks) ---------------
+#
+#: Where the owner's approval is: a row of a phase's decisions file, read
+#: as ``ratchet.py`` reads every phase's (T2.0), its status the owner's
+#: approval as ``ratchet.owner_approved`` reads it, its text naming the
+#: full new reference SHA (40 hex) and the word "reference".
+DECISIONS = 'docs/design/rust-core/phase-2/decisions.md'
+HEADER = (
+    '# Phase 2 decisions (seeded by the T2.0e tests)\n\n'
+    '| # | Decision | Reason | Status |\n|---|---|---|---|\n'
+)
+APPROVED = 'approved by owner 2026-10-16'
+#: The refusal that stays, by name, when no row admits the change (today's
+#: ``check_reference`` text).
+REFUSAL = 'new reference commit'
+#: A problem is ``<rule>: <text>``; the reference rule's name.
+RULE = 'reference'
+# ---------------------------------------------------------------------------------
+
+NEW = '5a' * 20
+OTHER = '6c' * 20
+THIRD = '7d' * 20
+REFERENCE = 'contract/reference'
+ENV = 'contract/reference-env.txt'
+#: A vector file a consistency test checks (test_t132b_decimal_vectors.py).
+VECTORS = 'contract/decimal-vectors.json'
+#: A case of the recording, for the per-case seeds.
+CASE = 'base.regression'
+
+
+def _module(path: Path, name: str) -> ModuleType:
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The ratchet tests' helpers, under the name the other test files share.
+helpers = _module(ROOT / 'tests/test_contract_ratchet.py', 'ratchet_tests')
+ratchet = helpers.ratchet
+git, commit, land = helpers.git, helpers.commit, helpers.land
+
+
+def old_sha(repo: Path) -> str:
+    (path,) = (repo / REFERENCE).glob('*.jsonl')
+    return path.stem
+
+
+def citing(root: Path, sha: str) -> list[str]:
+    r"""The tracked files of ``root`` that cite ``sha`` in full, but
+    ``docs/`` (history) and the reference recordings themselves."""
+    done = subprocess.run(
+        ['git', '-C', str(root), 'grep', '-l', '-F', sha],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return sorted(
+        name
+        for name in done.stdout.splitlines()
+        if not name.startswith(('docs/', f'{REFERENCE}/'))
+    )
+
+
+def build(tmp: Path) -> tuple[Path, str]:
+    r"""The ratchet tests' repository, plus a landing that adds every file
+    of this checkout citing the reference SHA that it lacks, so it holds
+    every citation the real repository does."""
+    repo, _ = helpers.build(tmp)
+    old = old_sha(repo)
+    wanted = [name for name in citing(ROOT, old) if not (repo / name).exists()]
+
+    def add(r: Path) -> None:
+        for name in wanted:
+            (r / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / name, r / name)
+
+    return repo, land(repo, 'T1.16', add)
+
+
+@pytest.fixture(scope='module')
+def origin(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, str]:
+    return build(tmp_path_factory.mktemp('origin'))
+
+
+@pytest.fixture
+def repo(origin: tuple[Path, str], tmp_path: Path) -> Path:
+    source, landed = origin
+    tree = tmp_path / 'tree'
+    git(source, 'worktree', 'add', '-q', '--detach', str(tree), landed)
+    return tree
+
+
+def row(text: str, status: str = APPROVED, ident: str = 'P2E-901') -> str:
+    return f'| {ident} | {text} | The owner moved the reference | {status} |\n'
+
+
+def approval(sha: str) -> str:
+    r"""The row's text in the form assumed: the word and the full SHA."""
+    return (
+        f'The reference moves to `{sha}`: its recording replaces the '
+        'recorded one'
+    )
+
+
+def decisions(*rows: str, path: str = DECISIONS) -> Callable[[Path], None]:
+    def edit(repo: Path) -> None:
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        before = target.read_text() if target.is_file() else HEADER
+        target.write_text(before + ''.join(rows))
+
+    return edit
+
+
+def rerecord(
+    new: str,
+    *,
+    name: str | None = None,
+    keep_old: bool = False,
+    skip: tuple[str, ...] = (),
+    env: str | None = None,
+    change: Callable[[list[dict[str, Any]]], None] | None = None,
+) -> Callable[[Path], None]:
+    r"""The candidate's edit: the reference re-recorded at ``new``, its
+    file named ``name`` (``new``), the old file removed unless
+    ``keep_old``, every citation of the old SHA outside ``docs/`` moved to
+    ``new`` but those in ``skip``, ``reference-env.txt`` naming ``env``
+    when given, and ``change`` applied to the new recording's lines."""
+
+    def edit(repo: Path) -> None:
+        old = old_sha(repo)
+        source = repo / REFERENCE / f'{old}.jsonl'
+        lines = [
+            json.loads(line.replace(old, new))
+            for line in source.read_text().splitlines()
+        ]
+        if change is not None:
+            change(lines)
+        if not keep_old:
+            source.unlink()
+        (repo / REFERENCE / f'{name or new}.jsonl').write_text(
+            ''.join(json.dumps(line) + '\n' for line in lines)
+        )
+        for path in citing(repo, old):
+            if path in skip:
+                continue
+            target = repo / path
+            target.write_text(target.read_text().replace(old, new))
+        if env is not None:
+            target = repo / ENV
+            target.write_text(
+                re.sub(
+                    r'(?m)^reference: [0-9a-f]{40}$',
+                    f'reference: {env}',
+                    target.read_text(),
+                )
+            )
+
+    return edit
+
+
+def run(repo: Path, checkpoint: str) -> Any:
+    r"""The ratchet's report on HEAD, no observations, no trailer (the
+    protected paths are then notes, for the landing to name)."""
+    return ratchet.check(repo, checkpoint, [], None)
+
+
+def rules(problems: list[str]) -> set[str]:
+    return {problem.split(':', 1)[0] for problem in problems}
+
+
+def approved_checkpoint(repo: Path, *rows: str) -> str:
+    r"""The checkpoint: a landing adding ``rows`` (the owner's approval of
+    ``NEW`` when none are given) to ``phase-2/decisions.md``."""
+    return land(repo, 'T2.0d', decisions(*(rows or (row(approval(NEW)),))))
+
+
+def twin_passes(repo: Path, checkpoint: str) -> None:
+    r"""The unseeded twin: ``NEW`` re-recorded as the row approves passes,
+    then the worktree is back at the checkpoint for the seed."""
+    commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
+    found = run(repo, checkpoint).problems
+    assert found == [], found
+    git(repo, 'reset', '-q', '--hard', checkpoint)
+
+
+def refused_by_name(found: list[str]) -> bool:
+    return any(p.startswith(f'{RULE}:') and REFUSAL in p for p in found)
+
+
+# --- exit 1: the owner's row admits a new reference --------------------------------
+
+
+def test_without_a_row_the_refusal_stays_by_name(repo: Path) -> None:
+    r"""Control (exit 1, "without such a row, the current refusal stays,
+    by name"): a whole, consistent re-recording with no row is refused as
+    today. Passes on the base."""
+    checkpoint = git(repo, 'rev-parse', 'HEAD')
+    commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
+    assert refused_by_name(run(repo, checkpoint).problems)
+
+
+@PENDING
+def test_an_owner_row_naming_the_sha_admits_the_new_reference(
+    repo: Path,
+) -> None:
+    r"""Exit 1: the owner's row naming the full new SHA and "reference",
+    the new file named for it, ``reference-env.txt`` and every vector file
+    citing it, the old file gone: no problem."""
+    checkpoint = approved_checkpoint(repo)
+    commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
+    report = run(repo, checkpoint)
+    assert report.problems == [], report.problems
+    assert [p.name for p in (repo / REFERENCE).iterdir()] == [f'{NEW}.jsonl']
+
+
+def test_the_old_sha_is_not_a_new_reference(repo: Path) -> None:
+    r"""Exit 1, "the new SHA is not the old one": a row approving the old
+    SHA waives nothing; a changed line of the recording it names is still
+    judged case by case. Control: passes on the base."""
+    old = old_sha(repo)
+    checkpoint = approved_checkpoint(repo, row(approval(old)))
+    twin = rerecord(old, change=lambda lines: None)
+    commit(repo, 'T2.0c: identity only', twin)
+    assert run(repo, checkpoint).problems == []
+    git(repo, 'reset', '-q', '--hard', checkpoint)
+
+    def moved(lines: list[dict[str, Any]]) -> None:
+        line = next(x for x in lines if x['case'] == CASE)
+        line['outcome']['stage'] = 'materialize'
+
+    commit(repo, 'T2.0c: a line changed', rerecord(old, change=moved))
+    found = run(repo, checkpoint).problems
+    assert any(
+        p.startswith(f'{RULE}: {CASE}: its line changed') for p in found
+    ), found
+
+
+@PENDING
+@pytest.mark.parametrize(
+    ('seed', 'named'),
+    [
+        ('reference-env.txt not moved', ENV),
+        ('reference-env.txt names another SHA', ENV),
+        ('a vector file not moved', VECTORS),
+        ('the file named for another SHA', OTHER),
+    ],
+)
+def test_every_citation_agrees_or_is_named(
+    repo: Path, seed: str, named: str
+) -> None:
+    r"""Exit 1: the file's name, ``reference-env.txt`` and every vector
+    file name the approved SHA; a disagreement is refused, naming the file
+    (or the SHA the file is named for)."""
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+    edit = {
+        'reference-env.txt not moved': rerecord(NEW, skip=(ENV,)),
+        'reference-env.txt names another SHA': rerecord(NEW, env=OTHER),
+        'a vector file not moved': rerecord(NEW, skip=(VECTORS,)),
+        'the file named for another SHA': rerecord(NEW, name=OTHER),
+    }[seed]
+    commit(repo, f'T2.0c: {seed}', edit)
+    found = run(repo, checkpoint).problems
+    assert any(named in p for p in found), found
+
+
+@PENDING
+def test_a_case_the_new_recording_drops_is_named(repo: Path) -> None:
+    r"""Exit 1, "nothing silently disappears": the new recording carries
+    every case the old one did; a dropped case is refused by its ID."""
+    checkpoint = approved_checkpoint(repo)
+    twin_passes(repo, checkpoint)
+
+    def drop(lines: list[dict[str, Any]]) -> None:
+        lines.remove(next(x for x in lines if x['case'] == CASE))
+
+    commit(repo, 'T2.0c: a case dropped', rerecord(NEW, change=drop))
+    found = run(repo, checkpoint).problems
+    assert any(CASE in p for p in found), found
+
+
+@PENDING
+def test_a_case_whose_recording_differs_is_listed_for_the_reviewers(
+    repo: Path,
+) -> None:
+    r"""Exit 1: across a reference change the per-case comparison does not
+    apply, but every case whose recording differs from the old one (other
+    than its identity) is named in the ratchet's report, so the reviewers
+    see it; a case recorded alike is not."""
+    checkpoint = approved_checkpoint(repo)
+
+    def moved(lines: list[dict[str, Any]]) -> None:
+        line = next(x for x in lines if x['case'] == CASE)
+        line['outcome']['stage'] = 'materialize'
+
+    commit(repo, 'T2.0c: one answer moved', rerecord(NEW, change=moved))
+    report = run(repo, checkpoint)
+    said = report.problems + report.notes
+    assert any(CASE in p for p in said), said
+    # Not vacuous: the identity-only cases are not listed as differing.
+    unchanged = next(
+        line['case']
+        for line in map(
+            json.loads,
+            (repo / REFERENCE / f'{NEW}.jsonl').read_text().splitlines(),
+        )
+        if line['case'] != CASE
+    )
+    assert not any(
+        re.search(rf'\b{re.escape(unchanged)}\b', p) for p in said
+    ), said
+
+
+# --- exit 2: the approval can't be forged ------------------------------------------
+
+#: Each seeded row, and the rows it stands for.
+FORGED = {
+    'a row without the SHA': row(
+        'The reference moves to the new recording of rust-core-reference'
+    ),
+    'a row naming another SHA': row(approval(OTHER)),
+    'an abbreviated SHA (8)': row(approval(NEW[:8])),
+    'an abbreviated SHA (12)': row(approval(NEW[:12])),
+    'an abbreviated SHA (39)': row(approval(NEW[:39])),
+    'a row without the word reference': row(f'The recording moves to `{NEW}`'),
+    'a proposed row': row(approval(NEW), status='proposed'),
+    "a reviewer's approval": row(
+        approval(NEW), status='approved by reviewer 2026-10-16'
+    ),
+    "an orchestrator's row, owner to confirm": row(
+        approval(NEW), status='orchestrator, owner to confirm'
+    ),
+    'not approved by the owner': row(
+        approval(NEW), status='not approved by owner 2026-10-16'
+    ),
+    'an approval withdrawn': row(
+        approval(NEW), status='approved by owner 2026-10-16; withdrawn'
+    ),
+    'the owner approving in the text, not the status': row(
+        approval(NEW) + ', approved by owner 2026-10-16', status='proposed'
+    ),
+}
+
+
+@PENDING
+@pytest.mark.parametrize('seed', sorted(FORGED))
+def test_a_row_that_is_not_the_owner_s_approval_admits_nothing(
+    repo: Path, seed: str
+) -> None:
+    r"""Exit 2's seeded faults: with only such a row, the replacement is
+    refused by today's name. The twin, the owner's row naming the SHA,
+    passes on the same history."""
+    good = approved_checkpoint(repo)
+    twin_passes(repo, good)
+    git(repo, 'reset', '-q', '--hard', 'HEAD~2')
+    checkpoint = approved_checkpoint(repo, FORGED[seed])
+    commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
+    found = run(repo, checkpoint).problems
+    assert refused_by_name(found), found
+
+
+@PENDING
+def test_a_row_outside_a_phase_decisions_file_admits_nothing(
+    repo: Path,
+) -> None:
+    r"""Exit 2: the owner's row counts only in a ``phase-*/decisions.md``
+    (where ``ratchet.py`` reads every owner approval, T2.0); the same row
+    in another file of the design admits nothing."""
+    good = approved_checkpoint(repo)
+    twin_passes(repo, good)
+    git(repo, 'reset', '-q', '--hard', 'HEAD~2')
+    checkpoint = land(
+        repo,
+        'T2.0d',
+        decisions(
+            row(approval(NEW)),
+            path='docs/design/rust-core/phase-2/notes.md',
+        ),
+    )
+    commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
+    assert refused_by_name(run(repo, checkpoint).problems)
+
+
+@PENDING
+def test_two_reference_files_left_behind_are_refused(repo: Path) -> None:
+    r"""Exit 2's seeded fault: the new recording added beside the old one
+    (two reference files) is refused, naming the old file."""
+    checkpoint = approved_checkpoint(repo)
+    old = old_sha(repo)
+    twin_passes(repo, checkpoint)
+    commit(repo, 'T2.0c: both recordings', rerecord(NEW, keep_old=True))
+    assert len(list((repo / REFERENCE).glob('*.jsonl'))) == 2
+    found = run(repo, checkpoint).problems
+    assert any(old in p and RULE in rules([p]) for p in found), found
+
+
+# --- exit 5: the post-landing state ------------------------------------------------
+
+
+@pytest.fixture
+def landed(repo: Path) -> tuple[Path, str]:
+    r"""The phase branch after the change landed: the owner's row, then
+    the re-recording, each landed (the second the checkpoint)."""
+    approved_checkpoint(repo)
+    return repo, land(repo, 'T2.0c', rerecord(NEW))
+
+
+def test_the_next_package_passes_after_the_landing(
+    landed: tuple[Path, str],
+) -> None:
+    r"""Exit 5: the phase branch at the landing judges the next package
+    (no reference change) with no problem; the landing itself, judged
+    against its own landed state, has none either. Control: passes on
+    the base (the landing is committed here, not judged), and must keep
+    passing."""
+    repo, checkpoint = landed
+    assert run(repo, checkpoint).problems == []
+    commit(repo, 'T2.1: the next package')
+    assert run(repo, checkpoint).problems == []
+
+
+@pytest.mark.parametrize('seed', ['a line changed', 'a line removed'])
+def test_the_per_case_rules_hold_the_new_recording(
+    landed: tuple[Path, str], seed: str
+) -> None:
+    r"""Exit 5: after the landing, the new recording is the one the
+    per-case rules hold: a line changed or removed is refused by case.
+    Control: passes on the base, and must keep passing."""
+    repo, checkpoint = landed
+
+    def edit(r: Path) -> None:
+        path = r / REFERENCE / f'{NEW}.jsonl'
+        lines = [json.loads(x) for x in path.read_text().splitlines()]
+        line = next(x for x in lines if x['case'] == CASE)
+        if seed == 'a line changed':
+            line['outcome']['stage'] = 'materialize'
+        else:
+            lines.remove(line)
+        path.write_text(''.join(json.dumps(x) + '\n' for x in lines))
+
+    commit(repo, f'T2.1: {seed}', edit)
+    found = run(repo, checkpoint).problems
+    assert any(p.startswith(f'{RULE}: {CASE}: its line') for p in found), found
+
+
+@PENDING
+def test_a_spent_approval_admits_no_further_reference(
+    landed: tuple[Path, str],
+) -> None:
+    r"""Exit 5 and exit 2: the landed row approves ``NEW`` only; a further
+    replacement to another SHA, every citation moved, is refused by name,
+    and passes once the owner's row names that SHA."""
+    repo, checkpoint = landed
+    commit(repo, 'T2.1: another reference', rerecord(THIRD))
+    assert refused_by_name(run(repo, checkpoint).problems)
+    git(repo, 'reset', '-q', '--hard', checkpoint)
+    again = land(
+        repo, 'T2.0f', decisions(row(approval(THIRD), ident='P2E-902'))
+    )
+    commit(repo, 'T2.1: another reference', rerecord(THIRD))
+    found = run(repo, again).problems
+    assert found == [], found
+
+
+def test_the_copied_history_cites_the_old_sha_where_the_real_one_does(
+    origin: tuple[Path, str],
+) -> None:
+    r"""Not vacuous: the temporary repository cites the reference SHA in
+    every file this checkout does (outside ``docs/``), the vector file
+    the seeds name and ``reference-env.txt`` among them, and the seeded
+    SHAs are none of the real one."""
+    source, _ = origin
+    old = old_sha(source)
+    assert citing(source, old) == citing(ROOT, old)
+    assert {VECTORS, ENV} <= set(citing(source, old))
+    assert old not in (NEW, OTHER, THIRD)
