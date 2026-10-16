@@ -48,6 +48,7 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 
 | Round | SHA | Claude subagent | Codex | P1 | P2 | What changed |
 |---|---|---|---|---|---|---|
+| 1 | 77c8c8c3 | CHANGES REQUIRED (1 P1, 10 P2, 14 P3) | CHANGES REQUIRED (2 P1, 4 P2, 2 P3) | 3 | 14 | Fix 1 (1069a5c0): the refusal census (T2.0d) and offline L7 (T2.15) added as packages and locked checks; coverage and `Request` pickles in the checks; the reference-replacement rule (T2.0b) and a second update at the gate; multi-call `predict` (T2.8c) and its vocabulary in v26; the freeze widened alone (T2.14a); HO2; the key-type matrix in T2.2 and T2.3; letter-led decision IDs; Q2.4 over 37 rules; `Q-G<n>` names; the P3s |
 
 ## Carried rows (plan section 8)
 
