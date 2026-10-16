@@ -641,6 +641,19 @@ def _run(python: str, argv: list[str]) -> tuple[list[str], int]:
     return done.stdout.strip().splitlines(), done.returncode
 
 
+def _where(package: Path) -> str:
+    r"""Where a route's ``sdm_client`` is, with no machine's path in it:
+    relative to the checkout it is a source tree of (the one holding
+    ``packages/``), or from the ``site-packages`` it is installed in."""
+    parts = package.parts
+    if 'site-packages' in parts:
+        return '/'.join(parts[parts.index('site-packages') :])
+    for parent in package.parents:
+        if (parent / 'packages').is_dir():
+            return package.relative_to(parent).as_posix()
+    return package.name
+
+
 def _environment(python: str) -> dict[str, str]:
     lines, _ = _run(python, ['environment'])
     loaded: dict[str, str] = json.loads(lines[-1])
@@ -662,7 +675,7 @@ def main() -> int:
                         'pandas': pd.__version__,
                         'pyarrow': pa.__version__,
                         'duckdb': duckdb.__version__,
-                        'sdm_client': str(Path(sdm_client.__file__).parent),
+                        'sdm_client': _where(Path(sdm_client.__file__).parent),
                     }
                 )
             )
