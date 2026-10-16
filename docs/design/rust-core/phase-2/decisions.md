@@ -10,7 +10,7 @@ A row is at most 1,000 characters; the design is updated in the same change as a
 Row IDs start `KO2-`: a capital letter, as `capture_check.py` and `coverage.py` read IDs, and a `2` so they never collide with Phase 1's (`C1`, `E1`, ...) once every phase's decisions file is read (T2.0).
 
 **Reference approvals.**
-A row approves a new reference commit when its status is the owner's approval as `ratchet.owner_approved` reads it (exactly `approved by owner YYYY-MM-DD`, optionally followed by ` (` or `; ` and a note that withdraws nothing) and its Decision cell begins `Reference: ` followed by the commit's full 40-hex SHA in backticks.
+A row approves a new reference commit when its status is the owner's approval as `ratchet.owner_approved` reads it (exactly `approved by owner YYYY-MM-DD`, optionally followed by ` (` or `; ` and a note that withdraws nothing) and its Decision cell holds the word "reference" and the commit's full 40-hex SHA in backticks (KO2-1 begins `Reference: ` with it).
 T2.0e's ratchet rule accepts a replaced `contract/reference/<sha>.jsonl` only when the new file's name, `contract/reference-env.txt` and such a row name the same SHA; an abbreviated SHA, another SHA, or any other status does not count.
 The ratchet reads these rows only from the checkpoint's decisions files (the orchestrator's decision, design.md), so a reference approval lands before the landing that replaces the reference.
 
@@ -45,7 +45,7 @@ Quotes are the owner's words; "as recommended" means the kickoff page's recommen
 | KO2-22 | Q2.4 (17): Phase 2 lifts the 35 of E92's 37 rules S1 reaches, each in the package the design names; `model` and `text_time_rules` are kept until Phase 4 | As recommended (the page showed no counts; the census, T2.0d, measures them) | approved by owner 2026-10-16 |
 | KO2-23 | Q2.5 (18): unseeded SQLite sampling (`ORDER BY RANDOM()`) is compared on common inputs only | As recommended | approved by owner 2026-10-16 |
 | KO2-24 | Q2.6 (19): whether RS-6's approval covers the warehouse routes is decided in Phase 3 | As recommended | approved by owner 2026-10-16 |
-| KO2-25 | Q2.7 (20): ASan and LSan move to Phase 5's L8; expression columns are rendered in Phase 3 with metric views (their contract shape is in v26, KO2-39); the Postgres common-input comparison (H24) stays a gating check | As recommended | approved by owner 2026-10-16 |
+| KO2-25 | Q2.7 (20): ASan and LSan move to Phase 5's L8; expression columns move to Phase 3 if only metric views need them; the Postgres common-input comparison (H24) stays a gating check | As recommended | approved by owner 2026-10-16 |
 | KO2-26 | Q2.8 (21): L3 is the existing `differential.py`, about 200 seeds per database, with the held-out set's pass threshold | As recommended | approved by owner 2026-10-16 |
 | KO2-27 | Q2.9 (22): an accuracy benchmark runs only when a ranking or forecast result differs from the reference's, and only on real data | As recommended | approved by owner 2026-10-16 |
 | KO2-28 | Q-C (23): a census refusal outside E92's 37 is lifted by the package owning the code, or comes to the owner at the next check-in as owner-pending; it never waits for the gate | As recommended | approved by owner 2026-10-16 |
