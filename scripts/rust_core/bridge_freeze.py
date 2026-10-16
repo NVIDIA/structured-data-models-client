@@ -54,13 +54,15 @@ for it are gone), must be declared in ``bridge_changes.json`` under
   is not an ancestor of the merge base (a commit the base already holds was
   judged when it came in), is brought in by a merge commit of the candidate
   (reached from a parent other than its first), changes the entry against
-  its first parent, and left the entry exactly as the candidate holds it (by
-  its fingerprint; an entry gone, gone there too). ``main`` is read from the
-  remote-tracking ref as it stands: CI's checkout fetches it, so CI's run,
-  the evidence a landing stands on, reads the remote's ``main``; a local run
-  reads the ref as last fetched. Review judges, as for the others, whether
-  ``main``'s rule belongs in the bridge; the port of a ``main`` rule into
-  Rust is its own package's ``moved``.
+  its first parent, and the candidate holds the entry as that merge commit
+  holds it (by its fingerprint; an entry gone, gone there too): ``main``'s
+  change merged with the phase's, so an entry both changed passes, and a
+  change the candidate made after the merge does not. ``main`` is read from
+  the remote-tracking ref as it stands: CI's checkout fetches it, so CI's
+  run, the evidence a landing stands on, reads the remote's ``main``; a
+  local run reads the ref as last fetched. Review judges, as for the others,
+  whether ``main``'s rule belongs in the bridge; the port of a ``main`` rule
+  into Rust is its own package's ``moved``.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale), unless the merge base's declarations hold it as it stands,
@@ -898,15 +900,17 @@ def main_judge(
         merges = ask(
             'rev-list', '--merges', '--parents', f'{merge_base}..HEAD'
         ).stdout.splitlines()
-        if not any(
-            len(parents := line.split()[1:]) >= 2
+        bringing = [
+            line.split()[0]
+            for line in merges
+            if len(parents := line.split()[1:]) >= 2
             and ask('merge-base', '--is-ancestor', sha, parents[0]).returncode
             and any(
                 ask('merge-base', '--is-ancestor', sha, other).returncode == 0
                 for other in parents[1:]
             )
-            for line in merges
-        ):
+        ]
+        if not bringing:
             return (
                 f'{sha[:12]} is not brought in by a merge of the candidate '
                 '(a commit main holds reaches the phase branch only by the '
@@ -923,13 +927,17 @@ def main_judge(
         ).stdout.split('\0')
         if rel not in changed:
             return f'{sha[:12]} does not change {rel}'
-        made = entry_at(sha, rel, name)
-        if made == entry_at(parent.stdout.strip(), rel, name):
+        if entry_at(sha, rel, name) == entry_at(
+            parent.stdout.strip(), rel, name
+        ):
             return f'{sha[:12]} does not change the entry {name}'
-        if made != now:
+        # The entry as the merge bringing the commit in holds it: main's
+        # change merged with the phase's, which no main commit alone made.
+        if not any(entry_at(merge, rel, name) == now for merge in bringing):
             return (
-                f'the entry {name} is not as {sha[:12]} left it: the '
-                'candidate holds a version main did not make'
+                f'the entry {name} is not as the merge of main bringing '
+                f'{sha[:12]} in ({bringing[0][:12]}) holds it: the candidate '
+                'changed it after the merge'
             )
         return None
 

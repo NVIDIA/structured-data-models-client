@@ -316,7 +316,6 @@ def module_of(h: History, rev: str) -> str:
     return freeze.measure_text(text, Path(TARGET))[freeze.MODULE]
 
 
-@PENDING
 @pytest.mark.parametrize('edit', sorted(PHASE_EDITS))
 def test_an_entry_the_phase_and_main_both_changed_takes_main_s_reason(
     tmp_path: Path, edit: str

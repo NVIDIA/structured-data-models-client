@@ -160,22 +160,21 @@ package that re-records. Then, each named when it fails: the file is exactly
 recorded reference's name; it is the only file added, and the only one left
 (the old one removed); ``contract/reference-env.txt`` names ``NEW`` in its
 one ``reference:`` line; no file outside ``docs/`` (history) and
-``contract/reference/`` cites the old SHA in full; each file that cited it
-at the checkpoint is still there, and each of its fields that held the old
-SHA, by path (on every line of a JSON-lines file), holds ``NEW`` (the fields
-the reference SHA consistency tests read: ``reference``,
-``recorded.reference``, ``identity.reference.commit.sha``), a text field
-``NEW`` and not the old SHA; every line of the new file, read as written
-before any is indexed, names a case, names it once (a second line of a case
-is refused by file and line) and records ``NEW`` as its reference commit;
-and the new recording carries every case the old one did, but one whose
-removal is approved. The per-case comparison does not apply across the
-change: instead every case whose semantic projection differs from its
-recorded line is listed in the notes, by case and with the fields that
-differ (named, never their values), for the reviewers, with the move itself
-and the row approving it; a case recorded alike is not listed. The landed
-file is then the one the per-case rules hold, and the row admits no further
-file: another commit needs its own row.
+``contract/reference/`` cites the old SHA in full; each file
+:data:`CITATIONS` lists, the files and fields the reference SHA consistency
+tests read, is there, is not empty, parses as JSON (each line of a
+JSON-lines file), and its listed field equals ``NEW`` (on every line of a
+JSON-lines file), each failure named by file and line; every line of the new
+file, read as written before any is indexed, names a case, names it once (a
+second line of a case is refused by file and line) and records ``NEW`` as
+its reference commit; and the new recording carries every case the old one
+did, but one whose removal is approved. The per-case comparison does not
+apply across the change: instead every case whose semantic projection
+differs from its recorded line is listed in the notes, by case and with the
+fields that differ (named, never their values), for the reviewers, with the
+move itself and the row approving it; a case recorded alike is not listed.
+The landed file is then the one the per-case rules hold, and the row admits
+no further file: another commit needs its own row.
 
 The decisions the rules read (owner approvals of relaxations and of a new
 reference commit) are every phase's: each
@@ -1404,115 +1403,84 @@ def listed(names: list[str], most: int = 10) -> str:
     )
 
 
-def _citations(value: Any, sha: str, at_path: str = '') -> list[str]:
-    r"""The paths of ``value`` (a JSON document) whose string holds
-    ``sha``, dotted, a list's items by index (``reference``,
-    ``recorded.reference``, ``identity.reference.commit.sha``)."""
-    found: list[str] = []
-    if isinstance(value, dict):
-        for key, item in value.items():
-            found += _citations(item, sha, f'{at_path}.{key}'.lstrip('.'))
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            found += _citations(item, sha, f'{at_path}[{index}]')
-    elif isinstance(value, str) and sha in value:
-        found.append(at_path)
-    return found
+#: The files that cite the reference commit, each with the field that
+#: names it in full: the fields the reference SHA consistency tests read
+#: (the vector files' ``reference``, ``tests/test_contract_reference.py``'s
+#: and the goldens' line identities). A JSON-lines file (``.jsonl``) holds
+#: the field on every line. ``contract/reference-env.txt`` is checked apart
+#: (:data:`ENV_LINE`). A new citing file joins this table; until it does,
+#: the rule that no file outside ``docs/`` keeps the old SHA still moves it.
+CITATIONS: dict[str, tuple[str, ...]] = {
+    'contract/decimal-vectors.json': ('reference',),
+    'contract/empty-null-vectors.json': ('reference',),
+    'contract/fixtures/pickles/expected.json': ('reference',),
+    'contract/float-multiclass-vectors.json': ('reference',),
+    'contract/given-vectors.json': ('reference',),
+    'contract/key-cast-vectors.json': ('reference',),
+    'contract/key-inference-vectors.json': ('reference',),
+    'contract/multicategorical-vectors.json': ('reference',),
+    'contract/nested-type-vectors.json': ('reference',),
+    'contract/sampled-null-key-vectors.json': ('reference',),
+    'contract/t136-average-null-vectors.json': ('reference',),
+    'contract/t136-forecast-vectors.json': ('reference',),
+    'contract/t136-host2-vectors.json': ('recorded', 'reference'),
+    'contract/t136-host2-zone-vectors.json': ('recorded', 'reference'),
+    'contract/time-inference-vectors.json': ('reference',),
+    'contract/type-set-vectors.json': ('recorded', 'reference'),
+    'packages/structured-data-models-client/tests/labels_reference.json': (
+        'reference',
+    ),
+    'packages/structured-data-models-client/tests/t128a-payload-rules.json': (
+        'reference',
+    ),
+    'packages/structured-data-models-client/tests/t128b-predict-result.json': (
+        'reference',
+    ),
+    'tests/golden/t132g-fixture-cases/python-ref.jsonl': (
+        'identity',
+        'reference',
+        'commit',
+        'sha',
+    ),
+    'tests/golden/t132g-later-stage/python-ref.jsonl': (
+        'identity',
+        'reference',
+        'commit',
+        'sha',
+    ),
+}
 
 
-def _at_path(value: Any, dotted: str) -> Any:
-    r"""The value at a path :func:`_citations` names, or a sentinel
-    :class:`KeyError` instance when there is none."""
-    for part in re.findall(r'[^.\[\]]+|\[\d+\]', dotted):
-        if part.startswith('['):
-            index = int(part[1:-1])
-            if not isinstance(value, list) or index >= len(value):
-                return KeyError(dotted)
-            value = value[index]
-        elif isinstance(value, dict) and part in value:
-            value = value[part]
-        else:
-            return KeyError(dotted)
-    return value
-
-
-def _documents(text: str) -> list[Any] | None:
-    r"""A JSON file's document, or a JSON-lines file's documents (each
-    line its own), or None when it is neither."""
-    try:
-        return [json.loads(text)]
-    except (ValueError, RecursionError):
-        pass
-    try:
-        return [json.loads(line) for line in text.splitlines() if line.strip()]
-    except (ValueError, RecursionError):
-        return None
-
-
-def check_citation(
-    report: Report,
-    name: str,
-    before: str,
-    after: str | None,
-    old: str,
-    new: str,
-) -> None:
-    r"""A file that cited the recorded reference ``old`` at the checkpoint
-    moves with it: it is still there, and each field that held ``old``
-    (by its path, per document of a JSON-lines file) holds ``new`` in its
-    place: ``new`` itself where it was ``old`` itself, else a text holding
-    ``new`` and not ``old``. A file that is no JSON is held as text."""
-    rule = 'reference'
-    if after is None:
-        report.fail(
-            rule,
-            f'{name}: removed; it cited the recorded reference {old[:12]}, and '
-            f'every such file moves to the new one {new} (the reference SHA '
-            'consistency tests read it)',
-        )
-        return
-    then, now = _documents(before), _documents(after)
-    if then is None or now is None:
-        if old in after or new not in after:
-            report.fail(rule, f'{name}: does not cite the new reference {new}')
-        return
-    lines = len(then) > 1 or len(now) > 1
-    # A JSON-lines file's fields are those of its first line citing the
-    # reference, judged on every line it has now.
-    paths = next(
-        (
-            (document, found)
-            for document in then
-            if (found := _citations(document, old))
-        ),
-        None,
-    )
-    if paths is None:
-        return
-    document, found = paths
-    for path in found:
-        exact = _at_path(document, path) == old
-        for index, item in enumerate(now if lines else now[:1]):
-            value = _at_path(item, path)
-            if (
-                value == new
-                if exact
-                else isinstance(value, str)
-                and new in value
-                and old not in value
-            ):
-                continue
-            where = f'{name}:{index + 1}' if lines else name
-            report.fail(
-                rule,
-                f'{where}: {path or "the document"} '
-                + (
-                    'is missing'
-                    if isinstance(value, KeyError)
-                    else 'does not name the new reference'
-                )
-                + f' {new} (it named {old[:12]})',
+def citation_problems(name: str, text: str | None, new: str) -> list[str]:
+    r"""Why the citing file ``name`` (:data:`CITATIONS`), as ``text``,
+    does not name the reference commit ``new`` in its field: it is gone,
+    empty, not JSON (a line of a JSON-lines file included), or the field
+    (keys taken as written, never as a path) is missing or not ``new``."""
+    keys = CITATIONS[name]
+    field_name = '.'.join(keys)
+    if text is None:
+        return [f'{name}: removed; it cites the reference, in {field_name}']
+    if not text.strip():
+        return [f'{name}: empty; it cites the reference, in {field_name}']
+    if name.endswith('.jsonl'):
+        documents = list(enumerate(text.splitlines(), 1))
+    else:
+        documents = [(0, text)]
+    found = []
+    for number, raw in documents:
+        where = f'{name}:{number}' if number else name
+        try:
+            value: Any = json.loads(raw)
+        except (ValueError, RecursionError):
+            found.append(f'{where}: not JSON')
+            continue
+        for key in keys:
+            value = value.get(key) if isinstance(value, dict) else None
+        if value != new:
+            found.append(
+                f'{where}: {field_name} does not name the new reference {new}'
             )
+    return found
 
 
 def _differing(old: Any, new: Any, at_path: str = '') -> list[str]:
@@ -1600,6 +1568,9 @@ def check_new_reference(
             f'{ENV}: names {listed(named_env) or "no reference"}, not the new '
             f'reference {new}',
         )
+    for name in sorted(CITATIONS):
+        for problem in citation_problems(name, candidate.read(name), new):
+            report.fail('reference', problem)
     for old in olds:
         for name in citing(candidate, old):
             report.fail(
@@ -1608,16 +1579,6 @@ def check_new_reference(
                 f'file citing the reference outside docs/ names the new one '
                 f'{new}',
             )
-        for name in citing(checkpoint, old):
-            if name != ENV:
-                check_citation(
-                    report,
-                    name,
-                    checkpoint.read(name) or '',
-                    candidate.read(name),
-                    old,
-                    new,
-                )
     # Every line read and judged as written, before any is indexed: a
     # case on two lines is refused by file and line, never one of them
     # silently kept.
