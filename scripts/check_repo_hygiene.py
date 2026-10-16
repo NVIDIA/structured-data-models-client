@@ -93,6 +93,10 @@ INTERNAL_PATTERNS = (
     # ships either way.
     re.compile(r'\btfm-serving\b', re.IGNORECASE),
     re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
+    # A workspace inside that repository. The bare `rfm_nim` names the model
+    # a test talks to and stays; this is a path into a tree nobody outside
+    # can open, which is what shipped in a docstring until it was removed.
+    re.compile(r'\bkumo_rfm_nim\b', re.IGNORECASE),
     # Internal build names for the servers behind a model id. A reader
     # cannot look either up, and which build answers is not the client
     # story. The public repository and the five distributions it publishes
