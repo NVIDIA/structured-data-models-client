@@ -34,8 +34,10 @@ cookie hiding code (one behind a lone CR included) and a package shadowing
 a frozen module are refused; a declared refactor, a rename declared, a
 rule moved out declared, a widened coverage declared, a frozen file added
 or removed, and a spent declaration of an unchanged entry pass, as does
-the tree as landed judged against itself; a stale or spent declaration,
-a retired ``allowance`` reason, and missing, empty, retyped, too deep or
+the tree as landed judged against itself, as does a ``main`` reason its
+judge accepts (T2.0e); a stale or spent declaration, a retired
+``allowance`` reason, a ``main`` reason with no judge or one its judge
+refuses, and missing, empty, retyped, too deep or
 too wide evidence fail; both baseline formats are read (format 2's
 counts ignored, format 3 written); and the merge base is read through git
 on a temporary repository. From T1.28b (E56(d)) the counts, allowances
@@ -68,7 +70,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -1251,6 +1253,34 @@ def freeze_cases(results: list[Result]) -> None:
         None,
         rewrite=True,
         declare={from_source: refactor},
+    )
+    # A main reason (T2.0e) is judged by the base's judge, from git; the
+    # judge's own rules are the T2.0e tests' (tests/test_t20e_bridge_main.py).
+    from_main = {'main': f'{"ab" * 20} Rename a local (#1)'}
+    case(
+        'a main reason with no history to judge it by',
+        renamed_local,
+        'declared main, which is not a change the candidate merged from main: '
+        'no git history to judge it by',
+        rewrite=True,
+        declare={from_source: from_main},
+    )
+    case(
+        'a main reason its judge refuses',
+        renamed_local,
+        'declared main, which is not a change the candidate merged from main: '
+        'the judge refuses it',
+        on=replace(base, main=lambda rel, text: 'the judge refuses it'),
+        rewrite=True,
+        declare={from_source: from_main},
+    )
+    case(
+        'control: a main reason its judge accepts',
+        renamed_local,
+        None,
+        on=replace(base, main=lambda rel, text: None),
+        rewrite=True,
+        declare={from_source: from_main},
     )
 
     # The review's false positives of round 2, each a declared refactor.

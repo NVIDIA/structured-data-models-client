@@ -45,7 +45,15 @@ phase. Before it changes anything it refuses, naming the reason, unless:
   ...``, one parent, no file changed, and a ``Base-SHA`` in the phase
   branch. A fix builds on it, and the new landing commit's parent is that
   fix and its ``Base-SHA`` the current phase head, so the phase branch
-  still fast-forwards;
+  still fast-forwards. A package that brings ``main`` into the phase
+  branch (T2.0e; T2.0c is the first) does so from its lane, by one merge
+  commit whose subject it owns, with two parents, the second an ancestor
+  of ``main`` as the remote holds it at landing time (``git ls-remote``,
+  then fetched; never a local ``main`` or a remote-tracking ref as it
+  stands): the commits that merge brings in are ``main``'s and exempt from
+  the subject rule (``main_merge``). A second merge commit, a merge of
+  anything else, or a ``main`` commit rewritten exempts nothing, and is
+  refused naming the commits;
 - the worktree is clean, HEAD is the candidate, and the candidate descends
   from the phase branch's head on the remote without being it;
 - ``--checkpoint``, when given, names the checkpoint land.py computes:
@@ -453,18 +461,119 @@ def landing_problem(
     return None
 
 
+#: The product branch a package may merge into its phase branch (T2.0e),
+#: read from the remote at check time, never from a local ref.
+MAIN = 'main'
+
+
+def remote_main(tools: Tools, remote: str, *where: str) -> str:
+    """``main`` as the remote holds it now: its SHA as ``git ls-remote``
+    reads it, its commits fetched (which refreshes
+    ``refs/remotes/<remote>/main``). A local ``main``, or a remote-tracking
+    ref moved by hand, never stands in for it."""
+    ref = f'refs/heads/{MAIN}'
+    out = tools.git(*where, 'ls-remote', remote, ref)
+    tips = [
+        tip
+        for tip, _, name in (line.partition('\t') for line in out.splitlines())
+        if name == ref
+    ]
+    if len(tips) != 1 or not re.fullmatch(r'[0-9a-f]{40}', tips[0]):
+        raise Refusal(
+            f'the lane merges a commit, and the remote {remote} has no {MAIN} '
+            f'to judge it against; a package merges only {MAIN}'
+        )
+    tools.git(*where, 'fetch', '--quiet', remote, ref)
+    return tips[0]
+
+
+def main_merge(
+    tools: Tools, remote: str, base: str, head: str, package: str, *where: str
+) -> tuple[set[str], list[tuple[str, str, str]]]:
+    """The commits of ``base..head`` a merge of ``main`` exempts from the
+    subject rule, and the merge commits refused, each as (SHA, subject,
+    why). A package may bring ``main`` in by one merge commit (T2.0e): two
+    parents, a subject ``package`` owns, its second parent an ancestor of
+    the remote's ``main`` (:func:`remote_main`). The commits it brings in,
+    reachable from that parent but not from its first parent or ``base``,
+    are then ``main``'s, and exempt; every other commit still needs the
+    package's ID. Without a merge nothing is exempt; with two or more, each
+    is refused and nothing is exempt; a merge whose subject the package
+    does not own exempts nothing (the subject rule names it)."""
+    merges = tools.git(
+        *where, 'rev-list', '--merges', f'{base}..{head}'
+    ).split()
+    if not merges:
+        return set(), []
+
+    def title(sha: str) -> str:
+        return tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
+
+    if len(merges) > 1:
+        return set(), [
+            (
+                sha,
+                title(sha),
+                f'one of {len(merges)} merge commits; a package brings {MAIN} '
+                'in by one merge commit and merges nothing else',
+            )
+            for sha in merges
+        ]
+    (merge,) = merges
+    subject = title(merge)
+    if ownership_problem(subject, package) is not None:
+        return set(), []
+    parents = tools.git(
+        *where, 'rev-list', '--parents', '-n', '1', merge
+    ).split()[1:]
+    if len(parents) != 2:
+        return set(), [
+            (
+                merge,
+                subject,
+                f'a merge of {len(parents)} parents; a merge of {MAIN} has two',
+            )
+        ]
+    main = remote_main(tools, remote, *where)
+    if not tools.git_ok(
+        *where, 'merge-base', '--is-ancestor', parents[1], main
+    ):
+        return set(), [
+            (
+                merge,
+                subject,
+                f'it merges {parents[1][:12]}, which is not in {MAIN} as '
+                f'{remote} holds it ({main[:12]}); a package merges only '
+                f'{MAIN}, never another branch, a local {MAIN} or a rewritten '
+                'commit',
+            )
+        ]
+    brought = tools.git(
+        *where, 'rev-list', parents[1], '--not', base, parents[0]
+    ).split()
+    return set(brought), []
+
+
 def commits_not_owned(
-    tools: Tools, base: str, head: str, package: str, *where: str
+    tools: Tools,
+    base: str,
+    head: str,
+    package: str,
+    *where: str,
+    remote: str = 'origin',
 ) -> list[tuple[str, str, str]]:
     """The commits in ``base..head`` that ``package`` does not own, each as
     (SHA, subject, why). An earlier landing commit of ``package`` that
-    ``landing_problem`` accepts is owned."""
+    ``landing_problem`` accepts is owned, and the commits of ``main`` one
+    merge commit of the package brings in are exempt (:func:`main_merge`,
+    T2.0e)."""
+    exempt, found = main_merge(tools, remote, base, head, package, *where)
+    refused = {sha for sha, _, _ in found}
     out = tools.git(*where, 'log', '--format=%H%x00%s%x1e', f'{base}..{head}')
-    found: list[tuple[str, str, str]] = []
     for entry in out.split('\x1e'):
         sha, sep, text = entry.strip('\n').partition('\x00')
         subject = text.split('\n', 1)[0]
-        if not sep:
+        if not sep or sha in exempt or sha in refused:
             continue
         if LANDING_SUBJECT.match(subject):
             why = landing_problem(tools, sha, package, base, *where)
@@ -512,9 +621,9 @@ def check_lane_package(tools: Tools, topic: str, package: str) -> None:
 
 
 def check_lane_commits(
-    tools: Tools, base: str, candidate: str, package: str
+    tools: Tools, base: str, candidate: str, package: str, remote: str
 ) -> None:
-    stray = commits_not_owned(tools, base, candidate, package)
+    stray = commits_not_owned(tools, base, candidate, package, remote=remote)
     if stray:
         raise Refusal(
             f'commits on the lane are not owned by {package} (a subject '
@@ -1074,7 +1183,7 @@ def land(
     check_descent(tools, candidate, base, args.phase_branch)
     checkpoint = checkpoint_of(tools, candidate, base, args.checkpoint)
     if on_lane:
-        check_lane_commits(tools, base, candidate, package)
+        check_lane_commits(tools, base, candidate, package, args.remote)
     moved: str | None = None
     if args.moved_from is not None:
         moved = resolve(tools, args.moved_from, 'the moved-from commit')

@@ -53,12 +53,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts/rust_core'
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason='T2.0e: landing a merge of main is not implemented yet',
-)
-
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 PHASE1 = 'rust-core-phase-1'
 PHASE2 = 'rust-core-phase-2'
@@ -263,7 +257,6 @@ def test_each_seed_puts_its_commit_on_the_lane(w: Any, seed: str) -> None:
 # --- exit 4: lane.py check, and the pre-push hook ---------------------------------
 
 
-@PENDING
 def test_lane_check_passes_a_merge_of_main(w: Any) -> None:
     r"""Exit 4: ``lane.py check`` passes the lane, main's commits (no ID)
     brought in by the ID-titled merge."""
@@ -274,7 +267,6 @@ def test_lane_check_passes_a_merge_of_main(w: Any) -> None:
     assert ran.code == 0, ran.text
 
 
-@PENDING
 def test_the_pre_push_check_passes_a_merge_of_main(w: Any) -> None:
     r"""Exit 4: ``lane.py check --pushed-refs`` (the pre-push hook's
     check) passes the same push."""
@@ -283,7 +275,6 @@ def test_the_pre_push_check_passes_a_merge_of_main(w: Any) -> None:
     assert ran.code == 0, ran.text
 
 
-@PENDING
 @pytest.mark.parametrize('seed', sorted(FAULTS))
 def test_lane_check_refuses_what_is_not_main_s(w: Any, seed: str) -> None:
     r"""Exit 4's seeded faults, refused by ``lane.py check`` and the
@@ -302,7 +293,6 @@ def test_lane_check_refuses_what_is_not_main_s(w: Any, seed: str) -> None:
 # --- exit 4 and 5: land.py ----------------------------------------------------------
 
 
-@PENDING
 def test_land_lands_a_merge_of_main_and_it_verifies(w: Any) -> None:
     r"""Exits 4 and 5: ``land.py`` lands the lane; the phase branch and the
     lane are at the landing, whose parent is the candidate and which holds
@@ -325,7 +315,6 @@ def test_land_lands_a_merge_of_main_and_it_verifies(w: Any) -> None:
     assert ran.code == 0, ran.text
 
 
-@PENDING
 @pytest.mark.parametrize('seed', sorted(FAULTS))
 def test_land_refuses_what_is_not_main_s(w: Any, seed: str) -> None:
     r"""Exit 4's seeded faults, refused by ``land.py`` naming the commit,
@@ -342,7 +331,6 @@ def test_land_refuses_what_is_not_main_s(w: Any, seed: str) -> None:
     assert w.refs() == before
 
 
-@PENDING
 def test_land_reads_main_from_the_remote_not_a_tracking_ref_moved_by_hand(
     w: Any,
 ) -> None:

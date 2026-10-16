@@ -64,12 +64,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason='T2.0e: the owner-approved reference change is not implemented yet',
-)
-
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
 #: Where the owner's approval is: a row of a phase's decisions file, read
@@ -277,7 +271,6 @@ def test_without_a_row_the_refusal_stays_by_name(repo: Path) -> None:
     assert refused_by_name(run(repo, checkpoint).problems)
 
 
-@PENDING
 def test_an_owner_row_naming_the_sha_admits_the_new_reference(
     repo: Path,
 ) -> None:
@@ -313,7 +306,6 @@ def test_the_old_sha_is_not_a_new_reference(repo: Path) -> None:
     ), found
 
 
-@PENDING
 @pytest.mark.parametrize(
     ('seed', 'named'),
     [
@@ -342,7 +334,6 @@ def test_every_citation_agrees_or_is_named(
     assert any(named in p for p in found), found
 
 
-@PENDING
 def test_a_case_the_new_recording_drops_is_named(repo: Path) -> None:
     r"""Exit 1, "nothing silently disappears": the new recording carries
     every case the old one did; a dropped case is refused by its ID."""
@@ -357,7 +348,6 @@ def test_a_case_the_new_recording_drops_is_named(repo: Path) -> None:
     assert any(CASE in p for p in found), found
 
 
-@PENDING
 def test_a_case_whose_recording_differs_is_listed_for_the_reviewers(
     repo: Path,
 ) -> None:
@@ -420,7 +410,6 @@ FORGED = {
 }
 
 
-@PENDING
 @pytest.mark.parametrize('seed', sorted(FORGED))
 def test_a_row_that_is_not_the_owner_s_approval_admits_nothing(
     repo: Path, seed: str
@@ -437,7 +426,6 @@ def test_a_row_that_is_not_the_owner_s_approval_admits_nothing(
     assert refused_by_name(found), found
 
 
-@PENDING
 def test_a_row_outside_a_phase_decisions_file_admits_nothing(
     repo: Path,
 ) -> None:
@@ -459,7 +447,6 @@ def test_a_row_outside_a_phase_decisions_file_admits_nothing(
     assert refused_by_name(run(repo, checkpoint).problems)
 
 
-@PENDING
 def test_a_row_the_candidate_writes_itself_admits_nothing(repo: Path) -> None:
     r"""Exit 2 (orchestrator's decision: the approval row is read only at
     the checkpoint, never from the candidate): a candidate that replaces
@@ -482,7 +469,6 @@ def test_a_row_the_candidate_writes_itself_admits_nothing(repo: Path) -> None:
     assert refused_by_name(found), found
 
 
-@PENDING
 def test_two_reference_files_left_behind_are_refused(repo: Path) -> None:
     r"""Exit 2's seeded fault: the new recording added beside the old one
     (two reference files) is refused, naming the old file."""
@@ -544,7 +530,6 @@ def test_the_per_case_rules_hold_the_new_recording(
     assert any(p.startswith(f'{RULE}: {CASE}: its line') for p in found), found
 
 
-@PENDING
 def test_a_spent_approval_admits_no_further_reference(
     landed: tuple[Path, str],
 ) -> None:

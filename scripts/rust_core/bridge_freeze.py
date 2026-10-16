@@ -45,7 +45,17 @@ for it are gone), must be declared in ``bridge_changes.json`` under
   old name gone;
 - ``{"gone": "<one line>"}``, an entry that left the freeze: an entry gone
   against the base is declared gone, or moved when its rule moved into
-  Rust, and nothing else.
+  Rust, or main, and nothing else;
+- ``{"main": "<the full SHA of a commit of main> <its title>"}``, a change
+  ``main`` made, brought into the phase branch by the candidate's merge of
+  ``main`` (T2.0e): the SHA is 40 lower-case hex digits, then one space and
+  the commit's own subject; the commit is an ancestor of ``main`` as last
+  fetched (``refs/remotes/origin/main``, never a local branch) and of HEAD,
+  is not an ancestor of the merge base (a commit the base already holds
+  was judged when it came in), and changes the entry's file against its
+  first parent. Review judges, as for the others, whether ``main``'s rule
+  belongs in the bridge; the port of a ``main`` rule into Rust is its own
+  package's ``moved``.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale), unless the merge base's declarations hold it as it stands,
@@ -135,7 +145,7 @@ import re
 import subprocess
 import sys
 import tokenize
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -169,10 +179,17 @@ ABOUT = (
 CHANGES_ABOUT = (
     'Each change to frozen bridge code against the merge base, with one '
     'reason: moved (a rule moved into Rust, naming its task), refactor '
-    '(behaviour kept) or gone (an entry that left the freeze). Entries the '
-    'merge base already holds are spent and may be pruned.'
+    '(behaviour kept), gone (an entry that left the freeze) or main (a '
+    'change main made, merged by this change: the full SHA of the main '
+    'commit, then its title). Entries the merge base already holds are '
+    'spent and may be pruned.'
 )
-REASONS = ('moved', 'refactor', 'gone')
+REASONS = ('moved', 'refactor', 'gone', 'main')
+#: Where ``main`` is read for a ``main`` reason: the remote's, as last
+#: fetched, never a local branch.
+MAIN_REF = 'refs/remotes/origin/main'
+#: A ``main`` reason: a commit's full SHA, a space, and its title.
+_MAIN_REASON = re.compile(r'([0-9a-f]{40}) (\S.*)')
 #: What a ``moved`` reason names: the task that moves the rule.
 _TASK = re.compile(r'\bT\d+\.\d+[a-z]?\b')
 
@@ -633,6 +650,10 @@ class Base:
     label: str
     baseline: str | None
     changes: str | None = None
+    #: Why a ``main`` reason's text is not one for the entry's file (the
+    #: arguments), or None when it is (:func:`main_judge`); without one, a
+    #: ``main`` reason is refused.
+    main: Callable[[str, str], str | None] | None = None
 
 
 def ratchet(
@@ -642,9 +663,11 @@ def ratchet(
     *,
     declared: Mapping[str, tuple[str, str]],
     spent: Mapping[str, tuple[str, str]],
+    main: Callable[[str, str], str | None] | None = None,
 ) -> list[str]:
     """The tripwire against the merge base: every entry changed, new or
-    gone is declared, once, with a reason that fits."""
+    gone is declared, once, with a reason that fits; ``main`` judges a
+    ``main`` reason (:attr:`Base.main`)."""
     problems = []
     files = {str(rel): rel for rel in FROZEN}
     files.update({name: Path(name) for name in base if name not in files})
@@ -674,11 +697,11 @@ def ratchet(
                 f'{key}: {how}, declared only by an entry the base ({label}) '
                 'already holds, which is spent: declare this change anew'
             )
-        elif how == 'gone' and reason[0] not in ('gone', 'moved'):
+        elif how == 'gone' and reason[0] not in ('gone', 'moved', 'main'):
             problems.append(
                 f'{key}: gone against the base ({label}), declared '
                 f'{reason[0]}: an entry that left is declared gone (or moved, '
-                'when its rule moved into Rust)'
+                'when its rule moved into Rust, or main, when main removed it)'
             )
         elif reason[0] == 'gone' and how != 'gone':
             problems.append(
@@ -690,6 +713,17 @@ def ratchet(
                 f'{key}: a moved reason names the task that moves the rule '
                 f'(T1.xx), not {reason[1]!r}'
             )
+        elif reason[0] == 'main':
+            why = (
+                'no git history to judge it by'
+                if main is None
+                else main(key.split('::', 1)[0], reason[1])
+            )
+            if why is not None:
+                problems.append(
+                    f'{key}: {how}, declared main, which is not a change the '
+                    f'candidate merged from main: {why}'
+                )
     for key in sorted(set(declared) - set(changed)):
         if spent.get(key) != declared[key]:
             problems.append(
@@ -746,7 +780,12 @@ def check(root: Path, base: Base | str) -> list[str]:
             return problems + unreadable
         spent = spent_or_none
     problems += ratchet(
-        baseline, then, base.label, declared=declared, spent=spent
+        baseline,
+        then,
+        base.label,
+        declared=declared,
+        spent=spent,
+        main=base.main,
     )
     return problems
 
@@ -783,7 +822,66 @@ def base_baseline(root: Path, ref: str) -> Base | str:
         label=f'{ref} at {merge_base[:12]}',
         baseline=read(BASELINE),
         changes=read(CHANGES),
+        main=main_judge(root, merge_base),
     )
+
+
+def main_judge(root: Path, merge_base: str) -> Callable[[str, str], str | None]:
+    """The judge of a ``main`` reason against ``merge_base``: why its text
+    is not the full SHA and title of a commit of :data:`MAIN_REF` that
+    HEAD holds, ``merge_base`` does not, and that changes the file named,
+    or None when it is."""
+
+    def ask(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ['git', '-C', str(root), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+
+    def judge(rel: str, text: str) -> str | None:
+        found = _MAIN_REASON.fullmatch(text)
+        if not found:
+            return (
+                'a main reason is the full SHA of the commit (40 lower-case '
+                f'hex digits), a space and its title, not {text!r}'
+            )
+        sha, title = found.groups()
+        if ask('cat-file', '-e', f'{sha}^{{commit}}').returncode != 0:
+            return f'{sha} is no commit here'
+        tip = ask('rev-parse', '--verify', '--quiet', f'{MAIN_REF}^{{commit}}')
+        if tip.returncode != 0:
+            return f'no {MAIN_REF} to read main from; fetch origin main'
+        if ask(
+            'merge-base', '--is-ancestor', sha, tip.stdout.strip()
+        ).returncode:
+            return (
+                f'{sha[:12]} is not in main ({MAIN_REF} at '
+                f'{tip.stdout.strip()[:12]}), the only branch merged so'
+            )
+        if ask('merge-base', '--is-ancestor', sha, 'HEAD').returncode:
+            return f'{sha[:12]} is not merged into the candidate'
+        if ask('merge-base', '--is-ancestor', sha, merge_base).returncode == 0:
+            return (
+                f'{sha[:12]} is already in the merge base {merge_base[:12]}, '
+                'so this change did not bring it in'
+            )
+        subject = ask('log', '-1', '--format=%s', sha).stdout.strip()
+        if subject != title:
+            return f'{sha[:12]} is titled {subject!r}, not {title!r}'
+        parent = ask('rev-parse', '--verify', '--quiet', f'{sha}^1')
+        if parent.returncode != 0:
+            return f'{sha[:12]} is a root commit, which no merge brings in'
+        changed = ask(
+            'diff', '--name-only', '-z', parent.stdout.strip(), sha, '--'
+        ).stdout.split('\0')
+        if rel not in changed:
+            return f'{sha[:12]} does not change {rel}'
+        return None
+
+    return judge
 
 
 def base_ref(
