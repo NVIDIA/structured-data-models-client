@@ -163,14 +163,10 @@ def test_the_pin_holds_a_whole_call_and_result() -> None:
     assert body['metadata']['request_id'] == {
         'excluded value of type': 'string'
     }
-    assert set(body['inference']['inference_config']) <= {
-        'kind',
-        'num_estimators',
-        'column_shuffle',
-        'category_shuffle',
-        'hop_shuffle',
-        'class_shuffle',
-    }
+    # The caller set no inference option, so the call carries no config:
+    # the reference's 26ecdd28, ported at T2.0c (only the options the
+    # caller set are sent, sdm-core's tests/predict.rs).
+    assert 'inference_config' not in body['inference']
     result = predicted['result']
     # From T1.28b each answer's place in the endpoint's order is the last
     # column (answer_index).
