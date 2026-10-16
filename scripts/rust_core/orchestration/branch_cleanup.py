@@ -82,7 +82,23 @@ CACHE_PARTS = frozenset(
         '.pytest_cache',
         '.ruff_cache',
         '.mypy_cache',
+        'build',
+        'dist',
+        '_sibling_wheels',
+        'htmlcov',
     }
+)
+
+# Ignored build outputs matched by name pattern (wheels, native modules,
+# package metadata, coverage data), also rebuilt rather than lost.
+CACHE_GLOBS = (
+    '*.egg-info',
+    '*.so',
+    '*.whl',
+    '.venv*',
+    'native*',
+    'dist-native*',
+    '.coverage*',
 )
 
 OP_FILES = (
@@ -383,7 +399,13 @@ def ignored_files(repo, path):
     out = []
     for entry in proc.stdout.splitlines():
         parts = entry.rstrip('/').split('/')
-        if CACHE_PARTS.intersection(parts) or entry.endswith('.pyc'):
+        if (
+            CACHE_PARTS.intersection(parts)
+            or entry.endswith('.pyc')
+            or any(
+                fnmatch.fnmatch(part, g) for part in parts for g in CACHE_GLOBS
+            )
+        ):
             continue
         out.append(entry)
     return out
