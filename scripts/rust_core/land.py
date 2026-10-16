@@ -148,6 +148,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -160,7 +161,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from phases import (  # noqa: E402
+    ENVIRONMENT,
     PACKAGE_ID,
+    PHASE_BRANCH,
     Phase,
     PhaseError,
     phase_branch,
@@ -1467,6 +1470,29 @@ def parser_for(command: str) -> argparse.ArgumentParser:
     return parser
 
 
+def landing_phase(tools: Tools, remote: str, landing: str) -> str:
+    """The phase a landing commit landed on, for ``verify`` given no
+    phase: the lowest-numbered phase branch on the remote that holds it
+    (a later phase holds an earlier one's landings through the epic
+    branch's merges). None holding it is a refusal, by name."""
+    sha = resolve(tools, landing, 'the landing commit')
+    out = tools.git('ls-remote', remote, 'refs/heads/rust-core-phase-*')
+    tips = {}
+    for line in out.splitlines():
+        tip, _, ref = line.partition('\t')
+        name = ref.removeprefix('refs/heads/')
+        if PHASE_BRANCH.fullmatch(name):
+            tips[name] = tip.strip()
+    for name in sorted(tips, key=lambda n: Phase(n).number):
+        tools.git('fetch', '--quiet', remote, f'refs/heads/{name}')
+        if tools.git_ok('merge-base', '--is-ancestor', sha, tips[name]):
+            return name
+    raise Refusal(
+        f'no phase branch on {remote} holds {sha[:12]}: name its phase with '
+        '--phase-branch'
+    )
+
+
 def main(
     argv: Sequence[str] | None = None,
     tools: Tools | None = None,
@@ -1481,6 +1507,15 @@ def main(
     tools.repo = args.repo or tools.repo or repo_of(tools, args.remote)
     try:
         try:
+            if (
+                command == 'verify'
+                and args.phase_branch is None
+                and not os.environ.get(ENVIRONMENT)
+            ):
+                # The landing's own phase, never the phase in progress.
+                args.phase_branch = landing_phase(
+                    tools, args.remote, args.landing
+                )
             args.phase_branch = phase_branch(
                 args.phase_branch,
                 branch=getattr(args, 'topic_branch', None),

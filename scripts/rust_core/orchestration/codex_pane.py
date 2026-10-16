@@ -46,25 +46,7 @@ STATE = Path(
 )
 
 
-def _toplevel() -> Path:
-    """The git toplevel of this script's directory, as the other tools default
-    SDM_REPO (README, "Settings shared by all tools")."""
-    here = Path(__file__).resolve().parent
-    proc = subprocess.run(
-        ['git', '-C', str(here), 'rev-parse', '--show-toplevel'],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        stdin=subprocess.DEVNULL,
-    )
-    return (
-        Path(proc.stdout.strip()) if proc.returncode == 0 else here.parents[2]
-    )
-
-
-REPO = (
-    Path(os.environ['SDM_REPO']) if os.environ.get('SDM_REPO') else _toplevel()
-)
+REPO = Path(os.environ.get('SDM_REPO', Path.home() / 'code/sdmc-rust-core'))
 HERDR = os.environ.get('SDM_HERDR', 'herdr')
 CAP = int(os.environ.get('SDM_CODEX_CAP', '4'))
 MODEL = os.environ.get('SDM_CODEX_MODEL', 'gpt-6-astra')

@@ -77,7 +77,11 @@ def main(problems):
     ap.add_argument('minutes', nargs='?', type=float, default=10)
     a = ap.parse_args()
     if not a.tasks_dir:
-        ap.error('give TASKS_DIR or set SDM_TASKS_DIR')
+        # Loudly, on stdout as the loop greps it, not argparse's stderr.
+        problems.report(
+            'no tasks directory: give TASKS_DIR or set SDM_TASKS_DIR'
+        )
+        return 1
     tasks = transcripts.tasks_dir(a.tasks_dir, problems)
     if tasks is None:
         return 1

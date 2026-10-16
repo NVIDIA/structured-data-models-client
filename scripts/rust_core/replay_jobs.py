@@ -56,7 +56,7 @@ from typing import Any
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from phases import checked_out, phase_branch  # noqa: E402
+from phases import PhaseError, checked_out, phase_branch  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 CI = '.github/workflows/ci.yml'
@@ -357,7 +357,11 @@ class Replay:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n', 1)[0])
-    phase = 'origin/' + phase_branch(branch=checked_out())
+    try:
+        phase = 'origin/' + phase_branch(branch=checked_out())
+    except PhaseError as error:
+        print(f'replay: {error}', file=sys.stderr)
+        return 2
     parser.add_argument(
         '--base',
         help=f'default: the merge base with {phase} (phases.py: '

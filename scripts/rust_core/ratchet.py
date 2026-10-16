@@ -15,7 +15,6 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
     ratchet.py effective [--repo DIR] (--base REV | --phase-push BEFORE)
         [--epic REF] --out FILE
     ratchet.py where [--repo DIR]
-    ratchet.py stand-in [--repo DIR] SHA
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
 ``HEAD``: ``git merge-base CANDIDATE BASE``, never read from evidence.
@@ -49,8 +48,8 @@ epic branch, which is judged against the merged phase's last landing
 own product commit, an older epic commit or an unreviewed commit pushed to
 the phase branch, is still refused. A fork point whose own ``ratchet.py``
 predates this (Phase 2's) cannot resolve itself; ``gate.sh`` then judges
-with the merged phase's last landing's harness (:func:`epic_checkpoint`,
-``ratchet.py stand-in``), the bootstrap T2.0 records.
+with Phase 1's last landing's harness, under the conditions it pins and
+reads from git itself (the bootstrap T2.0 records).
 
 ``check`` holds the candidate, ``--repo``'s committed ``HEAD``, to the
 checkpoint's files, read from git at ``--checkpoint``:
@@ -74,6 +73,12 @@ checkpoint's files, read from git at ``--checkpoint``:
   checkpoint's register authorizes (:func:`in_this_change`, T1.29): an entry
   approved by an earlier landing authorized that landing's change, not
   every later one to the same case or base;
+- ``epic``: on the epic branch (the candidate is the tip of
+  ``origin/rust-core``, no landing commit), every commit after the merge
+  that brought the checkpoint, and that merge for what it adds to the
+  checkpoint, that changes a protected path is named by an owner-approved
+  row of the epic head's decisions (by a SHA prefix of 8 or more digits,
+  or a range ``A..B``, in backticks), since no landing will (T2.0);
 - ``register``: ``register.py validate``, with the checkpoint's register for
   never-reused IDs; entries added or changed are listed, ``approved_by:
   owner`` ones first, for the owner's check-ins;
@@ -124,10 +129,6 @@ passes there too and an unapproved one fails. It fails on a register
 ``register.py validate`` refuses, since only a valid register's approved
 entries count; a checkpoint before the ratchet (the bootstrap) has no
 baselines, and so no expectations.
-
-``stand-in`` prints the merged phase's last landing ``SHA`` holds
-(:func:`epic_checkpoint`), whose harness ``gate.sh`` judges with when a
-fork point's own harness cannot (T2.0).
 
 ``where`` prints the gate's ``--base`` or ``--phase-push`` for the CI run
 it is in, from GitHub's environment, or nothing outside the phase branches
@@ -1475,6 +1476,104 @@ def check_relaxations(
             report.note(rule, f'{change}: approved by {decision}')
 
 
+def epic_run(repo: Path, head: str) -> bool:
+    r"""The candidate is the epic branch's head (T2.0): no landing commit,
+    and the tip of :data:`EPIC_REFS`' first the repository holds, as a CI
+    run on a push to ``rust-core`` checks it out."""
+    tip = epic_tip(repo, None)
+    return tip is not None and tip[0] == head and not is_landing(repo, head)
+
+
+#: A commit an owner's row names: a SHA prefix of at least 8 hex digits, or
+#: a range ``A..B`` (git's: the first-parent commits after A up to B), each
+#: in backticks.
+NAMED_COMMIT = re.compile(r'`([0-9a-f]{8,40})(?:\.\.([0-9a-f]{8,40}))?`')
+
+
+def owner_named(repo: Path, decisions: str, commit: str) -> bool:
+    r"""Whether a row of ``decisions`` approved by the owner names
+    ``commit`` (:data:`NAMED_COMMIT`)."""
+    for row, status in capture_check().decision_rows(decisions).values():
+        if not owner_approved(status):
+            continue
+        for start, end in NAMED_COMMIT.findall(row):
+            if not end and commit.startswith(start):
+                return True
+            if end:
+                try:
+                    inside = git(
+                        repo, 'rev-list', '--first-parent', f'{start}..{end}'
+                    ).split()
+                except Unreadable:
+                    continue
+                if commit in inside:
+                    return True
+    return False
+
+
+def check_epic(
+    report: Report, repo: Path, checkpoint: Tree, candidate: Tree, head: str
+) -> None:
+    r"""On the epic branch, a protected change beyond the merged phase's
+    last landing (the checkpoint) has no landing to name it, so an owner's
+    row of the checkpoint's decisions must name each commit that makes one
+    (T2.0, rule ``epic``): every commit on ``head``'s first-parent history
+    after the merge that brought the checkpoint, and that merge itself for
+    what it holds beyond the checkpoint. A landing commit is named by its
+    own trailers. The rows are the epic head's own decisions: the epic
+    branch is the owner's, and a commit made on it after the merged
+    phase's last landing can be named nowhere else."""
+    module = capture_check()
+    try:
+        decisions = module.phase_decisions(
+            candidate.files(DECISIONS_DIR), candidate.read
+        )
+    except module.DecisionsError as error:
+        report.fail('epic', f"the epic head's {error}")
+        decisions = ''
+    rules = patterns(checkpoint.read(PROTECTED))
+    merge = None
+    for line in git(
+        repo, 'rev-list', '--first-parent', '--parents', head
+    ).splitlines():
+        parents = line.split()
+        if parents[2:3] == [checkpoint.sha]:
+            merge = parents[0]
+            break
+    if merge is None:
+        report.fail(
+            'epic',
+            f'the checkpoint {checkpoint.sha[:12]} is no landing the epic '
+            "branch's first-parent history merges",
+        )
+        return
+    made = [(merge, checkpoint.sha)] + [
+        (commit, f'{commit}^')
+        for commit in git(
+            repo, 'rev-list', '--first-parent', f'{merge}..{head}'
+        ).split()
+        if not is_landing(repo, commit)
+    ]
+    for commit, before in made:
+        changed = git(
+            repo, 'diff', '--name-only', '--no-renames', '-z', before, commit
+        ).split('\0')
+        touched = [path for path in changed if path and protects(rules, path)]
+        if touched and not owner_named(repo, decisions, commit):
+            for path in touched:
+                report.fail(
+                    'epic',
+                    f'{path}: changed on the epic branch by {commit[:12]}, '
+                    'which no owner-approved row of its decisions names',
+                )
+        elif touched:
+            report.note(
+                'epic',
+                f'{commit[:12]}: {len(touched)} protected paths, named by an '
+                'owner-approved row',
+            )
+
+
 def checkpoint_decisions(report: Report, checkpoint: Tree) -> str:
     r"""Every phase's decisions at the checkpoint, as one text
     (``capture_check.phase_decisions``, T2.0); a file missing, unreadable
@@ -1776,6 +1875,8 @@ def check(
         )
         check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
+        if epic_run(repo, head):
+            check_epic(report, repo, checkpoint, candidate, head)
         old_policy = _yaml(checkpoint.read(POLICY), POLICY)
         new_policy = _yaml(candidate.read(POLICY), POLICY)
         check_relaxations(
@@ -2040,9 +2141,6 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--effective-out', type=Path)
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
-    stand = commands.add_parser('stand-in')
-    stand.add_argument('--repo', type=Path, default=Path('.'))
-    stand.add_argument('sha')
     expect = commands.add_parser('effective')
     expect.add_argument('--repo', type=Path, default=Path('.'))
     among = expect.add_mutually_exclusive_group(required=True)
@@ -2060,19 +2158,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if arguments.command == 'where':
             print(ci_base(dict(os.environ), arguments.repo))
-            return 0
-        if arguments.command == 'stand-in':
-            sha = git(
-                arguments.repo, 'rev-parse', f'{arguments.sha}^{{commit}}'
-            )
-            landing = epic_checkpoint(arguments.repo, sha.strip())
-            if landing is None:
-                print(
-                    f'stand-in: {arguments.sha} holds no merged phase',
-                    file=sys.stderr,
-                )
-                return 1
-            print(landing)
             return 0
         if arguments.command == 'checkpoint':
             found, problems = resolve(

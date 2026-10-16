@@ -1234,12 +1234,14 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
         ('push', LANE, False),
         ('push', f'{PHASE}-t1.99', False),
         ('push', f'{PHASE}-archive-lane-a-t1.99', False),
-        # Every phase alike (T2.0), as far as the workflow's list goes; a
-        # phase past it fails in the landing step instead.
+        # Every phase alike (T2.0), multi-digit ones included.
         ('push', 'rust-core-phase-2', True),
-        ('push', 'rust-core-phase-9', True),
+        ('push', 'rust-core-phase-10', True),
+        ('push', 'rust-core-phase-123', True),
         ('push', 'rust-core-phase-2-lane-a', False),
-        ('push', 'rust-core-phase-10', False),
+        ('push', 'rust-core-phase-10-lane-a', False),
+        ('push', 'rust-core-phase-10-t10.1', False),
+        ('push', 'rust-core-phase-10-archive-a-t10.1-abc1234', False),
         ('push', 'main', False),
         ('push', 'rust-core', False),
         ('pull_request', PHASE, False),
@@ -1692,37 +1694,19 @@ def test_ci4_the_skip_step_reads_runs_with_the_workflow_token(
 #
 # The workflow names no phase: patterns match every rust-core-phase-N, and
 # where an expression cannot match a pattern (the concurrency, the phase
-# check's condition) it lists rust-core-phase-0 to -9, the same list in
-# both places, and the landing step fails a push to a phase branch past it.
+# check's condition) a phase branch is a name under rust-core-phase-
+# holding no digit followed by "-", for any N.
 
 PHASE_2 = 'rust-core-phase-2'
 LANE_2 = f'{PHASE_2}-lane-a'
-LISTED = [f'rust-core-phase-{n}' for n in range(10)]
-
-
-def _phase_lists() -> list[list[str]]:
-    text = CI.read_text(encoding='utf-8')
-    return [
-        json.loads(found.replace('{0}', prefix))
-        for found, prefix in re.findall(
-            r"fromJSON\(format\('(\[[^']*)', '(rust-core-phase-)'\)\)", text
-        )
-    ]
 
 
 def test_t20_the_workflow_names_no_one_phase() -> None:
     text = CI.read_text(encoding='utf-8')
-    # No phase is named but the lists' bounds, in comments.
-    assert not re.search(r'rust-core-phase-[1-9]', text)
+    assert not re.search(r'rust-core-phase-[0-9]', text)
     branches = _workflow()[True]['push']['branches']
     assert 'rust-core-phase-*' in branches
     assert '!rust-core-phase-*-archive-*' in branches
-
-
-def test_t20_the_phase_lists_are_phases_0_to_9_alike() -> None:
-    lists = _phase_lists()
-    assert len(lists) == 2, lists
-    assert all(found == LISTED for found in lists), lists
 
 
 @pytest.mark.parametrize(
@@ -1734,6 +1718,11 @@ def test_t20_the_phase_lists_are_phases_0_to_9_alike() -> None:
         (LANE_2, False, True),
         ('rust-core-phase-7-lane-b', False, True),
         (f'{PHASE_2}-t2.3', True, False),
+        # Multi-digit phases (T2.0 fix 1): no cap.
+        ('rust-core-phase-10', False, False),
+        ('rust-core-phase-10-lane-b', False, True),
+        ('rust-core-phase-10-t10.2', True, False),
+        ('rust-core-phase-123', False, False),
         ('rust-core', True, True),
         ('main', True, True),
         ('feature-x', True, False),
@@ -1784,14 +1773,21 @@ def test_t20_another_phase_s_green_run_is_no_evidence(
     assert found == 'false'
 
 
-@pytest.mark.parametrize('ref', ['rust-core-phase-10', 'rust-core-phase-12'])
-def test_t20_a_phase_past_the_workflow_s_lists_fails_the_landing_step(
+@pytest.mark.parametrize(
+    'ref',
+    ['rust-core-phase-10', 'rust-core-phase-10-lane-a', 'rust-core-phase-123'],
+)
+def test_t20_a_multi_digit_phase_s_landing_skips_on_its_green_run(
     tmp_path: Path, ref: str
 ) -> None:
     repo = _repo(tmp_path)
     _landing(repo)
+    seeded = [
+        _run(sha, 100 + n, branch=f'{ref.split("-lane-")[0]}-lane-a')
+        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
+    ]
+    found, _ = _decide(repo, tmp_path, 'push', ref, seeded)
+    assert found == 'true'
+    # Control: with no green run of its own phase it runs everything.
     found, _ = _decide(repo, tmp_path, 'push', ref, [])
-    assert found == 'failed'
-    # Its lanes are judged as any lane's: the gate's own checks run there.
-    found, _ = _decide(repo, tmp_path, 'push', f'{ref}-lane-a', [])
     assert found == 'false'

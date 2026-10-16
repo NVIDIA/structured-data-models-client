@@ -39,15 +39,14 @@ permissions:
 # be: GitHub keeps one pending run per group, and a newer push supersedes
 # it. land.py refuses a candidate whose newest run was cancelled, and
 # land.py verify asks for a rerun rather than a revert. Every phase alike
-# (T2.0): a phase branch is one of rust-core-phase-0 to -9, a list made
-# with format() so that no phase is named (an expression has no pattern
-# match; the phase-check step's condition makes the same list,
-# tests/test_ci_workflow.py holds both alike, and the landing step fails a
-# push to a phase branch past them), a lane a branch under one holding
-# "-lane-".
+# (T2.0), with no phase named: an expression has no pattern match, so a
+# phase branch is a name under rust-core-phase- holding no digit followed
+# by "-" (the prefix holds no digit, and every branch under a phase,
+# rust-core-phase-N-<name>, holds one), and a lane is one holding
+# "-lane-". The phase check's condition reads the phase branch alike.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !(contains(fromJSON(format('["{0}0", "{0}1", "{0}2", "{0}3", "{0}4", "{0}5", "{0}6", "{0}7", "{0}8", "{0}9"]', 'rust-core-phase-')), github.ref_name) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
+  cancel-in-progress: ${{ !((startsWith(github.ref_name, 'rust-core-phase-') && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and the DuckDB
@@ -134,13 +133,6 @@ jobs:
             [[ "${GITHUB_REF_NAME:-}" =~ ^(rust-core-phase-(0|[1-9][0-9]*))(-.+)?$ ]]; then
             phase=${BASH_REMATCH[1]}
           fi
-          # The concurrency and the phase check name the phase branches as
-          # a list, rust-core-phase-0 to -9: a push to one past it fails
-          # here rather than go unchecked.
-          if [ "$phase" = "${GITHUB_REF_NAME:-}" ] && ! [[ "$phase" =~ ^rust-core-phase-[0-9]$ ]]; then
-            echo "$phase is a phase branch ci.yml's lists (concurrency, the phase check) lack: add it"
-            exit 1
-          fi
           case "$phase" in
             ?*)
               moved=$(git log -1 --format='%(trailers:key=Moved-from,valueonly)' HEAD)
@@ -165,10 +157,10 @@ jobs:
       # when the jobs run, made here whether or not they are left out. The
       # epic branch is fetched for a phase's first landing, whose checkpoint
       # is the phase's fork point from it (T2.0), when the remote has it:
-      # without it a fork point is refused, by name. The phase branches as
-      # the concurrency's list names them.
+      # without it a fork point is refused, by name. A phase branch as the
+      # concurrency reads it, any N.
       - name: A push to the phase branch lands one package
-        if: github.event_name == 'push' && contains(fromJSON(format('["{0}0", "{0}1", "{0}2", "{0}3", "{0}4", "{0}5", "{0}6", "{0}7", "{0}8", "{0}9"]', 'rust-core-phase-')), github.ref_name)
+        if: github.event_name == 'push' && (startsWith(github.ref_name, 'rust-core-phase-') && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-')))
         run: |
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
           if git ls-remote --exit-code --heads origin rust-core >/dev/null; then

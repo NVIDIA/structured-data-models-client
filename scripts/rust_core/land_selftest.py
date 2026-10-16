@@ -25,6 +25,7 @@ Decision E43; the checks themselves are documented in land.py.
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import io
 import json
 import os
@@ -231,7 +232,12 @@ class Fake:
             raise AssertionError(f'unexpected git {args}')
         if args[0] == 'ls-remote':
             refs = {**self.remote_refs, **self.moved_after_push}
-            lines = [f'{refs[ref]}\t{ref}' for ref in args[2:] if ref in refs]
+            lines = [
+                f'{refs[ref]}\t{ref}'
+                for pattern in args[2:]
+                for ref in sorted(refs)
+                if fnmatch.fnmatchcase(ref, pattern)
+            ]
             return land.Completed(0, ''.join(line + '\n' for line in lines))
         if args[0] == 'log' and '..' in args[-1]:
             base, head = (self.sha(r) for r in args[-1].split('..'))
@@ -860,19 +866,23 @@ for package in ('T2.0', 'T2.0a', 'T2.15', 'CI5'):
         return ok, f'landed {package}' if ok else c.text
 
 
-@case('phase: verify with no --phase-branch reads the phase in progress')
+@case("phase: verify with no --phase-branch infers the landing's phase")
 def _(tmp: Path) -> tuple[bool, str]:
     c = landed(tmp)
-    c.lines.clear()
+    # Phase 2's tip holds no Phase 1 landing here; Phase 1's does.
+    c.fake.remote_refs[f'refs/heads/{PHASE_2}'] = OTHER
     c.call(['verify', LAND, '--appear-timeout', '0'])
-    # The fake's landing stands on a Phase 1 run: verified against Phase 2
-    # it has no evidence run, and the revert names Phase 2.
-    ok = (
-        c.code == 1
-        and 'no CI run on the candidate' in c.text
-        and f'refs/heads/{PHASE_2}:' in c.text
-    )
-    return ok, 'verified against Phase 2, which has no run' if ok else c.text
+    ok = c.code == 0 and f'VERIFIED {LAND}' in c.text and PHASE_2 not in c.text
+    return ok, 'verified on Phase 1, inferred' if ok else c.text
+
+
+@case('phase: verify with no --phase-branch, no phase holding it, refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp)
+    c.fake.remote_refs = {f'refs/heads/{PHASE_2}': OTHER}
+    c.call(['verify', LAND, '--appear-timeout', '0'])
+    ok = c.code == 2 and 'no phase branch on origin holds' in c.text
+    return ok, 'refused by name' if ok else c.text
 
 
 @case('lands: a task-named topic branch under the phase branch')

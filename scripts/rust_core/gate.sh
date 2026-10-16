@@ -22,12 +22,13 @@
 # the checkpoint's gate.sh there, which resolves the checkpoint again with
 # its own ratchet.py, refuses to judge from any other commit, and runs the
 # checkpoint's harness against the candidate. A phase's first checkpoint is
-# its fork point from the epic branch, no landing commit (T2.0); when that
-# commit's own ratchet.py predates fork points and refuses it (Phase 2's
-# fork point, the bootstrap T2.0 records), the merged phase's last landing
-# stands in (ratchet.py stand-in): its harness judges, handed --base <that
-# landing>, which its own ratchet.py resolves to that landing, and the
-# stand-in is printed. A checkpoint with no ratchet.py
+# its fork point from the epic branch, no landing commit (T2.0). Phase 2's
+# holds Phase 1's ratchet.py, which refuses it; for that one fork point,
+# pinned below with the landing that stands in for it, and only when every
+# condition bootstrap_problem reads from git holds, that landing's harness
+# judges, handed --base <that landing> (the first landing itself judged as
+# its parent's tree under its trailers), and the gate says so. A checkpoint
+# with no ratchet.py
 # is the bootstrap, before T1.14's landing: the candidate's harness runs, and
 # no acceptance claim is made. Each run prints the commit whose harness
 # judged: from T1.14's landing on, that is the checkpoint, a landing commit.
@@ -221,6 +222,73 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The one bootstrap a checkpoint is judged by another commit's harness for
+# (T2.0): the phase, its fork point from the epic branch, and the landing
+# that stands in for it, pinned here. SDM_GATE_BOOTSTRAP ("PHASE FORK
+# STAND") replaces the pin for the gate's own tests only; ci.yml sets it
+# nowhere (tests/test_t20_bootstrap.py holds it to that).
+read -r bootstrap_phase bootstrap_fork bootstrap_stand <<<"${SDM_GATE_BOOTSTRAP:-rust-core-phase-2 9604074af96b8a05a5532c91249470595b38a4c5 bd44b34270ca59679ddf1fb4104d8aaa0373ddfb}"
+# The data the harness reads from the checkpoint's tree: the fork point and
+# the stand-in must agree on every one of these paths.
+judging=(contract docs/design/rust-core/register.yaml docs/design/rust-core/register.schema.json
+  ':(glob)docs/design/rust-core/phase-*/decisions.md' ':(glob)docs/design/rust-core/phase-*/locked-set.yaml'
+  docs/design/rust-core/phase-0 rust scripts/rust_core/gate.sh scripts/rust_core/ratchet.py
+  scripts/rust_core/compare.py scripts/rust_core/coverage.py scripts/rust_core/register.py
+  scripts/rust_core/wheel_smoke.py scripts/rust_core/bridge_freeze.py scripts/rust_core/bridge_freeze.json
+  scripts/rust_core/bridge_changes.json scripts/rust_core/l0_deps.py scripts/rust_core/l0_scan.py
+  scripts/rust_core/selftest.py scripts/rust_core/emulation-allowlist.txt)
+# bootstrap_problem: why the bootstrap does not apply to $candidate's HEAD
+# and $checkpoint, or nothing (status 0) when every condition holds:
+# - the checkpoint is the pinned fork point, which is the merge base of the
+#   remote phase branch and the remote epic branch, read from git here;
+# - the candidate holds no landing commit after the fork point, but for
+#   itself as the first landing: an empty landing commit whose Base-SHA and
+#   Checkpoint-SHA are the fork point;
+# - the stand-in is the pinned landing, a landing commit, and the merged
+#   phase's last landing the fork point holds: the second parent of the
+#   newest merge on its first-parent history whose second parent is one;
+# - the fork point only adds files to the stand-in's tree, and none of the
+#   judging data above.
+bootstrap_problem() {
+  local g=(git -C "$candidate") remote fork landings head merged=''
+  for remote in "$bootstrap_phase" rust-core; do
+    "${g[@]}" rev-parse -q --verify "refs/remotes/origin/$remote^{commit}" >/dev/null ||
+      { echo "no origin/$remote to read the fork point from"; return 1; }
+  done
+  fork=$("${g[@]}" merge-base "refs/remotes/origin/$bootstrap_phase" refs/remotes/origin/rust-core) || fork=''
+  [ "$fork" = "$bootstrap_fork" ] ||
+    { echo "the fork point of origin/$bootstrap_phase from origin/rust-core is ${fork:-none}, not $bootstrap_fork"; return 1; }
+  head=$("${g[@]}" rev-parse HEAD)
+  landings=$("${g[@]}" log --format=%H -E --grep='^Land ' "$bootstrap_fork..HEAD")
+  if [ -n "$landings" ]; then
+    [ "$landings" = "$head" ] ||
+      { echo "the candidate holds a landing commit after the fork point: judge it against that landing"; return 1; }
+    [ "$("${g[@]}" rev-list --parents -n 1 HEAD | wc -w)" = 2 ] &&
+      [ "$("${g[@]}" rev-parse 'HEAD^{tree}')" = "$("${g[@]}" rev-parse 'HEAD^^{tree}')" ] ||
+      { echo 'the candidate is a landing commit that is not empty, with one parent'; return 1; }
+    for key in Base-SHA Checkpoint-SHA; do
+      [ "$("${g[@]}" log -1 --format="%(trailers:key=$key,valueonly)" HEAD | tr -d ' \n')" = "$bootstrap_fork" ] ||
+        { echo "the first landing's $key is not the fork point $bootstrap_fork"; return 1; }
+    done
+  fi
+  while read -r _ _ second _; do
+    [ -n "${second:-}" ] || continue
+    case "$("${g[@]}" log -1 --format=%s "$second")" in
+      'Land '*) merged=$second; break ;;
+    esac
+  done < <("${g[@]}" rev-list --first-parent --parents "$bootstrap_fork")
+  [ "$merged" = "$bootstrap_stand" ] ||
+    { echo "the merged phase's last landing the fork point holds is ${merged:-none}, not $bootstrap_stand"; return 1; }
+  [ -n "$("${g[@]}" log -1 --format='%(trailers:key=Base-SHA,valueonly)' "$bootstrap_stand")" ] ||
+    { echo "the stand-in $bootstrap_stand records no Base-SHA: no landing commit"; return 1; }
+  if [ -n "$("${g[@]}" diff --name-only --diff-filter=a "$bootstrap_stand" "$bootstrap_fork")" ] ||
+    ! "${g[@]}" diff --quiet "$bootstrap_stand" "$bootstrap_fork" -- "${judging[@]}"; then
+    echo "the fork point and the stand-in differ in more than added files outside the judging data"
+    return 1
+  fi
+  return 0
+}
+
 if [ "$harness" = 0 ]; then
   candidate=$(git rev-parse --show-toplevel) || exit 2
   if [ -n "$(git -C "$candidate" status --porcelain --untracked-files=no)" ]; then
@@ -240,20 +308,34 @@ if [ "$harness" = 0 ]; then
   if [ "$kind" = harness ]; then
     git -C "$candidate" worktree add --quiet --detach "$scratch/checkpoint" "$checkpoint" || exit 1
     worktrees+=("$scratch/checkpoint")
-    # The bootstrap of a fork point (T2.0): no landing commit, and its own
-    # ratchet.py refuses it, so the merged phase's last landing stands in.
+    # The bootstrap (T2.0; owner question H2): Phase 2's fork point holds
+    # Phase 1's ratchet.py, which refuses any checkpoint that is no landing
+    # commit, itself included, so its harness cannot judge. Then, and only
+    # then, Phase 1's last landing stands in, its harness judging. Each
+    # condition is read here from git, none from the candidate's own tools
+    # (bootstrap_problem), and any other non-landing checkpoint takes the
+    # normal path, its own harness resolving it again.
     case "$(git -C "$candidate" log -1 --format=%s "$checkpoint")" in
       'Land '*) ;;
       *)
-        if ! "$PYTHON" "$scratch/checkpoint/scripts/rust_core/ratchet.py" checkpoint \
-          --repo "$candidate" "${where[@]}" >/dev/null 2>&1; then
-          stand=$("$PYTHON" "$candidate/scripts/rust_core/ratchet.py" stand-in \
-            --repo "$candidate" "$checkpoint") || exit 1
-          echo "gate.sh: the checkpoint $checkpoint is the phase's fork point, and its own ratchet.py refuses it; the merged phase's last landing $stand stands in, its harness judging" >&2
-          git -C "$candidate" worktree add --quiet --detach "$scratch/stand-in" "$stand" || exit 1
+        if [ "$checkpoint" = "$bootstrap_fork" ]; then
+          why=$(bootstrap_problem) || { echo "gate.sh: the bootstrap is refused: $why" >&2; exit 1; }
+          echo "gate.sh: the checkpoint $checkpoint is $bootstrap_phase's fork point, whose own ratchet.py refuses it; Phase 1's last landing $bootstrap_stand stands in, its harness judging (the T2.0 bootstrap)" >&2
+          git -C "$candidate" worktree add --quiet --detach "$scratch/stand-in" "$bootstrap_stand" || exit 1
           worktrees+=("$scratch/stand-in")
-          "$scratch/stand-in/scripts/rust_core/gate.sh" --harness-for "$candidate" \
-            --base "$stand" "${for_harness[@]+"${for_harness[@]}"}"
+          judged=$candidate
+          extra=()
+          if [ "$(git -C "$candidate" rev-list --count "$checkpoint..HEAD" --grep='^Land ' -E)" != 0 ]; then
+            # The first landing itself (its phase push or a replay of it):
+            # its parent's tree, which is its own, judged under its
+            # trailers, as a landing is.
+            git -C "$candidate" worktree add --quiet --detach "$scratch/landed" HEAD^ || exit 1
+            worktrees+=("$scratch/landed")
+            judged=$scratch/landed
+            extra=(--protected-paths "$(git -C "$candidate" log -1 --format='%(trailers:key=Reviewed-by,valueonly,unfold) %(trailers:key=Protected-paths,valueonly,unfold)' HEAD | tr '\n' ' ')")
+          fi
+          "$scratch/stand-in/scripts/rust_core/gate.sh" --harness-for "$judged" \
+            --base "$bootstrap_stand" "${for_harness[@]+"${for_harness[@]}"}" "${extra[@]+"${extra[@]}"}"
           exit $?
         fi ;;
     esac

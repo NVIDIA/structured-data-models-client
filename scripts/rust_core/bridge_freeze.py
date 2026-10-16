@@ -810,8 +810,12 @@ def phase_base(environ: Mapping[str, str]) -> str:
 
 
 def problems(root: Path = REPO_ROOT, ref: str | None = None) -> list[str]:
-    """The check as ``l0_deps.py`` runs it, against ``base_ref(ref)``."""
-    ref = base_ref(ref)
+    """The check as ``l0_deps.py`` runs it, against ``base_ref(ref)``; a
+    phase setting that is no phase branch is a problem, named."""
+    try:
+        ref = base_ref(ref)
+    except phases.PhaseError as error:
+        return [f'the base branch: {error}']
     if not ref.strip():
         return [f'the base branch is blank (--base or {BASE_ENV}): name one']
     return check(root, base_baseline(root, ref))

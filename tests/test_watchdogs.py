@@ -204,3 +204,23 @@ def test_the_loop_keeps_an_unreadable_transcript(tmp_path):
 def test_the_loop_is_silent_when_all_is_well(tmp_path):
     (tmp_path / 'a1.output').write_text(_call('ls', 1) + '\n', encoding='utf-8')
     assert _loop(tmp_path, tmp_path) == ''
+
+
+@pytest.mark.parametrize('tool', ['stuck_agents.py', 'rule_watch.py'])
+def test_no_tasks_directory_at_all_fails_loudly(tool: str, tmp_path: Path):
+    """T2.0 fix 1: neither TASKS_DIR nor SDM_TASKS_DIR: a WATCHDOG-ERROR
+    line on stdout, which the loop keeps, and exit 1, not argparse's
+    stderr."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith('SDM_')}
+    env['SDM_ORCH_STATE'] = str(tmp_path)
+    done = subprocess.run(
+        [sys.executable, str(TOOLS / tool)],
+        capture_output=True,
+        text=True,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert done.stdout.startswith('WATCHDOG-ERROR'), done.stdout
+    assert 'no tasks directory' in done.stdout

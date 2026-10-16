@@ -55,7 +55,11 @@ def main(problems):
     ap.add_argument('minutes', nargs='?', type=float, default=15)
     a = ap.parse_args()
     if not a.tasks_dir:
-        ap.error('give TASKS_DIR or set SDM_TASKS_DIR')
+        # Loudly, on stdout as the loop greps it, not argparse's stderr.
+        problems.report(
+            'no tasks directory: give TASKS_DIR or set SDM_TASKS_DIR'
+        )
+        return 1
     try:
         ceiling_min = float(
             os.environ.get('SDM_EXPECTED_WAIT_CEILING_MIN') or CEILING_MIN
