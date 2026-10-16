@@ -10,6 +10,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from sdm_client.errors import StructuredDataError
 from sdm_client.in_process.refusal import refusal
 from sdm_client.in_process.tables import to_arrow, values
 
@@ -115,7 +116,14 @@ class Shape:
                 f'{where} omits column(s) {absent} that the context carries',
             )
         arrow = to_arrow(table, self.columns, self.dtypes, self.keys)
-        return TableTensor.from_arrow(arrow, stypes=self.stypes, device='cpu')
+        try:
+            return TableTensor.from_arrow(
+                arrow, stypes=self.stypes, device='cpu'
+            )
+        except (TypeError, ValueError) as error:
+            raise refusal(
+                'VALIDATION_FAILED', 'table cannot be represented by SDM'
+            ) from error
 
 
 @dataclass
@@ -160,9 +168,17 @@ def labelled(
             'TASK_SCHEMA_MISMATCH',
             f'context target {column!r} contains null labels',
         )
-    arrow = to_arrow(table, [column], {column: target.get('dtype', 'float64')})
     stype = 'categorical' if classifies else 'numerical'
-    y = TableTensor.from_arrow(arrow, stypes={column: stype}, device='cpu')
+    try:
+        arrow = to_arrow(
+            table, [column], {column: target.get('dtype', 'float64')}
+        )
+        y = TableTensor.from_arrow(arrow, stypes={column: stype}, device='cpu')
+    except (StructuredDataError, TypeError, ValueError) as error:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            'context labels cannot be represented by SDM',
+        ) from error
     if not classifies:
         return y, (), ()
     encoded = tuple(y.categorical.categories[0].tolist())
