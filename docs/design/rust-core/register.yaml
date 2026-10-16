@@ -5786,3 +5786,149 @@ entries:
     subagent, which approved it in round 2, re-ran the boundary sweep at
     b6ac5b76 in five zones: the core holds both the UTC instant and the wall
     clock to the years 1 to 9999 exactly as the reference does.
+
+# --- lane B entries (P2B-1..19) ---
+
+- id: P2B-1
+  title: The core refuses decimal inputs the reference at 6298913c answers, until T2.17
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c, the
+    reference reads a DuckDB DECIMAL column as its declared data type in
+    Table._sanitize: int64 at scale 0, float64 otherwise, the column left
+    as it was where a value does not fit. So a decimal key (key.decimal-18-0,
+    key.decimal-38-10, a HUGEINT key in key.hugeint) and a decimal class
+    target (decimal.class-target-38-18) reach predict, where b413e9ad failed
+    INTERNAL_ERROR at materialize; decimal sums past 38 digits and decimal
+    features float64 cannot hold exactly are sent as float64 sums and
+    rounded values, where b413e9ad refused them INVALID_REQUEST.
+  new_behavior: >-
+    The core keeps Phase 1's exact decimals (register P1B-3, P1B-18, P1B-31,
+    P1B-33, P1B-35 to P1B-37): it refuses each of these inputs by name, as
+    before, a refusal of inputs the reference now answers. T2.17 (exact
+    decimals, KO2-45) retires this entry by answering them, never merging
+    two distinct keys, rather than by matching the reference's float64
+    reading.
+  affected_inputs: >-
+    PredictiveQuery.materialize and SDMClient.predict over a DuckDB source
+    on the core route with a DECIMAL or HUGEINT key, a DECIMAL class target,
+    a DECIMAL sum past 38 digits, or a DECIMAL feature float64 cannot hold
+    exactly.
+  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, decimal.class-target-38-18]
+  refs:
+  - eb6c68eb
+  - contract/decimal-vectors.json
+  - contract/key-inference-vectors.json
+  - contract/sampled-null-key-vectors.json
+  - P1B-3
+  - P1B-18
+  - P1B-31
+  - P1B-33
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16), a
+    blanket approval of T2.0c's temporary entries for refusals of inputs the
+    new reference answers; the reviewers check this entry fits it. Temporary:
+    it lapses when T2.17 lands, and the final gate fails while it remains.
+    The trace of every moved reference line and vector to eb6c68eb is in
+    phase-2/tracker-T2.0c-recording.md; case_outcomes come from ratchet.py
+    once the re-recorded observations are in.
+
+- id: P2B-2
+  title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c,
+    Schema.from_source leaves out a column whose name holds a dot, a
+    backtick, a line feed or a carriage return, with one SDMWarning per
+    table ("users leaves out 'a.b': a predictive query cannot name a column
+    holding a dot, a backtick or a line break"), and describes the rest;
+    b413e9ad refused the table INVALID_REQUEST in SourceTable.
+  new_behavior: >-
+    On the core route python-core still refuses, INVALID_REQUEST "The name
+    'a.b' contains one or more invalid characters", since the host builds
+    SourceTable from the core's description; rust-host describes the
+    column, since the core checks table names only. Measured at T2.0c on
+    DuckDB with each of the four characters: the old route leaves the
+    column out with the warning, the core route refuses. T2.18 (KO2-45)
+    retires this entry by letting any column name work.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source on the core route whose table
+    has a column named with a dot, a backtick, a line feed or a carriage
+    return.
+  cases: [T2.0c]
+  refs: [eb6c68eb]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16); the
+    reviewers check this entry fits it. Temporary: it lapses when T2.18
+    lands, and the final gate fails while it remains. No case covers it
+    yet; T2.18's test author adds one.
+
+- id: P2B-3
+  title: The core refuses 1,001 to 10,000 entities, which the reference gathers, until T2.8c
+  kind: change
+  old_behavior: >-
+    Since main's 1fc5a686, merged into the reference at 6298913c, materialize
+    takes up to 10,000 entities per call and 100,000 across up to 100 calls,
+    gathering more than one call's as several payloads that predict sends
+    one at a time, numbering rows across calls; b413e9ad refused more than
+    1,000 UNSUPPORTED_REQUEST (_check_entity_count, now deleted).
+  new_behavior: >-
+    The core still refuses more than 1,000 entities UNSUPPORTED_REQUEST,
+    field indices (sdm-core materialize, PREDICT_ROWS), and gathers one
+    payload. Measured at T2.0c on DuckDB with 1,001 users: the old route
+    gathers one payload, the core route refuses. T2.8c (multi-call
+    materialize and predict, KO2-45) retires this entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a DuckDB source on the core route with
+    1,001 to 100,000 entities.
+  cases: [T2.0c]
+  refs:
+  - 1fc5a686
+  - P1B-20
+  - packages/structured-data-models-client/tests/t128a-payload-rules.json
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16); the
+    reviewers check this entry fits it. Temporary: it lapses when T2.8c
+    lands, and the final gate fails while it remains. P1B-20's old behavior
+    (the reference's _check_entity_count) no longer holds at 6298913c; the
+    re-recorded t128a vectors (base.regression.entities-1001,
+    many-1001.entities-1001) carry the reference's new outcomes.
+
+- id: P2B-4
+  title: The core refuses the rows_per_call option, which the reference takes, until T2.8c
+  kind: change
+  old_behavior: >-
+    Since main's 1fc5a686, merged into the reference at 6298913c, materialize
+    takes rows_per_call, a positive integer that lowers how many entities
+    one call scores (a non-integer, a bool or below 1 refused
+    INVALID_REQUEST); b413e9ad refused it as an unknown option,
+    INVALID_REQUEST.
+  new_behavior: >-
+    The client forwards rows_per_call to the core with every option the
+    materializer accepts, and the core refuses it as not one of its options
+    (sdm-request options), INVALID_REQUEST naming the field options. Measured
+    at T2.0c on DuckDB with 8 users and rows_per_call=3: the old route
+    gathers three payloads, the core route refuses. T2.8c (KO2-45) retires
+    this entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a DuckDB source on the core route with
+    rows_per_call set.
+  cases: [T2.0c]
+  refs: [1fc5a686]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approver: owner, by KO2-45 (Q-I, approved by owner 2026-10-16); the
+    reviewers check this entry fits it. Temporary: it lapses when T2.8c
+    lands, and the final gate fails while it remains. No case covers it
+    yet; T2.8c's test author adds one.
