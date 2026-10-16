@@ -36,9 +36,9 @@ Start Phase 2. Read docs/design/rust-core/orchestration/phase-2-prep.md.
 
 1. Send me all of its owner questions at once, in plain language, each with your recommendation and what it costs either way. Don't wait for the answers; start the prep that doesn't depend on them.
 2. Create rust-core-phase-2 from rust-core, and phase-2/design.md (3 pages or fewer) and phase-2/tracker.md on it.
-3. P2.0 first: parameterize the phase branch across ci.yml and scripts/rust_core (a separate test author, an implementer, two reviewers; it lands alone).
+3. T2.0 first: parameterize the phase branch across ci.yml and scripts/rust_core, and bootstrap the first checkpoint (a separate test author, an implementer, two reviewers; it lands alone).
 4. In parallel: the new held-out set, frozen in the current case format, where implementers can't read it; the test-author batch; the update from main and the reference rerun; the speed-ups (queue-driven land_chain, CI5, one Codex pane per lane, the fast local loop).
-5. Then run the one-day plan: 2.1 alone first, then the lanes stacked on it.
+5. Then run the one-day plan: T2.1 alone first, then the lanes stacked on it.
 
 Never sit idle waiting on CI or on me: when a question is mine, mark it owner-pending in the tracker and keep going on everything else. Give me a five-line check-in twice a day, and a plain-language note whenever you need a decision.
 ```
@@ -49,5 +49,5 @@ Never sit idle waiting on CI or on me: when a question is mine, mark it owner-pe
 Set up the watchdogs for this phase (session-only, nothing that outlives the session):
 1. A silent background loop around scripts/rust_core/orchestration/stuck_agents.py and rule_watch.py on this session's task-output directory, which only notifies me when an agent is blocked or breaks a rule. When an agent is flagged, stop it and resume it with the blocking command named and an alternative.
 2. A heartbeat every 3 hours: check for stuck agents, red CI on the phase and lane branches, queued landings and idle lanes, and act on what you find. If nothing needs doing, say so in one line.
-3. A daily cleanup: scripts/rust_core/orchestration/clean_tmp.sh as a dry run first; apply only what it lists as safe, never a worktree in use.
+3. A daily cleanup: scripts/rust_core/orchestration/clean_tmp.sh as a dry run first. Rerun it with --apply only if nothing it lists is still needed; otherwise remove the listed items you're sure of one by one, with the owner's approval for anything outside the scratchpad.
 ```

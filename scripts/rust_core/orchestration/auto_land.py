@@ -10,8 +10,11 @@ Each file in <state>/land-queue/*.json describes one approved candidate:
    "title": "Land T1.x: ...", "checkpoint": SHA, "protected_paths": "a; b", "summary": "..."}
 land.py itself enforces every rule (both reviews approve the SHA, CI green, descends from
 the phase head, protected paths). This script only waits for CI, reruns jobs that failed on
-a Docker pull rate limit, and calls land.py. Prints one line per event:
+a Docker pull rate limit, and calls land.py (with --phase-branch <phase>). Prints one line
+per event:
   LANDED <title> <landing sha> | FAILED <title>: <reason> | (nothing while waiting)
+An entry it cannot read or process (bad JSON, a missing key) prints  FAILED <file>: <error>,
+becomes <pkg>.failed and the other entries are still processed.
 
 Clean rebase (added 2026-10-13). When land.py refuses because the candidate does not
 descend from the phase head, and the lane worktree is clean with HEAD == the candidate,
@@ -59,11 +62,15 @@ Environment:
   SDM_ORCH_STATE      state directory (default ~/.local/share/sdm-orchestration): holds
                       land-queue/, logs/ and the lock that keeps one lander at a time
   SDM_LAND_QUEUE      the queue directory (default <state>/land-queue)
-  SDM_PHASE_BRANCH    the phase branch (default rust-core-phase-2; --phase overrides);
-                      lanes are <phase>-lane-<x>, topic branches <phase>-<name>
+  SDM_PHASE_BRANCH    the phase branch, e.g. rust-core-phase-2 (required unless --phase
+                      gives it; exits 2 when neither does); lanes are <phase>-lane-<x>,
+                      topic branches <phase>-<name>
   SDM_TOOLS_PYTHON    the Python that runs `ratchet.py check` first (default: the Python
                       running this script; the worktree's .venv* and python3 are the fallbacks)
-  SDM_AFTER_LAND_LOG  the after-landing log (default <state>/logs/after-land.log)
+  SDM_CLEAN_AFTER_LAND  set to 1 to run `clean_tmp.sh --apply --after-land <worktree>` after
+                      each landing, which deletes the lane's Cargo target (default: off, so
+                      lanes keep their build directories across landings)
+  SDM_AFTER_LAND_LOG  that cleanup's log (default <state>/logs/after-land.log)
 SDM_LAND_QUEUE and SDM_AFTER_LAND_LOG are used by auto_land_selftest.py.
 """
 
@@ -86,7 +93,9 @@ Q = pathlib.Path(
     os.environ.get('SDM_LAND_QUEUE', STATE / 'land-queue')
 ).expanduser()
 REMOTE = 'origin'
-PHASE = os.environ.get('SDM_PHASE_BRANCH') or 'rust-core-phase-2'
+PHASE = (
+    os.environ.get('SDM_PHASE_BRANCH') or ''
+)  # required: checked in __main__
 NOT_DESCENDED = 'does not descend from the head of'
 
 
@@ -97,7 +106,7 @@ def topic_branch_re(phase):
     )
 
 
-TOPIC_BRANCH = topic_branch_re(PHASE)
+TOPIC_BRANCH = None  # topic_branch_re(PHASE), set in __main__
 # CI3's check_moved refusals: the candidate is not X moved over landing commits only.
 MOVE_REFUSED = re.compile(
     r'--moved-from [0-9a-f]{7,40}: not (?:the same code|the same patches'
@@ -404,106 +413,109 @@ def protected_from_ratchet(worktree, checkpoint):
     return None
 
 
-def main():
-    for f in sorted(Q.glob('*.json')):
-        q = json.loads(f.read_text())
-        try:
-            branch = branch_of(q)
-        except ValueError as e:
-            print(f'FAILED {q.get("title", f.stem)}: {e}')
-            f.rename(f.with_suffix('.failed'))
-            continue
-        # A moved candidate is judged on X's run (E130: no re-CI after a clean move).
-        x = q.get('moved_from')
-        runs = runs_for(x or q['candidate'], branch)
-        if not runs:
-            continue
-        run = runs[0]
-        if run['status'] != 'completed':
-            continue
-        if run['conclusion'] != 'success':
-            if infra_only(run['databaseId']):
-                marker = f.with_suffix('.reruns')
-                n = int(marker.read_text()) if marker.exists() else 0
-                if n < 4:
-                    sh(
-                        'gh',
-                        'run',
-                        'rerun',
-                        str(run['databaseId']),
-                        '-R',
-                        R,
-                        '--failed',
-                    )
-                    marker.write_text(str(n + 1))
-                    continue
-            on = f' on the moved-from commit {x[:12]}' if x else ''
-            print(
-                f'FAILED {q["title"]}: CI run {run["databaseId"]} {run["conclusion"]}{on} (not only a Docker limit)'
-            )
-            f.rename(f.with_suffix('.failed'))
-            continue
-        # The ratchet's own list of protected paths is authoritative (2026-10-14: two landings
-        # went red because a hand-built list missed protected files). Union it with the queued one;
-        # refuse to land if the ratchet can't be run.
-        checkpoint = q['checkpoint']
-        if x:
-            # land.py refuses a --checkpoint other than merge-base(candidate, phase head); the
-            # queued one stays X's. Read the ratchet against the same merge base.
-            sh('git', 'fetch', '-q', cwd=q['worktree'])
-            checkpoint = sh(
-                'git',
-                'merge-base',
-                q['candidate'],
-                f'refs/remotes/{REMOTE}/{PHASE}',
-                cwd=q['worktree'],
-            ).stdout.strip()
-            if not checkpoint:
-                print(
-                    f'FAILED {q["title"]}: cannot compute the merge base of {q["candidate"][:12]} '
-                    f'and {REMOTE}/{PHASE} in {q["worktree"]}'
+def process(f):
+    q = json.loads(f.read_text())
+    if not isinstance(q, dict):
+        raise ValueError('the entry is not a JSON object')
+    try:
+        branch = branch_of(q)
+    except ValueError as e:
+        print(f'FAILED {q.get("title", f.stem)}: {e}')
+        f.rename(f.with_suffix('.failed'))
+        return
+    # A moved candidate is judged on X's run (E130: no re-CI after a clean move).
+    x = q.get('moved_from')
+    runs = runs_for(x or q['candidate'], branch)
+    if not runs:
+        return
+    run = runs[0]
+    if run['status'] != 'completed':
+        return
+    if run['conclusion'] != 'success':
+        if infra_only(run['databaseId']):
+            marker = f.with_suffix('.reruns')
+            n = int(marker.read_text()) if marker.exists() else 0
+            if n < 4:
+                sh(
+                    'gh',
+                    'run',
+                    'rerun',
+                    str(run['databaseId']),
+                    '-R',
+                    R,
+                    '--failed',
                 )
-                f.rename(f.with_suffix('.failed'))
-                continue
-        named = protected_from_ratchet(q['worktree'], checkpoint)
-        if named is None:
+                marker.write_text(str(n + 1))
+                return
+        on = f' on the moved-from commit {x[:12]}' if x else ''
+        print(
+            f'FAILED {q["title"]}: CI run {run["databaseId"]} {run["conclusion"]}{on} (not only a Docker limit)'
+        )
+        f.rename(f.with_suffix('.failed'))
+        return
+    # The ratchet's own list of protected paths is authoritative (2026-10-14: two landings
+    # went red because a hand-built list missed protected files). Union it with the queued one;
+    # refuse to land if the ratchet can't be run.
+    checkpoint = q['checkpoint']
+    if x:
+        # land.py refuses a --checkpoint other than merge-base(candidate, phase head); the
+        # queued one stays X's. Read the ratchet against the same merge base.
+        sh('git', 'fetch', '-q', cwd=q['worktree'])
+        checkpoint = sh(
+            'git',
+            'merge-base',
+            q['candidate'],
+            f'refs/remotes/{REMOTE}/{PHASE}',
+            cwd=q['worktree'],
+        ).stdout.strip()
+        if not checkpoint:
             print(
-                f"FAILED {q['title']}: could not read the ratchet's protected paths"
+                f'FAILED {q["title"]}: cannot compute the merge base of {q["candidate"][:12]} '
+                f'and {REMOTE}/{PHASE} in {q["worktree"]}'
             )
             f.rename(f.with_suffix('.failed'))
-            continue
-        queued = [
-            p.strip() for p in q['protected_paths'].split(';') if p.strip()
-        ]
-        paths = '; '.join(sorted(set(queued) | set(named)))
-        args = [
-            'python3',
-            'scripts/rust_core/land.py',
-            '--candidate',
-            q['candidate'],
-            '--topic-branch',
-            branch,
-            '--title',
-            q['title'],
-            '--checkpoint',
-            checkpoint,
-            '--protected-paths',
-            paths,
-            '--summary',
-            q['summary'],
-        ]
-        if x:
-            args += ['--moved-from', x]
-        for r in q['reviews']:
-            args += ['--review', r]
-        sh('git', 'fetch', '-q', cwd=q['worktree'])
-        res = sh(*args, cwd=q['worktree'])
-        out = res.stdout + res.stderr
-        landed = [ln for ln in out.splitlines() if ln.startswith('LANDED ')]
-        if landed:
-            print(f'LANDED {q["title"]} {landed[0].split()[1]}')
-            f.rename(f.with_suffix('.landed'))
-            # Owner-approved 2026-10-13 (step 4): drop the landed lane's build output unless in use.
+            return
+    named = protected_from_ratchet(q['worktree'], checkpoint)
+    if named is None:
+        print(
+            f"FAILED {q['title']}: could not read the ratchet's protected paths"
+        )
+        f.rename(f.with_suffix('.failed'))
+        return
+    queued = [p.strip() for p in q['protected_paths'].split(';') if p.strip()]
+    paths = '; '.join(sorted(set(queued) | set(named)))
+    args = [
+        'python3',
+        'scripts/rust_core/land.py',
+        '--candidate',
+        q['candidate'],
+        '--phase-branch',
+        PHASE,
+        '--topic-branch',
+        branch,
+        '--title',
+        q['title'],
+        '--checkpoint',
+        checkpoint,
+        '--protected-paths',
+        paths,
+        '--summary',
+        q['summary'],
+    ]
+    if x:
+        args += ['--moved-from', x]
+    for r in q['reviews']:
+        args += ['--review', r]
+    sh('git', 'fetch', '-q', cwd=q['worktree'])
+    res = sh(*args, cwd=q['worktree'])
+    out = res.stdout + res.stderr
+    landed = [ln for ln in out.splitlines() if ln.startswith('LANDED ')]
+    if landed:
+        print(f'LANDED {q["title"]} {landed[0].split()[1]}')
+        f.rename(f.with_suffix('.landed'))
+        if os.environ.get('SDM_CLEAN_AFTER_LAND') == '1':
+            # Opt-in (owner-approved 2026-10-13, step 4): drop the landed lane's build output
+            # unless in use. Off by default: lanes keep their Cargo target across landings.
             cl = sh(
                 str(pathlib.Path(__file__).with_name('clean_tmp.sh')),
                 '--apply',
@@ -517,15 +529,26 @@ def main():
             log_path.parent.mkdir(parents=True, exist_ok=True)
             with open(log_path, 'a') as log:
                 log.write(f'{q["title"]}: {cl.stdout.strip()}\n')
-        elif NOT_DESCENDED in out:
-            print(auto_rebase(f, q, branch))
-        elif x and MOVE_REFUSED.search(out):
-            # reported by report_needs_confirm below
-            move_refused(f, q, out, branch, checkpoint)
-        else:
-            tail = ' | '.join(out.strip().splitlines()[-3:])
-            print(f'FAILED {q["title"]}: land.py refused: {tail[:300]}')
-            f.rename(f.with_suffix('.failed'))
+    elif NOT_DESCENDED in out:
+        print(auto_rebase(f, q, branch))
+    elif x and MOVE_REFUSED.search(out):
+        # reported by report_needs_confirm() in main()
+        move_refused(f, q, out, branch, checkpoint)
+    else:
+        tail = ' | '.join(out.strip().splitlines()[-3:])
+        print(f'FAILED {q["title"]}: land.py refused: {tail[:300]}')
+        f.rename(f.with_suffix('.failed'))
+
+
+def main():
+    for f in sorted(Q.glob('*.json')):
+        # A malformed entry (bad JSON, a missing key) fails alone; the others still run.
+        try:
+            process(f)
+        except Exception as e:
+            print(f'FAILED {f.name}: {type(e).__name__}: {e}')
+            if f.exists():
+                f.rename(f.with_suffix('.failed'))
     report_needs_confirm()
 
 
@@ -537,9 +560,13 @@ if __name__ == '__main__':
     ap.add_argument(
         '--phase',
         default=PHASE,
-        help='the phase branch (default $SDM_PHASE_BRANCH, else rust-core-phase-2)',
+        help='the phase branch, e.g. rust-core-phase-2 (default $SDM_PHASE_BRANCH; one is required)',
     )
     PHASE = ap.parse_args().phase
+    if not PHASE:
+        ap.error(
+            'set SDM_PHASE_BRANCH or pass --phase: the phase branch, e.g. rust-core-phase-2'
+        )
     TOPIC_BRANCH = topic_branch_re(PHASE)
     import fcntl
 

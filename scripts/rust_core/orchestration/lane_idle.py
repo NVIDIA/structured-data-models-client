@@ -20,7 +20,8 @@ TASKS_DIR holds the agents' a*.output transcripts; it defaults to $SDM_TASKS_DIR
 of the two is required. Environment:
   SDM_REPO                  the repo (default: the git toplevel of this script)
   SDM_LANE_WORKTREE_PREFIX  the lane worktrees' path prefix (default <repo>-lane-)
-  SDM_PHASE_BRANCH          the phase branch (default rust-core-phase-2; --phase overrides)
+  SDM_PHASE_BRANCH          the phase branch, e.g. rust-core-phase-2 (required unless --phase
+                            gives it; exits 2 when neither does)
   SDM_ORCH_STATE            state directory (default ~/.local/share/sdm-orchestration)
 """
 
@@ -88,14 +89,18 @@ def main():
     )
     ap.add_argument(
         '--phase',
-        default=os.environ.get('SDM_PHASE_BRANCH') or 'rust-core-phase-2',
-        help='the phase branch (default $SDM_PHASE_BRANCH, else rust-core-phase-2)',
+        default=os.environ.get('SDM_PHASE_BRANCH') or '',
+        help='the phase branch, e.g. rust-core-phase-2 (default $SDM_PHASE_BRANCH; one is required)',
     )
     ap.add_argument(
         'tasks_dir', nargs='?', default=os.environ.get('SDM_TASKS_DIR')
     )
     ap.add_argument('minutes', nargs='?', type=float, default=25)
     a = ap.parse_args()
+    if not a.phase:
+        ap.error(
+            'set SDM_PHASE_BRANCH or pass --phase: the phase branch, e.g. rust-core-phase-2'
+        )
     if not a.tasks_dir:
         ap.error('give TASKS_DIR or set SDM_TASKS_DIR')
     tasks = pathlib.Path(a.tasks_dir)

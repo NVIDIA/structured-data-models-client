@@ -11,7 +11,7 @@ The package brief above gives the scope, the exits, the design row and the decis
 - Final report: final SHA, each exit with its evidence, deviations, decision rows added, and anything needing the owner.
 
 **Judging paths and guards**
-- Before the first push, list every judging-path file you touch (`compare.py`, `run_python.py`, `ratchet.py`, `gate.sh`, `wheel_smoke.py`, `bridge_freeze.py`, `l0_*.py`, `ci.yml`). If the package relies on its own judging change for its gate, plan two parts up front: the judging change alone, then the rest.
+- Before the first push, list every judging-path file you touch (`compare.py`, `run_python.py`, `ratchet.py`, `coverage.py`, `gate.sh`, `wheel_smoke.py`, `bridge_freeze.py`, `l0_*.py`, `ci.yml`). If the package relies on its own judging change for its gate, plan two parts up front: the judging change alone, then the rest.
 - Any guard or gate change must also pass in its post-landing state: the phase branch at the landing, judged against itself.
 - Guards are frozen at bug fixes. No new frameworks or harness layers; extend the existing runners, vectors and maps.
 - A new case-format key lands with accept and refuse vectors in `contract/tests/malformed-cases.json`, run by both loaders.

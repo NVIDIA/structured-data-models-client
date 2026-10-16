@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Cancel in-progress/queued CI runs on a lane branch whose commit is not the branch head
-# and is not a landing commit ("Land T..."). Lane/phase CI has cancel-in-progress off,
-# so a superseded candidate's run otherwise blocks the new one in the same concurrency group.
+# and is not a landing run (title "Land ...": T<n> and CI<n> landings alike). Lane/phase CI
+# has cancel-in-progress off, so a superseded candidate's run otherwise blocks the new one in
+# the same concurrency group.
 #
 # Lanes are discovered from the remote: every refs/heads/<phase>-lane-<name> whose
 # <name> matches lane.py's [a-z0-9]{1,16} (so -tests* branches are skipped).
@@ -19,19 +20,23 @@
 # --dry-run (or DRY_RUN=1) prints "would cancel ..." instead of cancelling.
 #
 # Environment:
-#   SDM_PHASE_BRANCH  the phase branch (default rust-core-phase-2)
+#   SDM_PHASE_BRANCH  the phase branch, e.g. rust-core-phase-2 (required; exits 2 when unset)
 #   SDM_ORCH_STATE    state directory (default ~/.local/share/sdm-orchestration)
 #   SDM_LAND_QUEUE    the queue directory (default $SDM_ORCH_STATE/land-queue)
 #   SDM_REPO          the repo whose origin is read (default: the git toplevel of this script)
 set -u
-case "${1:-}" in -h|--help) sed -n '6,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; esac
+case "${1:-}" in -h|--help) sed -n '6,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; esac
+[ -n "${SDM_PHASE_BRANCH:-}" ] || {
+  echo "cancel_superseded.sh: set SDM_PHASE_BRANCH to the phase branch, e.g. rust-core-phase-2 (see --help)" >&2
+  exit 2
+}
 R=NVIDIA/structured-data-models-client
 DRY=${DRY_RUN:-0}
 [ "${1:-}" = "--dry-run" ] && DRY=1
 STATE=${SDM_ORCH_STATE:-$HOME/.local/share/sdm-orchestration}
 QDIR=${SDM_LAND_QUEUE:-$STATE/land-queue}
 REPO=${SDM_REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
-P=${SDM_PHASE_BRANCH:-rust-core-phase-2}
+P=$SDM_PHASE_BRANCH
 
 # From the queue: "topic <branch>", "protect <sha>", "moved <branch> <candidate> <moved_from>".
 QINFO=$(python3 - "$QDIR" "$P" <<'EOF'
@@ -100,7 +105,7 @@ while read -r head ref; do
       [ "$head_too" = 1 ] || continue
       why="${head:0:8} lands on ${X:0:8}'s run"
     else
-      case "$title" in Land\ T*) continue;; esac
+      case "$title" in Land\ *) continue;; esac  # a landing run (Land T<n>... or Land CI<n>...)
       why="$sha superseded by ${head:0:8}"
     fi
     if [ "$DRY" = 1 ]; then

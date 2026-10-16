@@ -14,20 +14,25 @@ Cases: clean replay, conflict, dirty worktree, HEAD != candidate, lease rejected
 (2026-10-14) a topic-branch entry ("branch"), an invalid "branch", and moved_ok entries (CI3,
 land.py --moved-from): a clean move lands on X's evidence, a second move keeps X, X's run
 decides, a move CI3 refuses goes to .needs-confirm, another refusal fails as before; and
-cancel_superseded.sh (topic branches, moved_from runs protected, a moved head's run cancelled).
+cancel_superseded.sh (topic branches, moved_from runs protected, a moved head's run cancelled,
+every "Land ..." run spared, CI<n> landings included). Also (2026-10-15): malformed queue entries
+fail alone; SDM_PHASE_BRANCH is required by auto_land.py, cancel_superseded.sh, lane_idle.py and
+land_chain.sh; land_chain.sh refuses an ORDER entry with nothing queued; clean_tmp.sh (dry run)
+never lists a scratch directory holding a git worktree or clone.
 The fake gh can also serve runs per branch from $FAKE_GH_RUNS (a JSON file, newest first),
 applies -q with jq, logs to $FAKE_GH_LOG; the fake land.py logs its argv to $FAKE_LAND_LOG,
 refuses a --checkpoint that is not the merge base and checks --moved-from like CI3 (same tree,
 only empty 'Land ' commits in X..H); a fake ratchet.py logs its --checkpoint.
-The phase branch is $SDM_PHASE_BRANCH (default rust-core-phase-2); every other SDM_* variable
-is cleared and SDM_ORCH_STATE points into the temp dir, so the real queue, logs and lock are
-never touched.
+The phase branch is $SDM_PHASE_BRANCH (default rust-core-phase-2 here; the tools themselves
+require it) and is set for every tool run; every other SDM_* variable is cleared and
+SDM_ORCH_STATE points into the temp dir, so the real queue, logs and lock are never touched.
 Usage: auto_land_selftest.py [--keep]   (--keep leaves the temp dir and prints its path)
 """
 
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -128,6 +133,27 @@ def run(*a, cwd=None, check=True, env=ENV):
     if check and r.returncode:
         raise RuntimeError(f'{a} failed: {r.stdout}{r.stderr}')
     return r
+
+
+def run_limited(*a, env, timeout=60):
+    """Run a tool that might loop (land_chain.sh sleeps between polls): (returncode, output).
+    On timeout the whole process group is killed and the return code is -9."""
+    p = subprocess.Popen(
+        a,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        text=True,
+        env=env,
+        start_new_session=True,
+    )
+    try:
+        out, _ = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        out, _ = p.communicate()
+        return -9, f'{out}\n(timed out after {timeout}s)'
+    return p.returncode, out
 
 
 def g(cwd, *a, check=True):
@@ -437,9 +463,10 @@ def case_clean(root):
         c,
         len(la) == 1
         and opt(la[0], '--topic-branch') == LANE_BR
+        and opt(la[0], '--phase-branch') == PHASE
         and opt(la[0], '--checkpoint') == s['base']
         and '--moved-from' not in la[0],
-        'lane entry: land.py --topic-branch is the lane, queued checkpoint, no --moved-from',
+        'lane entry: land.py --phase-branch PHASE, --topic-branch is the lane, queued checkpoint, no --moved-from',
     )
     out2 = auto_land(s, new)
     check(
@@ -695,6 +722,11 @@ def case_moved(root):
         and (s['q'] / f'{PKG}.landed').exists(),
         "LANDED on X's green run though the new tip's run is unfinished",
     )
+    check(
+        c,
+        not (s['root'] / 'after-land.log').exists(),
+        'no after-landing cleanup unless SDM_CLEAN_AFTER_LAND=1',
+    )
     la = logged(s['land_log'])[-1]
     check(
         c,
@@ -927,6 +959,9 @@ def case_cancel(root):
                 24, 'f' * 40, 'queued', branch=br['lane'], title='Land T9.1: x'
             ),  # landing: keep
             ci(
+                25, '8' * 40, 'queued', branch=br['lane'], title='Land CI9: x'
+            ),  # a CI<n> landing: keep
+            ci(
                 32, heads['topic'], 'in_progress', branch=br['topic']
             ),  # moved head, X running: cancel
             ci(
@@ -965,7 +1000,7 @@ def case_cancel(root):
     check(
         c,
         would == ['21', '32', '62'],
-        'dry run: would cancel 21 (superseded), 32 and 62 (moved heads) only',
+        'dry run: would cancel 21 (superseded), 32 and 62 (moved heads) only; never 24/25 (Land T/CI runs)',
     )
     check(
         c,
@@ -990,6 +1025,184 @@ def case_cancel(root):
     )
 
 
+def case_malformed(root):
+    c = 'malformed queue entries'
+    print(c)
+    s = setup(root, 'clean')
+    (s['q'] / 'a-bad.json').write_text('{not json')
+    (s['q'] / 'b-nokey.json').write_text(
+        json.dumps({'lane': LANE, 'title': 'Land T9.97: no candidate'})
+    )
+    out = auto_land(s, s['cand'])
+    show(out)
+    lines = out.splitlines()
+    check(
+        c,
+        any(ln.startswith('FAILED a-bad.json: JSONDecodeError') for ln in lines)
+        and any(
+            ln.startswith("FAILED b-nokey.json: KeyError: 'candidate'")
+            for ln in lines
+        )
+        and 'Traceback' not in out,
+        'FAILED <file>: <error> for bad JSON and a missing key, no traceback',
+    )
+    check(
+        c,
+        (s['q'] / 'a-bad.failed').exists()
+        and (s['q'] / 'b-nokey.failed').exists(),
+        'both malformed entries become .failed',
+    )
+    check(
+        c,
+        any(ln.startswith(f'REBASED {PKG} ') for ln in lines),
+        'the well-formed entry after them is still processed',
+    )
+
+
+def no_phase_env(root, **extra):
+    env = {k: v for k, v in ENV.items() if k != 'SDM_PHASE_BRANCH'}
+    fake = root / 'fakebin'
+    if not fake.exists():
+        fake.mkdir()
+        (fake / 'gh').write_text(FAKE_GH)
+        (fake / 'gh').chmod(0o755)
+    env.update(
+        SDM_ORCH_STATE=str(root / 'state'),
+        SDM_LAND_QUEUE=str(root / 'queue'),
+        FAKE_GH_LOG=str(root / 'gh.log'),
+        PATH=f'{fake}{os.pathsep}{ENV["PATH"]}',
+        **extra,
+    )
+    return env
+
+
+def case_phase_required(root):
+    c = 'SDM_PHASE_BRANCH required'
+    print(c)
+    (root / 'queue').mkdir()
+    (root / 'tasks').mkdir()
+    env = no_phase_env(
+        root,
+        ORDER='t9.99-p1',
+        SHAS='0' * 40,
+        SDM_TASKS_DIR=str(root / 'tasks'),
+    )
+    for cmd in (
+        (sys.executable, str(AUTO_LAND)),
+        ('/bin/bash', str(CANCEL), '--dry-run'),
+        (sys.executable, str(HERE / 'lane_idle.py'), str(root / 'tasks')),
+        ('/bin/bash', str(HERE / 'land_chain.sh')),
+    ):
+        rc, out = run_limited(*cmd, env=env)
+        name = pathlib.Path(cmd[1]).name
+        check(
+            c,
+            rc == 2 and 'SDM_PHASE_BRANCH' in out,
+            f'{name} without it: exit 2 naming SDM_PHASE_BRANCH (got {rc})',
+        )
+    check(c, not logged(root / 'gh.log'), 'no gh call was made')
+
+
+def case_chain_missing(root):
+    c = 'land_chain.sh: ORDER entries must be queued'
+    print(c)
+    q = root / 'queue'
+    q.mkdir()
+    (root / 'tasks').mkdir()
+    (q / 't9.1-p1.next').write_text('{}')
+    (q / 't9.3-p1.json').write_text('{}')
+    env = no_phase_env(
+        root,
+        SDM_PHASE_BRANCH=PHASE,
+        ORDER='t9.1-p1 t9.2-p1 t9.3-p1 t9.4-p1',
+        SHAS='0' * 40,
+        SDM_TASKS_DIR=str(root / 'tasks'),
+    )
+    rc, out = run_limited('/bin/bash', str(HERE / 'land_chain.sh'), env=env)
+    show(out)
+    check(
+        c,
+        rc == 1
+        and 'NOT QUEUED' in out
+        and ' t9.2-p1 t9.4-p1' in out
+        and 't9.1-p1' not in out
+        and 't9.3-p1' not in out,
+        'exit 1 naming t9.2-p1 and t9.4-p1 only',
+    )
+    check(
+        c,
+        not logged(root / 'gh.log') and (q / 't9.1-p1.next').exists(),
+        'checked before anything else: no gh call, nothing renamed',
+    )
+
+
+def case_clean_tmp(root):
+    c = 'clean_tmp.sh: scratch holding a worktree'
+    print(c)
+    repo, scratch, home = root / 'repo', root / 'scratch', root / 'home'
+    home.mkdir()
+    g(root, 'init', '-q', '-b', 'main', str(repo))
+    commit_file(repo, 'f.txt', 'f\n', 'base')
+    live = scratch / 'sess1' / 'wt-live'
+    deep = (
+        scratch / 'sess3' / 'a' / 'b' / 'c' / 'wt-deep'
+    )  # .git beyond find's depth 4
+    for wt in (live, deep):
+        wt.parent.mkdir(parents=True)
+        g(repo, 'worktree', 'add', '-q', '--detach', str(wt))
+    (live / 'uncommitted.txt').write_text('work in progress\n')
+    (scratch / 'sess2').mkdir()
+    (scratch / 'sess2' / 'notes.txt').write_text('stale\n')
+    (scratch / 'sess4').mkdir()
+    g(root, 'clone', '-q', str(repo), str(scratch / 'sess4' / 'clone'))
+    env = dict(
+        ENV,
+        HOME=str(home),
+        SDM_SCRATCH=str(scratch),
+        SDM_REPO=str(repo),
+        SDM_ORCH_STATE=str(root / 'state'),
+        AGE='0',
+    )
+    r = run('/bin/bash', str(HERE / 'clean_tmp.sh'), env=env, check=False)
+    out = r.stdout + r.stderr
+    show('\n'.join(ln for ln in out.splitlines() if str(scratch) in ln))
+    would = [ln for ln in out.splitlines() if ln.startswith('would remove ')]
+
+    def listed(d):
+        return any(
+            ln.startswith(f'would remove {scratch / d} ') for ln in would
+        )
+
+    check(
+        c,
+        not listed('sess1'),
+        'sess1 (holds a worktree with an uncommitted file) not listed',
+    )
+    check(
+        c,
+        f'refuse {scratch / "sess1"} (holds a git worktree or clone' in out,
+        'sess1 refused: holds a git worktree',
+    )
+    check(
+        c,
+        not listed('sess3')
+        and f'refuse {scratch / "sess3"} (holds the worktree' in out,
+        "sess3 (a worktree below find's depth) refused from git worktree list",
+    )
+    check(c, not listed('sess4'), 'sess4 (holds a clone) not listed')
+    check(c, listed('sess2'), 'sess2 (plain stale scratch) is listed')
+    check(
+        c,
+        r.returncode == 0
+        and not any(ln.startswith('remove ') for ln in out.splitlines())
+        and (live / 'uncommitted.txt').exists(),
+        'dry run removes nothing',
+    )
+    (live / 'uncommitted.txt').unlink()
+    for wt in (live, deep):
+        g(repo, 'worktree', 'remove', str(wt))
+
+
 def main():
     keep = '--keep' in sys.argv
     tmp = tempfile.TemporaryDirectory(
@@ -1012,6 +1225,10 @@ def main():
                 case_moved_refused,
                 case_moved_other,
                 case_cancel,
+                case_malformed,
+                case_phase_required,
+                case_chain_missing,
+                case_clean_tmp,
             )
         ):
             d = root / f'c{i}'

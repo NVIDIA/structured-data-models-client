@@ -9,9 +9,12 @@
 
 A tool call waiting on the owner's approval never gets a result, so it shows
 up here. Long waits that are expected (gh run watch, until/sleep loops,
-herdr agent wait) are labelled as such rather than flagged. Prints one line
-per call pending for MINUTES (default 15) or more:
-  POSSIBLY-BLOCKED|expected-wait <agent> <age>min <tool>: <input>
+herdr agent wait, gate.sh) are labelled as such rather than flagged, until
+they pass a ceiling: an expected wait pending for longer than
+$SDM_EXPECTED_WAIT_CEILING_MIN minutes (default 90) is reported as
+POSSIBLY-BLOCKED too, since a hung loop or gate run looks the same. Prints one
+line per call pending for MINUTES (default 15) or more:
+  POSSIBLY-BLOCKED|expected-wait <agent> <age>min <tool>[ (note)]: <input>
 
 TASKS_DIR holds the agents' a*.output transcripts; it defaults to
 $SDM_TASKS_DIR and one of the two is required.
@@ -32,6 +35,7 @@ EXPECTED = (
     'prepush.sh --full',
     'gate.sh',
 )
+CEILING_MIN = 90  # an expected wait older than this is flagged anyway
 
 
 def main():
@@ -46,6 +50,12 @@ def main():
     a = ap.parse_args()
     if not a.tasks_dir:
         ap.error('give TASKS_DIR or set SDM_TASKS_DIR')
+    try:
+        ceiling_min = float(
+            os.environ.get('SDM_EXPECTED_WAIT_CEILING_MIN') or CEILING_MIN
+        )
+    except ValueError:
+        ap.error('SDM_EXPECTED_WAIT_CEILING_MIN must be a number of minutes')
     tasks = pathlib.Path(a.tasks_dir)
     limit_min = a.minutes
 
@@ -85,12 +95,14 @@ def main():
                 risky = any(
                     r in inp for r in ('rm -rf', 'rm -r ', '--force', 'sudo ')
                 )
-                kind = (
-                    'expected-wait'
-                    if any(e in inp for e in EXPECTED) and not risky
-                    else 'POSSIBLY-BLOCKED'
-                )
-                print(f'{kind} {f.stem} {age:.0f}min {name}: {inp[:240]}')
+                expected = any(e in inp for e in EXPECTED) and not risky
+                kind, note = 'POSSIBLY-BLOCKED', ''
+                if expected and age > ceiling_min:
+                    # Past the ceiling: a hung `until` loop or gate.sh run, or an approval wait.
+                    note = f' (expected wait past the {ceiling_min:.0f}min ceiling)'
+                elif expected:
+                    kind = 'expected-wait'
+                print(f'{kind} {f.stem} {age:.0f}min {name}{note}: {inp[:240]}')
         except Exception as e:
             print(f'error {f.name}: {e}')
 

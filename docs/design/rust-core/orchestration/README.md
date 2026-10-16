@@ -48,12 +48,12 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 ## Landing
 
 - **land.py does all landings.** It makes an empty `Land <ID>: ...` commit with `Reviewed-by`, `Protected-paths`, `Base-SHA` and `Checkpoint-SHA` trailers and fast-forwards the phase branch in one atomic push. It refuses an empty `--protected-paths`; pass `"none (docs and evidence only)"` when nothing protected changed.
-- **CI skips the landing commit** when the candidate's tree has green exact-SHA evidence (owner, items 30 and 36). `land.py verify <landing SHA>` stands on the candidate's run.
+- **CI skips the landing commit** when the candidate's tree has green exact-SHA evidence (decision E131). `land.py verify <landing SHA>` stands on the candidate's run.
 - **Moved landings (`--moved-from X`)**: an approved, green X rebased over landing commits only (same tree, the same patches one to one) lands on X's reviews and run, with no re-review. A move over another package's product commits is not a moved landing: it needs its own CI run and a confirmation.
 - **Stack on the landing commit**, never on a landed candidate. Phase 1 lost a cycle when the ratchet refused a merge base that wasn't a landing commit.
-- **Clean rebases are confirmed by script** (`mech_confirm.py`, owner item 28). Reviewers look again only when the move changed something.
+- **Clean rebases are confirmed by script** (`mech_confirm.py`; decision E130). Reviewers look again only when the move changed something.
 - **`land_chain.sh` queues one package at a time** and lands each only after the run of the package below it has completed.
-- **Judging-path changes land alone, first.** If a package changes a file `gate.sh` takes from the checkpoint (`compare.py`, `run_python.py`, `ratchet.py`, `gate.sh`, `wheel_smoke.py`, the guards, `ci.yml`) and relies on that change for its own gate, it lands in two parts: the judging change alone, then the rest. Every guard or gate change must also pass in its post-landing state.
+- **Judging-path changes land alone, first.** If a package changes a file `gate.sh` takes from the checkpoint (`compare.py`, `run_python.py`, `ratchet.py`, `coverage.py`, `gate.sh`, `wheel_smoke.py`, the guards `bridge_freeze.py` and `l0_*.py`, `ci.yml`) and relies on that change for its own gate, it lands in two parts: the judging change alone, then the rest. Every guard or gate change must also pass in its post-landing state.
 
 ## CI
 
@@ -96,7 +96,7 @@ Never edit a bash script while it's running. Bash reads scripts incrementally, s
 
 ## Where Phase 1's time went
 
-70 landings over a week, 6 to 14 a day. A package's median first-commit-to-landing time was about 4.5 hours; the tail was 8 to 11.
+82 landings over about a week, 6 to 14 a day. A package's median first-commit-to-landing time was about 4.5 hours; the tail was 8 to 11.
 Implementers spent about 2 of their 3.3 active hours in local pytest, cargo and gate runs.
 The day-killers were the tails: rebases across other lanes' product commits (about 0.6 per landing, 45 to 120 minutes each), red or cancelled CI (on 2026-10-14 only 35 of 106 runs were green), owner waits (one 6.7 hours, two overnight) and stalls.
 
@@ -105,7 +105,7 @@ The fixes, best first. Items 1, 3, 5 and 6 aren't built yet; they are Phase 2 pr
 1. **A merge-queue flow.** Stack each approved, green package on the queue at approval time, so every later move is over landing commits only and lands without new CI. `land_chain.sh` reads its queue from a file.
 2. **The CI fixes above** (private images, timeouts, opt-level 1, no CI on landing commits). Done.
 3. **Split the slow CI jobs**: a separate `rust-host` job so `cross-host` stops waiting for `cargo test`, and shard `cargo test` and the contract tests, each shard checking that the shards add up to the whole. Target: a push in about 20 to 25 minutes instead of 43 to 88.
-4. **Settle owner questions at kickoff**, all at once, plus two fixed check-ins a day. New questions found mid-phase are marked owner-pending and work continues around them (owner, item 34).
+4. **Settle owner questions at kickoff**, all at once, plus two fixed check-ins a day. New questions found mid-phase are marked owner-pending and work continues around them (the owner's rule from Phase 1).
 5. **A fast local loop**: keep each lane's Cargo target across landings, a shared sccache, one prebuilt wheel per phase head, warm venvs, `pytest -n auto`.
 6. **One Codex per lane**, re-prompted automatically after capacity errors.
 7. **Fewer, bigger landings.** One early judging-path landing, case families admitted in one landing when the reference observations are committed first. Splits cost 7 to 12% of lane time and caught nothing.

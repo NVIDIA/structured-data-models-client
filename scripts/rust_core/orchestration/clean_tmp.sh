@@ -12,11 +12,12 @@
 #   Build output is removed when stale, or when over CAP_GIB (default 15) with no write for 30 min and no
 #   process using its worktree (owner-approved 2026-10-13, step 3).
 # `clean_tmp.sh --after-land <worktree>` removes that worktree's build output after a landing unless a
-# process is using it (step 4; auto_land.py calls it with --apply).
+# process is using it (step 4; auto_land.py calls it with --apply only when SDM_CLEAN_AFTER_LAND=1).
 #
 # Dry run by default: it prints "would remove <dir>" and removes nothing. --apply removes.
 # Never removes: a path git tracks, a git worktree, /, $HOME, ~/code, the repo, the state dir or
-# anything inside it, or a directory holding one of those.
+# anything inside it, or a directory holding one of those: a .git within 4 levels below it, or
+# any worktree `git -C <repo> worktree list` names under it.
 #
 #   clean_tmp.sh [--apply | --dry-run] [--after-land <worktree>]
 #
@@ -33,7 +34,7 @@ while [ $# -gt 0 ]; do
     --apply) APPLY=1;;
     --dry-run) APPLY=0;;
     --after-land) AFTER=${2:?--after-land needs a worktree}; shift;;
-    -h|--help) sed -n '6,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    -h|--help) sed -n '6,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
     *) echo "clean_tmp.sh: unknown argument $1 (see --help)" >&2; exit 2;;
   esac
   shift
@@ -45,7 +46,7 @@ real() { (cd "$1" 2>/dev/null && pwd -P) || printf '%s\n' "${1%/}"; }  # the phy
 uses() { # $1 = path; true if another process (not this script or its pipeline) names it in its args
   ps -axo args= 2>/dev/null | W="$1" awk 'index($0, ENVIRON["W"]) && !/clean_tmp\.sh/ && !/ENVIRON/ {f=1} END {exit !f}'
 }
-protected() { # $1 = path; true (printing why) if it must never be removed
+special() { # $1 = path; true (printing why) if it is, holds or lies inside a protected location
   local p=${1%/} rp x rx
   [ -n "$p" ] || { echo "refuse empty path"; return 0; }
   rp=$(real "$p")
@@ -56,7 +57,25 @@ protected() { # $1 = path; true (printing why) if it must never be removed
     case "$rx/" in "$rp"/*) echo "refuse $p (is or holds $x)"; return 0;; esac
   done
   case "$rp/" in "$(real "$STATE")"/*) echo "refuse $p (inside the state dir)"; return 0;; esac
+  return 1
+}
+protected() { # $1 = path; true (printing why) if it must never be removed
+  local p=${1%/} rp g w
+  special "$p" && return 0
+  rp=$(real "$p")
   [ -e "$p/.git" ] && { echo "refuse $p (a git worktree)"; return 0; }
+  # A worktree or clone anywhere below it (a reviewer's throwaway worktree in its scratch dir).
+  g=$(find "$p" -maxdepth 4 -name .git -print -quit 2>/dev/null)
+  [ -n "$g" ] && { echo "refuse $p (holds a git worktree or clone: ${g%/.git})"; return 0; }
+  if [ -n "$REPO" ]; then
+    while IFS= read -r w; do
+      [ -n "$w" ] || continue
+      case "$(real "$w")/" in "$rp"/*) echo "refuse $p (holds the worktree $w)"; return 0;; esac
+      case "${w%/}/" in "$rp"/*|"${p}"/*) echo "refuse $p (holds the worktree $w)"; return 0;; esac
+    done <<WT
+$(git -C "$REPO" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')
+WT
+  fi
   if git -C "$(dirname "$p")" rev-parse --is-inside-work-tree >/dev/null 2>&1 &&
      [ -n "$(git -C "$(dirname "$p")" ls-files -- "$(basename "$p")" 2>/dev/null | head -1)" ]; then
     echo "refuse $p (holds tracked files)"; return 0
@@ -111,7 +130,7 @@ else
     echo "skip scratch: $SDM_SCRATCH is not a directory"
   elif [ "$SCRATCH" = "$TMPROOT" ]; then
     echo "skip scratch: $SDM_SCRATCH is /tmp itself"
-  elif why=$(protected "$SCRATCH"); then
+  elif why=$(special "$SCRATCH"); then
     echo "skip scratch: $why"
   elif git -C "$SCRATCH" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "skip scratch: $SDM_SCRATCH is inside a git worktree"

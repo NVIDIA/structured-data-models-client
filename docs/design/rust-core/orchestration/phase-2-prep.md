@@ -14,7 +14,11 @@ This page is a starting plan, drafted on 2026-10-14 from Phase 1's state and upd
 
 Do these first, mostly in parallel. None is product code.
 
-1. **P2.0 Parameterize the phase branch.** 18 files hard-code `rust-core-phase-1`: `.github/workflows/ci.yml` (11 places, including `cancel-in-progress`), `scripts/rust_core/prepush.sh`, ten Python scripts beside it (`land.py`, `lane.py`, `ratchet.py`, `prune_caches.py`, `replay_jobs.py`, `bridge_freeze.py`, `l0_deps.py` and three self-tests) and six tests under `tests/`. Make the phase a single setting (for example `rust-core-phase-[0-9]+` patterns in CI and one constant or flag in the scripts). It touches judging paths, so it lands alone, first, with two reviewers. `grep -rn 'rust-core-phase-1' .github scripts tests` finds them.
+1. **T2.0 Parameterize the phase branch, and bootstrap the first checkpoint.** 18 files hard-code `rust-core-phase-1`: `.github/workflows/ci.yml` (11 places, including `cancel-in-progress`), `scripts/rust_core/prepush.sh`, ten Python scripts beside it (`land.py`, `lane.py`, `ratchet.py`, `prune_caches.py`, `replay_jobs.py`, `bridge_freeze.py`, `l0_deps.py` and three self-tests) and six tests under `tests/`. Make the phase a single setting (for example `rust-core-phase-[0-9]+` patterns in CI and one constant or flag in the scripts). `grep -rn 'rust-core-phase-1' .github scripts tests` finds them.
+   Two more things in the same package. The phase branch starts at `rust-core`'s head, which is a merge, not a landing commit, so `ratchet.py` ("the checkpoint ... is not a landing commit") refuses the gate for every early candidate: accept the phase branch's fork point from `rust-core` as the first checkpoint, with a self-test. And `land.py`, `ratchet.py` and `lane.py` accept only `T<n>.<n>[a-z]` and `CI<n>` package IDs, so Phase 2 packages are named `T2.<n>`.
+   **CI on `rust-core` itself is red since the Phase 1 merge** (run 38818504440 on `91a00319`): off `rust-core-phase-1` branches the gate runs without the ratchet (`gate: no ratchet off the phase branch`) and `contract/tests/test_runners.py` holds outcomes to the reference, so every approved difference fails `rust-test`, `contract-python` and `cross-host`. T2.0 also gives the epic branch a ratchet base (for example, the merged phase's last landing as its checkpoint), so `rust-core` goes green again.
+   And a flake to fix while there: `sdm-testkit`'s `duck::load` can read DuckDB's extension while a parallel test is still installing it (`json.duckdb_extension.tmp-...` "is not the one recorded"); install once before the tests run.
+   It touches judging paths, so it lands alone, first, with two reviewers.
 2. **A new held-out set**, frozen in the current case format before implementation starts, kept where implementers can't read it. Phase 1's set is spent.
 3. **The speed-ups** from the handbook's "Where Phase 1's time went": the queue-driven `land_chain.sh`, CI5 (split `rust-host` out of `rust-test`, shard `cargo test` and the contract tests; it lands alone), one Codex pane per lane, and the fast local loop. About a day of work in parallel; each one pays back within the phase.
 4. **The owner questions below**, all sent at once, in plain language, each with a recommendation.
@@ -27,40 +31,40 @@ M is mechanical (ported, with reference vectors), N novel, R risky.
 
 | ID | Package | Kind | Estimate | Depends on |
 |---|---|---|---|---|
-| 2.1 | **Contract and harness part 1**: one version bump with paging (a continuation on fetch results), multi-column keys in `Neighbors`, `Lookup` and key sets (for `composite_key`), ranking and forecast result fields, expression columns, fallback limits as capabilities, `RequestState` pickle versioning, a backend axis in the case format with `malformed-cases.json` vectors | N | 2 h | prep |
-| 2.2 | SQLite dialect in `sdm-data`, the Python ADBC provider returning Arrow, a dev-only rust-host provider over `rusqlite` | M | 4 h | 2.1 |
-| 2.3 | Postgres dialect, the psycopg provider (Arrow without pandas), a rust-host provider (real driver or recorded results, Q2.2) | M/R | 4–5 h | 2.1 |
-| 2.4 | The full L4 (goldens on all three databases) and L5 (pandas 2 and 3; the same tables through three drivers give identical Arrow) matrices | M | 3 h | 2.2, 2.3 |
-| 2.5 | Conformance kit in `sdm-testkit`: fixture dataset, multi-page results, limits, expected answers, capability failure and retryability | N | 4 h | 2.1 |
-| 2.6 | In-memory fallback for optional requests: ordering, row limits, memory and transfer limits that fail loudly (Phase 4's frames reuse it) | N/R | 4 h | 2.1 |
-| 2.7 | A minimal non-SQL test provider passing the kit, and a swapped `DataLayer` running the same prediction with no domain edits | M | 2–3 h | 2.5 |
-| 2.8a | **Ranking, materialize side**: `top_k`, `candidates`, the decomposition moved into `sdm-request` | N/R | 4–5 h | 2.1 |
-| 2.8b | **Ranking, predict side**: scores and rankings, `prediction_statistic`, NaN ranks last (PD-1), parts put back together | N/R | 4 h | 2.8a |
-| 2.9 | Forecasting: `num_forecasts`, `lag_timesteps`, quantiles in the result (the decomposition is already in the core since T1.36) | N/R | 3–4 h | 2.1 |
-| 2.10 | PQL targets: other aggregations, `open_window`, `condition`, `logical_target`, `target_filter`, `static_target` | M | 4 h | 2.1 |
-| 2.11 | Sampling options: `anchor_entity`, `context_anchor_time`, `exclude_cols_dict`, `num_hops`, `num_neighbors`, `max_pq_iterations`, `use_prediction_time`, `return_embeddings`, unseeded, `parent_table` (real data hits it) | M/R | 4–5 h | 2.1 |
-| 2.12 | Schema rules: `composite_key`, `float_nan` (the lead item of plan section 8's carried rows), `float_signed_zero`, `key_tie`, `key_name_order` | R | 4–5 h | 2.1 |
-| 2.13 | The query and option long tail: `entity_filter`, `entity_ids`, `assuming`, `evaluate`, `explain`, `target_transform_null`, `inference_config_text` | mixed | 3–5 h | 2.1 |
-| 2.14 | S1 host clean-up: the response-bytes handoff, reference `Request` pickles loading (H23), ledger rows deleted, the bridge freeze lowered | M | 3 h | 2.8b |
-| 2.15 | Coverage `--gate S1` and L3 seed sets wired into `gate.sh` (judging path; land it early) | M | 2 h | 2.1 |
-| 2.16 | The slice gate: full local gate, L3, register reconciliation, evidence pack, phase review | M | 6 h | all |
+| T2.1 | **Contract and harness part 1**: one version bump with paging (a continuation on fetch results), multi-column keys in `Neighbors`, `Lookup` and key sets (for `composite_key`), ranking and forecast result fields, expression columns, fallback limits as capabilities, `RequestState` pickle versioning, a backend axis in the case format with `malformed-cases.json` vectors | N | 2 h | prep |
+| T2.2 | SQLite dialect in `sdm-data`, the Python ADBC provider returning Arrow, a dev-only rust-host provider over `rusqlite` | M | 4 h | T2.1 |
+| T2.3 | Postgres dialect, the psycopg provider (Arrow without pandas), a rust-host provider (real driver or recorded results, Q2.2) | M/R | 4–5 h | T2.1 |
+| T2.4 | The full L4 (goldens on all three databases) and L5 (pandas 2 and 3; the same tables through three drivers give identical Arrow) matrices | M | 3 h | T2.2, T2.3 |
+| T2.5 | Conformance kit in `sdm-testkit`: fixture dataset, multi-page results, limits, expected answers, capability failure and retryability | N | 4 h | T2.1 |
+| T2.6 | In-memory fallback for optional requests: ordering, row limits, memory and transfer limits that fail loudly (Phase 4's frames reuse it) | N/R | 4 h | T2.1 |
+| T2.7 | A minimal non-SQL test provider passing the kit, and a swapped `DataLayer` running the same prediction with no domain edits | M | 2–3 h | T2.5 |
+| T2.8a | **Ranking, materialize side**: `top_k`, `candidates`, the decomposition moved into `sdm-request` | N/R | 4–5 h | T2.1 |
+| T2.8b | **Ranking, predict side**: scores and rankings, `prediction_statistic`, NaN ranks last (PD-1), parts put back together | N/R | 4 h | T2.8a |
+| T2.9 | Forecasting: `num_forecasts`, `lag_timesteps`, quantiles in the result (the decomposition is already in the core since T1.36) | N/R | 3–4 h | T2.1 |
+| T2.10 | PQL targets: other aggregations, `open_window`, `condition`, `logical_target`, `target_filter`, `static_target` | M | 4 h | T2.1 |
+| T2.11 | Sampling options: `anchor_entity`, `context_anchor_time`, `exclude_cols_dict`, `num_hops`, `num_neighbors`, `max_pq_iterations`, `use_prediction_time`, `return_embeddings`, unseeded, `parent_table` (real data hits it) | M/R | 4–5 h | T2.1 |
+| T2.12 | Schema rules: `composite_key`, `float_nan` (the lead item of plan section 8's carried rows), `float_signed_zero`, `key_tie`, `key_name_order` | R | 4–5 h | T2.1 |
+| T2.13 | The query and option long tail: `entity_filter`, `entity_ids`, `assuming`, `evaluate`, `explain`, `target_transform_null`, `inference_config_text` | mixed | 3–5 h | T2.1 |
+| T2.14 | S1 host clean-up: the response-bytes handoff, reference `Request` pickles loading (H23), ledger rows deleted, the bridge freeze lowered | M | 3 h | T2.8b |
+| T2.15 | Coverage `--gate S1` and L3 seed sets wired into `gate.sh` (judging path; land it early) | M | 2 h | T2.1 |
+| T2.16 | The slice gate: full local gate, L3, register reconciliation, evidence pack, phase review | M | 6 h | all |
 | carried | Plan section 8's "Carried into Phase 2" rows (harness hygiene, host wording, FX-1 to FX-6), bundled into the lanes they touch rather than landed one by one | M | spread | — |
 
-**Critical path**: prep → 2.1 → 2.8a → 2.8b → 2.14 → gate, about 19 to 20 hours with one fix round each. There's no slack for a second fix round on ranking, so give lane D the strongest implementer and both reviewers every round.
+**Critical path**: prep → T2.1 → T2.8a → T2.8b → T2.14 → gate, about 19 to 20 hours with one fix round each. There's no slack for a second fix round on ranking, so give lane D the strongest implementer and both reviewers every round.
 
 ## A one-day schedule (6 lanes)
 
 | Lane | H0–H4 | H4–H8 | H8–H12 | H12–H16 | H16–H24 |
 |---|---|---|---|---|---|
-| A (head) | 2.1, then 2.15 | 2.14 prep | 2.14 | gate support | 2.16 gate and review |
-| B dialects | 2.2 | 2.3 | 2.4 | fixes | |
-| C data layer | 2.5 | 2.6 | 2.7 | fixes | |
-| D ranking | 2.8a | 2.8a fixes | 2.8b | 2.8b fixes | |
-| E forecast and targets | 2.9 | fixes | 2.10 | fixes | |
-| F options and schema | 2.11 | 2.12 | 2.13 | fixes | |
+| A (head) | T2.1, then T2.15 | T2.14 prep | T2.14 | gate support | T2.16 gate and review |
+| B dialects | T2.2 | T2.3 | T2.4 | fixes | |
+| C data layer | T2.5 | T2.6 | T2.7 | fixes | |
+| D ranking | T2.8a | T2.8a fixes | T2.8b | T2.8b fixes | |
+| E forecast and targets | T2.9 | fixes | T2.10 | fixes | |
+| F options and schema | T2.11 | T2.12 | T2.13 | fixes | |
 | Reference machine | update from `main`, reference rerun, SQLite and Postgres bases | gate dry run at about H8 | | full `gate.sh --locked` and L3 | |
 
-Every lane starts on top of 2.1's candidate as a stack, so it lands later as a moved landing without new CI.
+Every lane starts on top of T2.1's candidate. A package moved over landing commits only lands on its own run without new CI. One moved over another lane's product commits needs a fresh CI run and a confirmation, so expect about one extra CI cycle per landing until the merge-queue flow (prep item 3) stacks approved packages in landing order.
 
 ## Owner questions to settle at kickoff
 
@@ -92,11 +96,11 @@ Send these together, each with the recommendation, and record the answers in `ph
 
 | Risk | Mitigation |
 |---|---|
-| Ranking's decomposition needs two or more fix rounds | Split into 2.8a and 2.8b, tests and vectors written in prep, the result shape fixed in 2.1 |
-| `composite_key` touches key sets, the graph and the sampler | Its contract shape goes in 2.1; if it slips it stays a parked refusal under G6(d) |
+| Ranking's decomposition needs two or more fix rounds | Split into T2.8a and T2.8b, tests and vectors written in prep, the result shape fixed in T2.1 |
+| `composite_key` touches key sets, the graph and the sampler | Its contract shape goes in T2.1; if it slips it stays a parked refusal under G6(d) |
 | Six lanes saturate CI | The private images and skipped landing runs are in place; stack approved packages; CI5 |
 | One Codex pane serializes about 60 reviews | One pane per lane (G3) |
-| Contract bumps collide across lanes | All new vocabulary goes in 2.1; anything later is renumbered by the second lane to land |
+| Contract bumps collide across lanes | All new vocabulary goes in T2.1; anything later is renumbered by the second lane to land |
 | The reference machine is slow | Start the rerun and base loading in prep; dry-run the gate at about H8 |
 | `evaluate` or `explain` turn out large | Q2.4 lets them be cut without blocking the gate |
 | The update from `main` changes behavior | Do it in prep; each new difference must trace to a deliberate commit on `main` |

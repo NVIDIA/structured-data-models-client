@@ -10,7 +10,9 @@
 # when the whole chain has landed (CHAIN DONE).
 #
 # Each package in ORDER waits in the queue as <pkg>.next (an auto_land.py entry); this
-# renames it to <pkg>.json only when every package before it has landed.
+# renames it to <pkg>.json only when every package before it has landed. Before anything else
+# it checks that every package in ORDER has a <pkg>.next, <pkg>.json or <pkg>.landed (a
+# restarted chain) in the queue, and exits 1 naming the ones that have none.
 #
 # Environment:
 #   ORDER             the packages to land, in order (required), e.g. "t2.1-p1 t2.2-p1"
@@ -20,14 +22,25 @@
 #   SDM_ORCH_STATE    state directory (default ~/.local/share/sdm-orchestration): the queue,
 #                     logs/ and rule_watch.ignore (acknowledged violations, one pattern a line)
 #   SDM_LAND_QUEUE    the queue directory (default $SDM_ORCH_STATE/land-queue)
-#   SDM_PHASE_BRANCH  the phase branch (default rust-core-phase-2), passed on to the tools
+#   SDM_PHASE_BRANCH  the phase branch, e.g. rust-core-phase-2 (required; exits 2 when
+#                     unset), passed on to the tools
 set -u
-case "${1:-}" in -h|--help) sed -n '6,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; esac
+case "${1:-}" in -h|--help) sed -n '6,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; esac
+[ -n "${SDM_PHASE_BRANCH:-}" ] || {
+  echo "land_chain.sh: set SDM_PHASE_BRANCH to the phase branch, e.g. rust-core-phase-2 (see --help)" >&2
+  exit 2
+}
+export SDM_PHASE_BRANCH
 : "${ORDER:?set ORDER to the packages to land, in order (see --help)}"
 : "${SHAS:?set SHAS to the stack candidate SHAs (see --help)}"
 T=${SDM_TASKS_DIR:?set SDM_TASKS_DIR to the agents task-output directory (see --help)}
 STATE=${SDM_ORCH_STATE:-$HOME/.local/share/sdm-orchestration}
 Q=${SDM_LAND_QUEUE:-$STATE/land-queue}
+missing=""
+for p in $ORDER; do
+  [ -f "$Q/$p.next" ] || [ -f "$Q/$p.json" ] || [ -f "$Q/$p.landed" ] || missing="$missing $p"
+done
+[ -z "$missing" ] || { echo "NOT QUEUED: no $Q/<pkg>.next or .json for:$missing" >&2; exit 1; }
 B=$(cd "$(dirname "$0")" && pwd)
 mkdir -p "$STATE/logs"
 LOG=$STATE/logs/land-chain.log
