@@ -131,9 +131,11 @@ KUMO_RELATIONAL = ModelSpec(
         # Empty, and not because the model does not explain. Nothing on this
         # client takes a format argument, the contract's `OutputSpec` is only
         # `{fields: [...]}`, and the endpoint stamps its own name on what it
-        # returns: `kumo_rfm_v2_1` from the shipping build. Two names were
-        # declared here that appear in no response on any task or graph, which
-        # is a list of formats to ask for on a surface that has no such knob.
+        # returns: `kumo_rfm_v2_1` from the deployment that serves
+        # explanations, which is not the one this client is measured against.
+        # Two names were declared here that appear in no response on any task
+        # or graph, which is a list of formats to ask for on a surface that
+        # has no such knob.
         explanation_formats=(),
         limits=RELATIONAL_LIMITS,
         unread_feature_stypes=frozenset({'text'}),
