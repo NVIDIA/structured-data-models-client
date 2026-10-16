@@ -15,7 +15,9 @@ notebook, before the implementation. The cases are
 ``base.adventureworks.color.json``.
 
 - The questions are the notebook's (``examples/databricks/
-  adventureworks_relational.ipynb``, ``QUESTIONS['inactivity_90d']`` and
+  adventureworks_relational.ipynb``, frozen since T2.0c as
+  ``contract/fixtures/adventureworks/notebook-fa0637d4.ipynb``,
+  ``QUESTIONS['inactivity_90d']`` and
   ``QUESTIONS['product_color']``): the query text as the client prints
   it once parsed (``to_string()``), no option the notebook does not pass
   (``inference_config`` among them), and the entities its
@@ -71,7 +73,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / 'contract/cases/s1'
 IDS = ['base.adventureworks.churn', 'base.adventureworks.color']
 BASE = 'base.adventureworks'
-NOTEBOOK = ROOT / 'examples/databricks/adventureworks_relational.ipynb'
+#: The notebook as it was at fa0637d4, the cases' source: main deleted it
+#: from ``examples/`` (18e26f1c), and T2.0c keeps it here, frozen, so the
+#: cases are still held to the questions they were written from.
+NOTEBOOK = ROOT / 'contract/fixtures/adventureworks/notebook-fa0637d4.ipynb'
 #: Each case's question in the notebook's ``QUESTIONS``.
 QUESTION = {
     'base.adventureworks.churn': 'inactivity_90d',

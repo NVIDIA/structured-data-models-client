@@ -22,8 +22,8 @@ setup(
         # core's epic branch (decision E16). Databricks Runtime 14.3 LTS and
         # serverless environment 1 ship older ones, which the install
         # upgrades; pyarrow 8 failed there on import before any floor.
-        'numpy>=1.26',
-        'pandas>=2.2',
+        'numpy>=1.23.5',
+        'pandas>=2.2.2',
         'pyarrow>=14.0.1',
         'python-dateutil',
         'requests>=2.28.2',
