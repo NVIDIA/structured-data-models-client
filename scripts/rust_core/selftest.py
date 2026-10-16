@@ -1391,12 +1391,14 @@ def freeze_cases(results: list[Result]) -> None:
         rewrite=True,
         declare={f'{materialize}::_anchor': {'gone': 'out'}},
     )
-    entity_count = 'RelationalMaterializer._check_entity_count'
+    # The batch's row cap in _check_limits (main's 1fc5a686 deleted the
+    # entity count's own method, which this case moved before T2.0c).
+    entity_count = 'RelationalMaterializer._check_limits'
     entity_rule = (
-        '        if len(indices) > ceiling:\n'
+        '        if len(rows) > cap:\n'
         '            raise StructuredDataError(\n'
-        "                f'{len(indices):,} entities were asked for, and {described} '\n"
-        "                f'{ceiling:,} at a time; split them across calls',\n"
+        "                f'this batch scores {len(rows)} rows and the endpoint accepts at '\n"
+        "                f'most {cap} for a {kind} task',\n"
         "                code='UNSUPPORTED_REQUEST',\n"
         '            )\n'
     )
@@ -2724,9 +2726,12 @@ def scan_cases(results: list[Result]) -> None:
         lambda r: edit(
             r / l0_scan.CI_FILE,
             '  installed-wheel:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n'
-            '    needs: build\n    steps:\n      - uses: actions/checkout@v7\n',
+            '    needs: build\n    steps:\n'
+            '      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n',
             '  installed-wheel:\n    runs-on: ubuntu-latest\n    timeout-minutes: 20\n'
-            f'    needs: build\n    steps:\n      - uses: actions/checkout@v7\n        {ALLOWED_TO_FAIL}: true\n',
+            '    needs: build\n    steps:\n'
+            '      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n'
+            f'        {ALLOWED_TO_FAIL}: true\n',
         ),
         f'`{ALLOWED_TO_FAIL}` in job installed-wheel',
     )
