@@ -253,6 +253,15 @@ def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
                 ).materialize(indices=[0, 1]),
                 model=KumoRelational(),
             ),
+            ('VALIDATION_FAILED', 422): lambda: client.predict(
+                Request(
+                    context=people().iloc[:40][['person_id', 'churn']],
+                    predict=people().iloc[40:][['person_id']],
+                    target='churn',
+                    task='classification',
+                ),
+                model=KumoTabular(),
+            ),
             ('UNSUPPORTED_DTYPE', 422, 'seen'): lambda: client.predict(
                 Request(
                     context=people()
@@ -382,16 +391,17 @@ def test_a_model_left_in_training_mode_is_named_not_run(tabular):
 def test_without_the_extra_the_extra_is_named():
     """In a fresh interpreter, since nothing the extra brings may already be
     imported: a module imported at the top of the in-process package once
-    failed before the check that names the extra."""
+    failed before the check that names the extra. On Python 3.10, where the
+    extra installs nothing, the refusal says which Python it needs."""
     script = (
         'import sys\n'
         "for name in ('sdm', 'torch', 'pyarrow'):\n"
         '    sys.modules[name] = None\n'
-        'from sdm_client import MissingExtraError, SDMClient\n'
+        'from sdm_client import SDMClient, StructuredDataError\n'
         'try:\n'
         '    SDMClient.in_process()\n'
-        'except MissingExtraError as error:\n'
-        "    print(error.details['extra'])\n"
+        'except StructuredDataError as error:\n'
+        "    print(error.code, error.details['extra'], '3.11' in str(error))\n"
     )
     run = subprocess.run(
         [sys.executable, '-c', script],
@@ -399,4 +409,9 @@ def test_without_the_extra_the_extra_is_named():
         text=True,
         check=False,
     )
-    assert run.stdout.strip() == 'in-process', run.stderr
+    names_the_python = sys.version_info < (3, 11)
+    assert run.stdout.split() == [
+        'MISSING_EXTRA',
+        'in-process',
+        str(names_the_python),
+    ], run.stderr

@@ -15,6 +15,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import json
+import sys
 import threading
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
@@ -248,6 +249,17 @@ def _require_sdm() -> Any:
         import sdm  # noqa: F401
         import torch
     except ImportError as error:
+        if sys.version_info < (3, 11):
+            raise StructuredDataError(
+                f'running a model in process needs structured-data-models, '
+                f'which needs Python 3.11 or later; this is Python '
+                f'{sys.version_info.major}.{sys.version_info.minor}',
+                code='MISSING_EXTRA',
+                details={
+                    'extra': 'in-process',
+                    'package': 'structured-data-models',
+                },
+            ) from error
         raise MissingExtraError(
             'in-process', 'structured-data-models'
         ) from error

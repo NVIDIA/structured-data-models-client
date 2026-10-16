@@ -7,7 +7,7 @@
 | `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]`. |
 | `pip install 'structured-data-models-client[all]'` | The relational model and every warehouse backend. |
 | `pip install 'structured-data-models-client[databricks-serving]'` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
-| `pip install 'structured-data-models-client[in-process]'` | Runs the models in this Python process with structured-data-models, through `SDMClient.in_process`. Brings PyTorch. **Python 3.11 or later**: on 3.10 pip reports `No matching distribution found for structured-data-models`. Not in `[all]`, for the same reason as `[databricks-serving]`. |
+| `pip install 'structured-data-models-client[in-process]'` | Runs the models in this Python process with structured-data-models, through `SDMClient.in_process`. Brings PyTorch. **Python 3.11 or later**: on 3.10 the extra installs nothing, and `in_process()` says why. Not in `[all]`, for the same reason as `[databricks-serving]`. |
 
 **What you install is not what you import.** The five distributions are
 `structured-data-models-client`, `-api`, `-pql`, `-connectors` and
