@@ -51,11 +51,16 @@ for it are gone), must be declared in ``bridge_changes.json`` under
   ``main`` (T2.0e): the SHA is 40 lower-case hex digits, then one space and
   the commit's own subject; the commit is an ancestor of ``main`` as last
   fetched (``refs/remotes/origin/main``, never a local branch) and of HEAD,
-  is not an ancestor of the merge base (a commit the base already holds
-  was judged when it came in), and changes the entry's file against its
-  first parent. Review judges, as for the others, whether ``main``'s rule
-  belongs in the bridge; the port of a ``main`` rule into Rust is its own
-  package's ``moved``.
+  is not an ancestor of the merge base (a commit the base already holds was
+  judged when it came in), is brought in by a merge commit of the candidate
+  (reached from a parent other than its first), changes the entry against
+  its first parent, and left the entry exactly as the candidate holds it (by
+  its fingerprint; an entry gone, gone there too). ``main`` is read from the
+  remote-tracking ref as it stands: CI's checkout fetches it, so CI's run,
+  the evidence a landing stands on, reads the remote's ``main``; a local run
+  reads the ref as last fetched. Review judges, as for the others, whether
+  ``main``'s rule belongs in the bridge; the port of a ``main`` rule into
+  Rust is its own package's ``moved``.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale), unless the merge base's declarations hold it as it stands,
@@ -650,10 +655,11 @@ class Base:
     label: str
     baseline: str | None
     changes: str | None = None
-    #: Why a ``main`` reason's text is not one for the entry's file (the
-    #: arguments), or None when it is (:func:`main_judge`); without one, a
+    #: Why a ``main`` reason's text is not one for the entry (the
+    #: arguments: its key, the text, and its fingerprint now, None when it
+    #: is gone), or None when it is (:func:`main_judge`); without one, a
     #: ``main`` reason is refused.
-    main: Callable[[str, str], str | None] | None = None
+    main: Callable[[str, str, str | None], str | None] | None = None
 
 
 def ratchet(
@@ -663,7 +669,7 @@ def ratchet(
     *,
     declared: Mapping[str, tuple[str, str]],
     spent: Mapping[str, tuple[str, str]],
-    main: Callable[[str, str], str | None] | None = None,
+    main: Callable[[str, str, str | None], str | None] | None = None,
 ) -> list[str]:
     """The tripwire against the merge base: every entry changed, new or
     gone is declared, once, with a reason that fits; ``main`` judges a
@@ -672,11 +678,13 @@ def ratchet(
     files = {str(rel): rel for rel in FROZEN}
     files.update({name: Path(name) for name in base if name not in files})
     changed: dict[str, str] = {}
+    current: dict[str, str | None] = {}
     for name_of, rel in files.items():
         now = baseline.get(name_of, {})
         held = base.get(name_of, {})
         for name in sorted(set(now) | set(held)):
             key = f'{rel}::{name}'
+            current[key] = now.get(name)
             if name not in held:
                 changed[key] = 'new'
             elif name not in now:
@@ -717,7 +725,7 @@ def ratchet(
             why = (
                 'no git history to judge it by'
                 if main is None
-                else main(key.split('::', 1)[0], reason[1])
+                else main(key, reason[1], current[key])
             )
             if why is not None:
                 problems.append(
@@ -826,7 +834,9 @@ def base_baseline(root: Path, ref: str) -> Base | str:
     )
 
 
-def main_judge(root: Path, merge_base: str) -> Callable[[str, str], str | None]:
+def main_judge(
+    root: Path, merge_base: str
+) -> Callable[[str, str, str | None], str | None]:
     """The judge of a ``main`` reason against ``merge_base``: why its text
     is not the full SHA and title of a commit of :data:`MAIN_REF` that
     HEAD holds, ``merge_base`` does not, and that changes the file named,
@@ -841,7 +851,24 @@ def main_judge(root: Path, merge_base: str) -> Callable[[str, str], str | None]:
             stdin=subprocess.DEVNULL,
         )
 
-    def judge(rel: str, text: str) -> str | None:
+    def entry_at(rev: str, rel: str, name: str) -> str | None:
+        """The entry's fingerprint in ``rev``'s copy of the file, None when
+        the file or the entry is not there."""
+        if ask('cat-file', '-e', f'{rev}:{rel}').returncode != 0:
+            return None
+        data = subprocess.run(
+            ['git', '-C', str(root), 'show', f'{rev}:{rel}'],
+            capture_output=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        ).stdout
+        try:
+            return measure_text(data, Path(rel)).get(name)
+        except (SyntaxError, Unreadable):
+            return None
+
+    def judge(key: str, text: str, now: str | None) -> str | None:
+        rel, _, name = key.partition('::')
         found = _MAIN_REASON.fullmatch(text)
         if not found:
             return (
@@ -868,6 +895,23 @@ def main_judge(root: Path, merge_base: str) -> Callable[[str, str], str | None]:
                 f'{sha[:12]} is already in the merge base {merge_base[:12]}, '
                 'so this change did not bring it in'
             )
+        merges = ask(
+            'rev-list', '--merges', '--parents', f'{merge_base}..HEAD'
+        ).stdout.splitlines()
+        if not any(
+            len(parents := line.split()[1:]) >= 2
+            and ask('merge-base', '--is-ancestor', sha, parents[0]).returncode
+            and any(
+                ask('merge-base', '--is-ancestor', sha, other).returncode == 0
+                for other in parents[1:]
+            )
+            for line in merges
+        ):
+            return (
+                f'{sha[:12]} is not brought in by a merge of the candidate '
+                '(a commit main holds reaches the phase branch only by the '
+                "package's merge of main)"
+            )
         subject = ask('log', '-1', '--format=%s', sha).stdout.strip()
         if subject != title:
             return f'{sha[:12]} is titled {subject!r}, not {title!r}'
@@ -879,6 +923,14 @@ def main_judge(root: Path, merge_base: str) -> Callable[[str, str], str | None]:
         ).stdout.split('\0')
         if rel not in changed:
             return f'{sha[:12]} does not change {rel}'
+        made = entry_at(sha, rel, name)
+        if made == entry_at(parent.stdout.strip(), rel, name):
+            return f'{sha[:12]} does not change the entry {name}'
+        if made != now:
+            return (
+                f'the entry {name} is not as {sha[:12]} left it: the '
+                'candidate holds a version main did not make'
+            )
         return None
 
     return judge

@@ -391,7 +391,6 @@ def then(*edits: Callable[[Path], None]) -> Callable[[Path], None]:
     return edit
 
 
-@PENDING
 def test_a_duplicate_line_naming_another_reference_is_refused(
     repo: Path,
 ) -> None:
@@ -416,7 +415,6 @@ def test_a_duplicate_line_naming_another_reference_is_refused(
     ), found
 
 
-@PENDING
 @pytest.mark.parametrize(
     'seed', ['its reference field names another SHA', 'it is deleted']
 )
@@ -446,7 +444,6 @@ def test_a_vector_file_s_reference_field_must_name_the_sha(
     assert any(VECTORS in p for p in found), found
 
 
-@PENDING
 @pytest.mark.parametrize(
     'name',
     [f'{NEW}.txt', NEW, f'{NEW}.jsonl.txt', f'{NEW}/{NEW}.jsonl'],

@@ -148,32 +148,40 @@ that landing; a harness that predates it refuses the flag, so ``rust-core``
 holding T2.0 but judged by an older landing fails closed.
 
 A new reference commit (T2.0e): a candidate that adds a reference file
-``contract/reference/<NEW>.jsonl`` passes only when a row of the
-checkpoint's decisions approves ``NEW`` (:func:`approved_references`): its
-status is the owner's approval as :func:`owner_approved` reads it, and its
-Decision cell, the second, holds the word "reference" and exactly one full
-40-hex SHA in backticks, ``NEW`` (the form the Phase 2 decisions
-file's header states; KO2-1 begins ``Reference: `<NEW>```). Only the
-checkpoint's rows count, never one the candidate adds, as for a
-relaxation: the owner's row lands before the package that re-records. Then, each named when it fails:
-``NEW`` is no recorded reference's name; it is the only file added, and
-the only one left (the old one removed); ``contract/reference-env.txt``
-names ``NEW`` in its one ``reference:`` line; no file outside ``docs/``
-(history) and ``contract/reference/`` cites the old SHA in full, and each
-that cited it at the checkpoint and is still there cites ``NEW``; every
-line of the new file records ``NEW`` as its reference commit; and the new
-recording carries every case the old one did, but one whose removal is
-approved. The per-case comparison does not apply across the change:
-instead every case whose semantic projection differs from its recorded
-line is listed in the notes, by case, for the reviewers, with the move
-itself and the row approving it; a case recorded alike is not listed. The
-landed file is then the one the per-case rules hold, and the row admits no
-further file: another commit needs its own row.
+passes only when a row of the checkpoint's decisions approves its name
+(:func:`approved_references`): its status is the owner's approval as
+:func:`owner_approved` reads it, and its Decision cell, the second, holds
+the word "reference" and exactly one full 40-hex SHA in backticks, ``NEW``
+(the form the Phase 2 decisions file's header states; KO2-1 begins
+``Reference: `<NEW>```). Only the checkpoint's rows count, never one the
+candidate adds, as for a relaxation: the owner's row lands before the
+package that re-records. Then, each named when it fails: the file is exactly
+``contract/reference/<NEW>.jsonl``, which the gate reads; ``NEW`` is no
+recorded reference's name; it is the only file added, and the only one left
+(the old one removed); ``contract/reference-env.txt`` names ``NEW`` in its
+one ``reference:`` line; no file outside ``docs/`` (history) and
+``contract/reference/`` cites the old SHA in full; each file that cited it
+at the checkpoint is still there, and each of its fields that held the old
+SHA, by path (on every line of a JSON-lines file), holds ``NEW`` (the fields
+the reference SHA consistency tests read: ``reference``,
+``recorded.reference``, ``identity.reference.commit.sha``), a text field
+``NEW`` and not the old SHA; every line of the new file, read as written
+before any is indexed, names a case, names it once (a second line of a case
+is refused by file and line) and records ``NEW`` as its reference commit;
+and the new recording carries every case the old one did, but one whose
+removal is approved. The per-case comparison does not apply across the
+change: instead every case whose semantic projection differs from its
+recorded line is listed in the notes, by case and with the fields that
+differ (named, never their values), for the reviewers, with the move itself
+and the row approving it; a case recorded alike is not listed. The landed
+file is then the one the per-case rules hold, and the row admits no further
+file: another commit needs its own row.
 
 The decisions the rules read (owner approvals of relaxations and of a new
-reference commit) are every phase's: each ``docs/design/rust-core/phase-N/decisions.md`` of the
-checkpoint, Phase 1's rows in force and each later phase's added; a file
-missing, unreadable or malformed fails the ``decisions`` rule by name
+reference commit) are every phase's: each
+``docs/design/rust-core/phase-N/decisions.md`` of the checkpoint, Phase 1's
+rows in force and each later phase's added; a file missing, unreadable or
+malformed fails the ``decisions`` rule by name
 (``capture_check.phase_decisions``, T2.0).
 
 Exit status 1 on any problem. Each problem names its rule and its case;
@@ -1355,10 +1363,10 @@ def approved_references(decisions: str) -> dict[str, str]:
     r"""The new reference commits the owner approved, each with its row's
     ID (T2.0e): a row of a phase's decisions file whose status is the
     owner's approval (:func:`owner_approved`) and whose Decision cell, its
-    second, holds the word "reference" and exactly one full SHA in
-    backticks (the form the Phase 2 decisions file's header states;
-    KO2-1 begins ``Reference: `<40 hex>```). An abbreviated SHA, a row naming two, or any other
-    status approves nothing."""
+    second, holds the word "reference" and exactly one full SHA in backticks
+    (the form the Phase 2 decisions file's header states; KO2-1 begins
+    ``Reference: `<40 hex>```). An abbreviated SHA, a row naming two, or any
+    other status approves nothing."""
     found: dict[str, str] = {}
     for ident, (line, status) in (
         capture_check().decision_rows(decisions).items()
@@ -1396,6 +1404,130 @@ def listed(names: list[str], most: int = 10) -> str:
     )
 
 
+def _citations(value: Any, sha: str, at_path: str = '') -> list[str]:
+    r"""The paths of ``value`` (a JSON document) whose string holds
+    ``sha``, dotted, a list's items by index (``reference``,
+    ``recorded.reference``, ``identity.reference.commit.sha``)."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            found += _citations(item, sha, f'{at_path}.{key}'.lstrip('.'))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            found += _citations(item, sha, f'{at_path}[{index}]')
+    elif isinstance(value, str) and sha in value:
+        found.append(at_path)
+    return found
+
+
+def _at_path(value: Any, dotted: str) -> Any:
+    r"""The value at a path :func:`_citations` names, or a sentinel
+    :class:`KeyError` instance when there is none."""
+    for part in re.findall(r'[^.\[\]]+|\[\d+\]', dotted):
+        if part.startswith('['):
+            index = int(part[1:-1])
+            if not isinstance(value, list) or index >= len(value):
+                return KeyError(dotted)
+            value = value[index]
+        elif isinstance(value, dict) and part in value:
+            value = value[part]
+        else:
+            return KeyError(dotted)
+    return value
+
+
+def _documents(text: str) -> list[Any] | None:
+    r"""A JSON file's document, or a JSON-lines file's documents (each
+    line its own), or None when it is neither."""
+    try:
+        return [json.loads(text)]
+    except (ValueError, RecursionError):
+        pass
+    try:
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+    except (ValueError, RecursionError):
+        return None
+
+
+def check_citation(
+    report: Report,
+    name: str,
+    before: str,
+    after: str | None,
+    old: str,
+    new: str,
+) -> None:
+    r"""A file that cited the recorded reference ``old`` at the checkpoint
+    moves with it: it is still there, and each field that held ``old``
+    (by its path, per document of a JSON-lines file) holds ``new`` in its
+    place: ``new`` itself where it was ``old`` itself, else a text holding
+    ``new`` and not ``old``. A file that is no JSON is held as text."""
+    rule = 'reference'
+    if after is None:
+        report.fail(
+            rule,
+            f'{name}: removed; it cited the recorded reference {old[:12]}, and '
+            f'every such file moves to the new one {new} (the reference SHA '
+            'consistency tests read it)',
+        )
+        return
+    then, now = _documents(before), _documents(after)
+    if then is None or now is None:
+        if old in after or new not in after:
+            report.fail(rule, f'{name}: does not cite the new reference {new}')
+        return
+    lines = len(then) > 1 or len(now) > 1
+    # A JSON-lines file's fields are those of its first line citing the
+    # reference, judged on every line it has now.
+    paths = next(
+        (
+            (document, found)
+            for document in then
+            if (found := _citations(document, old))
+        ),
+        None,
+    )
+    if paths is None:
+        return
+    document, found = paths
+    for path in found:
+        exact = _at_path(document, path) == old
+        for index, item in enumerate(now if lines else now[:1]):
+            value = _at_path(item, path)
+            if (
+                value == new
+                if exact
+                else isinstance(value, str)
+                and new in value
+                and old not in value
+            ):
+                continue
+            where = f'{name}:{index + 1}' if lines else name
+            report.fail(
+                rule,
+                f'{where}: {path or "the document"} '
+                + (
+                    'is missing'
+                    if isinstance(value, KeyError)
+                    else 'does not name the new reference'
+                )
+                + f' {new} (it named {old[:12]})',
+            )
+
+
+def _differing(old: Any, new: Any, at_path: str = '') -> list[str]:
+    r"""The paths at which two semantic projections differ, by name only
+    (values are never printed)."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        found: list[str] = []
+        for key in sorted(set(old) | set(new), key=str):
+            found += _differing(
+                old.get(key), new.get(key), f'{at_path}.{key}'.lstrip('.')
+            )
+        return found
+    return [] if old == new else [at_path or 'the line']
+
+
 def check_new_reference(
     report: Report,
     checkpoint: Tree,
@@ -1425,6 +1557,17 @@ def check_new_reference(
         )
     if refused:
         return
+    misnamed = [
+        path for path in added if path != f'{REFERENCE}/{Path(path).stem}.jsonl'
+    ]
+    for path in misnamed:
+        report.fail(
+            'reference',
+            f'{path}: a new reference recording is exactly '
+            f'{REFERENCE}/<the approved full SHA>.jsonl, which the gate reads',
+        )
+    if misnamed:
+        return
     if len(added) != 1:
         report.fail(
             'reference',
@@ -1438,8 +1581,8 @@ def check_new_reference(
         'reference',
         f'the reference moves from {listed(olds)} to {new}, approved by '
         f'{approved[new]} at the checkpoint; each case is compared with its '
-        'recorded line below, and a case recorded differently is listed for '
-        'the reviewers',
+        'recorded line below, and a case recorded differently is listed, '
+        'with the fields that differ, for the reviewers',
     )
     for left in after:
         if left != path:
@@ -1457,34 +1600,50 @@ def check_new_reference(
             f'{ENV}: names {listed(named_env) or "no reference"}, not the new '
             f'reference {new}',
         )
-    stale: set[str] = set()
     for old in olds:
-        stale.update(citing(candidate, old))
+        for name in citing(candidate, old):
+            report.fail(
+                'reference',
+                f'{name}: still cites the recorded reference {old[:12]}; every '
+                f'file citing the reference outside docs/ names the new one '
+                f'{new}',
+            )
         for name in citing(checkpoint, old):
-            text = candidate.read(name)
-            if text is not None and new not in text:
-                stale.add(name)
-    for name in sorted(stale):
-        report.fail(
-            'reference',
-            f'{name}: cites the recorded reference ({listed(olds)}) or not the '
-            f'new one {new}; every file citing the reference outside docs/ '
-            'names the new one',
-        )
-    lines = {
-        line.get('case'): line for line in jsonl(candidate.read(path), path)
-    }
-    other = sorted(
-        str(case)
-        for case, line in lines.items()
-        if at(line, 'identity.reference.commit.sha') != new
-    )
-    if other:
-        report.fail(
-            'reference',
-            f'{path}: the lines of {listed(other)} record another reference '
-            f"commit than {new}, the file's name",
-        )
+            if name != ENV:
+                check_citation(
+                    report,
+                    name,
+                    checkpoint.read(name) or '',
+                    candidate.read(name),
+                    old,
+                    new,
+                )
+    # Every line read and judged as written, before any is indexed: a
+    # case on two lines is refused by file and line, never one of them
+    # silently kept.
+    lines: dict[Any, dict[str, Any]] = {}
+    first: dict[Any, int] = {}
+    for number, line in enumerate(jsonl(candidate.read(path), path), 1):
+        case = line.get('case')
+        if not isinstance(case, str) or not case:
+            report.fail('reference', f'{path}:{number}: names no case')
+            continue
+        if at(line, 'identity.reference.commit.sha') != new:
+            report.fail(
+                'reference',
+                f'{path}:{number}: {case}: records another reference commit '
+                f"than {new}, the file's name",
+            )
+        if case in first:
+            report.fail(
+                'reference',
+                f'{path}:{number}: {case}: a second line of the case (its '
+                f'first is line {first[case]}); a recording holds each case '
+                'once',
+            )
+            continue
+        first[case] = number
+        lines[case] = line
     policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
     ordered = policy.get('ordered') if isinstance(policy, dict) else None
     recorded = reference_lines(checkpoint)
@@ -1496,11 +1655,13 @@ def check_new_reference(
                     f'{case}: its line removed: the new recording carries '
                     'every case the recorded one did',
                 )
-        elif semantic(line, ordered) != semantic(lines[case], ordered):
+            continue
+        then, now = semantic(line, ordered), semantic(lines[case], ordered)
+        if then != now:
             report.note(
                 'reference',
                 f'{case}: recorded differently at the new reference {new[:12]}'
-                ': for the reviewers',
+                f', in {listed(_differing(then, now), 6)}: for the reviewers',
             )
     fresh = len(set(lines) - set(recorded))
     if fresh:
