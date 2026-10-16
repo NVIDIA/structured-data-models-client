@@ -74,10 +74,9 @@ The package does not rely on its own judging change for its gate: its candidate 
 
 ### Deviations
 
-- **The row format.** The decisions header on the design branch states that a reference approval's Decision cell *begins* `Reference: ` and the SHA in backticks.
-  The T2.0e tests' rows read "The reference moves to `<SHA>`: ...".
-  To keep both, the rule reads the word "reference" anywhere in the Decision cell and exactly one full SHA in backticks; the header's form is a case of it, and KO2-1 passes.
-  Requiring exactly one SHA keeps a row that names two (for example "not `<other>`") from approving either.
+- **The row format, one SHA.** The approved design's decisions header (`dce97ec9`) states the format this rule reads: the word "reference" and the full SHA in backticks in the Decision cell, status the owner's approval, read only at the checkpoint (KO2-1 begins `Reference: `).
+  The rule is one step stricter: the Decision cell must hold exactly one full SHA in backticks, so a row that names two (for example "not `<other>`") approves neither.
+  KO2-1 and the T2.0e tests' rows each name one.
 - **One exit 5 test stays `PENDING`.** `test_after_the_landing_the_declarations_are_held_and_spent` edits the frozen file with `.replace('    return value\n', '    return 1\n')`, which also matches the existing `_copied` in `_rust/predict.py` (`        return value`), so a second entry changes and the test's final declaration doesn't cover it.
   With the replacement anchored to the added function (`'\n    return value\n'`) the test passes against this implementation.
   It is left as a strict xfail for the test author to fix; its `PENDING` definition stays for that one use.
