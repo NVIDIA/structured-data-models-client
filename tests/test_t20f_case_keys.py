@@ -10,7 +10,7 @@ The design (choice 2, "Reference"): SQLite and Postgres lines are keyed
 ID, and observations and baselines use the same keys. T2.0f teaches the
 observation schema's case pattern and the ratchet's removed-case and
 baseline rules the suffix (``compare.py``'s known-case check is held in
-``tests/test_t20f_gate.py``, through the gate).
+``contract/tests/test_t20f_gate.py``, through the gate).
 
 The schema: through ``contract/runners/run_python.py``'s validator, the one
 ``compare.py`` validates every observation with. ``X@sqlite`` and
@@ -44,6 +44,29 @@ python-core observing ``X@sqlite`` and ``X@postgres`` and the candidate
 proposing both baselines it passes, and seeded, python-core's ``X@postgres``
 baseline missing fails, naming ``X@postgres`` and python-core.
 
+``ratchet.py accept`` (review round 1): with python-core and python-old
+observing X on all three databases, the baselines ``accept`` writes hold
+``X@sqlite`` and ``X@postgres`` too, and ``check`` then passes.
+
+Approving a database line (review round 1; the case is the unit, its
+databases are lines of it): an unapproved move of python-old's
+``X@postgres`` baseline fails, and the ratchet's message suggests the
+``case_outcomes`` item; that item, as suggested (its ``summary`` filled
+in), is one the register accepts and approves the move. In the same form
+(the runner ``python-ref``, the reference line's old and new outcome), an
+entry approves a changed ``X@postgres`` reference line, which fails
+without one.
+
+After the rebase onto T2.0e (review round 1): an owner-approved
+re-recording of the reference that drops an approved-removed case's
+database lines passes; dropping a kept case's ``X@sqlite`` line fails,
+naming it. It builds T2.0e's approval as T2.0e's tests assume it (an owner
+row in ``phase-2/decisions.md`` naming the full new SHA and the word
+"reference", every citation of the old SHA outside ``docs/`` moved). It
+cannot pass on this branch's base, which has no T2.0e, so it is gated
+like the rest: the implementer removes ``PENDING`` once rebased onto
+T2.0e's landing.
+
 Every seeded fault is shown on a candidate whose unseeded twin passes, so a
 refusal is the seed's.
 
@@ -60,6 +83,9 @@ from __future__ import annotations
 import copy
 import importlib.util
 import json
+import re
+import shutil
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -463,3 +489,264 @@ def test_an_approved_removal_removes_the_case_s_database_lines(
     found = helpers.check(held, landed, files)
     assert found, 'a removal leaving a database line passed'
     assert _naming(found, POSTGRES) == found, found
+
+
+# --- ratchet.py accept writes the database baselines ----------------------------
+
+
+@PENDING
+def test_accept_writes_the_database_baselines_check_then_needs(
+    recorded: Path, tmp_path: Path
+) -> None:
+    r"""Review round 1: python-core and python-old observe X on DuckDB,
+    SQLite and Postgres, matching the reference; ``ratchet.py accept``
+    (the command line) writes their ``X@sqlite`` and ``X@postgres``
+    baselines beside ``X``'s, and ``check`` on that commit passes."""
+    landed = git(recorded, 'rev-parse', 'HEAD')
+    files = _observe(recorded, tmp_path, keep=(X, SQLITE, POSTGRES))
+    commit(recorded, 'T2.0f: a change')
+    given = [x for path in files for x in ('--observations', str(path))]
+    done = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / 'scripts/rust_core/ratchet.py'),
+            'accept',
+            '--repo',
+            str(recorded),
+            '--checkpoint',
+            landed,
+            *given,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert done.returncode == 0, done.stdout + done.stderr
+    for runner in ('python-core', 'python-old'):
+        written = {x['case'] for x in _jsonl(_baseline_file(recorded, runner))}
+        assert {X, SQLITE, POSTGRES} <= written, (runner, sorted(written))
+    commit(recorded, 'T2.0f: the baselines accept wrote')
+    found = helpers.check(recorded, landed, files)
+    assert found == [], '\n'.join(found)
+
+
+# --- an entry approves a database line --------------------------------------------
+
+
+def _replace_baseline(
+    files: tuple[Path, ...], runner: str, key: str
+) -> Callable[[Path], None]:
+    r"""``runner``'s proposed baseline of ``key`` replaced by its
+    observation's projection (as ``ratchet.py accept`` writes it)."""
+    observation = _observed(files)[runner][key]
+
+    def edit(tree: Path) -> None:
+        projection = ratchet.projection(observation, _fields(tree))
+        path = _baseline_file(tree, runner)
+        lines = _jsonl(path)
+        line = next(x for x in lines if x['case'] == key)
+        line.update(projection=projection, digest=ratchet.digest(projection))
+        _write_jsonl(path, lines)
+
+    return edit
+
+
+def _suggested(problem: str) -> dict[str, Any]:
+    r"""The ``case_outcomes`` item the ratchet's message suggests, its
+    ``summary`` filled in."""
+    found = yaml.safe_load(problem[problem.index('{') :].replace('...', 'x'))
+    assert isinstance(found, dict), problem
+    found['summary'] = 'Seeded by the T2.0f tests.'
+    return found
+
+
+def _moved_on_postgres(
+    held: Path, tmp_path: Path
+) -> tuple[str, tuple[Path, ...], dict[str, Any]]:
+    r"""python-old's ``X@postgres`` observation moved to predict: the
+    checkpoint, the observations, and the item the ratchet suggests for
+    the move, unapproved (the worktree back at the checkpoint)."""
+    landed = git(held, 'rev-parse', 'HEAD')
+
+    def moved(lines: dict[str, Any]) -> None:
+        lines[POSTGRES]['outcome']['stage'] = 'predict'
+
+    files = (helpers.observe(held, tmp_path, 'python-old', moved),)
+    commit(held, 'T2.0f: no entry')
+    found = helpers.check(held, landed, files)
+    assert found, 'an unapproved move of a database baseline passed'
+    assert _naming(found, POSTGRES) == found, found
+    suggesting = [p for p in found if '{' in p]
+    assert len(suggesting) == 1, found
+    git(held, 'reset', '-q', '--hard', landed)
+    return landed, files, _suggested(suggesting[0])
+
+
+@PENDING
+def test_the_suggested_entry_approves_a_database_baseline_move(
+    held: Path, tmp_path: Path
+) -> None:
+    r"""Review round 1: the item the ratchet suggests for a moved
+    ``X@postgres`` baseline is one the register accepts, and an approved
+    entry holding it lets the move pass (the proposed baseline the new
+    observation)."""
+    landed, files, item = _moved_on_postgres(held, tmp_path)
+
+    def approve(tree: Path) -> None:
+        helpers.append_entry(
+            tree, {'id': 'SEED-1', 'cases': [X], 'case_outcomes': [item]}
+        )
+        _replace_baseline(files, 'python-old', POSTGRES)(tree)
+
+    commit(held, 'T2.0f: the move approved', approve)
+    found = helpers.check(held, landed, files)
+    assert found == [], '\n'.join(found)
+
+
+@PENDING
+def test_an_entry_in_the_same_form_approves_a_changed_database_reference_line(
+    held: Path, tmp_path: Path
+) -> None:
+    r"""Review round 1: a changed ``X@postgres`` reference line fails with
+    no entry, naming it; an entry in the suggested form, for python-ref
+    with the line's old and new outcome, approves it."""
+    landed, _, item = _moved_on_postgres(held, tmp_path)
+    fields = _fields(held)
+    before = next(
+        x for x in _jsonl(_reference_file(held)) if x['case'] == POSTGRES
+    )
+    after = copy.deepcopy(before)
+    after['outcome']['stage'] = 'predict'
+
+    def change(tree: Path) -> None:
+        path = _reference_file(tree)
+        _write_jsonl(
+            path,
+            [after if x['case'] == POSTGRES else x for x in _jsonl(path)],
+        )
+
+    commit(held, 'T2.0f: the line changed', change)
+    found = helpers.check(held, landed)
+    assert found, 'a changed database reference line passed'
+    assert _naming(found, POSTGRES) == found, found
+    git(held, 'reset', '-q', '--hard', landed)
+    reference = {
+        **item,
+        'runner': 'python-ref',
+        'old': ratchet.outcome_text(ratchet.projection(before, fields)),
+        'new': ratchet.outcome_text(ratchet.projection(after, fields)),
+    }
+
+    def approve(tree: Path) -> None:
+        change(tree)
+        helpers.append_entry(
+            tree, {'id': 'SEED-1', 'cases': [X], 'case_outcomes': [reference]}
+        )
+
+    commit(held, 'T2.0f: the change approved', approve)
+    found = helpers.check(held, landed)
+    assert found == [], '\n'.join(found)
+
+
+# --- after the rebase onto T2.0e: a re-recording drops removed lines --------------
+
+#: The re-recorded reference's fake SHA, and T2.0e's approval of it as
+#: T2.0e's tests assume it (tests/test_t20e_reference_change.py).
+NEW = '5a' * 20
+DECISIONS = 'docs/design/rust-core/phase-2/decisions.md'
+HEADER = (
+    '# Phase 2 decisions (seeded by the T2.0f tests)\n\n'
+    '| # | Decision | Reason | Status |\n|---|---|---|---|\n'
+)
+ROW = (
+    f'| P2H-901 | The reference moves to `{NEW}`: its recording replaces '
+    'the recorded one | The owner moved the reference | approved by owner '
+    '2026-10-16 |\n'
+)
+
+
+def _citing(root: Path, sha: str) -> list[str]:
+    r"""The tracked files citing ``sha`` in full, but ``docs/`` and the
+    recordings."""
+    done = subprocess.run(
+        ['git', '-C', str(root), 'grep', '-l', '-F', sha],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return sorted(
+        name
+        for name in done.stdout.splitlines()
+        if not name.startswith(('docs/', 'contract/reference/'))
+    )
+
+
+def _approved_new_reference(tree: Path) -> str:
+    r"""A landing holding every file of this checkout that cites the
+    reference SHA, and the owner's row approving ``NEW``."""
+    old = _reference_file(tree).stem
+    wanted = [n for n in _citing(ROOT, old) if not (tree / n).exists()]
+
+    def edit(t: Path) -> None:
+        for name in wanted:
+            (t / name).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / name, t / name)
+        path = t / DECISIONS
+        path.parent.mkdir(parents=True, exist_ok=True)
+        before = path.read_text() if path.is_file() else HEADER
+        path.write_text(before + ROW)
+
+    landed: str = land(tree, 'T2.0d', edit, protected='contract/** docs/**')
+    return landed
+
+
+def _rerecord(drop: tuple[str, ...] = ()) -> Callable[[Path], None]:
+    r"""The reference re-recorded at ``NEW``, less the lines ``drop``, every
+    citation of the old SHA outside ``docs/`` moved."""
+
+    def edit(tree: Path) -> None:
+        source = _reference_file(tree)
+        old = source.stem
+        lines = [
+            json.loads(x.replace(old, NEW))
+            for x in source.read_text().splitlines()
+            if x.strip()
+        ]
+        source.unlink()
+        _write_jsonl(
+            source.with_name(f'{NEW}.jsonl'),
+            [x for x in lines if x['case'] not in drop],
+        )
+        for name in _citing(tree, old):
+            path = tree / name
+            path.write_text(path.read_text().replace(old, NEW))
+        env = tree / 'contract/reference-env.txt'
+        assert re.search(rf'(?m)^reference: {NEW}$', env.read_text())
+
+    return edit
+
+
+@PENDING
+def test_an_approved_rerecord_drops_a_removed_case_s_database_lines(
+    held: Path,
+) -> None:
+    r"""Review round 1, after the rebase onto T2.0e: the owner approves
+    the new reference; the candidate removes X under an approved entry
+    (its file, baselines and every line keyed X, ``X@sqlite`` or
+    ``X@postgres``) and re-records the reference without them: it passes.
+    Seeded: X kept, the re-recording dropping its ``X@sqlite`` line fails,
+    naming it."""
+    checkpoint = _approved_new_reference(held)
+
+    def both(tree: Path) -> None:
+        _remove_x()(tree)
+        _rerecord()(tree)
+
+    commit(held, 'T2.0c: the reference re-recorded, X removed', both)
+    found = ratchet.check(held, checkpoint, [], None).problems
+    assert found == [], '\n'.join(found)
+    git(held, 'reset', '-q', '--hard', checkpoint)
+    commit(held, 'T2.0c: the reference re-recorded', _rerecord(drop=(SQLITE,)))
+    found = ratchet.check(held, checkpoint, [], None).problems
+    assert found, 'a kept case re-recorded without its SQLite line passed'
+    assert _naming(found, SQLITE), found
