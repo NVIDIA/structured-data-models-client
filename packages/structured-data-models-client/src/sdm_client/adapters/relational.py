@@ -140,7 +140,7 @@ class RelationalAdapter:
     def _inference(
         self, inference: Any, request: Request
     ) -> dict[str, Any] | None:
-        """Send only the inference options this model reads.
+        """Send only the inference options the caller set and this model reads.
 
         The engine fills in an inference config on every request, including
         keys this client does not forward: `output_type`, whose choice travels
@@ -180,10 +180,15 @@ class RelationalAdapter:
                 },
             )
 
+        # Only what the caller set: a deployment applies the engine's defaults
+        # to a request that carries none, and the SDM backends refuse any
+        # non-empty `inference_config`, so sending the defaults broke them.
         trimmed = dict(inference)
-        trimmed['inference_config'] = {
-            key: value for key, value in config.items() if key in forwarded
-        }
+        sent = {key: value for key, value in config.items() if key in asked_for}
+        if sent:
+            trimmed['inference_config'] = sent
+        else:
+            del trimmed['inference_config']
         return trimmed
 
     def session_plan(

@@ -4,7 +4,8 @@
 
 import re
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from typing import cast
 
 import pandas as pd
@@ -12,6 +13,7 @@ from predictive_query.schema.typing import Dtype
 from sdm_connectors import quote_ident
 
 from sdm_relational_engine.exceptions import (
+    EmptyTableError,
     MetricViewAsTableError,
     TableNotFoundError,
 )
@@ -94,6 +96,8 @@ class DatabricksTable(Table):
         self._catalog = catalog
         self._schema = schema
         self._row_filter = row_filter
+        # Columns named otherwise than the source spells them, by name.
+        self._source_names: dict[str, str] = {}
 
         super().__init__(
             name=name,
@@ -121,16 +125,46 @@ class DatabricksTable(Table):
 
     @row_filter.setter
     def row_filter(self, row_filter: str | None) -> None:
-        if (
-            '_source_sample_df' in vars(self)
-            or '_num_rows' in vars(self)
-            or len(self._expr_sample_df.columns) > 0
-        ):
+        if self._rows_read:
             raise ValueError(
                 f"Cannot change the row filter of table '{self.name}' since "
                 f'its rows have already been read'
             )
         self._row_filter = row_filter
+
+    @property
+    def _rows_read(self) -> bool:
+        return (
+            '_source_sample_df' in vars(self)
+            or '_num_rows' in vars(self)
+            or len(self._expr_sample_df.columns) > 0
+        )
+
+    def _name_columns(self, names: Mapping[str, str]) -> None:
+        r"""Names source columns otherwise, as a metric view spells them.
+
+        Databricks matches a name to a column without regard to case, so a
+        view may call `SalesOrderID` `SALESORDERID`, and a question about the
+        view uses the view's spelling. Every read then names the column so.
+
+        Args:
+            names: Each column as the source spells it, and its new name.
+
+        Raises:
+            ValueError: If a row has already been read, under the old names.
+        """
+        if self._rows_read:
+            raise ValueError(
+                f"Cannot rename the columns of table '{self.name}' since its "
+                f'rows have already been read'
+            )
+        columns: dict[str, SourceColumn] = {}
+        for name, column in self._source_column_dict.items():
+            new = names.get(name, name)
+            if new != name:
+                self._source_names[new] = self._source_names.pop(name, name)
+            columns[new] = replace(column, name=new)
+        self.__dict__['_source_column_dict'] = columns
 
     @property
     def _quoted_source_name(self) -> str:
@@ -145,12 +179,13 @@ class DatabricksTable(Table):
         # read here, such as which words of a view's expression are columns,
         # would then silently stop holding. So once they are read, each is
         # named through the table, and a missing one fails the statement.
+        # A column renamed is renamed the same way.
         read = self.__dict__.get('_source_column_dict', {})
         columns = '*'
-        if any(col.lower() in _SESSION_WORDS for col in read):
-            columns = ', '.join(
-                f'{SOURCE_ALIAS}.{quote_ident(col, BACKTICK)}' for col in read
-            )
+        if self._source_names or any(
+            col.lower() in _SESSION_WORDS for col in read
+        ):
+            columns = ', '.join(self._projection(col) for col in read)
         elif self._row_filter is None:
             return name
         where = ''
@@ -158,6 +193,13 @@ class DatabricksTable(Table):
             where = f' WHERE ({self._row_filter})'
         # Left unaliased, since Databricks refuses `(...) AS x TABLESAMPLE`.
         return f'(SELECT {columns} FROM {name} AS {SOURCE_ALIAS}{where})'
+
+    def _projection(self, column: str) -> str:
+        source = self._source_names.get(column, column)
+        projection = f'{SOURCE_ALIAS}.{quote_ident(source, BACKTICK)}'
+        if source != column:
+            projection += f' AS {quote_ident(column, BACKTICK)}'
+        return projection
 
     @property
     def _quoted_catalog(self) -> str:
@@ -341,7 +383,7 @@ class DatabricksTable(Table):
             table = cursor.fetchall_arrow()
 
         if table.num_rows == 0:
-            raise RuntimeError(f"Table '{self.source_name}' is empty")
+            raise EmptyTableError(f"Table '{self.source_name}' is empty")
 
         return self._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),
@@ -366,7 +408,7 @@ class DatabricksTable(Table):
             num_rows = result[0]
 
         if num_rows == 0:
-            raise RuntimeError(f"Table '{self.source_name}' is empty")
+            raise EmptyTableError(f"Table '{self.source_name}' is empty")
 
         return num_rows
 
@@ -388,7 +430,7 @@ class DatabricksTable(Table):
             table = cursor.fetchall_arrow()
 
         if table.num_rows == 0:
-            raise RuntimeError(f"Table '{self.source_name}' is empty")
+            raise EmptyTableError(f"Table '{self.source_name}' is empty")
 
         return self._sanitize(
             df=table.to_pandas(types_mapper=pd.ArrowDtype),

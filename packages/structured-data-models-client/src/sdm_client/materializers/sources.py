@@ -16,6 +16,7 @@ from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.errors import MissingExtraError, StructuredDataError
 
 if TYPE_CHECKING:
@@ -248,16 +249,50 @@ def semantic_model_graph(model: Any) -> Graph:
     Named after the model's own tables, with its links, keys and time columns
     as the model declares them. Discovery and gathering both read it here, so
     they keep the same columns.
+
+    What the model has that a graph cannot hold is said in one
+    :class:`SDMWarning`, and nothing is said for a model that loses nothing:
+    how it was read is in the graph's ``conversion_notes``, which the schema
+    renders as text. A model the
+    engine refuses, for a filter on a joined table say, is refused with a
+    :class:`StructuredDataError` that carries the engine's reason.
     """
     try:
+        from sdm_relational_engine import (
+            TableNotFoundError,
+            ViewConversionError,
+        )
         from sdm_relational_engine.rfm import Graph
     except ImportError as error:  # pragma: no cover - optional extra
         raise MissingExtraError(
             'relational', 'structured-data-models-relational-engine'
         ) from error
 
-    with _schema_says_time_columns():
-        return _model_graph(Graph, model)
+    try:
+        # The engine is told not to warn, rather than its warnings filtered,
+        # since a filter holds for every thread: what it would say is said
+        # below, and by the schema, to the caller.
+        graph = _model_graph(Graph, model)
+    except (ViewConversionError, TableNotFoundError) as error:
+        # The engine's refusals of the model, each saying what to change in
+        # it, and a table it reads that is not there, as for a source's own
+        # tables. Any other failure is not the model's, and is not one.
+        raise StructuredDataError(
+            str(error),
+            code='INVALID_REQUEST',
+            details={'semantic_model': model.name},
+        ) from error
+    if graph.conversion_messages:
+        warnings.warn(
+            f'{model!r} has what a graph cannot hold, so it is read in '
+            f'part:\n'
+            + '\n'.join(
+                f'- {message}' for message in graph.conversion_messages
+            ),
+            category=SDMWarning,
+            stacklevel=caller_stacklevel(),
+        )
+    return graph
 
 
 def _model_graph(graph_type: type[Graph], model: Any) -> Graph:
@@ -270,6 +305,7 @@ def _model_graph(graph_type: type[Graph], model: Any) -> Graph:
             schema=namespace.get('schema'),
             verbose=False,
             trust_expressions=model.trust_expressions,
+            warn=False,
         )
     if model.backend == 'snowflake':
         # The engine resolves an unqualified name against the connection's
@@ -287,6 +323,7 @@ def _model_graph(graph_type: type[Graph], model: Any) -> Graph:
             model.connection,
             verbose=False,
             trust_expressions=model.trust_expressions,
+            warn=False,
         )
     raise StructuredDataError(  # pragma: no cover - SemanticModel refuses
         f'no semantic model is kept in a {model.backend!r} source',

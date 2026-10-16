@@ -84,7 +84,7 @@ ranking = scores.sort_values('probability_True', ascending=False)
 ## What a regression reports
 
 The relational model predicts a distribution for a regression, and `prediction` is its median.
-That matches what the engine and kumo-relational-client return.
+That matches what the engine returns.
 Pass `materialize(..., prediction_statistic='mean')` for the mean instead.
 
 Choose `'mean'` when predictions will be added up across entities, such as total demand over products.

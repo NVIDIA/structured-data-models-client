@@ -325,7 +325,23 @@ def test_a_defaulted_dataclass_field_is_dropped_without_a_refusal():
         regression_config(),
         sent={'num_estimators': 1, 'output_type': 'median'},
     )
-    assert sent_inference(request)['inference_config'] == {'num_estimators': 1}
+    assert 'inference_config' not in sent_inference(request)
+
+
+def test_the_engine_s_defaults_are_not_sent():
+    """A deployment applies them to a request that carries none, and the
+    SDM backends refuse a non-empty inference_config."""
+    defaults = {
+        'kind': 'classification',
+        'num_estimators': 1,
+        'column_shuffle': False,
+        'category_shuffle': False,
+        'hop_shuffle': False,
+        'class_shuffle': False,
+    }
+    assert sent_inference(gathered_with({}, sent=defaults)) == {
+        'run_mode': 'fast'
+    }
 
 
 def test_a_dropped_option_is_refused_with_a_remedy_that_works():

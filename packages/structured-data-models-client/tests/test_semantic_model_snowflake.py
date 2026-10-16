@@ -275,3 +275,31 @@ def test_trusting_the_view_reaches_the_engine(
     RelationalMaterializer(schema)._build_graph()
 
     assert seen == [trusted]
+
+
+@pytest.mark.parametrize('missing', ['table', 'column'])
+def test_a_view_naming_what_is_not_there_is_an_invalid_request(
+    monkeypatch: pytest.MonkeyPatch, missing: str
+) -> None:
+    r"""A base table, or a declared column, that is not there refused the
+    view as an `INVALID_REQUEST` until only the engine's view refusals were
+    translated, and then escaped as the engine's own error.
+    """
+    from sdm_client import StructuredDataError
+
+    if missing == 'table':
+        monkeypatch.delitem(_COLUMN_TYPES, 'RACKS')
+        said = "RACKS' does not exist"
+    else:
+        monkeypatch.setitem(
+            _COLUMN_TYPES,
+            'RACKS',
+            {k: v for k, v in _COLUMN_TYPES['RACKS'].items() if k != 'HALL'},
+        )
+        said = "table 'RACKS' cannot hold what it declares"
+
+    with pytest.raises(StructuredDataError) as caught:
+        _schema()
+
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert said in caught.value.message

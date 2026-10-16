@@ -10,7 +10,7 @@ import re
 import warnings
 from collections import defaultdict
 from collections.abc import Collection, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeAlias
@@ -33,17 +33,27 @@ import sdm_relational_engine.utils.display as display
 from sdm_relational_engine.exceptions import (
     GraphConstructionError,
     KumoRelationalError,
+    MetricViewAsTableError,
     NoTablesFoundError,
+    ViewConversionError,
 )
 from sdm_relational_engine.rfm.base import (
     Column,
     ColumnSpec,
     DataBackend,
+    KeyCount,
     Table,
     composite_key,
+    count_keys,
 )
 from sdm_relational_engine.rfm.base.casting import CastMixin
 from sdm_relational_engine.rfm.base.utils import Timedelta
+from sdm_relational_engine.rfm.view_conversion import (
+    ConversionNote,
+    MeasureNote,
+    TimeColumnNote,
+    by_folded_name,
+)
 from sdm_relational_engine.rfm.view_expr import (
     _unsafe_expr_reason,
     _untrusted_call_reason,
@@ -181,6 +191,254 @@ def _view_expr_message(
     )
 
 
+def _refuses_column(error: BaseException) -> bool:
+    r"""Whether ``error`` refuses a column alone: a column the graph cannot
+    hold, or an expression the warehouse refused for what it says or reads.
+
+    A driver's error is judged by its state alone, since a Spark session's
+    errors are ``RuntimeError`` and ``ValueError`` whatever went wrong.
+    """
+    from sdm_relational_engine.rfm.backend.databricks.errors import (
+        refuses_expression,
+    )
+
+    if _is_driver_error(error):
+        return refuses_expression(error)
+    return isinstance(error, ValueError | RuntimeError) and not isinstance(
+        error, NotImplementedError
+    )
+
+
+def _try_add_columns(
+    table: Table, columns: Sequence[ColumnSpec]
+) -> BaseException | None:
+    r"""Adds ``columns`` to ``table``, or none of them if one is refused, and
+    returns why. Any other failure is raised, as the table's then is too.
+    """
+    before = set(table._column_dict)
+    try:
+        table.add_columns(columns)
+    except Exception as error:
+        if not _refuses_column(error):
+            raise
+        for name in list(table._column_dict):
+            if name not in before:
+                table.remove_column(name)
+        return error
+    return None
+
+
+def _add_view_columns(table: Table, columns: Sequence[ColumnSpec]) -> list[str]:
+    r"""Adds a view's columns to ``table``, leaving out each one that is
+    refused, and returns why for each.
+
+    A table's expressions are sampled in one query, so one refused column
+    refuses the batch, and the columns are then added one at a time.
+    """
+    if _try_add_columns(table, columns) is None:
+        return []
+    msgs: list[str] = []
+    for column in columns:
+        if (error := _try_add_columns(table, [column])) is not None:
+            msgs.append(
+                f"Failed to add column '{column.name}' to table "
+                f"'{table.name}': {error}"
+            )
+    return msgs
+
+
+def _join_key_reason(count: KeyCount, table: str, key: str) -> str | None:
+    r"""Why ``key``, counted as ``count``, cannot be the primary key a view's
+    join gives ``table``, or ``None`` if it can.
+
+    A many-to-one join promises one row of ``table`` per key, and neither
+    Databricks nor a view checks it. A key that repeats would make one entity
+    of several rows. A row with no key is one no join reaches, and sampling
+    leaves it out, so it does not count against the key.
+    """
+    if count.rows is None or count.distinct is None:
+        return None
+    if count.distinct == 0:
+        return f"its key '{key}' holds no value in table '{table}'"
+    if count.repeats > 0:
+        example = '' if count.example is None else f', e.g. {count.example!r}'
+        return (
+            f"its key '{key}' is not unique in table '{table}': "
+            f'{count.repeats:,} of {count.rows:,} rows repeat a value'
+            f'{example}. A graph table needs one row per key, so point the '
+            f"join at a table or view with one row per '{key}'"
+        )
+    return None
+
+
+def _infer_view_time_column(
+    table: Table, window_orders: Sequence[str], *, warn: bool = True
+) -> TimeColumnNote | None:
+    r"""Infers the time column of a metric view's table, and notes it where
+    the view's own columns would have led elsewhere.
+
+    A truncated or cast date, such as ``DATE_TRUNC('MONTH', order_date)``,
+    starts at or before the column it derives from, so that column is
+    offered in its place, under a name of its own where a dimension has its
+    name. A dimension a window measure orders by is offered alone first.
+    """
+    from predictive_query.schema.typing import Dtype
+
+    from sdm_relational_engine.rfm.backend.databricks.metric_view import (
+        derived_column,
+    )
+
+    timestamps = [
+        column.name
+        for column in table.columns
+        if column.stype == Stype.timestamp
+    ]
+    source = by_folded_name(
+        table._source_column_dict.values(), lambda column: column.name
+    )
+    derived_from: dict[str, str] = {}
+    for name in timestamps:
+        expr = table[name].expr
+        under = None if expr is None else derived_column(str(expr))
+        column = None if under is None else source.get(under.lower())
+        if column is not None and column.dtype in (Dtype.date, Dtype.time):
+            derived_from[name] = column.name
+
+    added: list[str] = []
+    # The source column each added column is, where a dimension has its
+    # name and it is added under another:
+    renamed: dict[str, str] = {}
+    for raw in dict.fromkeys(derived_from.values()):
+        taken = {column.name.lower() for column in table.columns}
+        name = raw
+        if table.has_column(raw) and table[raw].is_source:
+            usable = table[raw].stype == Stype.timestamp
+        else:
+            if raw.lower() in taken:
+                name = f'{raw}_raw'
+                suffix = 2
+                while name.lower() in taken:
+                    name = f'{raw}_raw_{suffix}'
+                    suffix += 1
+            spec = ColumnSpec(
+                name=name,
+                expr=None if name == raw else quote_ident(raw, char='`'),
+            )
+            usable = _try_add_columns(table, [spec]) is None
+            if usable:
+                if name != raw:
+                    renamed[name] = raw
+                added.append(name)
+                usable = table[name].stype == Stype.timestamp
+        derived_from = {
+            k: name if v == raw else v
+            for k, v in derived_from.items()
+            if v != raw or usable
+        }
+
+    candidates = list(dict.fromkeys(derived_from.get(n, n) for n in timestamps))
+    axes = list(
+        dict.fromkeys(
+            derived_from.get(name, name)
+            for name in window_orders
+            if name in timestamps
+        )
+    )
+    chosen = None
+    if axes and len(candidates) > 1:
+        chosen = table._infer_time_column_among(axes, warn=warn)
+    if chosen is None and candidates:
+        chosen = table._infer_time_column_among(candidates, warn=warn)
+
+    choice = table._time_column_choice
+    kept = set() if choice is None else {choice.column, choice.fallback}
+    for raw in added:
+        if raw not in kept:
+            table.remove_column(raw)
+
+    window_order = chosen is not None and chosen in axes and len(candidates) > 1
+    instead_of = tuple(n for n, raw in derived_from.items() if raw == chosen)
+    if instead_of:
+        assert choice is not None
+        table._time_column_choice = replace(choice, instead_of=instead_of)
+    if chosen is None or not (window_order or instead_of):
+        return None
+    return TimeColumnNote(
+        table=table.name,
+        column=chosen,
+        instead_of=instead_of,
+        source_column=renamed.get(chosen),
+        added=chosen in added and chosen not in renamed,
+        window_order=window_order,
+    )
+
+
+def _measure_notes(
+    fact_table: Table, measures: Sequence[Any]
+) -> list[MeasureNote]:
+    r"""The predictive query aggregation each simple measure of a view is.
+
+    A measure names a column in any case, as Databricks reads it, and a
+    dimension that renames a column stands for it. A dimension that has a
+    source column's name but holds something else shadows it, so a measure
+    of that name gets no note: which of the two it reads is not certain.
+
+    Args:
+        fact_table: The view's source table, the columns of its measures
+            added.
+        measures: The view's
+            :class:`~sdm_relational_engine.rfm.backend.databricks.metric_view.MetricViewMeasure`.
+    """
+    source = by_folded_name(fact_table._source_column_dict)
+    columns = by_folded_name(fact_table.columns, lambda column: column.name)
+    renamed_as: dict[str, str] = {}
+    for column in fact_table.columns:
+        if column.expr is not None and (
+            renamed := _renamed_column(str(column.expr))
+        ):
+            renamed_as.setdefault(renamed.lower(), column.name)
+    notes: list[MeasureNote] = []
+    for measure in measures:
+        if measure.aggregation is None:
+            continue
+        function, name = measure.aggregation
+        if name is None:
+            target = None
+        elif (column := columns.get(name.lower())) is None:
+            if (target := renamed_as.get(name.lower())) is None:
+                continue
+        elif (
+            column.expr is None
+            or name.lower() not in source
+            or (_renamed_column(str(column.expr)) or '').lower() == name.lower()
+        ):
+            target = column.name
+        else:
+            continue
+        notes.append(
+            MeasureNote(measure.name, fact_table.name, function, target)
+        )
+    return notes
+
+
+def _renamed_column(expr: str) -> str | None:
+    r"""The column an expression is, if it is one column and nothing else."""
+    match = re.fullmatch(r'`((?:[^`]|``)+)`|([A-Za-z_]\w*)', expr.strip())
+    if match is None:
+        return None
+    quoted, bare = match.groups()
+    return bare if quoted is None else quoted.replace('``', '`')
+
+
+def _real_name(table: Table, name: str) -> str:
+    r"""``name`` as ``table``'s source spells it, which Databricks matches
+    to ``name`` without regard to case, or ``name`` if it spells none.
+    """
+    if name in table._source_column_dict:
+        return name
+    return by_folded_name(table._source_column_dict).get(name.lower(), name)
+
+
 class ViewConversionWarning(UserWarning):
     r"""Warn that parts of a view could not be represented in a :class:`Graph`.
 
@@ -213,24 +471,34 @@ def _warn_view_conversion(message: str, owned_connection: Any) -> None:
         raise
 
 
-def _reraise_as_graph_error(error: BaseException, source: str) -> None:
-    r"""Raise :class:`GraphConstructionError` for a foreign driver failure.
+def _is_driver_error(error: BaseException) -> bool:
+    r"""Whether ``error`` comes from a driver: not this package's, not a
+    built-in a programming error raises, and not a :class:`Warning` the
+    caller's filters escalated. An :class:`OSError` is a built-in a lost
+    connection raises, so it counts as a driver's.
+    """
+    if isinstance(error, OSError):
+        return True
+    return not (
+        isinstance(error, KumoRelationalError | Warning)
+        or type(error).__module__ == 'builtins'
+    )
 
-    Returns without raising for anything this package owns, for a built-in,
-    and for a :class:`Warning` the caller's filters escalated into an error, so
-    the caller's bare ``raise`` re-raises those unchanged with their original
-    traceback. Only a third-party driver's exception is translated, which is
-    the one class of failure that otherwise escapes graph construction with no
-    base in common with the rest of this client.
+
+def _reraise_as_graph_error(error: BaseException, source: str) -> None:
+    r"""Raise :class:`GraphConstructionError` for a driver failure.
+
+    Returns without raising for anything else, so the caller's bare
+    ``raise`` re-raises it unchanged with its original traceback. A driver's
+    exceptions share no base with the rest of this client, so they are the
+    one class of failure translated.
 
     Deliberately called from the existing cleanup handler rather than applied
     as a decorator: a wrapper frame shifts the stack depth that
     :func:`_warn_view_conversion` relies on, which silently re-attributes every
     conversion warning to this module instead of to the caller.
     """
-    if isinstance(error, KumoRelationalError | Warning):
-        return
-    if type(error).__module__ == 'builtins':
+    if not _is_driver_error(error):
         return
     raise GraphConstructionError(
         f'Reading the {source} source failed while building the graph: '
@@ -334,6 +602,7 @@ class Graph:
         self._tables: dict[str, Table] = {}
         self._edges: list[Edge] = []
         self._conversion_messages: tuple[str, ...] = ()
+        self._conversion_notes: tuple[ConversionNote, ...] = ()
         self._connection: (
             AdbcSqliteConnection
             | DuckDBPyConnection
@@ -1109,6 +1378,7 @@ class Graph:
         verbose: bool = True,
         *,
         trust_expressions: bool = False,
+        warn: bool = True,
     ) -> Self:
         r"""Create a :class:`Graph` from a Databricks Unity Catalog metric
         view.
@@ -1116,9 +1386,17 @@ class Graph:
         Its star or snowflake schema becomes a graph: ``source`` becomes the
         fact table, each join a linked table named for its alias, and each
         dimension an expression column on its referenced table. Measures define
-        aggregations, not row-level values, so the graph omits them; express
-        aggregations with a predictive query. Other unrepresentable elements
-        are dropped with a warning.
+        aggregations, not row-level values, so the graph omits them but adds
+        the columns they read; express aggregations with a predictive query.
+        :attr:`conversion_notes` spells each measure that is one aggregate of
+        a source table column, or a count of its rows, but not one over a
+        column whose name a dimension holding something else has. Other
+        unrepresentable elements are dropped with a warning.
+
+        A joined table that is missing, empty, a metric view or not yours to
+        read drops its join with a warning, and a column the warehouse refuses
+        drops alone. A source table that cannot be read, and any other failure
+        of the warehouse, fails the conversion.
 
         The view's ``filter`` is applied to the fact table, so every read of it
         sees only the rows the view holds. A filter on a joined table cannot
@@ -1126,12 +1404,18 @@ class Graph:
         regular view with that ``WHERE`` clause and point the metric view's
         source at it.
 
+        A parameter the filter or a dimension references is read as its
+        default, as a query of the view without arguments reads it. A filter
+        on a parameter with no default refuses the view, and a dimension on
+        one is dropped with a warning.
+
         Dimension expressions later run as SQL under your warehouse
-        credentials, making the view definition executable input. Expressions
-        with a statement separator, comment, or sub-query are not plain scalar
-        expressions and are dropped with a warning. So are expressions calling
-        anything but a pure built-in function, such as a user-defined function
-        or ``secret()``, unless ``trust_expressions`` is set. Load only trusted
+        credentials, making the view definition executable input. A comment is
+        removed first, as Databricks drops it. Expressions with a statement
+        separator or sub-query are not plain scalar expressions and are
+        dropped with a warning. So are expressions calling anything but a
+        pure built-in function, such as a user-defined function or
+        ``secret()``, unless ``trust_expressions`` is set. Load only trusted
         metric views.
 
         .. code-block:: python
@@ -1165,22 +1449,47 @@ class Graph:
             verbose: Whether to print verbose output.
             trust_expressions: Whether to keep dimensions, and accept a
                 filter, that call functions other than pure built-ins.
-                Sub-queries, comments and statement separators are refused
-                regardless.
+                Sub-queries and statement separators are refused regardless.
+            warn: Whether to warn of what the view loses, as a
+                :class:`ViewConversionWarning`, and of a time column taken
+                on the rows read alone, as a
+                :class:`~sdm_relational_engine.rfm.TimeColumnWarning`. A
+                caller that says them itself turns this off, rather than
+                filter warnings for every thread:
+                :attr:`conversion_messages` and each table's
+                ``time_column_choice`` hold them either way. It covers this
+                conversion only, so a later call such as
+                ``infer_time_column()`` warns as usual.
 
         Raises:
+            ViewConversionError: If the view is refused for what it is, with
+                what to change: a query or a metric view as its source, a
+                join name that collides with the source table's, or one of
+                the below. A ``ValueError`` as well.
             UnsupportedFilterError: If the view's filter references a joined
-                table, or is not a safe scalar condition.
+                table or a parameter with no default, or is not a safe scalar
+                condition. A :class:`ViewConversionError`.
+            TableNotFoundError: If the metric view, or its source table,
+                does not exist or you may not see it.
+            GraphConstructionError: If the warehouse fails other than by
+                refusing a joined table or a column, with the driver's error
+                as its ``__cause__``.
         """
         from sdm_relational_engine.rfm.backend.databricks import (
             CONNECTION_TYPES,
             DatabricksTable,
         )
+        from sdm_relational_engine.rfm.backend.databricks.errors import (
+            unusable_table_reason,
+        )
         from sdm_relational_engine.rfm.backend.databricks.metric_view import (
             SOURCE_ALIAS,
+            MetricViewJoin,
+            MetricViewWildcard,
+            SkippedJoin,
             UnsupportedJoinError,
             parse_metric_view,
-            parse_table_reference,
+            parse_view_name,
             read_metric_view_definition,
             resolve_join_keys,
             unquote_ident,
@@ -1195,9 +1504,9 @@ class Graph:
         assert isinstance(connection, CONNECTION_TYPES)
 
         try:
-            name_parts = parse_table_reference(metric_view_name)
+            name_parts = parse_view_name(metric_view_name)
             if name_parts is None:
-                raise ValueError(
+                raise ViewConversionError(
                     f"Invalid metric view name '{metric_view_name}'"
                 )
             if len(name_parts) == 1 and schema is not None:
@@ -1208,11 +1517,8 @@ class Graph:
                 quote_ident(part, char='`') for part in name_parts
             )
 
-            definition, dtype_names, view_catalog, view_schema = (
-                read_metric_view_definition(connection, quoted_name)
-            )
-            spec = parse_metric_view(definition)
-            msgs = list(spec.messages)
+            description = read_metric_view_definition(connection, quoted_name)
+            view_catalog, view_schema = description.catalog, description.schema
 
             def _table_parts(parts: tuple[str, ...]) -> tuple[str, str, str]:
                 if len(parts) == 2 and view_catalog is not None:
@@ -1220,40 +1526,65 @@ class Graph:
                 elif len(parts) == 1 and view_catalog and view_schema:
                     parts = (view_catalog, view_schema, *parts)
                 if len(parts) != 3:
-                    raise ValueError(
+                    raise ViewConversionError(
                         f'Could not fully qualify table '
                         f"'{'.'.join(parts)}' referenced by "
                         f"metric view '{metric_view_name}'"
                     )
                 return parts[0], parts[1], parts[2]
 
+            tables_by_alias: dict[str, DatabricksTable] = {}
+
+            def _fact_table(parts: tuple[str, ...]) -> DatabricksTable:
+                r"""The source table, its columns read. Tables start empty,
+                so the checks below see their columns before anything reads
+                a row.
+                """
+                if SOURCE_ALIAS not in tables_by_alias:
+                    catalog_, schema_, source_ = _table_parts(parts)
+                    table = DatabricksTable(
+                        connection,
+                        name=source_,
+                        source_name=source_,
+                        catalog=catalog_,
+                        schema=schema_,
+                        columns=[],
+                        primary_key=None,
+                    )
+                    try:
+                        table._source_column_dict  # noqa: B018
+                    except MetricViewAsTableError as error:
+                        raise ViewConversionError(
+                            f"'{table.source_name}' is a metric view; a "
+                            f'metric view built on another metric view is not '
+                            f'supported, point its source at the underlying '
+                            f'table'
+                        ) from error
+                    tables_by_alias[SOURCE_ALIAS] = table
+                return tables_by_alias[SOURCE_ALIAS]
+
+            spec = parse_metric_view(
+                description.definition,
+                description.parameters,
+                source_columns=lambda parts: (
+                    _fact_table(parts)._source_column_dict
+                ),
+            )
+            msgs = [*spec.messages, *map(str, spec.skipped_joins)]
+            notes: list[ConversionNote] = list(spec.notes)
+
             dtypes = {
                 name: DatabricksTable._to_dtype(data_type)
-                for name, data_type in dtype_names.items()
+                for name, data_type in description.dtypes.items()
             }
 
-            fact_catalog, fact_schema, fact_source = _table_parts(spec.source)
-            if any(join.alias == fact_source for join in spec.joins):
-                raise ValueError(
+            fact_table = _fact_table(spec.source)
+            if any(join.alias == fact_table.name for join in spec.joins):
+                raise ViewConversionError(
                     f"Cannot convert metric view '{metric_view_name}' into a "
-                    f"graph since the join name '{fact_source}' collides with "
-                    f'the name of the source table'
+                    f"graph since the join name '{fact_table.name}' collides "
+                    f'with the name of the source table'
                 )
-
-            # Tables start empty, so the checks below see their columns before
-            # anything reads a row.
-            fact_table = DatabricksTable(
-                connection,
-                name=fact_source,
-                source_name=fact_source,
-                catalog=fact_catalog,
-                schema=fact_schema,
-                columns=[],
-                primary_key=None,
-            )
-            tables_by_alias: dict[str, DatabricksTable] = {
-                SOURCE_ALIAS: fact_table
-            }
             joins_by_alias = {join.alias: join for join in spec.joins}
 
             def _table(alias: str) -> DatabricksTable:
@@ -1271,18 +1602,42 @@ class Graph:
                     )
                 return tables_by_alias[alias]
 
+            # Why each joined table cannot be used, by alias. A failure that
+            # gives no such reason fails the conversion instead.
+            unusable: dict[str, str] = {}
+
+            def _read_join(alias: str, rows: bool = False) -> bool:
+                r"""Whether a joined table can be used, its columns read, and
+                its rows if ``rows``.
+
+                A join under one that cannot be used goes with it, so it is
+                never read.
+                """
+                parent = joins_by_alias[alias].parent_alias
+                if alias in unusable or (
+                    parent != SOURCE_ALIAS and not _read_join(parent, rows)
+                ):
+                    return False
+                table = _table(alias)
+                try:
+                    table._source_column_dict  # noqa: B018
+                    if rows:
+                        table._source_sample_df  # noqa: B018
+                except Exception as error:
+                    if (reason := unusable_table_reason(error)) is None:
+                        raise
+                    unusable[alias] = reason
+                    return False
+                return True
+
             def _columns_of(alias: str) -> list[str]:
                 if alias == SOURCE_ALIAS:
                     return list(fact_table._source_column_dict)
-                # A join that cannot be read is dropped below with its reason,
-                # so here it shows no columns.
-                try:
-                    return list(_table(alias)._source_column_dict)
-                except ValueError:
+                if not _read_join(alias):
                     return []
+                return list(_table(alias)._source_column_dict)
 
-            # Every read of the fact table runs the filter, so it is checked
-            # against the table's columns and attached before the first one.
+            # Attached before the first read, since every read runs it.
             if spec.filter is not None:
                 fact_table.row_filter = (
                     spec.filter.trusted()
@@ -1291,8 +1646,26 @@ class Graph:
                 )
 
             columns_by_alias: dict[str, list[ColumnSpec]] = defaultdict(list)
+            renames: dict[str, dict[str, str]] = defaultdict(dict)
             for column_spec in spec.columns:
-                if unquote_ident(column_spec.expr) == column_spec.name:
+                if isinstance(column_spec, MetricViewWildcard):
+                    # Databricks refuses a view whose wildcards name a column
+                    # twice, so one that exists names each once.
+                    excluded = by_folded_name(column_spec.excluded)
+                    columns_by_alias[column_spec.alias].extend(
+                        ColumnSpec(name=name)
+                        for name in _columns_of(column_spec.alias)
+                        if name.lower() not in excluded
+                    )
+                elif (
+                    real := by_folded_name(_columns_of(column_spec.alias)).get(
+                        unquote_ident(column_spec.expr).lower()
+                    )
+                ) is not None and real.lower() == column_spec.name.lower():
+                    # A column named as itself in any case, as Databricks
+                    # reads it, is that column, named as the view names it.
+                    if real != column_spec.name:
+                        renames[column_spec.alias][real] = column_spec.name
                     columns_by_alias[column_spec.alias].append(
                         ColumnSpec(name=column_spec.name)
                     )
@@ -1314,7 +1687,261 @@ class Graph:
                         )
                     )
 
+            # A predictive query aggregates columns, not measures, so the
+            # columns a measure reads are added. A measure is never run.
+            for measure in spec.measures:
+                for alias, name in measure.inputs:
+                    columns = by_folded_name(_columns_of(alias))
+                    if (column := columns.get(name.lower())) is None:
+                        continue
+                    taken = by_folded_name(
+                        columns_by_alias[alias], lambda spec_: spec_.name
+                    )
+                    # A dimension renaming the column stands for it.
+                    if any(
+                        (renamed := _renamed_column(str(spec_.expr)))
+                        and renamed.lower() == column.lower()
+                        for spec_ in columns_by_alias[alias]
+                        if spec_.expr is not None
+                    ):
+                        continue
+                    if (same := taken.get(column.lower())) is None:
+                        columns_by_alias[alias].append(ColumnSpec(name=column))
+                    elif not same.is_source:
+                        msgs.append(
+                            f"Did not add the column '{column}', which the "
+                            f"measure '{measure.name}' reads, since the "
+                            f"dimension '{same.name}' has its name"
+                        )
+
+            # Databricks names a key as a dimension, wildcard or measure
+            # names it, and otherwise as the join's condition spells it.
+            for join in spec.joins:
+                try:
+                    other_alias, other_key, child_key = resolve_join_keys(
+                        join,
+                        child_columns=_columns_of(join.alias),
+                        parent_columns=_columns_of(join.parent_alias),
+                    )
+                except UnsupportedJoinError:
+                    continue  # Dropped below, with its reason.
+                for alias, key in (
+                    (join.alias, child_key),
+                    (other_alias, other_key),
+                ):
+                    real = by_folded_name(_columns_of(alias)).get(key.lower())
+                    named = any(
+                        spec_.name.lower() == key.lower()
+                        for spec_ in columns_by_alias[alias]
+                    )
+                    if (
+                        real is not None
+                        and real != key
+                        and real not in renames[alias]
+                        and not named
+                    ):
+                        renames[alias][real] = key
+
+            # Before a row is read, so every read names them as the view does.
+            for alias, names in renames.items():
+                if alias not in unusable:
+                    _table(alias)._name_columns(names)
+
             graph = cls(tables=[])
+
+            fact_table._source_sample_df  # noqa: B018
+            msgs.extend(
+                _add_view_columns(
+                    fact_table, columns_by_alias.get(SOURCE_ALIAS, [])
+                )
+            )
+            graph.add_table(fact_table)
+            table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
+
+            def _join_ends(join: MetricViewJoin) -> tuple[str, str, str, str]:
+                r"""The alias and key of the table ``join`` keys, then of the
+                table it links to that one.
+                """
+                child = _table(join.alias)
+                other_alias, other_key, child_key = resolve_join_keys(
+                    join,
+                    child_columns=child._source_column_dict,
+                    parent_columns=_table(
+                        join.parent_alias
+                    )._source_column_dict,
+                )
+                other_key = _real_name(_table(other_alias), other_key)
+                child_key = _real_name(child, child_key)
+                if join.cardinality == 'many_to_one':
+                    return join.alias, child_key, other_alias, other_key
+                return other_alias, other_key, join.alias, child_key
+
+            # Every key a join gives is counted in one statement, as a round
+            # trip per join is slow on a warehouse. Renames come first, as
+            # the count reads the columns by the view's names.
+            keyed: dict[tuple[str, str], str] = {}
+            for join in spec.joins:
+                if not _read_join(join.alias, rows=True):
+                    continue
+                try:
+                    one_alias, one_key, _, _ = _join_ends(join)
+                except UnsupportedJoinError:
+                    continue
+                keyed.setdefault((one_alias, one_key.lower()), one_key)
+            counts: dict[tuple[str, str], KeyCount] | None = None
+            try:
+                found = count_keys(
+                    [
+                        (_table(alias), (key,))
+                        for (alias, _), key in keyed.items()
+                    ]
+                )
+            except Exception as error:
+                # An unchecked key may build wrong entities, so each join
+                # says so, but a failed count is no reason to lose them.
+                if not _is_driver_error(error):
+                    raise
+                uncounted = type(error).__name__
+            else:
+                counts = dict(zip(keyed, found, strict=True))
+
+            def _drop_join(join: MetricViewJoin, reason: str) -> None:
+                r"""Reports a join dropped, with the table and dimensions
+                that go with it, which a question may have been asked of.
+                """
+                dimensions = tuple(
+                    column.name for column in columns_by_alias[join.alias]
+                )
+                msgs.append(
+                    str(SkippedJoin(join.alias, reason, dimensions=dimensions))
+                )
+
+            for join in spec.joins:
+                if join.parent_alias not in table_dict:
+                    _drop_join(
+                        join,
+                        f"its parent join '{join.parent_alias}' was not added",
+                    )
+                    continue
+
+                if not _read_join(join.alias, rows=True):
+                    _drop_join(join, unusable[join.alias])
+                    continue
+                table = _table(join.alias)
+
+                # A rejected join must leave no trace on tables already in
+                # the graph, so every change is recorded to be undone.
+                undo_columns: list[tuple[Table, str, Column | None]] = []
+                undo_primary_key: tuple[Table, str, Stype] | None = None
+                join_msgs = _add_view_columns(
+                    table, columns_by_alias.get(join.alias, [])
+                )
+
+                try:
+                    one_alias, one_key, many_alias, many_key = _join_ends(join)
+                    one_table, many_table = (
+                        _table(one_alias),
+                        _table(many_alias),
+                    )
+
+                    if (
+                        one_table._primary_key is not None
+                        and one_table._primary_key != one_key
+                    ):
+                        raise UnsupportedJoinError(
+                            join.alias,
+                            f"table '{one_table.name}' already uses "
+                            f"'{one_table._primary_key}' as its primary key",
+                        )
+
+                    # A key an earlier join set passed its count then.
+                    if one_table._primary_key is None and counts is None:
+                        join_msgs.append(
+                            f"Kept join '{join.alias}' with its key "
+                            f"'{one_key}' unchecked, since counting the keys "
+                            f'failed: {uncounted}'
+                        )
+                    elif one_table._primary_key is None and (
+                        reason := _join_key_reason(
+                            counts[(one_alias, one_key.lower())],
+                            one_table.name,
+                            one_key,
+                        )
+                    ):
+                        raise UnsupportedJoinError(join.alias, reason)
+
+                    for key_table, key in (
+                        (one_table, one_key),
+                        (many_table, many_key),
+                    ):
+                        if not key_table.has_column(key):
+                            key_table.add_column(key)
+                            undo_columns.append((key_table, key, None))
+                        elif not key_table[key].is_source:
+                            undo_columns.append(
+                                (key_table, key, key_table[key])
+                            )
+                            key_table.remove_column(key)
+                            key_table.add_column(key)
+                            join_msgs.append(
+                                f"Replaced the derived column '{key}' of table "
+                                f"'{key_table.name}' with its physical source "
+                                f"column since join '{join.alias}' references "
+                                f'it as a key'
+                            )
+
+                    if one_table._primary_key is None:
+                        undo_primary_key = (
+                            one_table,
+                            one_key,
+                            one_table[one_key].stype,
+                        )
+                        one_table.primary_key = one_key
+
+                    graph.add_table(table)
+                    table_dict[join.alias] = table
+                    graph.link(many_table.name, many_key, one_table.name)
+                    msgs.extend(join_msgs)
+                except ValueError as error:
+                    if table_dict.get(join.alias) is table:
+                        graph.remove_table(join.alias)
+                        del table_dict[join.alias]
+                    if undo_primary_key is not None:
+                        undo_table, undo_key, undo_stype = undo_primary_key
+                        undo_table.primary_key = None
+                        undo_table[undo_key].stype = undo_stype
+                    for undo_table, undo_key, undo_column in reversed(
+                        undo_columns
+                    ):
+                        if undo_table.has_column(undo_key):
+                            undo_table.remove_column(undo_key)
+                        if undo_column is not None:
+                            undo_table._column_dict[undo_key] = undo_column
+                    if isinstance(error, UnsupportedJoinError):
+                        _drop_join(join, error.reason)
+                    else:
+                        _drop_join(
+                            join, f'its keys could not be linked: {error}'
+                        )
+
+            notes.extend(_measure_notes(fact_table, spec.measures))
+            for table in graph.tables.values():
+                note = _infer_view_time_column(
+                    table, spec.window_orders, warn=warn
+                )
+                if note is not None:
+                    notes.append(note)
+
+            msgs.extend(graph._drop_invalid_edges())
+            graph._settle_time_columns()
+            graph.validate()
+
+            if verbose:
+                graph.print_metadata()
+                graph.print_links()
+
+            graph._conversion_messages = tuple(msgs)
+            graph._conversion_notes = tuple(notes)
         except BaseException as error:
             if internal_connection:
                 connection.close()
@@ -1324,126 +1951,7 @@ class Graph:
         if internal_connection:
             graph._connection = connection
 
-        fact_table.add_columns(columns_by_alias.get(SOURCE_ALIAS, []))
-        graph.add_table(fact_table)
-        table_dict: dict[str, Table] = {SOURCE_ALIAS: fact_table}
-
-        for join in spec.joins:
-            parent_table = table_dict.get(join.parent_alias)
-            if parent_table is None:
-                msgs.append(
-                    f"Failed to add join '{join.alias}' since its "
-                    f"parent join '{join.parent_alias}' was not "
-                    f'added'
-                )
-                continue
-
-            table = _table(join.alias)
-            table.add_columns(columns_by_alias.get(join.alias, []))
-
-            # Adding a join mutates tables that are already part of the graph,
-            # so record every mutation and undo it in full in case the join is
-            # rejected - a dropped join must not leave any trace behind:
-            undo_columns: list[tuple[Table, str, Column | None]] = []
-            undo_primary_key: tuple[Table, str, Stype] | None = None
-            join_msgs: list[str] = []
-
-            try:
-                other_alias, other_key, child_key = resolve_join_keys(
-                    join,
-                    child_columns=table._source_column_dict,
-                    parent_columns=parent_table._source_column_dict,
-                )
-                other_table = table_dict[other_alias]
-
-                if join.cardinality == 'many_to_one':
-                    one_table, one_key = table, child_key
-                    many_table, many_key = other_table, other_key
-                else:
-                    one_table, one_key = other_table, other_key
-                    many_table, many_key = table, child_key
-
-                if (
-                    one_table._primary_key is not None
-                    and one_table._primary_key != one_key
-                ):
-                    raise UnsupportedJoinError(
-                        f"Failed to add join '{join.alias}' since table "
-                        f"'{one_table.name}' already uses "
-                        f"'{one_table._primary_key}' as its primary key"
-                    )
-
-                for key_table, key in (
-                    (one_table, one_key),
-                    (many_table, many_key),
-                ):
-                    if not key_table.has_column(key):
-                        key_table.add_column(key)
-                        undo_columns.append((key_table, key, None))
-                    elif not key_table[key].is_source:
-                        undo_columns.append((key_table, key, key_table[key]))
-                        key_table.remove_column(key)
-                        key_table.add_column(key)
-                        join_msgs.append(
-                            f"Replaced the derived column '{key}' of table "
-                            f"'{key_table.name}' with its physical source "
-                            f"column since join '{join.alias}' references "
-                            f'it as a key'
-                        )
-
-                if one_table._primary_key is None:
-                    undo_primary_key = (
-                        one_table,
-                        one_key,
-                        one_table[one_key].stype,
-                    )
-                    one_table.primary_key = one_key
-
-                graph.add_table(table)
-                table_dict[join.alias] = table
-                graph.link(many_table.name, many_key, one_table.name)
-                msgs.extend(join_msgs)
-            except ValueError as error:
-                if table_dict.get(join.alias) is table:
-                    graph.remove_table(join.alias)
-                    del table_dict[join.alias]
-                if undo_primary_key is not None:
-                    undo_table, undo_key, undo_stype = undo_primary_key
-                    undo_table.primary_key = None
-                    undo_table[undo_key].stype = undo_stype
-                for undo_table, undo_key, undo_column in reversed(undo_columns):
-                    if undo_table.has_column(undo_key):
-                        undo_table.remove_column(undo_key)
-                    if undo_column is not None:
-                        undo_table._column_dict[undo_key] = undo_column
-                if isinstance(error, UnsupportedJoinError):
-                    msgs.append(str(error))
-                else:
-                    msgs.append(
-                        f"Failed to add join '{join.alias}' since "
-                        f'its keys could not be linked: {error}'
-                    )
-
-        for table in graph.tables.values():
-            candidates = [
-                column.name
-                for column in table.columns
-                if column.stype == Stype.timestamp
-            ]
-            if len(candidates) == 0:
-                continue
-            table._infer_time_column_among(candidates)
-
-        msgs.extend(graph._drop_invalid_edges())
-        graph._settle_time_columns()
-        graph.validate()
-
-        if verbose:
-            graph.print_metadata()
-            graph.print_links()
-
-        graph._conversion_messages = tuple(msgs)
-        if len(msgs) > 0:
+        if warn and len(msgs) > 0:
             title = (
                 f'Could not fully convert the metric view definition '
                 f"'{metric_view_name}' into a graph:\n"
@@ -1463,6 +1971,7 @@ class Graph:
         verbose: bool = True,
         *,
         trust_expressions: bool = False,
+        warn: bool = True,
     ) -> Self:
         r"""Create a :class:`Graph` from a Snowflake semantic view.
 
@@ -1518,6 +2027,9 @@ class Graph:
             trust_expressions: Whether to keep columns that call functions
                 other than pure built-ins. Sub-queries, comments and
                 statement separators are refused regardless.
+            warn: Whether to warn of what the view loses, and of a time
+                column taken on the rows read alone, as
+                :meth:`from_databricks_metric_view` does.
 
         Raises:
             GraphConstructionError: If the semantic view does not exist or
@@ -1658,11 +2170,22 @@ class Graph:
                     f'reference other tables'
                 )
 
-            table.add_columns(columns)
-            if primary_key is not None:
-                if primary_key not in table:
-                    table.add_column(primary_key)
-                table.primary_key = primary_key
+            # A column or key the view declares and its table cannot hold,
+            # one missing from it say, refuses the view, saying which.
+            try:
+                table.add_columns(columns)
+                if primary_key is not None:
+                    if primary_key not in table:
+                        table.add_column(primary_key)
+                    table.primary_key = primary_key
+            except ValueError as error:
+                if isinstance(error, KumoRelationalError):
+                    raise
+                raise ViewConversionError(
+                    f"Cannot convert semantic view '{semantic_view_name}' "
+                    f"into a graph since its table '{table_name}' cannot "
+                    f'hold what it declares: {error}'
+                ) from error
 
             # TODO: allow registering time columns explicitly, without the
             # heuristic.
@@ -1679,7 +2202,7 @@ class Graph:
                     if column.stype == Stype.timestamp
                 ]
             if len(time_candidates) > 0:
-                table._infer_time_column_among(time_candidates)
+                table._infer_time_column_among(time_candidates, warn=warn)
 
             graph.add_table(table)
 
@@ -1737,7 +2260,7 @@ class Graph:
             graph.print_links()
 
         graph._conversion_messages = tuple(msgs)
-        if len(msgs) > 0:
+        if warn and len(msgs) > 0:
             title = (
                 f'Could not fully convert the semantic view definition '
                 f"'{semantic_view_name}' into a graph:\n"
@@ -2178,9 +2701,26 @@ class Graph:
         cleanly. The same messages are also raised as a
         :class:`ViewConversionWarning`; this is the form to assert on, e.g.
         before running predictions that depend on a relationship the view
-        declared.
+        declared. How a view was read where nothing was lost is in
+        :attr:`conversion_notes` instead.
         """
         return self._conversion_messages
+
+    @property
+    def conversion_notes(self) -> tuple[ConversionNote, ...]:
+        r"""How :meth:`from_databricks_metric_view` read the view where
+        nothing was lost, which no warning repeats.
+
+        A :class:`~sdm_relational_engine.rfm.view_conversion.MeasureNote`
+        for each measure that is one predictive query aggregation over the
+        source table, a
+        :class:`~sdm_relational_engine.rfm.view_conversion.TimeColumnNote`
+        for a time column taken in place of a date the view truncates, and a
+        :class:`~sdm_relational_engine.rfm.view_conversion.ParameterNote`
+        for each parameter read as its default. ``str()`` of each says it in
+        words. Empty for every other constructor.
+        """
+        return self._conversion_notes
 
     def print_links(self) -> None:
         r"""Prints the :meth:`~Graph.edges` of the graph."""

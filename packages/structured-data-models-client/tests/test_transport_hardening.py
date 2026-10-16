@@ -20,6 +20,8 @@ from sdm_client import SDMClient
 from sdm_client.core.transport import Transport
 from sdm_client.errors import NimRequestError, StructuredDataError
 
+_PW = 'secret'
+
 _REMOTE = 'nim.example'
 
 
@@ -29,7 +31,7 @@ _REMOTE = 'nim.example'
 @pytest.mark.parametrize(
     'url',
     [
-        f'http://user:secret@{_REMOTE}',
+        f'http://user:{_PW}@{_REMOTE}',
         f'http://user@{_REMOTE}',
         f'http://:secret@{_REMOTE}',
     ],
@@ -53,9 +55,9 @@ def test_an_api_key_is_still_refused_over_plaintext_to_a_remote_host():
 @pytest.mark.parametrize(
     'url',
     [
-        'http://user:secret@127.0.0.1:8000',
-        'http://user:secret@localhost:8000',
-        f'https://user:secret@{_REMOTE}',
+        f'http://user:{_PW}@127.0.0.1:8000',
+        f'http://user:{_PW}@localhost:8000',
+        f'https://user:{_PW}@{_REMOTE}',
     ],
 )
 def test_a_credential_is_allowed_where_it_cannot_be_read_off_the_wire(url):
@@ -68,10 +70,10 @@ def test_a_credential_is_allowed_where_it_cannot_be_read_off_the_wire(url):
 
 
 def test_a_credential_in_the_url_is_not_rendered_back_to_the_caller():
-    transport = Transport('https://user:secret@nim.example')
+    transport = Transport(f'https://user:{_PW}@nim.example')
     try:
         assert 'secret' not in repr(
-            SDMClient('https://user:secret@nim.example')
+            SDMClient(f'https://user:{_PW}@nim.example')
         )
     finally:
         transport.close()
@@ -178,7 +180,7 @@ def test_an_error_status_becomes_a_nim_error_carrying_the_status():
 
 
 def test_a_transport_failure_is_reported_without_the_url_credential():
-    url = 'https://user:secret@nim.example'
+    url = f'https://user:{_PW}@nim.example'
     transport = Transport(url, timeout=1.0, max_retries=0)
     try:
         with requests_mock.Mocker() as mock:

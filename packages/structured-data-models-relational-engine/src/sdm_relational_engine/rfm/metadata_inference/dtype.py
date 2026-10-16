@@ -102,6 +102,19 @@ def infer_dtype(ser: pd.Series) -> Dtype:
                 return Dtype.stringlist
             if pa.types.is_null(elem_dtype):
                 return Dtype.floatlist
+        if pa.types.is_decimal(ser.dtype.pyarrow_dtype):
+            # As the payload names it: an integer at scale 0 where every
+            # value fits 64 bits, a string, keeping every digit, where one
+            # does not, and a float otherwise.
+            from sdm_relational_engine.rfm.inference.payload import (
+                _decimal_dtype_name,
+            )
+
+            return {
+                'int64': Dtype.int,
+                'float64': Dtype.float,
+                'string': Dtype.string,
+            }[_decimal_dtype_name(ser) or 'string']
 
     if isinstance(ser.dtype, np.dtype):
         dtype_str = str(ser.dtype).lower()

@@ -56,6 +56,14 @@ class TableNotFoundError(KumoRelationalError, ValueError):
     r"""A table named for a graph is not in its source."""
 
 
+class EmptyTableError(KumoRelationalError, RuntimeError):
+    r"""A table named for a graph holds no rows.
+
+    A :class:`RuntimeError` as well, which an empty table was raised as
+    before.
+    """
+
+
 class MetricViewAsTableError(KumoRelationalError, ValueError):
     r"""A Databricks metric view was named where a table was expected.
 
@@ -70,6 +78,17 @@ class MetricViewAsTableError(KumoRelationalError, ValueError):
     def __init__(self, message: str, *, name: str) -> None:
         super().__init__(message)
         self.name = name
+
+
+class ViewConversionError(KumoRelationalError, ValueError):
+    r"""A metric or semantic view is refused as a graph, for what it is.
+
+    Raised for the view itself, not for a failure reading it: a filter on a
+    joined table, a query as its source, a metric view as its source, a
+    definition that is no metric view's. The message says what to change in
+    the view. A ``ValueError`` as well, which these refusals were raised as
+    before.
+    """
 
 
 class NoEligibleEntityError(KumoRelationalError, ValueError):
