@@ -9,8 +9,8 @@ CI's ``wheel-smoke`` job runs this once per lane, with the wheels the
 ``native-wheel`` and ``native-test-ops`` jobs built, never rebuilt and
 never the source tree. Each lane is a pinned runtime of decision E16:
 
-- ``floor``: Python 3.10 with pyarrow 14.0.1, pandas 2.2.0 and NumPy
-  1.26.4, the floors every distribution declares;
+- ``floor``: Python 3.10 with pyarrow 14.0.1, pandas 2.2.2 and NumPy
+  1.23.5, the floors every distribution declares;
 - ``newest``: Python 3.14 with pandas 3, NumPy 2 and pyarrow at the newest
   releases those admit, resolved afresh on every run (no upper bound, a new
   environment, pip's newest).
@@ -197,8 +197,8 @@ LANES = {
         python='3.10',
         image='ghcr.io/nvidia/structured-data-models-client/python:3.10.22-trixie'
         '@sha256:c10791e6f69086d5216f7b5d3b839929c454e24305867ed9bc5152f0355b5423',
-        pins=('pyarrow==14.0.1', 'pandas==2.2.0', 'numpy==1.26.4'),
-        resolved={'pyarrow': '14.0.1', 'pandas': '2.2.0', 'numpy': '1.26.4'},
+        pins=('pyarrow==14.0.1', 'pandas==2.2.2', 'numpy==1.23.5'),
+        resolved={'pyarrow': '14.0.1', 'pandas': '2.2.2', 'numpy': '1.23.5'},
     ),
     'newest': Lane(
         python='3.14',

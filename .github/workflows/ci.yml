@@ -81,7 +81,7 @@ env:
   MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
   # The binding's tests run at the E16 floor; DuckDB, at the reference's
   # version, is for the DuckDB provider's tests there (T1.11b).
-  BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.0 numpy==1.26.4 duckdb==1.5.6
+  BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
 
 jobs:
   # Decision E131 (the owner's of 2026-10-14): CI does not test an empty
@@ -266,6 +266,16 @@ jobs:
       # The client wheel's notices for the Rust crates it links, regenerated
       # from Cargo.lock and compared with the committed file.
       - run: python3 scripts/rust_core/rust_notices.py --check
+        working-directory: .
+      # The open source inventory main's 4cfbcd18 added for nSpect's scan,
+      # uv.lock, current with every distribution's requirements (T2.0c).
+      # Reading the client's version builds its metadata with maturin, so
+      # the pinned toolchain is named: from the client's directory rustup
+      # does not see rust/rust-toolchain.toml.
+      - name: uv.lock is current
+        run: |
+          RUSTUP_TOOLCHAIN=$(sed -n 's/^channel *= *"\(.*\)"$/\1/p' rust/rust-toolchain.toml) \
+            pipx run uv==0.13.1 lock --check
         working-directory: .
 
   rust-deny:
@@ -547,7 +557,7 @@ jobs:
 
   # The wheels as a user installs them (T1.17, decision E16), each lane in
   # a clean container, both gating: the floor (Python 3.10, pyarrow 14.0.1,
-  # pandas 2.2.0, NumPy 1.26.4) and the newest (Python 3.14 with the newest
+  # pandas 2.2.2, NumPy 1.23.5) and the newest (Python 3.14 with the newest
   # pandas 3, NumPy 2 and pyarrow, resolved on every run). wheel_smoke.py
   # runs itself in the lane's Python image, pinned by digest, the checkout
   # mounted read-only; it installs the shipped wheel and the test-ops one,
@@ -998,7 +1008,7 @@ jobs:
     needs: native-wheel
     env:
       CELL: floor-pandas2.2
-      CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
     steps:
       - *contract-checkout
       - uses: actions/setup-python@v7

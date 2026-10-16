@@ -1175,18 +1175,23 @@ class TestDistributionCoherence:
         """pandas, NumPy and pyarrow carry one floor wherever they are named.
 
         The core takes Arrow through the PyCapsule interface, which pyarrow
-        has from 14.0.1, and the supported versions are decision E16's; a
-        distribution that named a lower floor would let an install resolve
-        to a set nothing tests.
+        has from 14.0.1, and the supported versions are decision E16's, with
+        main's pandas 2.2.2 and the NumPy 1.23.5 the Databricks runtimes ship
+        (the owner's, 2026-10-16); a distribution that named a lower floor
+        would let an install resolve to a set nothing tests. The one name
+        left unbounded is main's pyarrow in the connectors, where a floor
+        evicts a runtime's working pyarrow; the client floors it wherever
+        the core is installed.
         """
         from packaging.requirements import Requirement
         from packaging.version import Version
 
         floors = {
-            'pandas': Version('2.2'),
-            'numpy': Version('1.26'),
+            'pandas': Version('2.2.2'),
+            'numpy': Version('1.23.5'),
             'pyarrow': Version('14.0.1'),
         }
+        unbounded = {'structured-data-models-connectors: pyarrow'}
         named = []
         wrong = []
         for name in _distributions():
@@ -1213,22 +1218,23 @@ class TestDistributionCoherence:
                     for s in requirement.specifier
                     if s.operator == '>='
                 ]
+                if not lower and f'{name}: {text}' in unbounded:
+                    continue
                 if not lower or max(lower) < floor:
                     wrong.append(f'{name}: {text} (floor {floor})')
         # Every place one is named, so a requirement that moves or goes is
         # seen here rather than passing for lack of anything to check.
         assert sorted(named) == sorted(
             [
-                'structured-data-models-client: pandas>=2.2',
-                'structured-data-models-client: numpy>=1.26',
+                'structured-data-models-client: pandas>=2.2.2',
+                'structured-data-models-client: numpy>=1.23.5',
                 'structured-data-models-client: pyarrow>=14.0.1',
-                'structured-data-models-connectors: pandas>=2.2',
-                'structured-data-models-connectors: pyarrow>=14.0.1',
-                'structured-data-models-pql: numpy>=1.26',
-                'structured-data-models-pql: pandas>=2.2',
-                'structured-data-models-relational-engine: numpy>=1.26,<2.0',
-                'structured-data-models-relational-engine: numpy>=1.26',
-                'structured-data-models-relational-engine: pandas>=2.2',
+                'structured-data-models-connectors: pandas>=2.2.2',
+                'structured-data-models-connectors: pyarrow',
+                'structured-data-models-pql: numpy>=1.23.5',
+                'structured-data-models-pql: pandas>=2.2.2',
+                'structured-data-models-relational-engine: numpy>=1.23.5',
+                'structured-data-models-relational-engine: pandas>=2.2.2',
                 'structured-data-models-relational-engine: pyarrow>=14.0.1',
             ]
         ), named
