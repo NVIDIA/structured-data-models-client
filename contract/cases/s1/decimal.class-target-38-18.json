@@ -65,6 +65,9 @@
       ],
       "anchor_time": null,
       "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
     }
   },
   "expect": {
