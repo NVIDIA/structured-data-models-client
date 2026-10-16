@@ -152,6 +152,38 @@ This needs `pip install 'structured-data-models-client[databricks-serving]'`. A 
 answers one request at a time, so `fit()` is refused there; `predict()` sends
 the context with every call.
 
+## A model in this process
+
+The model can also run in your own Python process, with no NIM at all. The
+calls are the same; only how the client is opened differs:
+
+```python
+from sdm_client import KumoRelational, SDMClient
+
+with SDMClient.in_process() as client:
+    result = client.predict(request, model=KumoRelational())
+```
+
+Each model is loaded from its published weights on Hugging Face the first time
+it is asked for, on a GPU when there is one. A model you already loaded with
+structured-data-models is used as it is:
+
+```python
+import sdm
+
+relational = sdm.models.KumoRelational(device='cuda')
+with SDMClient.in_process(relational) as client:
+    result = client.predict(request, model=KumoRelational())
+```
+
+It answers as the NIM does. The context is fitted with the NIM's seed and
+settings, `fit()` holds its session in memory, and a request the NIM refuses
+is refused with the same `NimRequestError`. This needs
+`pip install 'structured-data-models-client[in-process]'`, which brings
+PyTorch, on Python 3.11 or later. A relational request is still gathered by
+the relational engine, so for `KumoRelational` install both:
+`pip install 'structured-data-models-client[relational,in-process]'`.
+
 ## Which rows get scored
 
 A query says *what* to predict. It never says *which rows*.

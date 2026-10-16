@@ -1192,12 +1192,14 @@ class TestDistributionCoherence:
                     .split('>=')[0]
                     .strip()
                 )
-                # databricks-sdk is imported by the client's own serving
-                # transport, so the client is the distribution that declares it.
+                # databricks-sdk and structured-data-models are imported by the
+                # client's own transports, so the client is the distribution
+                # that declares them.
                 assert name in known or name in {
                     'pytest',
                     'requests-mock',
                     'databricks-sdk',
+                    'structured-data-models',
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '
                     f"this repository's distributions"

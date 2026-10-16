@@ -369,12 +369,51 @@ class SDMClient:
         )
         return client
 
+    @classmethod
+    def in_process(cls, *models: Any, device: Any = None) -> SDMClient:
+        r"""Open a client that runs the models in this Python process.
+
+        The same calls, answered by structured-data-models here instead of by
+        a NIM. Pass models already loaded with it, or none to load each one
+        from its published weights the first time it is asked for:
+
+        >>> import sdm
+        >>> relational = sdm.models.KumoRelational()
+        >>> with SDMClient.in_process(relational) as client:
+        ...     result = client.predict(request, model=KumoRelational())
+
+        Each model is fitted as the NIM fits it, at the same seed and, on a
+        GPU, the same precision. A refusal is the
+        :class:`~sdm_client.errors.NimRequestError` a NIM answers with.
+
+        Args:
+            *models: ``sdm.models.KumoTabular`` or ``sdm.models.KumoRelational``
+                models, at most one of each. A model passed is only used:
+                each context is fitted on a copy that shares its weights.
+            device: Where to load the models this client loads itself, such as
+                ``'cuda'``. Defaults to CUDA when it is available, else the
+                CPU. Refused with ``models``, which stay where they are.
+
+        Raises:
+            MissingExtraError: If structured-data-models is not installed;
+                install ``structured-data-models-client[in-process]``.
+            StructuredDataError: With code ``INVALID_CONFIGURATION``, for a
+                model other than those two, two of one kind, or ``device``
+                given with ``models``.
+        """
+        from sdm_client.in_process import InProcessTransport
+
+        client = cls.__new__(cls)
+        client._start(InProcessTransport(models, device=device))
+        return client
+
     @property
     def url(self) -> str:
         r"""Where this client sends requests.
 
-        A NIM's base URL, or ``'databricks-serving:<name>'`` for a client
-        opened with :meth:`for_databricks_serving`.
+        A NIM's base URL, ``'databricks-serving:<name>'`` for a client opened
+        with :meth:`for_databricks_serving`, or ``'in-process'`` for one
+        opened with :meth:`in_process`.
         """
         return self._transport.url
 

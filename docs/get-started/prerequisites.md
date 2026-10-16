@@ -7,7 +7,9 @@
   reported as `No matching distribution found for structured-data-models-relational-engine`,
   which names the package and not the reason.
 - **A reachable NIM** serving `kumo-tabular` or `kumo-relational`. The client
-  runs no model and downloads no weights.
+  runs no model and downloads no weights. The one exception is a client
+  opened with `SDMClient.in_process()`, which runs the model itself; see the
+  [quickstart](quickstart.md#a-model-in-this-process).
 - **No GPU** on the client. The NIM owns that.
 
 ## Platforms

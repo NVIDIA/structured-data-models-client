@@ -160,10 +160,13 @@ jobs:
       - run: |
           cd packages/structured-data-models-relational-engine
           python -m pytest tests -q -m 'not live_nim and not live_warehouse'
-      # The client's suite again, with an engine present. The test job installs
-      # none, so every client test that needs one skips there and runs nowhere.
+      # The client's suite again, with an engine present and the models able to
+      # run in process. The test job installs neither, so every client test
+      # that needs one skips there and runs nowhere. PyTorch comes from its CPU
+      # index, since the default one resolves to a far larger CUDA build.
       - run: |
-          pip install -e './packages/structured-data-models-client[test]'
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e './packages/structured-data-models-client[test,in-process]'
           python -m pytest packages/structured-data-models-client/tests -q \
             -m 'not live_nim and not live_warehouse'
       # And the root suite, which holds the relational wire snapshots. They

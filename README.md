@@ -17,7 +17,9 @@ manage.
 This client talks to those models. It builds the request, sends it to a NIM
 inference endpoint, and gives you back a `PredictionResult`, which
 `to_pandas()` turns into a DataFrame. Inference runs in the NIM, so this
-package downloads no weights and needs no GPU.
+package downloads no weights and needs no GPU. To run the model in your own
+Python process instead, with the same calls, open the client with
+`SDMClient.in_process()`.
 
 Two models are available through the client:
 
@@ -68,6 +70,7 @@ The [quickstart](docs/get-started/quickstart.md) runs this end to end, and
 | `pip install 'structured-data-models-client[relational]'` | Adds the relational model and its native engine |
 | `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]` |
 | `pip install 'structured-data-models-client[all]'` | The relational model and every warehouse backend |
+| `pip install 'structured-data-models-client[in-process]'` | Runs the models in this Python process, through `SDMClient.in_process()` |
 
 [Installation](docs/get-started/installation.md) has the rest, including what
 differs on Databricks.
