@@ -15,19 +15,22 @@ stands on that run.
 
     land.py --candidate SHA --topic-branch NAME --review FILE --review FILE \\
         --title 'T1.12: the S0 case corpus' --protected-paths TEXT \\
-        [--checkpoint SHA] [--phase-branch rust-core-phase-1] \\
+        [--checkpoint SHA] [--phase-branch rust-core-phase-N] \\
         [--reviewer TEXT] [--summary TEXT] [--dry-run]
         [--moved-from SHA]
-    land.py verify LANDING_SHA [--phase-branch rust-core-phase-1]
+    land.py verify LANDING_SHA [--phase-branch rust-core-phase-N]
 
-Before it changes anything it refuses, naming the reason, unless:
+The phase branch is ``--phase-branch``, else ``SDM_PHASE_BRANCH``, else
+(landing) the phase the topic branch is under, else the phase in progress
+(``phases.py``, T2.0); ``verify`` of an earlier phase's landing names its
+phase. Before it changes anything it refuses, naming the reason, unless:
 
-- the phase branch is exactly ``rust-core-phase-1`` and the topic branch a
-  package branch under it (``rust-core-phase-1-<name>``, a lane
-  ``rust-core-phase-1-lane-<x>`` included), never ``main``, ``rust-core``
-  or anything else; a name under ``rust-core-phase-1-lane-`` must be a
+- the phase branch is a phase branch ``rust-core-phase-N`` and the topic
+  branch a package branch under it (``rust-core-phase-N-<name>``, a lane
+  ``rust-core-phase-N-lane-<x>`` included), never ``main``, ``rust-core``
+  or anything else; a name under ``rust-core-phase-N-lane-`` must be a
   lane, ``<x>`` lower-case letters and digits, and an archive branch
-  (``rust-core-phase-1-archive-...``) is refused;
+  (``rust-core-phase-N-archive-...``) is refused;
 - on a lane, the lane is the branch checked out (not another branch, not
   a detached HEAD), the package ``--title`` names (``Land <ID>: ...``) is
   the one ``lane.py start`` recorded for this worktree (``git config
@@ -145,6 +148,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -155,20 +159,23 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-PHASE_BRANCH = 'rust-core-phase-1'
-#: A package's topic branch: a branch under the phase branch, a lane
-#: (``rust-core-phase-1-lane-a``) or a task (``rust-core-phase-1-t1.12``).
-TOPIC_BRANCH = re.compile(
-    re.escape(PHASE_BRANCH) + r'-[A-Za-z0-9](?:[A-Za-z0-9_-]|\.(?!\.))*'
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from phases import (  # noqa: E402
+    ENVIRONMENT,
+    PACKAGE_ID,
+    PHASE_BRANCH,
+    Phase,
+    PhaseError,
+    phase_branch,
+    phase_of,
 )
-#: A lane branch is this prefix and a lane name (decision E43, CI2).
-LANE_PREFIX = PHASE_BRANCH + '-lane-'
-LANE_NAME = re.compile(r'[a-z0-9]{1,16}')
-#: Where the tip of an abandoned lane package is kept, by hand, on the
-#: owner's decision; never a topic branch (CI2).
-ARCHIVE_PREFIX = PHASE_BRANCH + '-archive-'
-#: A package: a task (``T1.11e``) or a process package (``CI3``).
-PACKAGE_ID = re.compile(r'T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+')
+
+# The names under a phase branch (``phases.Phase``): its topic branches,
+# a lane (``<phase>-lane-a``) or a task (``<phase>-t1.12``), its lanes
+# (decision E43, CI2), and its archive branches, where the tip of an
+# abandoned lane package is kept, by hand, on the owner's decision, never
+# a topic branch (CI2). A package (``phases.PACKAGE_ID``): a task
+# (``T1.11e``, ``T2.0a``) or a process package (``CI3``).
 #: The package that owns a commit: its subject starts with the ID, then a
 #: colon or a space (``T1.11e: ...``, ``T1.11e fix 1: ...``,
 #: ``T1.11e tracker: ...``).
@@ -217,6 +224,8 @@ class Tools:
     repo: str | None = None
     sleep: Callable[[float], None] = time.sleep
     calls: list[tuple[str, ...]] = field(default_factory=list)
+    #: The phase landed on or verified, which ``main`` resolves.
+    phase: Phase | None = None
 
     def _call(self, argv: Sequence[str], check: bool) -> str:
         self.calls.append(tuple(argv))
@@ -317,44 +326,51 @@ def checkpoint_of(
     return merged
 
 
-def check_branches(phase: str, topic: str) -> None:
+def phase_named(name: str) -> Phase:
+    """The phase branch ``name`` names, or a refusal saying it is none."""
+    try:
+        return Phase(name)
+    except PhaseError as error:
+        raise Refusal(
+            f'the phase branch is {name!r}; land.py lands only on a phase '
+            'branch, rust-core-phase-N'
+        ) from error
+
+
+def check_branches(phase_name: str, topic: str) -> None:
     """Refuses a destination other than the phase branch and a package
     branch under it, before anything is fetched, committed or pushed."""
-    if phase != PHASE_BRANCH:
-        raise Refusal(
-            f'the phase branch is {phase!r}; land.py lands only on '
-            f'{PHASE_BRANCH!r}'
-        )
-    if topic in ('main', 'master', 'rust-core', PHASE_BRANCH):
+    phase = phase_named(phase_name)
+    name = phase.branch
+    if topic in ('main', 'master', 'rust-core', name):
         raise Refusal(
             f'the topic branch is {topic!r}; a landing pushes a package branch '
-            f'({PHASE_BRANCH}-<name>, a lane {PHASE_BRANCH}-lane-<x>) and the '
+            f'({name}-<name>, a lane {name}-lane-<x>) and the '
             'phase branch, never main, rust-core or the phase branch as topic'
         )
-    if not TOPIC_BRANCH.fullmatch(topic) or topic.endswith(('.', '.lock')):
+    if not phase.topic.fullmatch(topic) or topic.endswith(('.', '.lock')):
         raise Refusal(
             f'the topic branch {topic!r} is not a package branch '
-            f'({PHASE_BRANCH}-<name> or {PHASE_BRANCH}-lane-<x>)'
+            f'({name}-<name> or {name}-lane-<x>)'
         )
-    if topic.startswith(ARCHIVE_PREFIX):
+    if topic.startswith(phase.archive_prefix):
         raise Refusal(
             f'the topic branch {topic!r} is an archive branch, which keeps an '
             'abandoned package and never lands'
         )
-    if topic.startswith(LANE_PREFIX) and lane_of(topic) is None:
+    if topic.startswith(phase.lane_prefix) and phase.lane_of(topic) is None:
         raise Refusal(
-            f'the topic branch {topic!r} is under {LANE_PREFIX} but is not a '
-            f'lane; a lane is {LANE_PREFIX}<x>, <x> lower-case letters and '
-            'digits'
+            f'the topic branch {topic!r} is under {phase.lane_prefix} but is '
+            f'not a lane; a lane is {phase.lane_prefix}<x>, <x> lower-case '
+            'letters and digits'
         )
 
 
 def lane_of(branch: str) -> str | None:
-    """The lane's name when ``branch`` is a lane branch, else None."""
-    if not branch.startswith(LANE_PREFIX):
-        return None
-    name = branch.removeprefix(LANE_PREFIX)
-    return name if LANE_NAME.fullmatch(name) else None
+    """The lane's name when ``branch`` is a lane of its phase branch
+    (``rust-core-phase-N-lane-<x>``), else None."""
+    phase = phase_of(branch)
+    return Phase(phase).lane_of(branch) if phase else None
 
 
 def owner_of(subject: str) -> str | None:
@@ -619,16 +635,19 @@ def check_reviews(
     return [Path(p) for p in paths]
 
 
-def gating(run: dict[str, object]) -> bool:
+def gating(run: dict[str, object], phase: Phase) -> bool:
     """Whether a run is evidence: a push to the phase branch or a topic
     branch under it, never an archive branch, so CI ran the checkpoint's
-    gate in it; a pull request's run on the same SHA skips the gate."""
+    gate in it; a pull request's run on the same SHA skips the gate, and
+    a run under another phase was judged against another checkpoint."""
     branch = str(run.get('headBranch'))
-    under = branch == PHASE_BRANCH or (
-        TOPIC_BRANCH.fullmatch(branch) is not None
-        and not branch.startswith(ARCHIVE_PREFIX)
-    )
-    return run.get('event') == 'push' and under
+    return run.get('event') == 'push' and phase.holds(branch)
+
+
+def phase_of_tools(tools: Tools) -> Phase:
+    """The phase ``main`` resolved, or, for a caller that set none, the
+    one ``phases.phase_branch`` gives."""
+    return tools.phase or Phase(phase_branch())
 
 
 def runs_on(tools: Tools, sha: str) -> list[dict[str, object]]:
@@ -647,7 +666,7 @@ def runs_on(tools: Tools, sha: str) -> list[dict[str, object]]:
     runs = [
         r
         for r in json.loads(out or '[]')
-        if r.get('headSha') == sha and gating(r)
+        if r.get('headSha') == sha and gating(r, phase_of_tools(tools))
     ]
     return sorted(runs, key=lambda r: str(r.get('createdAt', '')), reverse=True)
 
@@ -1260,10 +1279,7 @@ def verify(
     commit, whose tree must be the landing's. A run on the landing commit
     itself is reported and need not exist; one that ran and failed still
     fails, since CI should have skipped it."""
-    if args.phase_branch != PHASE_BRANCH:
-        raise Refusal(
-            f'the phase branch is {args.phase_branch!r}, not {PHASE_BRANCH!r}'
-        )
+    phase_named(args.phase_branch)
     sha = resolve(tools, args.landing, 'the landing commit')
     trailers = trailers_of(tools, sha)
     base = trailers.get('Base-SHA')
@@ -1444,12 +1460,37 @@ def parser_for(command: str) -> argparse.ArgumentParser:
             help="land on this commit's reviews and green run: the "
             'candidate is it moved over landing commits only (E130)',
         )
-    parser.add_argument('--phase-branch', default=PHASE_BRANCH)
+    # Resolved in main: the flag, SDM_PHASE_BRANCH, the topic branch's
+    # phase (landing), else the phase in progress (phases.py).
+    parser.add_argument('--phase-branch')
     parser.add_argument('--remote', default='origin')
     parser.add_argument(
         '--repo', help='OWNER/NAME for gh; read from the remote'
     )
     return parser
+
+
+def landing_phase(tools: Tools, remote: str, landing: str) -> str:
+    """The phase a landing commit landed on, for ``verify`` given no
+    phase: the lowest-numbered phase branch on the remote that holds it
+    (a later phase holds an earlier one's landings through the epic
+    branch's merges). None holding it is a refusal, by name."""
+    sha = resolve(tools, landing, 'the landing commit')
+    out = tools.git('ls-remote', remote, 'refs/heads/rust-core-phase-*')
+    tips = {}
+    for line in out.splitlines():
+        tip, _, ref = line.partition('\t')
+        name = ref.removeprefix('refs/heads/')
+        if PHASE_BRANCH.fullmatch(name):
+            tips[name] = tip.strip()
+    for name in sorted(tips, key=lambda n: Phase(n).number):
+        tools.git('fetch', '--quiet', remote, f'refs/heads/{name}')
+        if tools.git_ok('merge-base', '--is-ancestor', sha, tips[name]):
+            return name
+    raise Refusal(
+        f'no phase branch on {remote} holds {sha[:12]}: name its phase with '
+        '--phase-branch'
+    )
 
 
 def main(
@@ -1465,6 +1506,25 @@ def main(
     tools = tools or Tools()
     tools.repo = args.repo or tools.repo or repo_of(tools, args.remote)
     try:
+        try:
+            if (
+                command == 'verify'
+                and args.phase_branch is None
+                and not os.environ.get(ENVIRONMENT)
+            ):
+                # The landing's own phase, never the phase in progress.
+                args.phase_branch = landing_phase(
+                    tools, args.remote, args.landing
+                )
+            args.phase_branch = phase_branch(
+                args.phase_branch,
+                branch=getattr(args, 'topic_branch', None),
+            )
+        except PhaseError as error:
+            raise Refusal(
+                f'{error}; land.py lands only on a phase branch'
+            ) from error
+        tools.phase = phase_named(args.phase_branch)
         return (verify if command == 'verify' else land)(args, tools, out)
     except Refusal as why:
         out(f'REFUSED: {why}')

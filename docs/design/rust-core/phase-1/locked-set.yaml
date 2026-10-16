@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Phase 1's locked acceptance checks (design.md, "Locked acceptance checks";
+# decision H26), as scripts/rust_core/gate.sh --locked reads them from the
+# judging harness's tree (T2.0). A half lists its own steps beyond the
+# runners, observations, ratchet, compare, coverage, l0 and l1 every locked
+# run makes; its numbered checks and the steps each holds; the checks whose
+# reference comparisons gate only in the reference's cell (H1); the number
+# of the check that holds l0 and every step run; and, with an inventory
+# step, the inventory file (read from the candidate's commit), its case
+# count and the cases added to it. A protected path
+# (contract/protected-paths.txt): a change lands under its trailer.
+format: sdm-locked-set/1
+halves:
+  1a:
+    steps: [seeded, wheel-smoke]
+    checks:
+      '1': [runners, observations, ratchet, compare, coverage, l1]
+      '2': [seeded]
+      '3': [wheel-smoke]
+    reference: ['1']
+    every: '6'
+  1b:
+    steps: [inventory]
+    checks:
+      '4': [runners, observations, ratchet, compare, l1, inventory]
+      '5': [observations, ratchet, compare, inventory]
+    reference: ['4']
+    every: '6'
+    inventory:
+      file: docs/design/rust-core/phase-0/phase-1b-inventory.yaml
+      count: 40
+      also: [base.adventureworks]

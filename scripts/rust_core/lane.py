@@ -7,15 +7,20 @@
 lane carries one package (decision E43, confirmed by the owner 2026-10-09;
 package CI2).
 
-A lane is a branch ``rust-core-phase-1-lane-<x>`` that a parallel line of
+A lane is a branch ``rust-core-phase-N-lane-<x>`` that a parallel line of
 packages reuses as its topic branch, so a package's first CI run restores
 the builds the lane's previous package saved. A lane carries one package
 at a time: it starts at the phase head, takes that package's commits, and
 returns to the phase head when ``land.py`` lands them.
 
-    lane.py start --lane X --package ID --worktree PATH [--wait] [--dry-run]
-    lane.py status [--lane X]
+    lane.py [--phase-branch rust-core-phase-N] start --lane X --package ID
+        --worktree PATH [--wait] [--dry-run]
+    lane.py [--phase-branch rust-core-phase-N] status [--lane X]
     lane.py check [--pushed-refs FILE]
+
+The phase branch is ``--phase-branch``, else ``SDM_PHASE_BRANCH``, else the
+phase the branch checked out is under, else the phase in progress
+(``phases.py``, T2.0); ``check`` measures a lane against its own phase.
 
 A package owns a commit when the commit's subject starts with the
 package's ID followed by a colon or a space and names no other package
@@ -58,7 +63,7 @@ the package its local worktree records, and its latest CI run.
 
 ``check`` is what ``prepush.sh`` runs: on a lane branch, the recorded
 package must own every commit since the phase head
-(``origin/rust-core-phase-1`` as last fetched), and a lane branch with no
+(``origin/rust-core-phase-N`` as last fetched), and a lane branch with no
 recorded package is refused. On any other branch it does nothing. With
 ``--pushed-refs FILE`` (the pre-push hook's standard input, which the
 hook passes on) it checks what is pushed instead: every lane ref pushed,
@@ -88,11 +93,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from land import (  # noqa: E402
     LANDING_SUBJECT,
-    LANE_NAME,
-    LANE_PREFIX,
     PACKAGE_ID,
     PACKAGE_KEY,
-    PHASE_BRANCH,
     WORKFLOW,
     Completed,
     Refusal,
@@ -100,8 +102,17 @@ from land import (  # noqa: E402
     commits_not_owned,
     lane_of,
     owner_of,
+    phase_named,
+    phase_of_tools,
     recorded_package,
     repo_of,
+)
+from phases import (  # noqa: E402
+    LANE_NAME,
+    Phase,
+    PhaseError,
+    phase_branch,
+    phase_of,
 )
 
 #: prepush.sh, whose ``--install-hook`` start runs in the lane's worktree.
@@ -122,13 +133,13 @@ Out = Callable[[str], None]
 # --- names --------------------------------------------------------------------
 
 
-def lane_branch(name: str) -> str:
+def lane_branch(name: str, phase: Phase) -> str:
     if not LANE_NAME.fullmatch(name):
         raise Refusal(
             f'the lane {name!r} is not a lane name: one to sixteen lower-case '
             'letters and digits, such as 1b'
         )
-    return LANE_PREFIX + name
+    return phase.lane_prefix + name
 
 
 def package_id(package: str) -> str:
@@ -360,6 +371,7 @@ class Plan:
     lane: str
     branch: str
     package: str
+    phase_branch: str
     phase: str
     remote_lane: str | None
     path: str
@@ -383,15 +395,16 @@ def refuse_unlanded(
     tip: str,
     phase: str,
     found: Sequence[tuple[str, str]],
+    phase_name: str,
 ) -> Refusal:
     package = first_package(found) or 'unnamed'
     listed = '\n'.join(
         f'  {sha[:12]} {body.splitlines()[0] if body else ""}'
         for sha, body in found
     )
-    archive = f'{PHASE_BRANCH}-archive-{lane}-{package}-{tip[:7]}'
+    archive = f'{phase_name}-archive-{lane}-{package}-{tip[:7]}'
     return Refusal(
-        f'{branch} holds {len(found)} commit(s) {PHASE_BRANCH} lacks, owned by '
+        f'{branch} holds {len(found)} commit(s) {phase_name} lacks, owned by '
         f'{packages_named(found)}: package {package} has not landed.\n'
         f'{listed}\n'
         f'Land {package} first (land.py), or start the new package on another '
@@ -410,21 +423,20 @@ def plan_start(
 ) -> Plan | None:
     """Every check; the plan, or None when ``--wait`` watched runs and the
     remote must be read again."""
-    branch = lane_branch(args.lane)
+    phase_name = phase_of_tools(tools).branch
+    branch = lane_branch(args.lane, phase_of_tools(tools))
     package = package_id(args.package)
     tips = {
         b: s
-        for b, s in remote_tips(
-            tools, args.remote, PHASE_BRANCH, branch
-        ).items()
-        if b in (PHASE_BRANCH, branch)
+        for b, s in remote_tips(tools, args.remote, phase_name, branch).items()
+        if b in (phase_name, branch)
     }
-    if PHASE_BRANCH not in tips:
-        raise Refusal(f'{args.remote} has no {PHASE_BRANCH}')
-    phase = tips[PHASE_BRANCH]
+    if phase_name not in tips:
+        raise Refusal(f'{args.remote} has no {phase_name}')
+    phase = tips[phase_name]
     remote_lane = tips.get(branch)
     fetch_objects(tools, args.remote, *tips)
-    out(f'ok   {PHASE_BRANCH} is at {phase}')
+    out(f'ok   {phase_name} is at {phase}')
 
     if remote_lane is not None:
         active = [
@@ -455,7 +467,13 @@ def plan_start(
         if remote_lane != phase and not is_ancestor(tools, remote_lane, phase):
             found = commits(tools, phase, remote_lane)
             raise refuse_unlanded(
-                args.remote, branch, args.lane, remote_lane, phase, found
+                args.remote,
+                branch,
+                args.lane,
+                remote_lane,
+                phase,
+                found,
+                phase_name,
             )
         out(
             f'ok   {branch} is at {remote_lane[:12]}, '
@@ -487,7 +505,7 @@ def plan_start(
     if local and not is_ancestor(tools, local, phase):
         found = commits(tools, phase, local)
         raise Refusal(
-            f'the local {branch} holds {len(found)} commit(s) {PHASE_BRANCH} '
+            f'the local {branch} holds {len(found)} commit(s) {phase_name} '
             f'lacks, owned by {packages_named(found)}:\n'
             + '\n'.join(
                 f'  {sha[:12]} {body.splitlines()[0] if body else ""}'
@@ -525,6 +543,7 @@ def plan_start(
         lane=args.lane,
         branch=branch,
         package=package,
+        phase_branch=phase_name,
         phase=phase,
         remote_lane=remote_lane,
         path=path,
@@ -569,7 +588,7 @@ def describe_plan(plan: Plan, remote: str) -> list[str]:
         f'{PACKAGE_KEY} {plan.package}'
     )
     steps.append(
-        f"refresh refs/remotes/{remote}/{PHASE_BRANCH} and the lane's "
+        f"refresh refs/remotes/{remote}/{plan.phase_branch} and the lane's "
         'tracking ref (no local phase branch)'
     )
     steps.append(
@@ -599,7 +618,8 @@ def execute(
     # commits from. Only refs/remotes/ is written; no local phase branch.
     tools.git(
         'fetch', '--quiet', remote,
-        f'+refs/heads/{PHASE_BRANCH}:refs/remotes/{remote}/{PHASE_BRANCH}',
+        f'+refs/heads/{plan.phase_branch}'
+        f':refs/remotes/{remote}/{plan.phase_branch}',
         f'+refs/heads/{plan.branch}:refs/remotes/{remote}/{plan.branch}',
     )  # fmt: skip
     if plan.holder is None:
@@ -720,17 +740,23 @@ def start(args: argparse.Namespace, tools: Tools, out: Out) -> int:
 
 
 def status(args: argparse.Namespace, tools: Tools, out: Out) -> int:
-    pattern = lane_branch(args.lane) if args.lane else LANE_PREFIX + '*'
-    tips = remote_tips(tools, args.remote, PHASE_BRANCH, pattern)
-    if PHASE_BRANCH not in tips:
-        raise Refusal(f'{args.remote} has no {PHASE_BRANCH}')
-    phase = tips.pop(PHASE_BRANCH)
-    lanes = {b: s for b, s in sorted(tips.items()) if lane_of(b)}
-    out(f'{PHASE_BRANCH} at {phase}')
+    current = phase_of_tools(tools)
+    name = current.branch
+    pattern = (
+        lane_branch(args.lane, current)
+        if args.lane
+        else current.lane_prefix + '*'
+    )
+    tips = remote_tips(tools, args.remote, name, pattern)
+    if name not in tips:
+        raise Refusal(f'{args.remote} has no {name}')
+    phase = tips.pop(name)
+    lanes = {b: s for b, s in sorted(tips.items()) if current.lane_of(b)}
+    out(f'{name} at {phase}')
     if not lanes:
         out(f'no lane branches on {args.remote}')
         return 0
-    fetch_objects(tools, args.remote, PHASE_BRANCH, *lanes)
+    fetch_objects(tools, args.remote, name, *lanes)
     holders = {
         t.branch.removeprefix('refs/heads/'): t for t in worktrees(tools)
     }
@@ -767,9 +793,10 @@ def status(args: argparse.Namespace, tools: Tools, out: Out) -> int:
 def check_lane_range(
     tools: Tools, remote: str, branch: str, head: str, package: str
 ) -> int:
-    """Refuses a commit since the phase head that ``package`` does not own;
-    the number of commits checked."""
-    base_ref = f'refs/remotes/{remote}/{PHASE_BRANCH}'
+    """Refuses a commit since the head of the phase ``branch`` is a lane
+    of that ``package`` does not own; the number of commits checked."""
+    phase_name = phase_of(branch)
+    base_ref = f'refs/remotes/{remote}/{phase_name}'
     base = tools.attempt(
         'git', 'rev-parse', '--verify', '--quiet', base_ref
     ).stdout.strip()
@@ -779,7 +806,7 @@ def check_lane_range(
     if stray:
         raise Refusal(
             f'{branch} carries {package}, and these commits since '
-            f'{remote}/{PHASE_BRANCH} ({base[:12]}) are not owned by it (a '
+            f'{remote}/{phase_name} ({base[:12]}) are not owned by it (a '
             f"subject '{package}: ...' or '{package} <part>: ...', naming no "
             "other package), so they may be another package's; if the phase "
             'branch has moved, fetch and look again:\n'
@@ -806,7 +833,9 @@ def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
     current = done.stdout.strip()
     if args.pushed_refs:
         return check_pushed(args, tools, out, current)
-    if not current.startswith(LANE_PREFIX):
+    under = phase_of(current)
+    prefix = Phase(under).lane_prefix if under else None
+    if prefix is None or not current.startswith(prefix):
         out(
             f'not a lane branch ({current or "detached HEAD"}); '
             'nothing to check'
@@ -814,7 +843,7 @@ def check(args: argparse.Namespace, tools: Tools, out: Out) -> int:
         return 0
     if lane_of(current) is None:
         raise Refusal(
-            f'{current} is under {LANE_PREFIX} but is not a lane name: '
+            f'{current} is under {prefix} but is not a lane name: '
             'lower-case letters and digits'
         )
     package = worktree_package(tools, current)
@@ -836,7 +865,10 @@ def check_pushed(
             continue
         _, sha, remote_ref, _ = fields
         branch = remote_ref.removeprefix('refs/heads/')
-        if not remote_ref.startswith('refs/heads/' + LANE_PREFIX):
+        under = (
+            phase_of(branch) if remote_ref.startswith('refs/heads/') else None
+        )
+        if under is None or not branch.startswith(Phase(under).lane_prefix):
             continue
         if lane_of(branch) is None:
             raise Refusal(f'the push names {branch}, which is not a lane')
@@ -868,6 +900,11 @@ def parser() -> argparse.ArgumentParser:
     )
     top.add_argument('--remote', default='origin')
     top.add_argument('--repo', help='OWNER/NAME for gh; read from the remote')
+    top.add_argument(
+        '--phase-branch',
+        help='default: SDM_PHASE_BRANCH, else the phase of the branch '
+        'checked out, else the phase in progress (phases.py)',
+    )
     sub = top.add_subparsers(dest='command', required=True)
     begin = sub.add_parser('start', help='prepare a lane for a new package')
     begin.add_argument('--lane', required=True)
@@ -902,12 +939,29 @@ def main(
     tools = tools or Tools()
     command = {'start': start, 'status': status, 'check': check}[args.command]
     try:
-        # Names first, before git or gh is asked anything.
+        # Names first, before gh is asked anything: the phase branch (the
+        # branch checked out read from git), then the lane and package.
+        here = tools.attempt(
+            'git', 'symbolic-ref', '--quiet', '--short', 'HEAD'
+        )
+        try:
+            tools.phase = phase_named(
+                phase_branch(
+                    args.phase_branch,
+                    branch=here.stdout.strip()
+                    if here.returncode == 0
+                    else None,
+                )
+            )
+        except PhaseError as error:
+            raise Refusal(
+                f'{error}; lane.py works on a phase branch'
+            ) from error
         if args.command == 'start':
-            lane_branch(args.lane)
+            lane_branch(args.lane, tools.phase)
             package_id(args.package)
         elif args.command == 'status' and args.lane:
-            lane_branch(args.lane)
+            lane_branch(args.lane, tools.phase)
         if args.command != 'check':
             tools.repo = args.repo or tools.repo or repo_of(tools, args.remote)
         return command(args, tools, out)

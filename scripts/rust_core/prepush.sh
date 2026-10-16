@@ -25,7 +25,9 @@
 # The cheap tier skips those four self-tests only when no file under
 # scripts/rust_core/, nor .github/workflows/ci.yml, which they read, differs
 # between the merge base with the phase branch
-# (origin/rust-core-phase-1, else rust-core-phase-1) and the worktree,
+# (origin/<phase>, else <phase>; the phase is SDM_PHASE_BRANCH, else the
+# phase the branch checked out is under, else phases.py's phase in
+# progress, T2.0) and the worktree,
 # committed, uncommitted or untracked, nor, under the hook, between each ref
 # pushed and its own merge base; any change there runs all four, since the
 # tools import and run one another. A skip prints one line naming the merge
@@ -152,7 +154,19 @@ check() {
 phase_ref=
 base=
 changed=
-for ref in origin/rust-core-phase-1 rust-core-phase-1; do
+# The phase branch (scripts/rust_core/phases.py names it the same way):
+# SDM_PHASE_BRANCH, else the phase the branch checked out is under, else
+# the phase in progress. A name that is no phase branch measures nothing.
+phase=${SDM_PHASE_BRANCH:-}
+if [ -z "$phase" ] &&
+  [[ "$(git symbolic-ref --short -q HEAD)" =~ ^(rust-core-phase-(0|[1-9][0-9]*))(-.+)?$ ]]; then
+  phase=${BASH_REMATCH[1]}
+fi
+if [ -z "$phase" ]; then
+  phase=$(sed -n "s/^CURRENT = '\(rust-core-phase-[0-9]*\)'\$/\1/p" scripts/rust_core/phases.py 2>/dev/null)
+fi
+[[ "$phase" =~ ^rust-core-phase-(0|[1-9][0-9]*)$ ]] || phase=
+for ref in ${phase:+"origin/$phase" "$phase"}; do
   if git rev-parse -q --verify "$ref^{commit}" >/dev/null; then
     phase_ref=$ref
     break
