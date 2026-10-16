@@ -50,6 +50,9 @@ extend-exclude = [
     "packages/structured-data-models-pql/src/predictive_query/grammar",
     "packages/structured-data-models-api/src/sdm_api/generated/tfm_api.py",
     "*.md",
+    # A frozen copy, byte for byte, of a notebook main deleted, kept as the
+    # contract test's fixture (T2.0c): fixture data, never edited.
+    "contract/fixtures/adventureworks/notebook-fa0637d4.ipynb",
 ]
 
 [tool.ruff.lint]
