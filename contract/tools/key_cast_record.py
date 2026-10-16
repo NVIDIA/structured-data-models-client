@@ -12,6 +12,9 @@ repository's root::
 
     ~/code/sdmc-reference/.venv/bin/python -I contract/tools/key_cast_record.py
 
+``--marks`` derives each recorded vector's ``register`` again from the
+answers already recorded (``derive_marks``), recording nothing.
+
 Written by T1.32a's independent test author before the implementation.
 Each vector is one key type crossed with one list of entities:
 
@@ -58,7 +61,9 @@ this script keeps:
   chosen: the reference fails with ``INTERNAL_ERROR`` (E66(b)'s class, a
   clearer answer is a change); it accepts an entity by changing its kind
   (text read as a number, a number or a time written as text, a boolean
-  or a time read as a number) or its value (``1.5`` cast to ``1``); the
+  or a time read as a number) or its value (``1.5`` cast to ``1``); its
+  own cast of a decimal key is to another type than the key's decimal
+  (since main's eb6c68eb, ``int64`` or ``double``); the
   host hands the core the same column as another vector the reference
   answers otherwise; a derived expectation is not the reference's answer
   (disposition ``expected``); or the host hands a mix of kinds over as
@@ -1536,6 +1541,15 @@ def derive_marks(vectors: list[dict[str, Any]]) -> None:
                 "reference's answer"
             )
             disposition = 'expected'
+        cast = reference.get('cast') or {}
+        if vector['key'].startswith('decimal') and not str(
+            cast.get('dtype', 'decimal')
+        ).startswith('decimal'):
+            why.append(
+                f'the reference reads the decimal key as {cast["dtype"]}, not '
+                "as its decimal type (main's eb6c68eb): a host holding the "
+                "key's decimal value answers otherwise"
+            )
         text = reference.get('as_text')
         if text is not None and text != public:
             column = [v.get('v') for v in vector['host_arrow']['values']]
@@ -1661,5 +1675,20 @@ def main() -> int:
     return 0
 
 
+def marks() -> int:
+    r"""``--marks``: each recorded vector's ``register`` derived again from
+    its recorded answers (``derive_marks``), the answers untouched."""
+    document = json.loads(OUT.read_text(encoding='utf-8'))
+    for vector in document['vectors']:
+        del vector['register']
+    derive_marks(document['vectors'])
+    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
+    required = sum(v['register']['required'] for v in document['vectors'])
+    print(f'{required} marked register entry required', file=sys.stderr)
+    return 0
+
+
 if __name__ == '__main__':
-    raise SystemExit(_worker() if sys.argv[1:] == ['--worker'] else main())
+    if sys.argv[1:] == ['--worker']:
+        raise SystemExit(_worker())
+    raise SystemExit(marks() if sys.argv[1:] == ['--marks'] else main())
