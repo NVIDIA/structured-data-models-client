@@ -42,13 +42,16 @@ are observed and projected by the same code; ``sdm-testkit``'s
   ``contract/key-inference-vectors.json#<id or glob> <from> -> <to>``); a
   proposed entry excuses nothing. ``register.required`` is derived (the
   reference fails unnamed or with INTERNAL_ERROR) and excuses nothing by
-  itself: at recording it marks ``nulls-1-decimal.200``, a decimal key
-  with a null sampled at ``materialize`` (INTERNAL_ERROR).
+  itself. At b413e9ad it marked ``nulls-1-decimal.200``, a decimal key
+  with a null sampled at ``materialize`` (INTERNAL_ERROR); at 6298913c
+  (main's eb6c68eb reads the decimal key as an integer) the reference
+  materializes it as it does its integer twin, so no vector is marked.
   ``nulls-1-text.200``, the same with a text key, the reference refuses
   with INVALID_REQUEST at ``materialize``: a named code, so not marked.
 
 P1B-40, option (b) (owner, 2026-10-13, relayed):
-``nulls-1-decimal.200`` (INTERNAL_ERROR in the reference) and
+``nulls-1-decimal.200`` (INTERNAL_ERROR in the reference at b413e9ad, a
+success at 6298913c) and
 ``nulls-1-text.200`` (INVALID_REQUEST: the same mixed text key reached by
 sampling) must materialize on the core, describing the tables as the
 reference did, with the twin's warnings (``nulls-1.200``) and exactly one
@@ -302,13 +305,28 @@ def test_option_b_materializes_with_one_more_warning(
     )
 
 
+#: Option (b)'s vectors the reference still refuses at 6298913c.
+OPTION_B_REFUSED = frozenset({'nulls-1-text.200'})
+#: Option (b)'s vectors the reference answers since main's eb6c68eb (it
+#: reads the decimal key as an integer): it materializes them exactly as
+#: their integer twin, the null-key row's warning included, so the core's
+#: option (b) answer (the twin's warnings and one more) is no longer the
+#: reference's.
+OPTION_B_ANSWERED = frozenset({'nulls-1-decimal.200'})
+
+
 def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
+    assert OPTION_B_REFUSED | OPTION_B_ANSWERED == set(OPTION_B)
+    assert not OPTION_B_REFUSED & OPTION_B_ANSWERED
     for vector_id, twin_id in OPTION_B.items():
         outcome = BY_ID[vector_id]['reference']['outcome']
-        assert outcome['result'] == 'refusal'
-        assert outcome['stage'] == 'materialize'
-        assert outcome['code'] in ('INVALID_REQUEST', 'INTERNAL_ERROR')
         twin = BY_ID[twin_id]
+        if vector_id in OPTION_B_REFUSED:
+            assert outcome['result'] == 'refusal'
+            assert outcome['stage'] == 'materialize'
+            assert outcome['code'] == 'INVALID_REQUEST'
+        else:
+            assert BY_ID[vector_id]['reference'] == twin['reference']
         assert twin['reference']['outcome']['result'] == 'success'
         assert twin['key'] == {
             **BY_ID[vector_id]['key'],
@@ -392,8 +410,20 @@ def test_the_vectors_are_not_vacuous() -> None:
     assert ('success', 'materialize', None) in by_outcome
     assert ('refusal', 'from_source', 'INVALID_REQUEST') in by_outcome
     assert ('refusal', 'materialize', 'INVALID_REQUEST') in by_outcome
+    # At 6298913c the reference fails no vector unnamed or with
+    # INTERNAL_ERROR, so none is marked; the rule that would mark one is
+    # held by test_a_difference_passes_only_under_an_approved_transition's
+    # seeded vector.
     marked = [v['id'] for v in vectors if v['register']['required']]
-    assert 0 < len(marked) < len(vectors)
+    assert marked == []
+    assert not any(
+        v['reference']['outcome']['code'] == 'INTERNAL_ERROR'
+        or (
+            v['reference']['outcome']['result'] == 'refusal'
+            and v['reference']['outcome']['code'] is None
+        )
+        for v in vectors
+    )
     # The threshold, as the reference draws it: kept at exactly 99%,
     # declined at 98.9%, over the whole table at 5,000 rows.
     for rows in (1_000, 5_000):
@@ -474,7 +504,18 @@ def test_a_difference_passes_only_under_an_approved_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = sys.modules[__name__]
-    marked = BY_ID['nulls-1-decimal.200']
+    # nulls-1-decimal.200 as the reference answered it at b413e9ad
+    # (INTERNAL_ERROR at materialize), seeded: no recorded vector fails so
+    # at 6298913c. Its mark is the recorder's own, derived from it.
+    marked = copy.deepcopy(BY_ID['nulls-1-decimal.200'])
+    marked['reference']['outcome'] = {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'StructuredDataError',
+        'code': 'INTERNAL_ERROR',
+    }
+    why = R.register(marked['reference'])
+    marked['register'] = {'required': bool(why), 'why': why}
     assert R.outcome_class(marked['reference']['outcome']) == (
         'refusal INTERNAL_ERROR'
     )
