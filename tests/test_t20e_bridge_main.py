@@ -28,6 +28,9 @@ main after it, M3; no commit at all), a SHA already in the checkpoint (M0),
 a malformed SHA (abbreviated, not hex, upper case, none), a commit of the
 candidate that is not main's, and a commit only a local ``main`` branch
 holds. The reason is documented next to the others.
+Review round 2 added: the phase changed the frozen file before the merge
+too (a module statement, or a function), the merge is clean, and the
+``<module>`` both changed, declared ``main`` naming M1, passes.
 Exit 5: after the landing (the base branch at the candidate), the
 declarations are held as they stand, and a later change to an entry the
 spent ``main`` declaration covers must state its own reason.
@@ -83,6 +86,8 @@ freeze = _module(SCRIPT, 't20e_bridge_freeze')
 TARGET = str(freeze.WHOLE[-1])
 ADDED = '_a_rule_main_added'
 KEYS = (f'{TARGET}::<module>', f'{TARGET}::{ADDED}')
+#: The line of the frozen file the phase's own edits follow.
+FUTURE = 'from __future__ import annotations\n'
 #: The function main's commit appends, whole, so a later edit names it.
 ADDED_SOURCE = f'\n\ndef {ADDED}(value):\n    return value\n'
 IDENTITY = [
@@ -158,9 +163,12 @@ class History:
         return self.reason(f'{sha} {self.title(sha)}')
 
 
-def history(tmp: Path) -> History:
+def history(tmp: Path, phase: str | None = None) -> History:
     r"""The history in the module docstring, HEAD at the merge, nothing
-    declared yet."""
+    declared yet; with ``phase``, P0 also inserts that text after the
+    frozen file's ``from __future__`` import, with its baseline (the phase
+    changed the file too, apart from main's change, so they merge
+    cleanly)."""
     repo = tmp / 'repo'
     repo.mkdir()
     git(repo, 'init', '-q', '-b', 'trunk')
@@ -181,6 +189,11 @@ def history(tmp: Path) -> History:
     git(repo, 'update-ref', MAIN_REF, m3)
     # The phase branch, forked at M0.
     git(repo, 'checkout', '-q', '-b', 'lane', m0)
+    if phase is not None:
+        source = target.read_text()
+        assert source.count(FUTURE) == 1
+        target.write_text(source.replace(FUTURE, FUTURE + phase))
+        freeze.write(repo)
     p0 = commit(repo, 'Land T2.0: the phase base')
     git(repo, 'update-ref', f'refs/remotes/{BASE}', p0)
     # A local main that is not the remote's: one commit main never had.
@@ -289,6 +302,41 @@ def test_a_main_reason_that_is_not_the_merge_s_is_refused(
     declared(h, h.reason(text_of[seed]))
     code, text = run(h.repo)
     assert refused(code, text), text
+
+
+#: The phase's own changes to the frozen file, made before the merge.
+PHASE_EDITS = {
+    'a module statement': '\n_PHASE_EXISTING_RULE = 1\n',
+    'a function': '\n\ndef _phase_rule():\n    return 1\n\n',
+}
+
+
+def module_of(h: History, rev: str) -> str:
+    text = git(h.repo, 'show', f'{rev}:{TARGET}') + '\n'
+    return freeze.measure_text(text, Path(TARGET))[freeze.MODULE]
+
+
+@PENDING
+@pytest.mark.parametrize('edit', sorted(PHASE_EDITS))
+def test_an_entry_the_phase_and_main_both_changed_takes_main_s_reason(
+    tmp_path: Path, edit: str
+) -> None:
+    r"""Exit 3 (review round 2), a legitimate case: the phase changed the
+    frozen file before the merge (a module statement such as
+    ``_PHASE_EXISTING_RULE = 1``, or a function), and main changed it
+    elsewhere; the merge is clean, so ``<module>`` holds both changes,
+    which no main commit made alone. Declared ``main`` naming M1, the
+    commit that changed it on main, it passes."""
+    h = history(tmp_path, PHASE_EDITS[edit])
+    # Not vacuous: each side changed the skeleton, and the merge holds a
+    # skeleton neither side has.
+    m0, p0, m1 = (module_of(h, rev) for rev in (h.m0, h.p0, h.m1))
+    merged = module_of(h, h.merge)
+    assert len({m0, p0, m1, merged}) == 4
+    declared(h, h.main_reason(h.m1))
+    code, text = run(h.repo)
+    assert code == 0, text
+    assert 'freeze: ok' in text
 
 
 # --- exit 5: after the landing -------------------------------------------------------
