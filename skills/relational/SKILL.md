@@ -49,7 +49,10 @@ serves `prediction` and `quantiles` on a regression, `prediction` and
 ```
 
 So ask for an explanation, catch the refusal, and fall back. Do not build a
-flow that assumes one arrives.
+flow that assumes one arrives. Do not assume one never does either: another
+relational deployment serves `explanation`, and the same code gets a parsed
+one back there, so the refusal belongs to the deployment and not to the
+request.
 
 The task is not an argument. It follows from the query: see
 [`pql.md`](pql.md).
