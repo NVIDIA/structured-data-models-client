@@ -17,15 +17,21 @@ line per call pending for MINUTES (default 15) or more:
   POSSIBLY-BLOCKED|expected-wait <agent> <age>min <tool>[ (note)]: <input>
 
 TASKS_DIR holds the agents' a*.output transcripts; it defaults to
-$SDM_TASKS_DIR and one of the two is required.
+$SDM_TASKS_DIR and one of the two is required. A watchdog that cannot see
+fails loudly (transcripts.py): a missing tasks directory, an unreadable
+transcript or a line in one that is not JSON (a partial last line, still
+being written, excepted) prints
+  WATCHDOG-ERROR stuck_agents.py: <what>
+and exits 1; the loop's grep keeps those lines.
 """
 
 import argparse
 import datetime
 import json
 import os
-import pathlib
 import time
+
+import transcripts
 
 EXPECTED = (
     'gh run watch',
@@ -38,7 +44,7 @@ EXPECTED = (
 CEILING_MIN = 90  # an expected wait older than this is flagged anyway
 
 
-def main():
+def main(problems):
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -56,7 +62,9 @@ def main():
         )
     except ValueError:
         ap.error('SDM_EXPECTED_WAIT_CEILING_MIN must be a number of minutes')
-    tasks = pathlib.Path(a.tasks_dir)
+    tasks = transcripts.tasks_dir(a.tasks_dir, problems)
+    if tasks is None:
+        return 1
     limit_min = a.minutes
 
     now = time.time()
@@ -64,13 +72,8 @@ def main():
         try:
             if now - f.stat().st_mtime > 6 * 3600:
                 continue
-            pending, last_ts = {}, None
-            for line in f.open():
-                try:
-                    d = json.loads(line)
-                except Exception:
-                    continue
-                last_ts = d.get('timestamp', last_ts)
+            pending = {}
+            for d in transcripts.records(f, problems):
                 m = d.get('message', {})
                 if not isinstance(m, dict) or not isinstance(
                     m.get('content'), list
@@ -103,9 +106,10 @@ def main():
                 elif expected:
                     kind = 'expected-wait'
                 print(f'{kind} {f.stem} {age:.0f}min {name}{note}: {inp[:240]}')
-        except Exception as e:
-            print(f'error {f.name}: {e}')
+        except Exception as e:  # noqa: BLE001 - a record of another shape
+            problems.report(f'{f.name}: {type(e).__name__}: {e}')
+    return problems.exit_status()
 
 
 if __name__ == '__main__':
-    main()
+    transcripts.guarded('stuck_agents.py', main)

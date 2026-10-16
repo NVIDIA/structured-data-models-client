@@ -13,7 +13,10 @@ Rules (owner, 2026-10-12): no local `prepush.sh --full`; implementers don't
 `gh run watch`; no `rm -rf`/`rm -r`, `--force` removals or `sudo`.
 
 TASKS_DIR holds the agents' a*.output transcripts; it defaults to $SDM_TASKS_DIR and one
-of the two is required. Violations already acknowledged are listed in the ignore file,
+of the two is required. A watchdog that cannot see fails loudly (transcripts.py): a missing
+tasks directory, an unreadable transcript or a line in one that is not JSON (a partial last
+line, still being written, excepted) prints "WATCHDOG-ERROR rule_watch.py: <what>" and exits
+1; the loop's grep keeps those lines. Violations already acknowledged are listed in the ignore file,
 $SDM_ORCH_STATE/rule_watch.ignore (state default ~/.local/share/sdm-orchestration): one
 pattern per line, a Python regular expression searched in the VIOLATION line (an agent
 id alone drops every violation of that agent); blank lines and lines starting with #
@@ -22,11 +25,12 @@ are skipped.
 
 import argparse
 import datetime
-import json
 import os
 import pathlib
 import re
 import time
+
+import transcripts
 
 STATE = pathlib.Path(
     os.environ.get(
@@ -62,7 +66,7 @@ def ignore_patterns(path):
     return pats
 
 
-def main():
+def main(problems):
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -74,19 +78,17 @@ def main():
     a = ap.parse_args()
     if not a.tasks_dir:
         ap.error('give TASKS_DIR or set SDM_TASKS_DIR')
-    tasks = pathlib.Path(a.tasks_dir)
+    tasks = transcripts.tasks_dir(a.tasks_dir, problems)
+    if tasks is None:
+        return 1
     window_min = a.minutes
     ignored = ignore_patterns(IGNORE)
     now = time.time()
     for f in sorted(tasks.glob('a*.output')):
-        if now - f.stat().st_mtime > window_min * 60:
-            continue
         try:
-            for line in f.open():
-                try:
-                    d = json.loads(line)
-                except Exception:
-                    continue
+            if now - f.stat().st_mtime > window_min * 60:
+                continue
+            for d in transcripts.records(f, problems):
                 ts = d.get('timestamp')
                 if not ts:
                     continue
@@ -116,9 +118,10 @@ def main():
                                 v = f'VIOLATION {f.stem} {name}: {cmd[:200]}'
                                 if not any(p.search(v) for p in ignored):
                                     print(v)
-        except Exception as e:
-            print(f'error {f.name}: {e}')
+        except Exception as e:  # noqa: BLE001 - a record of another shape
+            problems.report(f'{f.name}: {type(e).__name__}: {e}')
+    return problems.exit_status()
 
 
 if __name__ == '__main__':
-    main()
+    transcripts.guarded('rule_watch.py', main)

@@ -48,8 +48,9 @@ R=NVIDIA/structured-data-models-client
 checks() {
   "$B/cancel_superseded.sh" >> "$STATE/logs/cancel-superseded.log" 2>&1
   out=$(python3 "$B/auto_land.py" 2>&1); [ -n "$out" ] && echo "$(date -u +%H:%M) $out" >> "$LOG"
-  # rule_watch.py drops the violations acknowledged in $STATE/rule_watch.ignore.
-  bad=$( { echo "$out" | grep -E '^(FAILED|CONFLICT|NEEDS-CONFIRM)'; python3 "$B/stuck_agents.py" "$T" 40 | grep POSSIBLY-BLOCKED; python3 "$B/rule_watch.py" "$T" 6 | grep VIOLATION; } 2>/dev/null)
+  # rule_watch.py drops the violations acknowledged in $STATE/rule_watch.ignore;
+  # a WATCHDOG-ERROR line (a watchdog that cannot read the transcripts) stops the chain too.
+  bad=$( { echo "$out" | grep -E '^(FAILED|CONFLICT|NEEDS-CONFIRM)'; python3 "$B/stuck_agents.py" "$T" 40 | grep -E '^(POSSIBLY-BLOCKED|WATCHDOG-ERROR)'; python3 "$B/rule_watch.py" "$T" 6 | grep -E '^(VIOLATION|WATCHDOG-ERROR)'; } 2>/dev/null)
   [ -n "$bad" ] && { echo "$bad" | cut -c1-300; exit 1; }
   echo "$out" | grep '^LANDED' | cut -c1-200
 }
