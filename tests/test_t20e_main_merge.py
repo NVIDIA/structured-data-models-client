@@ -25,6 +25,9 @@ titled with the ID; a commit without the ID beside the merge; a commit only
 the local ``main`` branch holds (never a local ref); two merges of
 ``main`` (one merge commit); and, for ``land.py``, a remote-tracking ref of
 ``main`` moved by hand (``main`` as the remote holds it at landing time).
+Review round 1 added: main's own merge commits (a pull request's) are
+exempt like its other commits, so a merge of a main holding one passes and
+lands, while two merges main does not hold are still refused.
 Exit 5: the landing verifies, the lane is at the phase head after it, and a
 Phase 1 landing still verifies.
 
@@ -290,6 +293,60 @@ def test_lane_check_refuses_what_is_not_main_s(w: Any, seed: str) -> None:
         assert stray[:12] in ran.text, ran.text
 
 
+def main_with_a_pr_merge(w: Any) -> list[str]:
+    r"""The remote's main gains a pull request's merge commit: a feature
+    commit on a branch, one on main beside it, and main's merge of the
+    branch (no package ID on any). Returns main's new commits, the merge
+    last."""
+    w.git('fetch', '--quiet', 'origin', cwd=w.seed)
+    w.git('checkout', '--quiet', '-B', 'feat', 'origin/main', cwd=w.seed)
+    feature = w.commit(w.seed, 'Add a feature (#103)')
+    w.git('checkout', '--quiet', '-B', 'work-pr', 'origin/main', cwd=w.seed)
+    beside = w.commit(w.seed, 'Fix a typo (#104)')
+    w.git(
+        'merge', '--quiet', '--no-ff', '-m',
+        'Merge pull request #105 from feat', 'feat', cwd=w.seed,
+    )  # fmt: skip
+    merged = w.git('rev-parse', 'HEAD', cwd=w.seed).strip()
+    w.git('push', '--quiet', 'origin', 'HEAD:refs/heads/main', cwd=w.seed)
+    w.git('fetch', '--quiet', 'origin', cwd=w.worktree)
+    return [feature, beside, merged]
+
+
+@PENDING
+def test_a_merge_of_main_holding_main_s_own_merge_passes(w: Any) -> None:
+    r"""Exit 4 (review round 1): main's own merge commits (a pull
+    request's) are main's commits, exempt like the others; the one merge
+    commit judged is the package's, the only merge in the range that the
+    remote's main does not hold. ``lane.py check`` and the pre-push check
+    pass."""
+    added = main_with_a_pr_merge(w)
+    head = valid(w)
+    merges = w.git(
+        'rev-list', '--merges', f'origin/{PHASE2}..HEAD', cwd=w.worktree
+    ).split()
+    assert len(merges) == 2 and added[-1] in merges
+    for ran in (check(w), pushed(w, head)):
+        assert ran.code == 0, ran.text
+
+
+@PENDING
+def test_two_merges_of_main_holding_main_s_own_merge_are_refused(
+    w: Any,
+) -> None:
+    r"""Exit 4: with main's own merge in the range, two merge commits that
+    main does not hold (two merges of main) are still refused, naming the
+    second; the twin (one merge) passes first."""
+    added = main_with_a_pr_merge(w)
+    valid(w)
+    assert check(w).code == 0
+    w.git('reset', '--quiet', '--hard', f'origin/{PHASE2}', cwd=w.worktree)
+    merge(w, added[0], f'{PACKAGE}: merge main, first part')
+    stray = merge(w, 'origin/main', f'{PACKAGE}: merge main, second part')
+    ran = check(w)
+    assert ran.code == 2 and stray[:12] in ran.text, ran.text
+
+
 # --- exit 4 and 5: land.py ----------------------------------------------------------
 
 
@@ -312,6 +369,22 @@ def test_land_lands_a_merge_of_main_and_it_verifies(w: Any) -> None:
     assert f'VERIFIED {landing}' in ran.text
     w.git('fetch', '--quiet', 'origin', cwd=w.worktree)
     ran = check(w)
+    assert ran.code == 0, ran.text
+
+
+@PENDING
+def test_land_lands_a_merge_of_main_holding_main_s_own_merge(w: Any) -> None:
+    r"""Exits 4 and 5 (review round 1): ``land.py`` lands a lane whose
+    merge of main brings in main's own merge commit, and the landing
+    verifies."""
+    main_with_a_pr_merge(w)
+    valid(w)
+    sha = publish(w)
+    ran = w.land(*land_args(w, sha))
+    assert ran.code == 0, ran.text
+    landing = w.tip(PHASE2)
+    assert landing == w.tip(ROUTE) != sha
+    ran = w.land('verify', landing, '--phase-branch', PHASE2)
     assert ran.code == 0, ran.text
 
 
