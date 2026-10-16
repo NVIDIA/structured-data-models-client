@@ -10,38 +10,38 @@ The design is updated in the same change as a row that changes it.
 ## Kickoff answers
 
 The owner's answers to the questions in [design.md](design.md), "Owner questions".
-Rows `2K1` onward; none yet.
-Phase 2's row IDs carry the `2` prefix so they never collide with Phase 1's (`C1`, `E1`, ...) once every phase's decisions file is read (T2.0).
+Rows `K2-1` onward; none yet.
+Phase 2's row IDs carry `2-` so they never collide with Phase 1's (`C1`, `E1`, ...) once every phase's decisions file is read (T2.0), and start with a capital letter, as `capture_check.py` and `coverage.py` read row IDs.
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 
-## Lane A (rows 2A1 to 2A19)
+## Lane A (rows A2-1 to A2-19)
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 
-## Lane B (rows 2B1 to 2B19)
+## Lane B (rows B2-1 to B2-19)
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 
-## Lane C (rows 2C1 to 2C19)
+## Lane C (rows C2-1 to C2-19)
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 
-## Lane D (rows 2D1 to 2D19)
+## Lane D (rows D2-1 to D2-19)
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 
-## Lane E (rows 2E1 to 2E19)
+## Lane E (rows E2-1 to E2-19)
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 
-## Lane F (rows 2F1 to 2F19)
+## Lane F (rows F2-1 to F2-19)
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
