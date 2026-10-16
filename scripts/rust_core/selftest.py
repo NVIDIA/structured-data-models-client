@@ -1270,7 +1270,7 @@ def freeze_cases(results: list[Result]) -> None:
         renamed_local,
         'declared main, which is not a change the candidate merged from main: '
         'the judge refuses it',
-        on=replace(base, main=lambda rel, text: 'the judge refuses it'),
+        on=replace(base, main=lambda key, text, now: 'the judge refuses it'),
         rewrite=True,
         declare={from_source: from_main},
     )
@@ -1278,7 +1278,7 @@ def freeze_cases(results: list[Result]) -> None:
         'control: a main reason its judge accepts',
         renamed_local,
         None,
-        on=replace(base, main=lambda rel, text: None),
+        on=replace(base, main=lambda key, text, now: None),
         rewrite=True,
         declare={from_source: from_main},
     )

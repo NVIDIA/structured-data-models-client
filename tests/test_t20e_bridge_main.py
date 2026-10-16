@@ -55,12 +55,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts/rust_core/bridge_freeze.py'
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason="T2.0e: the bridge freeze's main reason is not implemented yet",
-)
-
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
 #: The reason's key, and its text: the full SHA of the main commit, then
@@ -300,7 +294,6 @@ def test_a_main_reason_that_is_not_the_merge_s_is_refused(
 # --- exit 5: after the landing -------------------------------------------------------
 
 
-@PENDING
 def test_after_the_landing_the_declarations_are_held_and_spent(
     h: History,
 ) -> None:

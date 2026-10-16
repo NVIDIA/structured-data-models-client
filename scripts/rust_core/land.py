@@ -497,9 +497,12 @@ def main_merge(
     the remote's ``main`` (:func:`remote_main`). The commits it brings in,
     reachable from that parent but not from its first parent or ``base``,
     are then ``main``'s, and exempt; every other commit still needs the
-    package's ID. Without a merge nothing is exempt; with two or more, each
-    is refused and nothing is exempt; a merge whose subject the package
-    does not own exempts nothing (the subject rule names it)."""
+    package's ID. Only the merges ``main`` does not hold are the
+    package's: ``main``'s own merge commits (its pull requests) come in
+    with it and are exempt like its other commits. Without a merge of the
+    package's nothing is exempt; with two or more, each is refused and
+    nothing is exempt; a merge whose subject the package does not own
+    exempts nothing (the subject rule names it)."""
     merges = tools.git(
         *where, 'rev-list', '--merges', f'{base}..{head}'
     ).split()
@@ -509,6 +512,14 @@ def main_merge(
     def title(sha: str) -> str:
         return tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
 
+    main = remote_main(tools, remote, *where)
+    merges = [
+        sha
+        for sha in merges
+        if not tools.git_ok(*where, 'merge-base', '--is-ancestor', sha, main)
+    ]
+    if not merges:
+        return set(), []
     if len(merges) > 1:
         return set(), [
             (
@@ -534,7 +545,6 @@ def main_merge(
                 f'a merge of {len(parents)} parents; a merge of {MAIN} has two',
             )
         ]
-    main = remote_main(tools, remote, *where)
     if not tools.git_ok(
         *where, 'merge-base', '--is-ancestor', parents[1], main
     ):

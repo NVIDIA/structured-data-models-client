@@ -313,7 +313,6 @@ def main_with_a_pr_merge(w: Any) -> list[str]:
     return [feature, beside, merged]
 
 
-@PENDING
 def test_a_merge_of_main_holding_main_s_own_merge_passes(w: Any) -> None:
     r"""Exit 4 (review round 1): main's own merge commits (a pull
     request's) are main's commits, exempt like the others; the one merge
@@ -330,7 +329,6 @@ def test_a_merge_of_main_holding_main_s_own_merge_passes(w: Any) -> None:
         assert ran.code == 0, ran.text
 
 
-@PENDING
 def test_two_merges_of_main_holding_main_s_own_merge_are_refused(
     w: Any,
 ) -> None:
@@ -372,7 +370,6 @@ def test_land_lands_a_merge_of_main_and_it_verifies(w: Any) -> None:
     assert ran.code == 0, ran.text
 
 
-@PENDING
 def test_land_lands_a_merge_of_main_holding_main_s_own_merge(w: Any) -> None:
     r"""Exits 4 and 5 (review round 1): ``land.py`` lands a lane whose
     merge of main brings in main's own merge commit, and the landing
