@@ -1,6 +1,6 @@
 {
  "recorded_by": "t128a_payload_rules_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cases": [
   {
    "measure": false,
@@ -21245,7 +21245,7 @@
    "expected": {
     "outcome": "refused",
     "class": "StructuredDataError",
-    "code": "UNSUPPORTED_REQUEST",
+    "code": "INVALID_REQUEST",
     "mro": [
      "StructuredDataError",
      "Exception",
@@ -22271,14 +22271,155 @@
    },
    "call": false,
    "expected": {
-    "outcome": "refused",
-    "class": "StructuredDataError",
-    "code": "UNSUPPORTED_REQUEST",
-    "mro": [
-     "StructuredDataError",
-     "Exception",
-     "BaseException",
-     "object"
+    "outcome": "payload",
+    "parts": 1,
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "output": {
+     "fields": [
+      "prediction"
+     ]
+    },
+    "inference": {
+     "run_mode": "fast",
+     "use_prediction_time": false,
+     "inference_config": {
+      "kind": "regression",
+      "num_estimators": 1,
+      "column_shuffle": false,
+      "category_shuffle": false,
+      "hop_shuffle": false,
+      "target_transforms": [
+       "quantile"
+      ],
+      "output_type": "median"
+     }
+    },
+    "metadata": {
+     "source_query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+     "num_context_examples": 1000,
+     "num_prediction_examples": 1001
+    },
+    "schema": {
+     "instance_table": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__kumo_entity_ref_0": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "__kumo_anchor_time": {
+        "dtype": "timestamp[us]",
+        "stype": "timestamp",
+        "nullable": false
+       },
+       "TARGET": {
+        "dtype": "float32",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": "instance_id"
+     },
+     "related_tables": {
+      "users": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "user_id": {
+         "dtype": "int64",
+         "nullable": false
+        },
+        "age": {
+         "dtype": "int64",
+         "stype": "numerical"
+        }
+       },
+       "primary_key": [
+        "instance_id",
+        "user_id"
+       ]
+      },
+      "orders": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "__node_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "price": {
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        "ts": {
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        "user_id": {
+         "dtype": "int64",
+         "stype": "ID"
+        }
+       },
+       "primary_key": [
+        "instance_id",
+        "__node_id"
+       ]
+      }
+     },
+     "relationships": [
+      {
+       "source_columns": [
+        "__kumo_entity_ref_0"
+       ],
+       "target_table": "users",
+       "target_columns": [
+        "user_id"
+       ]
+      },
+      {
+       "source_table": "orders",
+       "source_columns": [
+        "user_id"
+       ],
+       "target_table": "users",
+       "target_columns": [
+        "user_id"
+       ]
+      }
+     ]
+    },
+    "context": 1000,
+    "context_related": [
+     "orders",
+     "users"
+    ],
+    "predict": 1001,
+    "predict_related": [
+     "orders",
+     "users"
+    ],
+    "notices": [
+     "1,000 context examples were gathered, which is all this route takes by default; pass num_context_samples to ask for up to 10,000."
     ]
    }
   },
@@ -23363,11 +23504,8 @@
       "run_mode": "fast",
       "use_prediction_time": false,
       "inference_config": {
-       "kind": "regression",
        "num_estimators": 4,
-       "column_shuffle": true,
-       "category_shuffle": false,
-       "hop_shuffle": false
+       "column_shuffle": true
       }
      }
     }
@@ -23574,12 +23712,8 @@
       "run_mode": "fast",
       "use_prediction_time": false,
       "inference_config": {
-       "kind": "classification",
        "num_estimators": 4,
-       "column_shuffle": true,
-       "category_shuffle": false,
-       "hop_shuffle": false,
-       "class_shuffle": false
+       "column_shuffle": true
       }
      }
     }
