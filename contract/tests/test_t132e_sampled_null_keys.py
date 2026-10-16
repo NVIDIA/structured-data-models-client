@@ -42,8 +42,9 @@ observed and projected by the same code.
   the walk no link, so the core's request differs from the reference's;
   it passes once P1B-13 carries
   ``contract/sampled-null-key-vectors.json#two-nulls-text success ->
-  success``. ``register.required`` (derived: ``mixed-null-decimal``,
-  INTERNAL_ERROR at materialize) excuses nothing by itself.
+  success``. ``register.required`` (derived: at b413e9ad it marked
+  ``mixed-null-decimal``, INTERNAL_ERROR at materialize; at 6298913c none)
+  excuses nothing by itself.
 - The singletons (:data:`EXACT`: one null key sampled alone, text and
   decimal, the review's reproduction among them) are held to the
   reference's exact answer and request: no entry excuses them, whatever
@@ -52,7 +53,8 @@ observed and projected by the same code.
 - P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling reaches
   a key mixing nulls with real text or decimal values (``mixed-null-text``,
   refused INVALID_REQUEST by the reference; ``mixed-null-decimal``,
-  INTERNAL_ERROR), the core leaves the null-key rows out and succeeds:
+  INTERNAL_ERROR at b413e9ad, and since main's eb6c68eb a success whose
+  request carries the null-key row), the core leaves the null-key rows out and succeeds:
   :func:`test_option_b_leaves_the_null_key_rows_out_with_one_warning`
   holds its request to the twin's (the same tables with the null row not
   reached, recorded from the reference) with no null-key row, and its
@@ -271,9 +273,16 @@ def test_the_review_s_reproduction_is_a_success_with_a_request() -> None:
         for v in RECORDED['vectors']
     }
     assert outcomes['mixed-null-text'] == 'refusal INVALID_REQUEST'
-    assert outcomes['mixed-null-decimal'] == 'refusal INTERNAL_ERROR'
     assert outcomes['singleton-null-decimal'] == 'success'
-    assert BY_ID['mixed-null-decimal']['register']['required']
+    # Since main's eb6c68eb the reference answers the mixed decimal key
+    # too (it reads the key as an integer), and sends the null-key row
+    # (amount 0) beside the two others reached for account 3; no vector is
+    # marked any more.
+    mixed = BY_ID['mixed-null-decimal']['reference']
+    assert outcomes['mixed-null-decimal'] == 'success'
+    assert mixed['outcome']['stage'] == 'predict'
+    assert sorted(_amounts(mixed['request'], 'payments')) == [0.0, 1.0, 2.0]
+    assert not any(v['register']['required'] for v in RECORDED['vectors'])
 
 
 def test_the_comparison_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -470,14 +479,34 @@ def test_option_b_leaves_the_null_key_rows_out_with_one_warning(
     )
 
 
+#: Option (b)'s vectors the reference still refuses at 6298913c.
+OPTION_B_REFUSED = frozenset({'mixed-null-text'})
+#: Option (b)'s vectors the reference answers since main's eb6c68eb: a
+#: success at predict whose request carries the null-key row, which
+#: option (b) leaves out, so the core's request is no longer the
+#: reference's.
+OPTION_B_ANSWERED = frozenset({'mixed-null-decimal'})
+
+
 def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
-    # The divergence is from a refusal, and each twin is a success the
-    # reference sends a request for, with the null row's key elsewhere.
+    # The divergence is from a refusal, or, where the reference now
+    # answers, from a request holding the null-key row; each twin is a
+    # success the reference sends a request for, with the null row's key
+    # elsewhere.
+    assert OPTION_B_REFUSED | OPTION_B_ANSWERED == set(OPTION_B)
+    assert not OPTION_B_REFUSED & OPTION_B_ANSWERED
     for vector_id, (twin_id, _) in OPTION_B.items():
-        outcome = BY_ID[vector_id]['reference']['outcome']
-        assert outcome['result'] == 'refusal'
-        assert outcome['stage'] == 'materialize'
-        assert outcome['code'] in ('INVALID_REQUEST', 'INTERNAL_ERROR')
+        reference = BY_ID[vector_id]['reference']
+        outcome = reference['outcome']
+        if vector_id in OPTION_B_REFUSED:
+            assert outcome['result'] == 'refusal'
+            assert outcome['stage'] == 'materialize'
+            assert outcome['code'] == 'INVALID_REQUEST'
+        else:
+            assert outcome['result'] == 'success'
+            assert outcome['stage'] == 'predict'
+            amounts = sorted(_amounts(reference['request'], 'payments'))
+            assert amounts == [0.0, 1.0, 2.0]
         twin = BY_ID[twin_id]['reference']
         assert twin['outcome']['result'] == 'success'
         assert sorted(_amounts(twin['request'], 'payments')) == [1.0, 2.0]
