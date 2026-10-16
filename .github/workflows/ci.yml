@@ -1083,6 +1083,9 @@ jobs:
   # under emulation. Databricks serverless compute can run on either
   # architecture, and each wheel is smoke-tested on the architecture it targets.
   engine-wheels:
+    # Every job has a ceiling (tests/test_ci_workflow.py); main's job had
+    # none. One engine build per interpreter, each arch on its own runner.
+    timeout-minutes: 60
     needs: build
     strategy:
       fail-fast: false
