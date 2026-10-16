@@ -7,19 +7,23 @@ r"""Reading a wire table back as the types its schema declares."""
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
-from typing import Any
-
-import pyarrow as pa
+from typing import TYPE_CHECKING, Any
 
 from sdm_client.in_process.refusal import refusal
 
+if TYPE_CHECKING:
+    import pyarrow as pa
+
+#: Each dtype's Arrow type, by factory name. PyArrow comes with the extra and
+#: is imported where it is used, so that a client without the extra reaches
+#: the check that names it.
 _ARROW_TYPES = {
-    'bool': pa.bool_(),
-    'int32': pa.int32(),
-    'int64': pa.int64(),
-    'float32': pa.float32(),
-    'float64': pa.float64(),
-    'string': pa.string(),
+    'bool': 'bool_',
+    'int32': 'int32',
+    'int64': 'int64',
+    'float32': 'float32',
+    'float64': 'float64',
+    'string': 'string',
 }
 _INTEGERS = frozenset({'int32', 'int64'})
 _NUMBERS = _INTEGERS | {'float32', 'float64'}
@@ -51,6 +55,8 @@ def to_arrow(
     sides of a join agree. A fractional one is refused rather than truncated
     onto another row.
     """
+    import pyarrow as pa
+
     arrays = []
     for column in columns:
         cells = values(table, column)
@@ -63,15 +69,16 @@ def to_arrow(
 
 
 def _array(cells: list[Any], dtype: str, column: str) -> pa.Array:
+    import pyarrow as pa
+
     try:
         if dtype == 'timestamp[us]':
             zoned = pa.array(cells, pa.string()).cast(
                 pa.timestamp('us', tz='UTC')
             )
             return zoned.cast(pa.timestamp('us'))
-        return pa.array(
-            [read_cell(cell, dtype) for cell in cells], _ARROW_TYPES[dtype]
-        )
+        arrow_type = getattr(pa, _ARROW_TYPES[dtype])()
+        return pa.array([read_cell(cell, dtype) for cell in cells], arrow_type)
     except (KeyError, pa.ArrowException, TypeError, ValueError) as error:
         raise refusal(
             'VALIDATION_FAILED',

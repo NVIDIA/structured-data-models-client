@@ -12,6 +12,7 @@ model as its own API would be called, and comes back as a NIM answers it.
 from __future__ import annotations
 
 import copy
+import subprocess
 import sys
 import warnings
 
@@ -21,7 +22,6 @@ import pytest
 from sdm_client import (
     KumoRelational,
     KumoTabular,
-    MissingExtraError,
     NimRequestError,
     PredictiveQuery,
     Request,
@@ -379,8 +379,24 @@ def test_a_model_left_in_training_mode_is_named_not_run(tabular):
         tabular.eval()
 
 
-def test_without_the_extra_the_extra_is_named(monkeypatch):
-    monkeypatch.setitem(sys.modules, 'sdm', None)
-    with pytest.raises(MissingExtraError) as caught:
-        SDMClient.in_process()
-    assert caught.value.details['extra'] == 'in-process'
+def test_without_the_extra_the_extra_is_named():
+    """In a fresh interpreter, since nothing the extra brings may already be
+    imported: a module imported at the top of the in-process package once
+    failed before the check that names the extra."""
+    script = (
+        'import sys\n'
+        "for name in ('sdm', 'torch', 'pyarrow'):\n"
+        '    sys.modules[name] = None\n'
+        'from sdm_client import MissingExtraError, SDMClient\n'
+        'try:\n'
+        '    SDMClient.in_process()\n'
+        'except MissingExtraError as error:\n'
+        "    print(error.details['extra'])\n"
+    )
+    run = subprocess.run(
+        [sys.executable, '-c', script],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.stdout.strip() == 'in-process', run.stderr
