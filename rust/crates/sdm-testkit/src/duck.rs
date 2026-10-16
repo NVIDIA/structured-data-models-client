@@ -20,8 +20,17 @@
 //! stay off, so nothing else loads, and the loaded ICU's version is
 //! checked. JSON, which the Python wheel also links, is loaded the same way
 //! (T1.33), so a JSON column can be set up here.
+//!
+//! Tests run in parallel, as threads of one binary and as several binaries
+//! (or one process per test, under nextest), and the first `INSTALL` writes
+//! the extension directory every one of them reads. [`open`] therefore
+//! installs, checks and loads the extensions holding an exclusive lock on a
+//! file in that directory (T2.0): one install runs at a time, and no host
+//! reads an extension's file while another writes it.
 
 use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result, anyhow, bail};
 use duckdb::arrow::compute::concat_batches;
@@ -96,15 +105,59 @@ pub fn open() -> Result<Connection> {
     if version != DUCKDB_VERSION {
         bail!("DuckDB {version} is linked, and the reference runs {DUCKDB_VERSION}");
     }
+    // Held until both are loaded; dropping the file releases it.
+    let _lock = extension_lock(&connection)?;
     load(&connection, "icu", &ICU_SHA256)?;
     load(&connection, "json", &JSON_SHA256)?;
     Ok(connection)
 }
 
+/// The extension directory's lock, held exclusively: `sdm-testkit.lock` in
+/// the directory DuckDB installs extensions under (its
+/// `extension_directory`, or `.duckdb/extensions` in its home directory,
+/// which defaults to `HOME`), created if missing. Every host takes it
+/// before it looks for, installs, checks or loads an extension, so threads
+/// and processes alike wait for an install in progress to finish, rather
+/// than reading a file it has not finished writing.
+fn extension_lock(connection: &Connection) -> Result<File> {
+    let setting = |name: &str| -> Result<String> {
+        connection
+            .query_row(&format!("SELECT current_setting('{name}')"), [], |row| {
+                row.get(0)
+            })
+            .with_context(|| format!("reading DuckDB's {name}"))
+    };
+    let directory = match setting("extension_directory")? {
+        directory if !directory.is_empty() => PathBuf::from(directory),
+        _ => {
+            let home = match setting("home_directory")? {
+                home if !home.is_empty() => PathBuf::from(home),
+                _ => std::env::var_os("HOME")
+                    .map(PathBuf::from)
+                    .context("DuckDB's home directory: HOME is not set")?,
+            };
+            home.join(".duckdb").join("extensions")
+        }
+    };
+    std::fs::create_dir_all(&directory)
+        .with_context(|| format!("creating {}", directory.display()))?;
+    let path = directory.join("sdm-testkit.lock");
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .with_context(|| format!("opening {}", path.display()))?;
+    file.lock()
+        .with_context(|| format!("locking {}", path.display()))?;
+    Ok(file)
+}
+
 /// Loads DuckDB's signed extension `name`: installed once per machine from
 /// DuckDB's repository, signature checked by DuckDB; its bytes are checked
 /// here against the digest recorded for the platform before it is loaded
-/// (decision E37), and the loaded version must be the linked DuckDB's.
+/// (decision E37), and the loaded version must be the linked DuckDB's. The
+/// caller holds [`extension_lock`].
 fn load(connection: &Connection, name: &str, digests: &[(&str, &str)]) -> Result<()> {
     let installed = |connection: &Connection| -> Result<Option<String>> {
         Ok(connection
@@ -119,11 +172,14 @@ fn load(connection: &Connection, name: &str, digests: &[(&str, &str)]) -> Result
     let path = match installed(connection)? {
         Some(path) => path,
         None => {
-            // Tests in parallel may install it at once; whichever install
-            // lands, the file must then be there.
-            let _ = connection.execute_batch(&format!("INSTALL {name}"));
-            installed(connection)?
-                .with_context(|| format!("installing DuckDB's {name} extension"))?
+            // No other host installs while the lock is held, so an
+            // install that fails is this one's failure, named.
+            connection
+                .execute_batch(&format!("INSTALL {name}"))
+                .with_context(|| format!("installing DuckDB's {name} extension"))?;
+            installed(connection)?.with_context(|| {
+                format!("DuckDB's {name} extension is not installed after INSTALL")
+            })?
         }
     };
     let platform: String =

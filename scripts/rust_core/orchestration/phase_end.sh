@@ -23,7 +23,9 @@
 #                      L (same tree): the phase-branch commit the CI wheel
 #                      and the live check name. Default: SHA.
 #   --half H           the locked half whose gate run makes the observations
-#                      (default 1b)
+#                      (default: the one half of SHA's
+#                      docs/design/rust-core/phase-N/locked-set.yaml that
+#                      locks cases; Phase 1's 1b)
 #   --until N          stop after step N (--until 2: everything before the
 #                      one-shot held-out run)
 #   --allow-proposed   go on with register entries still proposed (they do
@@ -55,7 +57,10 @@
 #                      PUBLIC} in its environment, writes anything the pack
 #                      may publish into $PHASE_END_PUBLIC, and must exit 0
 #                      only on a pass. Its output goes to a private log.
-#   SDM_INVENTORY      tree path of the inventory evidence.py reads (default
+#   SDM_INVENTORY      tree path of the inventory evidence.py reads (default:
+#                      the half's inventory in SHA's
+#                      docs/design/rust-core/phase-N/locked-set.yaml, as
+#                      gate.sh --locked reads it; Phase 1b's
 #                      docs/design/rust-core/phase-0/phase-1b-inventory.yaml)
 #   SDM_REF_SHA        the reference recording (default: the one
 #                      contract/reference/*.jsonl at SHA)
@@ -93,7 +98,7 @@ usage() { awk 'NR > 5 && /^#/ { sub(/^# ?/, ""); print; next } NR > 5 { exit }' 
 
 PHASE=${SDM_PHASE:-}; SHA=${SDM_PHASE_END_SHA:-}; WORK=${SDM_PHASE_END_WORK:-}
 MODE=dry; BASE=''; RUN=''; WHEEL_COMMIT=''; ALLOW_PROPOSED=0; CHECKPOINT=''; DIED=''
-LANDING=''; UNTIL=5; HALF=1b; HELDOUT_ARGS=()
+LANDING=''; UNTIL=5; HALF=''; HELDOUT_ARGS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) usage; exit 0 ;;
@@ -114,12 +119,16 @@ done
 [[ "$PHASE" =~ ^[0-9]+$ ]] || { echo "phase_end.sh: give --phase N (try --help)" >&2; exit 2; }
 [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "phase_end.sh: give --sha with the full 40-character SHA" >&2; exit 2; }
 [[ "$UNTIL" =~ ^[0-5]$ ]] || { echo "phase_end.sh: --until takes 0 to 5" >&2; exit 2; }
+# The locked half: given, else read from the phase's locked set in preflight
+# (T2.0).
+[ -z "$HALF" ] || [[ "$HALF" =~ ^[0-9]+[a-z]*$ ]] || { echo "phase_end.sh: --half takes a half's name, such as 1b" >&2; exit 2; }
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=${SDM_REPO:-$(git -C "$HERE" rev-parse --show-toplevel)}
 GH_REPO=${SDM_GH_REPO:-NVIDIA/structured-data-models-client}
 PHASE_BRANCH=rust-core-phase-$PHASE
-INVENTORY=${SDM_INVENTORY:-docs/design/rust-core/phase-0/phase-1b-inventory.yaml}
+# From the phase's locked set at SHA in preflight, unless given (T2.0).
+INVENTORY=${SDM_INVENTORY:-}
 OVERLAY=(contract/runners/run_python.py rust/crates/sdm-testkit/src/case.rs rust/crates/sdm-testkit/src/observation.rs)
 TOOLS_BIN=${SDM_TOOLS_BIN:-}
 BUNDLE=${SDM_HELDOUT_BUNDLE:-${HELDOUT_BUNDLE:-}}
@@ -282,7 +291,31 @@ if git -C "$REPO" cat-file -e "$SHA^{commit}" 2>/dev/null && git -C "$REPO" cat-
     [ "$(grep -c . <<<"$REFS")" = 1 ] && REF_SHA=$(basename "$REFS" .jsonl) && okay "reference recording ${REF_SHA:0:12}" \
       || problem "not exactly one contract/reference/<sha>.jsonl at SHA: set SDM_REF_SHA"
   fi
-  git -C "$REPO" cat-file -e "$SHA:$INVENTORY" 2>/dev/null && okay "inventory $INVENTORY" || problem "no $INVENTORY at SHA: set SDM_INVENTORY"
+  # The half and its inventory, as gate.sh --locked reads the phase's
+  # locked set (T2.0): the half given, else the one half locking cases.
+  LOCKED_SET=docs/design/rust-core/phase-$PHASE/locked-set.yaml
+  if [ -z "$HALF" ] || [ -z "$INVENTORY" ]; then
+    DERIVED=$(git -C "$REPO" show "$SHA:$LOCKED_SET" 2>/dev/null | "${CELL_REF_PY:-python3}" -I -c '
+import sys, yaml
+halves = yaml.safe_load(sys.stdin)["halves"]
+half = sys.argv[1] or "".join(h for h, v in halves.items() if "inventory" in v or "cases" in v)
+locking = [h for h, v in halves.items() if "inventory" in v or "cases" in v]
+if not sys.argv[1] and len(locking) != 1:
+    sys.exit(1)
+print(half, halves[half].get("inventory", {}).get("file", ""))' "$HALF" 2>/dev/null) || DERIVED=''
+    if [ -z "$HALF" ]; then
+      HALF=${DERIVED%% *}
+      [ -n "$HALF" ] && okay "half $HALF (from $LOCKED_SET)" || problem "no one half locking cases in $LOCKED_SET at SHA: give --half (and set SDM_INVENTORY)"
+    fi
+    if [ -z "$INVENTORY" ] && [ -n "$HALF" ]; then
+      INVENTORY=${DERIVED#* }
+      [ "$INVENTORY" != "$DERIVED" ] || INVENTORY=''
+      [ -n "$INVENTORY" ] || problem "no inventory file for half $HALF in $LOCKED_SET at SHA: set SDM_INVENTORY"
+    fi
+  fi
+  if [ -n "$INVENTORY" ]; then
+    git -C "$REPO" cat-file -e "$SHA:$INVENTORY" 2>/dev/null && okay "inventory $INVENTORY" || problem "no $INVENTORY at SHA: set SDM_INVENTORY"
+  fi
   git -C "$REPO" cat-file -e "$SHA:scripts/rust_core/heldout_run.sh" 2>/dev/null && okay "heldout_run.sh in SHA's tree" \
     || problem "no scripts/rust_core/heldout_run.sh at SHA"
 fi

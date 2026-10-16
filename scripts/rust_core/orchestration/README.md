@@ -12,7 +12,7 @@ every check.
 |---|---|---|
 | `SDM_ORCH_STATE` | State directory: `land-queue/`, `logs/`, `lanes_done`, `rule_watch.ignore`, the lander's lock | `~/.local/share/sdm-orchestration` |
 | `SDM_LAND_QUEUE` | The landing queue | `$SDM_ORCH_STATE/land-queue` |
-| `SDM_PHASE_BRANCH` | The phase branch, e.g. `rust-core-phase-2`. Lanes are `<phase>-lane-<x>`, topic branches `<phase>-<name>`, archives `<phase>-archive-...` | none; required by `auto_land.py`, `land_chain.sh`, `cancel_superseded.sh` and `lane_idle.py`, which exit 2 when it is unset (the two Python tools also take `--phase`) |
+| `SDM_PHASE_BRANCH` | The phase branch, e.g. `rust-core-phase-2`. Lanes are `<phase>-lane-<x>`, topic branches `<phase>-<name>`, archives `<phase>-archive-...` | none; required by `auto_land.py`, `land_chain.sh`, `cancel_superseded.sh` and `lane_idle.py`, which exit 2 when it is unset (the two Python tools also take `--phase`). The tools beside them read it too (`../phases.py`, T2.0): `land.py` and `lane.py` (whose `--phase-branch` overrides it), `ratchet.py`, `prepush.sh`, `prune_caches.py`, `replay_jobs.py` and `bridge_freeze.py`; unset, they take the phase of the branch they work on, else `phases.py`'s `CURRENT` |
 | `SDM_REPO` | The local clone | the git toplevel of this directory |
 | `SDM_TASKS_DIR` | The agents' task-output directory (`a*.output` transcripts) | none; required by the transcript tools |
 
@@ -65,12 +65,35 @@ every check.
   than `SDM_EXPECTED_WAIT_CEILING_MIN` minutes (default 90): then they are
   reported as `POSSIBLY-BLOCKED` too, since a hung loop or gate run looks the
   same. Example: `python3 stuck_agents.py "$SDM_TASKS_DIR" 40`.
+- **Both watchdogs fail loudly** when they cannot see (`transcripts.py`,
+  shared by the two): a tasks directory that does not exist, a transcript
+  that cannot be read, or a line in one that is not a JSON object prints
+  `WATCHDOG-ERROR <tool>: <what>` on stdout and exits 1, so the loop's grep
+  (prompts.md, "Watchdog texts", and `land_chain.sh`) keeps it. A partial
+  last line, which the agent is still writing, is skipped, not an error.
+  `tests/test_watchdogs.py` tests both, and runs the loop text as written.
 - **`rule_watch.py`**: flags process-rule violations in recent agent
   commands: a local `prepush.sh --full`, `gh run watch`, `rm -r`, forced
   removals and `sudo`. To silence a violation you have already dealt with,
   add a regular expression to `$SDM_ORCH_STATE/rule_watch.ignore`, one per
   line (an agent id alone silences that agent). Example:
   `python3 rule_watch.py "$SDM_TASKS_DIR" 6`.
+- **`codex_pane.py`**: runs Codex reviews in herdr panes, one pane per
+  package, kept alive across rounds. `open --package ID` creates the
+  package's tab in the `codex-reviews` workspace, a review worktree under
+  `$SDM_ORCH_STATE/review-worktrees/`, and starts Codex there; `review
+  --package ID --sha SHA --brief FILE` checks the worktree out at the exact
+  SHA and sends the round's prompt, naming a fresh report file (at most
+  `SDM_CODEX_CAP`, default 4, at once; `--queue` waits for a slot);
+  `wait --package ID` blocks until the round settles and prints one line
+  (`REPORT`, `BLOCKED`, `IDLE-NO-REPORT`, `CAPACITY`, `GONE` or `TIMEOUT`),
+  retrying a capacity error with backoff first; run it in the background;
+  `list` shows the registry (`$SDM_ORCH_STATE/codex-panes.json`). It never
+  prints herdr's raw JSON, which carries terminal titles with user and host
+  names. Also reads `SDM_HERDR`, `SDM_CODEX_MODEL`, `SDM_CODEX_EFFORT` and
+  the `SDM_CODEX_*` timings. `codex_pane_selftest.py` tests it against a
+  fake herdr and a throwaway repository, with no network;
+  `tests/test_codex_pane.py` runs it.
 - **`lane_idle.py`**: lists lanes no agent has touched recently. Lanes are
   found from `origin/<phase>-lane-*` and from `<repo>-lane-<x>` worktree
   directories (`SDM_LANE_WORKTREE_PREFIX` overrides the prefix). Lanes named

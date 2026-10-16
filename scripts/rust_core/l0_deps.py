@@ -49,7 +49,8 @@ features, every target platform) and checks:
 - the bridge freeze (decision E50, ``bridge_freeze.py``), a tripwire for
   undeclared changes to the core route's Python bridge: each frozen
   function's fingerprint against the merge base with the base branch
-  (``--base``, else ``SDM_FREEZE_BASE``, else ``origin/rust-core-phase-1``)
+  (``--base``, else ``SDM_FREEZE_BASE``, else ``origin/`` and the phase
+  branch, ``phases.py``)
   changes only as ``bridge_changes.json`` declares (from T1.28b the whole
   check: E56(d) retired its counts and allowances).
 

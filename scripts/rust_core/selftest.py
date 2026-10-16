@@ -78,6 +78,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bridge_freeze  # noqa: E402
 import l0_deps  # noqa: E402
 import l0_scan  # noqa: E402
+import phases  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IGNORED = shutil.ignore_patterns('target', '__pycache__', '.venv', '*.pyc')
@@ -1850,10 +1851,37 @@ def freeze_cases(results: list[Result]) -> None:
             results,
             'bridge_freeze: unset, the base branch is the phase branch',
             []
-            if chosen == 'origin/rust-core-phase-1'
+            if chosen
+            == 'origin/'
+            + phases.phase_branch(
+                branch=os.environ.get('GITHUB_REF_NAME') or phases.checked_out()
+            )
             else [f'chose {chosen!r}'],
             fails_with=None,
         )
+        # T2.0: the phase branch, from SDM_PHASE_BRANCH, else CI's branch,
+        # each a seeded value the default must follow.
+        for environ, wanted in (
+            ({'SDM_PHASE_BRANCH': 'rust-core-phase-2'}, 'rust-core-phase-2'),
+            (
+                {'GITHUB_REF_NAME': 'rust-core-phase-3-lane-a'},
+                'rust-core-phase-3',
+            ),
+            (
+                {
+                    'SDM_PHASE_BRANCH': 'rust-core-phase-1',
+                    'GITHUB_REF_NAME': 'rust-core-phase-2-lane-a',
+                },
+                'rust-core-phase-1',
+            ),
+        ):
+            chosen = bridge_freeze.base_ref(environ=environ)
+            expect(
+                results,
+                f'bridge_freeze: {sorted(environ.items())} names origin/{wanted}',
+                [] if chosen == f'origin/{wanted}' else [f'chose {chosen!r}'],
+                fails_with=None,
+            )
         with freeze_base('no-such-branch'):
             found_problems = bridge_freeze.problems(REPO_ROOT)
         expect(

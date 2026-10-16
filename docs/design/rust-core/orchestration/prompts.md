@@ -54,13 +54,13 @@ Confirm with the list of crons and the loop's task id.
 ```bash
 B=scripts/rust_core/orchestration; T=<TASKS>
 while true; do
-  OUT=$({ python3 $B/stuck_agents.py $T 40 | grep POSSIBLY-BLOCKED; python3 $B/rule_watch.py $T 6 | grep VIOLATION; } 2>/dev/null)
+  OUT=$({ python3 $B/stuck_agents.py $T 40 | grep -E '^(POSSIBLY-BLOCKED|WATCHDOG-ERROR)'; python3 $B/rule_watch.py $T 6 | grep -E '^(VIOLATION|WATCHDOG-ERROR)'; } 2>/dev/null)
   [ -n "$OUT" ] && { echo "$OUT" | cut -c1-300; break; }
   sleep 300
 done
 ```
 
-When it fires: for each agent still running, stop it and resume it naming the blocking command and an alternative (never `rm -rf`, `--force` or `sudo`); add acknowledged false alarms to `$SDM_ORCH_STATE/rule_watch.ignore`; then restart the loop.
+When it fires on a `WATCHDOG-ERROR` line, the watchdog itself can't see: fix the cause it names (a wrong or missing <TASKS>, an unreadable transcript) before restarting the loop. When it fires on any other line: for each agent still running, stop it and resume it naming the blocking command and an alternative (never `rm -rf`, `--force` or `sudo`); add acknowledged false alarms to `$SDM_ORCH_STATE/rule_watch.ignore`; then restart the loop.
 
 **Heartbeat** (cron `17 0-23/3 * * *` and `47 1-23/3 * * *`):
 

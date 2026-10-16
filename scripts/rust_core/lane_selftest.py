@@ -148,6 +148,9 @@ class World:
             GIT_CONFIG_NOSYSTEM='1',
             FAKE_GH_STATE=str(self.tmp / 'gh.json'),
             PATH=f'{self.tmp / "bin"}{os.pathsep}{os.environ["PATH"]}',
+            # The phase, as the orchestration tools name it (T2.0); the
+            # phase cases below change or drop it.
+            SDM_PHASE_BRANCH=PHASE,
         )
         self.gh_state({'runs': [], 'green_on': [], 'calls': []})
         self.remote = self.tmp / 'remote.git'
@@ -1066,6 +1069,95 @@ def _(w: World) -> tuple[bool, str]:
         and not (hooks / 'prepush-worktrees').exists()
     )
     return verdict(ok, 'reported, nothing installed', ran)
+
+
+# --- the phase is one setting (T2.0) ------------------------------------------
+
+PHASE_2 = 'rust-core-phase-2'
+
+
+def phase_2(w: World) -> str:
+    """A Phase 2 branch on the remote, cut from the Phase 1 head."""
+    w.git('push', '--quiet', 'origin', f'{w.phase}:refs/heads/{PHASE_2}', cwd=w.seed)  # fmt: skip
+    return w.phase
+
+
+@case('phase: --phase-branch takes effect over SDM_PHASE_BRANCH')
+def _(w: World) -> tuple[bool, str]:
+    head = phase_2(w)
+    ran = w.lane('--phase-branch', PHASE_2, 'start', '--lane', '1b',
+                 '--package', 'T2.0', '--worktree', str(w.worktree))  # fmt: skip
+    lane = f'{PHASE_2}-lane-1b'
+    ok = (
+        ran.code == 0
+        and w.tip(lane) == head
+        and w.tip(BRANCH) is None
+        and w.package(w.worktree) == 'T2.0'
+        and f'STARTED T2.0 on {lane} at {head}' in ran.text
+    )
+    return verdict(ok, 'a Phase 2 lane started', ran)
+
+
+@case('phase: SDM_PHASE_BRANCH takes effect, for start and status')
+def _(w: World) -> tuple[bool, str]:
+    phase_2(w)
+    w.env['SDM_PHASE_BRANCH'] = PHASE_2
+    ran = w.start('T2.0a')
+    shown = w.lane('status')
+    lane = f'{PHASE_2}-lane-1b'
+    ok = (
+        ran.code == 0
+        and w.tip(lane) is not None
+        and shown.code == 0
+        and f'{PHASE_2} at ' in shown.text
+        and lane in shown.text
+    )
+    return verdict(
+        ok, 'start and status on Phase 2', f'{ran.text} | {shown.text}'
+    )
+
+
+@case('phase: with no flag and no SDM_PHASE_BRANCH, the phase in progress')
+def _(w: World) -> tuple[bool, str]:
+    del w.env['SDM_PHASE_BRANCH']
+    before = w.refs()
+    ran = w.start()
+    # The clone has main checked out, so phases.CURRENT, which this
+    # remote lacks.
+    return verdict(
+        refused_untouched(w, ran, f'origin has no {PHASE_2}', before),
+        'refused, naming the phase in progress',
+        ran,
+    )
+
+
+@case('phase: a phase name that is no phase branch is refused, by name')
+def _(w: World) -> tuple[bool, str]:
+    before = w.refs()
+    ran = w.lane('--phase-branch', 'rust-core-phase-02', 'status')
+    ok = ran.code == 2 and "'rust-core-phase-02' is not a phase branch" in (
+        ran.text
+    )
+    return verdict(ok and w.refs() == before, 'refused', ran)
+
+
+@case("phase: check measures a lane against its own phase's head")
+def _(w: World) -> tuple[bool, str]:
+    head = phase_2(w)
+    w.env['SDM_PHASE_BRANCH'] = PHASE_2
+    started = w.start('T2.0')
+    w.commit(w.worktree, 'T2.0: the package')
+    # Under another phase's SDM_PHASE_BRANCH, the lane is still measured
+    # from its own phase's head.
+    w.env['SDM_PHASE_BRANCH'] = PHASE
+    ran = w.lane('check', cwd=w.worktree)
+    ok = (
+        started.code == 0
+        and ran.code == 0
+        and f'{PHASE_2}-lane-1b carries T2.0: 1 commit(s)' in ran.text
+        and head
+    )
+    return verdict(bool(ok), 'measured from the Phase 2 head', ran)
 
 
 # --- status -------------------------------------------------------------------

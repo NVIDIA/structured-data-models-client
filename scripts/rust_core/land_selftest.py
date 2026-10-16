@@ -25,6 +25,7 @@ Decision E43; the checks themselves are documented in land.py.
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import io
 import json
 import os
@@ -39,6 +40,10 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import land  # noqa: E402
+
+# The cases set the phase themselves (T2.0): one named in the caller's
+# environment would override the topic branch's.
+os.environ.pop('SDM_PHASE_BRANCH', None)
 
 CAND = 'c' * 8 + '1' * 32
 BASE = 'b' * 8 + '2' * 32
@@ -131,7 +136,7 @@ class Fake:
         rev = rev.removesuffix('^{commit}')
         if rev == 'HEAD':
             return self.head
-        if rev == f'refs/remotes/origin/{PHASE}':
+        if re.fullmatch(r'refs/remotes/origin/rust-core-phase-\d+', rev):
             return self.remote_phase
         found = [s for s in self.commits if s.startswith(rev.lower())]
         return found[0] if len(found) == 1 and len(rev) >= 4 else None
@@ -227,7 +232,12 @@ class Fake:
             raise AssertionError(f'unexpected git {args}')
         if args[0] == 'ls-remote':
             refs = {**self.remote_refs, **self.moved_after_push}
-            lines = [f'{refs[ref]}\t{ref}' for ref in args[2:] if ref in refs]
+            lines = [
+                f'{refs[ref]}\t{ref}'
+                for pattern in args[2:]
+                for ref in sorted(refs)
+                if fnmatch.fnmatchcase(ref, pattern)
+            ]
             return land.Completed(0, ''.join(line + '\n' for line in lines))
         if args[0] == 'log' and '..' in args[-1]:
             base, head = (self.sha(r) for r in args[-1].split('..'))
@@ -247,7 +257,7 @@ class Fake:
             for ref in args[1:]:
                 if ':refs/heads/' in ref:
                     sha, branch = ref.split(':refs/heads/')
-                    if branch == PHASE:
+                    if re.fullmatch(r'rust-core-phase-\d+', branch):
                         self.remote_phase = sha
                     self.remote_refs[f'refs/heads/{branch}'] = sha
                     self.runs.setdefault(sha, []).append(
@@ -325,7 +335,10 @@ class Case:
         return self.call([*argv, *extra])
 
     def verify(self, sha: str = LAND) -> Case:
-        return self.call(['verify', sha, '--appear-timeout', '0'])
+        # A Phase 1 landing, verified by naming its phase (T2.0).
+        return self.call(
+            ['verify', sha, '--appear-timeout', '0', '--phase-branch', PHASE]
+        )
 
     def call(self, argv: list[str]) -> Case:
         tools = land.Tools(run=self.fake, sleep=lambda _: None, repo='o/r')
@@ -718,19 +731,158 @@ for topic in (
 
     @case(f'refused: --topic-branch {topic}')
     def _(tmp: Path, topic: str = topic) -> tuple[bool, str]:
-        c = Case(tmp).land('--topic-branch', topic)
+        c = Case(tmp).land('--topic-branch', topic, '--phase-branch', PHASE)
         ok, detail = refused(c, 'topic branch')
         # Refused before anything was asked of git or gh.
         return ok and not c.calls, detail
 
 
-for phase in ('main', 'rust-core', f'{PHASE}-lane-a', 'rust-core-phase-2'):
+for phase in (
+    'main',
+    'rust-core',
+    f'{PHASE}-lane-a',
+    'rust-core-phase-01',
+    'rust-core-phase-x',
+):
 
     @case(f'refused: --phase-branch {phase}')
     def _(tmp: Path, phase: str = phase) -> tuple[bool, str]:
         c = Case(tmp).land('--phase-branch', phase)
         ok, detail = refused(c, 'phase branch')
         return ok and not c.calls, detail
+
+
+# --- the phase is one setting (T2.0) ------------------------------------------
+#
+# The phase branch is --phase-branch, else SDM_PHASE_BRANCH, else the phase
+# the topic branch is under, else phases.CURRENT; every name under it (the
+# topic, lane and archive branches, and which runs are evidence) follows.
+
+PHASE_2 = 'rust-core-phase-2'
+TOPIC_2 = f'{PHASE_2}-lane-a'
+
+
+@contextlib.contextmanager
+def phase_environment(value: str | None) -> Iterator[None]:
+    old = os.environ.pop('SDM_PHASE_BRANCH', None)
+    if value is not None:
+        os.environ['SDM_PHASE_BRANCH'] = value
+    try:
+        yield
+    finally:
+        os.environ.pop('SDM_PHASE_BRANCH', None)
+        if old is not None:
+            os.environ['SDM_PHASE_BRANCH'] = old
+
+
+def phase_2_fake() -> Fake:
+    return Fake(branch=TOPIC_2, runs={CAND: [ci_run(CAND, TOPIC_2)]})
+
+
+def pushed_to(c: Case, phase: str, topic: str) -> bool:
+    return c.code == 0 and c.fake.pushes == [
+        (
+            '--quiet',
+            '--no-verify',
+            '--atomic',
+            'origin',
+            f'{LAND}:refs/heads/{topic}',
+            f'{LAND}:refs/heads/{phase}',
+        )
+    ]
+
+
+@case("phase: a Phase 2 lane lands on rust-core-phase-2, the topic's phase")
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp, phase_2_fake()).land('--topic-branch', TOPIC_2)
+    ok = pushed_to(c, PHASE_2, TOPIC_2)
+    return ok, 'landed on Phase 2' if ok else f'{c.fake.pushes}: {c.text}'
+
+
+@case('phase: --phase-branch takes effect over SDM_PHASE_BRANCH')
+def _(tmp: Path) -> tuple[bool, str]:
+    with phase_environment(PHASE):
+        c = Case(tmp, phase_2_fake()).land(
+            '--topic-branch', TOPIC_2, '--phase-branch', PHASE_2
+        )
+    ok = pushed_to(c, PHASE_2, TOPIC_2)
+    return ok, "landed on the flag's phase" if ok else c.text
+
+
+@case('phase: SDM_PHASE_BRANCH takes effect: a lane of another phase refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    with phase_environment(PHASE):
+        c = Case(tmp, phase_2_fake()).land('--topic-branch', TOPIC_2)
+    ok, detail = refused(c, f'not a package branch ({PHASE}-<name>')
+    return ok and not c.calls, detail
+
+
+@case('phase: --phase-branch takes effect: a lane of another phase refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = Case(tmp).land('--phase-branch', PHASE_2)
+    ok, detail = refused(c, f'not a package branch ({PHASE_2}-<name>')
+    return ok and not c.calls, detail
+
+
+@case('phase: SDM_PHASE_BRANCH that is no phase branch is refused, by name')
+def _(tmp: Path) -> tuple[bool, str]:
+    with phase_environment('rust-core-phase-two'):
+        c = Case(tmp).land()
+    ok, detail = refused(c, "'rust-core-phase-two' is not a phase branch")
+    return ok and not c.calls, detail
+
+
+@case("phase: only a run under the landing's phase is evidence")
+def _(tmp: Path) -> tuple[bool, str]:
+    # The candidate's only green run is on a Phase 1 lane: judged against
+    # Phase 1's checkpoint, so no evidence for a Phase 2 landing.
+    fake = Fake(branch=TOPIC_2, runs={CAND: [ci_run(CAND, TOPIC)]})
+    c = Case(tmp, fake).land('--topic-branch', TOPIC_2)
+    return refused_for_push_evidence(c)
+
+
+for archive in (f'{PHASE_2}-archive-a-T2.1-abc1234',):
+
+    @case(f'phase: a Phase 2 archive branch is refused: {archive}')
+    def _(tmp: Path, archive: str = archive) -> tuple[bool, str]:
+        c = Case(tmp, phase_2_fake()).land('--topic-branch', archive)
+        ok, detail = refused(c, 'archive branch')
+        return ok and not c.calls, detail
+
+
+for package in ('T2.0', 'T2.0a', 'T2.15', 'CI5'):
+
+    @case(f'phase: the package ID {package} lands on a Phase 2 lane')
+    def _(tmp: Path, package: str = package) -> tuple[bool, str]:
+        fake = phase_2_fake()
+        fake.package = package
+        fake.commits[CAND]['message'] = f'{package}: a test package\n'
+        c = Case(tmp, fake).land(
+            '--topic-branch', TOPIC_2, '--title', f'{package}: a package'
+        )
+        ok = pushed_to(c, PHASE_2, TOPIC_2) and (
+            c.fake.committed[0].startswith(f'Land {package}: a package\n')
+        )
+        return ok, f'landed {package}' if ok else c.text
+
+
+@case("phase: verify with no --phase-branch infers the landing's phase")
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp)
+    # Phase 2's tip holds no Phase 1 landing here; Phase 1's does.
+    c.fake.remote_refs[f'refs/heads/{PHASE_2}'] = OTHER
+    c.call(['verify', LAND, '--appear-timeout', '0'])
+    ok = c.code == 0 and f'VERIFIED {LAND}' in c.text and PHASE_2 not in c.text
+    return ok, 'verified on Phase 1, inferred' if ok else c.text
+
+
+@case('phase: verify with no --phase-branch, no phase holding it, refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    c = landed(tmp)
+    c.fake.remote_refs = {f'refs/heads/{PHASE_2}': OTHER}
+    c.call(['verify', LAND, '--appear-timeout', '0'])
+    ok = c.code == 2 and 'no phase branch on origin holds' in c.text
+    return ok, 'refused by name' if ok else c.text
 
 
 @case('lands: a task-named topic branch under the phase branch')
@@ -2311,7 +2463,9 @@ class Verified:
                 contextlib.redirect_stderr(io.StringIO()) as err,
             ):
                 self.code = land.main(
-                    ['verify', landed.sha], tools, self.lines.append
+                    ['verify', landed.sha, '--phase-branch', PHASE],
+                    tools,
+                    self.lines.append,
                 )
         except SystemExit as error:  # argparse
             self.code = f'SystemExit({error.code})'

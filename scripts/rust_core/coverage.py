@@ -52,7 +52,9 @@ design "Contract corpus"). The rules, each problem printed naming its rule:
 8. against the manifests at ``--checkpoint``: no path or cell is removed, no
    path moves to a later slice and no cell's ``expect`` turns ``unknown``
    (each would take it out of rule 5), unless a row of the checkpoint's
-   ``docs/design/rust-core/phase-1/decisions.md``, its status starting
+   decisions, every phase's ``docs/design/rust-core/phase-N/decisions.md``
+   (T2.0; a file missing, unreadable or malformed refused by name, and no
+   row then authorizes anything), its status starting
    "approved by owner" and a date with nothing after but a parenthesis or
    a note, none withdrawing it (``ratchet.owner_approved``), names the ID in
    backticks; a row the candidate writes never authorizes its own change.
@@ -87,7 +89,8 @@ SCHEMA = f'{PHASE_0}/scope.schema.json'
 CASES = 'contract/cases'
 #: The reference observations rule 6 holds the cells' claims to (T1.13).
 REFERENCE = 'contract/reference'
-DECISIONS = 'docs/design/rust-core/phase-1/decisions.md'
+#: Where every phase's ``decisions.md`` is (T2.0).
+DECISIONS_DIR = 'docs/design/rust-core'
 SLICES = ('S0', 'S1', 'S2', 'S3')
 #: The language and slice whose coverage gates (design, "Coverage
 #: generator"): S0 in Python.
@@ -1002,9 +1005,12 @@ def check(repo: Path, rev: str, checkpoint: str) -> tuple[Report, list[str]]:
         except Unreadable as error:
             report.fail('read', str(error))
             continue
+        ratchet_check = ratchet.capture_check()
         try:
-            decisions = _text(before, DECISIONS)
-        except Unreadable as error:
+            decisions = ratchet_check.phase_decisions(
+                before.files(DECISIONS_DIR), before.read
+            )
+        except ratchet_check.DecisionsError as error:
             # No row authorizes anything: rule 8 still runs.
             report.fail('read', f"the checkpoint's {error}")
             decisions = ''

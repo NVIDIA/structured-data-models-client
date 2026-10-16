@@ -1742,8 +1742,23 @@ def test_ci_judges_a_phase_push_from_its_previous_tip_and_a_lane_from_the_phase_
     ) == (f'--phase-push {before}')
     lane = {**push, 'GITHUB_REF_NAME': 'rust-core-phase-1-lane-1a'}
     assert ratchet.ci_base(lane) == base
-    # A local replay has no CI environment and judges against the phase tip.
-    assert ratchet.ci_base({}) == base
+    # A local replay has no CI environment and judges against the tip of
+    # the phase SDM_PHASE_BRANCH names (T2.0).
+    assert ratchet.ci_base({'SDM_PHASE_BRANCH': 'rust-core-phase-1'}) == base
+    # Every phase alike (T2.0): Phase 2's push, lane and local replay.
+    phase_2 = {**push, 'GITHUB_REF_NAME': 'rust-core-phase-2'}
+    assert ratchet.ci_base(phase_2) == f'--phase-push {before}'
+    assert (
+        ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'rust-core-phase-2-lane-a'})
+        == '--base origin/rust-core-phase-2'
+    )
+    assert (
+        ratchet.ci_base({'SDM_PHASE_BRANCH': 'rust-core-phase-2'})
+        == '--base origin/rust-core-phase-2'
+    )
+    # A name that is no phase branch is refused, never defaulted.
+    with pytest.raises(ratchet.Unreadable):
+        ratchet.ci_base({'SDM_PHASE_BRANCH': 'rust-core-phase-two'})
     # No ratchet runs elsewhere, nor on another event.
     assert ratchet.ci_base({**push, 'GITHUB_REF_NAME': 'main'}) == ''
     assert ratchet.ci_base({**lane, 'GITHUB_EVENT_NAME': 'pull_request'}) == ''

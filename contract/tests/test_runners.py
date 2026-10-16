@@ -22,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import textwrap
@@ -71,22 +72,28 @@ def expectations(
     checkpoint's baselines and the transitions the candidate's register
     approves from them, written by ``ratchet.py effective`` for the
     checkpoint of ``where`` (by default ``ratchet.py where``'s, as CI's
-    gate step takes it). Off the phase branch and its lanes there is no
-    ratchet, and the outcomes are held to the reference; on a push to them
-    an empty ``where`` fails, as the gate step does."""
+    gate step takes it). Off the phase branches, their lanes and the epic
+    branch there is no ratchet, and the outcomes are held to the
+    reference; on a push to them an empty ``where`` fails, as the gate step
+    does. On the epic branch ``rust-core`` the checkpoint is the merged
+    phase's last landing (T2.0), so an approved difference passes there
+    too."""
     ratchet = repo / 'scripts/rust_core/ratchet.py'
     if where is None:
         asked = subprocess.run(
-            [sys.executable, str(ratchet), 'where'],
+            [sys.executable, str(ratchet), 'where', '--repo', str(repo)],
             capture_output=True,
             text=True,
             check=False,
         )
         assert asked.returncode == 0, asked.stdout + asked.stderr
         where = asked.stdout.split()
-        pushed = os.environ.get('GITHUB_EVENT_NAME') == 'push' and (
-            os.environ.get('GITHUB_REF_NAME', '') + '-'
-        ).startswith('rust-core-phase-1-')
+        pushed = os.environ.get('GITHUB_EVENT_NAME') == 'push' and bool(
+            re.fullmatch(
+                r'rust-core(-phase-(0|[1-9][0-9]*)(-.+)?)?',
+                os.environ.get('GITHUB_REF_NAME', ''),
+            )
+        )
         assert where or not pushed, 'ratchet.py where named no base'
         if not where:
             return []
