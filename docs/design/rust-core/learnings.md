@@ -123,6 +123,7 @@ The gate judges a candidate with its checkpoint's harness, so a change to a judg
 
 Two lanes each bumping the contract version collided, and one renumbered and replayed behind the other.
 **Lesson:** whoever lands second renumbers; after the rebase, review the interaction (a range-diff showing only the version changed), not the whole package again.
+*Note (T2.0a):* the version was also hard-coded in the binding tests' `messages.py`, which two later bumps missed, each a red CI run (migration-plan.md section 8, Phase 2 row FX-6); tests read the version from the crate, never write it.
 
 ### 15. Evidence names the exact SHA that lands (Phase 1, added at checkpoint 8)
 
@@ -133,6 +134,58 @@ A review, a measurement or a recorded reference line counts only for the commit 
 
 A test author working from the brief, the spec and the reference found defects the implementer's own tests passed, but late findings still came from the interpreter and pandas versions the tests had not run on.
 **Lesson:** keep tests by a separate author, and have them run the supported interpreter and pandas matrix early, not at landing.
+
+### 17. Semantics only the Python host supplies fail on the Rust host (Phase 1, added at T2.0a)
+
+On the held-out one-shot run, the pure-Rust host refused `h11.task.forecast-sum` (`UNSUPPORTED_REQUEST`, rule `problem_type`), an input the reference accepts, while python-core passed it.
+The Python bridge split a forecast into per-step questions before the core saw it, a row design.md's "Host-held semantics" ledger left to "a later phase", so the Python route hid the gap.
+Both reviewers ruled H11-FAIL on that case alone (`phase-1/evidence/heldout/h11-classification.md`).
+It cost T1.36 fixes 21 to 24 and contract 25 to move the split into the core (E153), three reruns of the core legs on the sealed cases, and the held-out set itself: the core had seen the case in more than one run, so the set is spent and Phase 2 needs a new one (`phase-1/evidence/heldout.md`).
+**Lesson:** a behavior is in the core only when the pure-Rust host runs it.
+The design lists every host-held ledger row its scope or held-out set can reach, and each is either moved into the core in the phase or taken out of the scope and the held-out set by the owner; the rust-host leg runs over the whole scope before the held-out run.
+
+### 18. Refusals of inputs the reference accepts surfaced last (Phase 1, added at T2.0a)
+
+At the final whole-phase review (c49ee4f8), after every package had landed, the independent subagent's P2-1 findings were all refusals of inputs the reference accepts: a float target inferred categorical refused `target_type` (T1.36 fix 1), `AVG(...) = NULL` refused on every input (fix 2, P1B-21), and the 12 "not yet" rules given to T1.33 never reconciled (fixes 5, 8 and 9).
+The survey of those rules (`phase-1/not-yet-refusals.md`) had been read from the code with nothing run, and measuring both routes disagreed with it on five rules (`entity_key`, `entity_ref`, `time_type`, `seed_size`, `condition_value`): lesson 8's hand-judged list again.
+Round 2 then found `float_nan`: any DOUBLE column with a NaN in the previewed rows refuses `Schema.from_source`, a rule inside E92's owner-approved Phase 2 class that real data is likely to hit, so it leads Phase 2's list (migration-plan.md section 8, FR2 P3-1); T1.33's RelBench differential had already met `text_time` and `parent_table` on real tables.
+It cost five fixes closed only after the owner's conditional go, and carries into Phase 2 a refusal a user's first call can hit.
+**Lesson:** keep a generated list of every refusal the core can give of an input the reference accepts, each with its trigger measured on both routes and how often the phase's real datasets hit it.
+The evidence pack counts them, and a refusal real data is likely to hit is lifted in the phase, not deferred inside a class.
+
+### 19. A key's type belongs to the relationship, not the column (Phase 1, added at T2.0a)
+
+T1.33 part 3 gave each big-integer column its own tier (int64, then `decimal128(38, 0)`, then text) and joined seeds by comparing converted values.
+Review found a VARINT key failing the seed join unnamed (round 1), a UHUGEINT key in the decimal tier joining the wrong rows (round 2, P1) and mixed numeric relationships losing rows and labels (round 3, P1): silent wrong answers from the overlap of key roles and types that lesson 3 names, now in typed data.
+It cost five fix rounds with two same-way failures and an H20 escalation (`phase-1/tracker.md`, "Stop-rule counters"), contract 24 (`DescribedColumn.declared_type`), and a fix 4 whose extra catalog statement broke `key.hugeint` once admitted; the edges left fail by name (P1B-43's notes) and the key cast's are Phase 2 row FR P3-8.
+**Lesson:** decide a key's representation per relationship, both ends together, joining in the joined key's declared type.
+Before review, run a vector matrix of every pair of key types a link allows (signed, unsigned and big integers, decimals with and without scale, floats, text) on the real engine, and treat a wrong row as P1.
+
+### 20. The comparator must cover the type set before admissions start (Phase 1, added at T2.0a)
+
+Admitting the T1.32 families exposed, one family at a time, values the comparator and the two value encoders (`run_python.py`, `sdm-testkit`'s `values.rs`) could not judge: maps and unions (E111), intervals (E113), stages past the reference's stop and DuckDB's large buffers (E112), the floor cell's pair (E114) and python-old's own `INTERNAL_ERROR` (E110).
+Each was a judging change that had to land alone before the admissions it judged (lesson 13), some with reference lines re-recorded under new entries (P1B-54, P1B-56).
+It cost T1.32g five judging landings in about 22 hours, and judging splits about 11 extra landings over the phase (`orchestration/phase-1-log.md`, "Where the time went", item 8).
+**Lesson:** settle the judging path in the phase's first landing.
+Before any admission, the comparator and every runner's encoder hold a vector for each type in the type set (nested, interval and extension types included) and for each stage a case can stop at; a judging change found during admissions is recorded as a design miss.
+
+### 21. Matching where the reference crashes needs every reading of the value (Phase 1, added at T2.0a)
+
+Under E66(b) the core may give a named refusal where the reference crashes, and P1B-81(b) refused a time candidate whose first value leaves the years 1 to 9999.
+T1.36 fix 3 checked the value's UTC instant; Codex's round 2 rejected it for the wall clock in DuckDB's session zone (fix 11), and its re-check rejected fix 11 for dropping the UTC instant (fix 13), one same-way failure.
+The subagent's re-check then found a third reading: with pytz installed, the reference's whole-table query fails and it chooses from the preview, which became an owner question at the go (P1B-89, E152) and a warning-text gap (FX-4) (`phase-1/as-built.md`, T1.36).
+It cost two extra rounds of the final review and an owner decision on the critical path.
+**Lesson:** a refusal or check that stands in for a reference crash states the crash's condition as measured on the reference, across every reading the reference makes of the value: the UTC instant, the wall clock in the session zone, with and without optional libraries such as pytz, and each supported pandas.
+Its vectors cross those readings at the boundary before review.
+
+### 22. A benchmark on generated data measures nothing (Phase 1, added at T2.0a)
+
+E73(a) fixed P1B-13's accuracy benchmark before any result: generated datasets with null keys, the same without nulls as controls, and AdventureWorks, passing within 2%.
+The live run at T1.29 found the core worse on the generated nulls, but the controls' AUROC were 0.59 and 0.51: the data had no signal, and only the owner noticed the comparison meant nothing (`orchestration/phase-1-log.md`, "Benchmark on random data").
+Checking what each route sent showed the reference itself corrupts requests with null keys (44 of 58 item links wrong in one request), so the owner re-approved P1B-13 on correctness and replaced the benchmark with a real-data parity check on AdventureWorks and RelBench H&M (E94; `phase-1/as-built.md`, T1.29 and T1.32e).
+It cost an owner-locked protocol reversed a day later, a discarded live run and P1B-13's acceptance condition rewritten.
+**Lesson:** a model-quality or parity benchmark runs on real datasets with a sanity floor (where the reference is near a trivial baseline, the result is "inconclusive"), and a difference between routes fails the run (Phase 2 row G8); generated data checks plumbing only.
+When the routes differ, compare what each sends before judging either.
 
 ## What held up and is worth keeping
 
