@@ -43,9 +43,10 @@ Kitmaker attestation instead is Kitmaker's to say; what this repository can
 tell you is that it does not sign these files itself.
 
 You can compare a downloaded file against the asset of the same name on the
-corresponding GitHub release. The release workflow checks this itself: it will
-not finish unless PyPI holds the same bytes it built and attached, and it never
-replaces an asset it has already uploaded. So the two should agree. It is still
+corresponding GitHub release. The release checks this itself: the publish will
+not finish unless PyPI holds the same bytes that were built and attached, and
+the workflow never replaces an asset it has already uploaded. So the two
+should agree. It is still
 not proof of how either was built, and a release asset can be replaced by hand
 afterwards, so a mismatch is not by itself evidence of tampering on PyPI and a
 match is not evidence that this repository produced them.

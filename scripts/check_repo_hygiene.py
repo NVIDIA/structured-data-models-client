@@ -72,6 +72,11 @@ INTERNAL_PATTERNS = (
     # A repository this one is not, and which no reader can open.
     re.compile(r'\bkumo-relational-client\b', re.IGNORECASE),
     re.compile(r'\bnv-shared-pypi\b'),
+    # Kitmaker's Portal is on the internal network, and its address shipped
+    # in a workflow script until the publish moved off CI. The service is
+    # named in SECURITY.md on purpose; the host a reader cannot reach is the
+    # part that does not belong here.
+    re.compile(r'kitmaker-portal|\bkm\.nvidia\.com\b', re.IGNORECASE),
     re.compile(r'\bnvbugs?\b', re.IGNORECASE),
     re.compile(r'\bnspect-\d', re.IGNORECASE),
     re.compile(r'\bcolossus\b', re.IGNORECASE),

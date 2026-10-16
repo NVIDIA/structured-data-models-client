@@ -7,22 +7,24 @@
 # Kitmaker owns NVIDIA's PyPI organization, and this project's open source
 # review record commits to releasing through it. Kitmaker does not accept an
 # upload; it fetches an artifact from a URL and publishes it itself, to pypi.org
-# and pypi.nvidia.com together. So the release here is two steps: attach every
-# distribution to the GitHub Release, then ask Kitmaker's Portal to publish from
-# those asset URLs.
+# and pypi.nvidia.com together. This workflow's job is to produce those URLs:
+# build every distribution and attach it to the GitHub Release. Asking Kitmaker
+# to publish from them is a separate step that a person runs, because Kitmaker's
+# Portal is on NVIDIA's internal network and a GitHub-hosted runner cannot
+# resolve it, let alone reach it. RELEASING.md says who runs that step and
+# what it has to do; the procedure itself is not kept in a public tree.
 #
 # Two consequences worth stating rather than discovering.
 #
-# There is a stored credential now. Kitmaker's Portal authenticates with a
-# long-lived bearer token, which the previous Trusted Publishing setup
-# deliberately avoided. `KITMAKER_API_TOKEN` must be an environment secret on
-# `pypi` rather than a repository secret: approval gates environment secrets,
-# so a repository secret would be readable from a workflow on any branch and
-# the approval would protect nothing. It is read by one job, and it can
-# publish only to the five Portal projects it owns.
+# Nothing here can publish to an index. There is no stored publishing
+# credential and no environment secret; the most this workflow can do is attach
+# files to a Release. The approval on `pypi` still gates the job, because
+# attaching the distributions is what makes them public and Kitmaker refuses
+# private assets, so that approval is the last point before the artifacts are
+# visible to anyone.
 #
-# This workflow no longer signs what it ships. PEP 740 attestations are issued
-# to whoever uploads, and that is Kitmaker now, so nothing here produces one
+# This workflow does not sign what it ships. PEP 740 attestations are issued
+# to whoever uploads, and that is Kitmaker, so nothing here produces one
 # naming this repository. Whether Kitmaker supplies its own is Kitmaker's to
 # say. A consumer is left with NVIDIA's ownership of the PyPI project, which
 # SECURITY.md states rather than dressing up.
@@ -30,9 +32,9 @@
 # `build` has `contents: read` to check the tree out and `actions: read` to ask
 # whether CI passed, and nothing more, so a compromised build dependency cannot
 # publish anything itself. It can still decide what gets published, because it
-# is what produces the distributions. `release` holds `contents: write` and the
-# Kitmaker token together, because the GitHub Release and the PyPI publish have
-# to be one approval; it is the only job behind the protected environment.
+# is what produces the distributions. `release` holds `contents: write` to
+# create the Release and attach to it, and is the only job behind the
+# protected environment.
 name: publish
 
 on:
@@ -43,10 +45,12 @@ on:
 # Least privilege at the top: a job that needs more says so itself.
 permissions: {}
 
-# Two runs for one tag, say a tag push and a `workflow_dispatch`, would upload
-# assets from two different builds to one release, and each would then refuse
-# the other's files as stale. Not cancel-in-progress: a run that has started
-# publishing must finish and write its summary.
+# Two runs for one tag, say a tag push and a `workflow_dispatch`, would build
+# that version twice and attach the results to one release. Nothing would fail:
+# the second run finds the first's assets already there and leaves them, so the
+# release ends up holding one build while the other run's artifact holds
+# different bytes for the same filenames. Not cancel-in-progress: a run that
+# has started attaching has to finish, or the release keeps part of a build.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -116,8 +120,8 @@ jobs:
           done
 
       # The engine pins its siblings by exact version, and at this point in
-      # a release those versions exist only in dist/, not on PyPI
-      # yet, and will not be until the `release` job runs. cibuildwheel's test
+      # a release those versions exist only in dist/, not on PyPI yet, and
+      # will not be until someone publishes them. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
       # the smoke test fails with "structured-data-models-api was not found" and the release stops
       # before it can publish anything. cibuildwheel copies the directory it
@@ -250,15 +254,11 @@ jobs:
   # the GitHub Release exists to give it public asset URLs. It refuses private
   # assets, so this cannot publish while the repository is internal.
   #
-  # Creating the release and publishing it are one gated job because the
-  # release cannot be a draft. Split, declining the approval still left a
-  # public release marked Latest, created by the ungated job that ran first.
-  # Together, declining means nothing was created at all. A publish that is
-  # approved and then fails does leave the release standing, which is
-  # deliberate: Kitmaker may already have fetched some of those assets, and
-  # `kitmaker-summary.txt` records, for each project an upload was requested
-  # for, what PyPI holds. The cost is the Kitmaker token
-  # sharing a job with `contents: write`.
+  # The Release is created behind the approval rather than before it. Creating
+  # it in an earlier ungated job would make every distribution public whether
+  # or not anyone approved, and it cannot be a draft instead, because a draft's
+  # asset URLs are private and Kitmaker could not fetch them. Declining the
+  # approval therefore means nothing was created at all.
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -266,28 +266,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Before the download, because checkout cleans the working directory.
-      # `kitmaker_release.py` ships in the repository, not in the artifact.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: distributions
           path: dist/
-
-      # Before the release exists, because the release is the public part. A
-      # missing secret should stop this where nothing is visible yet.
-      - name: The Kitmaker credentials are present
-        env:
-          KITMAKER_API_TOKEN: ${{ secrets.KITMAKER_API_TOKEN }}
-          PIC: ${{ vars.KITMAKER_PIC }}
-        run: |
-          set -euo pipefail
-          : "${KITMAKER_API_TOKEN:?KITMAKER_API_TOKEN is not set}"
-          : "${PIC:?KITMAKER_PIC is not set}"
-          echo "both are set"
 
       - name: Attach every distribution and the SBOM to the release
         env:
@@ -301,10 +283,12 @@ jobs:
           # a tag that is not really there.
           if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # Not Latest yet. Kitmaker needs public asset URLs, so the
-            # release cannot be a draft and has to exist before the dry runs.
-            # A dry run that then fails would otherwise leave this standing as
-            # the current release for a version with nothing on PyPI. It is
-            # promoted once the publish has actually worked.
+            # release cannot be a draft and has to exist before anything is
+            # published from it. Marking it Latest here would advertise a
+            # version that is not on the index, so that is done by hand once
+            # the Kitmaker publish has worked. This only withholds the
+            # promotion: with no earlier release to stay Latest, GitHub still
+            # reports the newest non-draft release as the latest one.
             gh release create "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" \
@@ -338,42 +322,20 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" "$path" --repo "$GITHUB_REPOSITORY"
           done
 
-      - name: Publish each distribution through Kitmaker
-        env:
-          GH_TOKEN: ${{ github.token }}
-          KITMAKER_API_TOKEN: ${{ secrets.KITMAKER_API_TOKEN }}
-          PIC: ${{ vars.KITMAKER_PIC }}
+      # The release is built and attached, and the person who approved this is
+      # the one who has to finish it. What the index holds is deliberately not
+      # asserted here: this job never asks, and a dispatch against a tag that
+      # was already published would make any claim about it wrong.
+      - name: Say what is left to do
         run: |
-          set -euo pipefail
-          # `gh release view` lists whatever is attached, which on a rerun can
-          # include assets this run did not build. The artifact `build` handed
-          # over is the authority for what may be published, so the asset list
-          # is filtered down to exactly its filenames.
-          # `browser_download_url`, not `url`: in the REST response `url` is
-          # the API metadata endpoint, and fetching it without an
-          # `Accept: application/octet-stream` header returns JSON about the
-          # asset rather than the asset. Kitmaker is given only the URL.
-          # (`gh release view --json assets` maps its `.url` to the download
-          # URL, which is why this reads differently from it. The digest is
-          # only in the REST response, which is why this uses it.)
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
-            --jq '.assets[] | "\(.name)\t\(.browser_download_url)\t\(.digest // "")"' \
-            > assets.tsv
-          test -s assets.tsv
-          python3 .github/workflows/kitmaker_release.py
-
-      # Only now, because until this point a failure could have left a
-      # release marked Latest for a version that never reached PyPI.
-      - name: Mark the release Latest, now that it is published
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --latest
-
-      # Into the job log, so a failed release says where it got to without
-      # anyone opening an artifact. The GitHub Release body is the changelog
-      # entry and is not touched.
-      - name: Print what each project ended up with
-        if: always()
-        run: cat kitmaker-summary.txt 2>/dev/null || true
+          {
+            echo "### Attached, not published"
+            echo
+            echo "\`$GITHUB_REF_NAME\` is on the Releases page with every"
+            echo "distribution and the SBOM attached. This workflow publishes"
+            echo "nothing to PyPI; that is a separate step, run from inside"
+            echo "NVIDIA's network. RELEASING.md says who runs it and what it"
+            echo "has to do."
+            echo
+            echo "Mark this release Latest once the index has all five."
+          } >> "$GITHUB_STEP_SUMMARY"
