@@ -38,7 +38,7 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 
 No package starts until the phase has a reviewed design and locked acceptance checks (migration-plan.md section 9). Phase 1 did this as its first task, T1.1 ("Phase documents and locked checks"), and so does every later phase.
 
-**0. Bring learnings.md up to date first.** It is what every design and design checkpoint is judged against. It holds the first attempt's lessons (1 to 11) and Phase 1's up to checkpoint 8 (12 to 16). Before writing the next design, add what the finished phase taught that isn't there yet: for Phase 2, from Phase 1's later checkpoint reviews and fix rounds ([phase-1/fix-round-history.md](../phase-1/fix-round-history.md)), the final whole-phase review, the held-out run, [phase-1-log.md](phase-1-log.md) and this handbook. Same format as lessons 12 to 16: what happened, what it cost, the rule that prevents it. Product and design lessons go there; process lessons stay in this handbook. Both reviewers review it.
+**0. Bring learnings.md up to date first.** It is what every design and design checkpoint is judged against. It holds the first attempt's lessons (1 to 11) and Phase 1's up to checkpoint 8 (12 to 16). Before writing the next design, add what the finished phase taught that isn't there yet: for Phase 2, from Phase 1's final whole-phase reviews ([phase-1/tracker.md](../phase-1/tracker.md)'s T1.36 section, [as-built.md](../phase-1/as-built.md)'s T1.36 notes and [evidence/reviews.md](../phase-1/evidence/reviews.md)), the FR and FR2 rows of migration-plan.md section 8, the held-out run ([evidence/heldout.md](../phase-1/evidence/heldout.md) and [h11-classification.md](../phase-1/evidence/heldout/h11-classification.md)), [fix-round-history.md](../phase-1/fix-round-history.md), [phase-1-log.md](phase-1-log.md) and this handbook. (Phase 1 had no design checkpoint after 8.) Same format as lessons 12 to 16: what happened, what it cost, the rule that prevents it. Product and design lessons go there; process lessons stay in this handbook. Both reviewers review it.
 
 **1. Read what the phase inherits.** The design is written from these, not from memory. Phase 1's design, decisions and as-built notes are 220 to 330 KB each, too much for the orchestrator to read whole: give each big source to a helper agent that returns a one-page digest of what the new phase inherits from it (rules in force, mechanisms to reuse, open items, traps), citing section or row numbers, and write the design from the digests. Read the plan and learnings.md in full yourself.
 
@@ -55,7 +55,7 @@ No package starts until the phase has a reviewed design and locked acceptance ch
 | [phase-1/evidence/](../phase-1/evidence/) | The shape of the go or no-go evidence pack |
 | This folder | The process lessons, [phase-1-log.md](phase-1-log.md), and the phase's prep file (for Phase 2, [phase-2-prep.md](phase-2-prep.md)) |
 
-**2. Write the phase's documents** on the phase branch, in `phase-N/`:
+**2. Write the phase's documents** in `phase-N/`, on a topic branch (for Phase 2, `rust-core-phase-2-design`), never directly on the phase branch: every commit on the phase branch must be a landing, or the ratchet refuses later gates. Push the topic branch after each review round; its CI may be red until the phase's tooling package (T2.0) lands, and the review doesn't wait on it. Once the design is approved and locked, land it with `land.py` as a docs package (`--protected-paths "none (docs and evidence only)"`), together with the learnings.md update.
 - `design.md`, with Phase 1's sections but only what's new: goal; scope and "explicitly out"; architecture choices new in this phase; the task table (each package with its output, exit check, dependencies, lane, and whether it changes a judging path); owner check-ins; the evidence pack; gates (merge rules, locked acceptance checks, process rules that differ from Phase 1); risks, each with the learnings lesson it guards. Phase 1's design grew to 220 KB; aim for a few pages that point at Phase 1 for everything unchanged.
 - `decisions.md`, empty except for the owner's kickoff answers. New rows only; cite Phase 1's rows instead of copying them.
 - `tracker.md`, one row per package, plus the stop-rule counters.
@@ -64,7 +64,7 @@ No package starts until the phase has a reviewed design and locked acceptance ch
 
 **4. Settle the owner's questions and lock the checks.** Send the open questions all at once, with a recommendation each. The owner's answers go into `decisions.md`. If an answer changes the design, run another review round on the change. Then the locked acceptance checks are marked locked, and any later change to them goes to the owner.
 
-Work that doesn't depend on the design's scope may run while it's in review: for Phase 2, T2.0, the new held-out set, the update from `main` and the reference rerun, and the speed-ups. Anything that depends on the locked scope (for Phase 2, the test-author batch) waits.
+Work that doesn't depend on the design's scope may run while it's in review and while the owner answers: for Phase 2, T2.0, the update from `main` and the reference rerun, and the speed-ups. Anything that depends on the locked scope waits: for Phase 2, the test-author batch and the new held-out set.
 
 ## A package, start to finish
 
@@ -163,7 +163,7 @@ How the owner works:
 - **Parallelize, and never sit idle waiting on CI.**
 - **Match the old client by default when it succeeds.** Be better than it where it crashes or errors: a named error beats an internal error. Every measured difference still gets a register entry, and changes to accepted answers or model inputs go to the owner one by one, with a recommendation.
 - **One day per phase is the goal.** "We CANNOT take a full month for this migration."
-- **Deletions only after a dry run**, with a backup and the owner's explicit approval.
+- **Deletions only after a dry run**, with a backup and the owner's explicit approval. The one standing exception: `clean_tmp.sh`'s removal of stale agent scratch and build output, which the owner approved in Phase 1 (2026-10-12 and 13), may run with `--apply` after a dry run shows nothing still needed.
 - **Close out dropped items** (retire pending entries, record the decision) so they make no noise later.
 
 What only the owner decides: a new refusal of input the reference accepts, relaxing a comparison rule, adding an exclusion, a new acceptance capability, register entries the reviewers can't approve, a third change to a phase's locked checks, lifting a stop rule, and each phase's go and merge.
@@ -181,7 +181,7 @@ Never approve your own register entry or exception.
 
 ## Gotchas from Phase 1
 
-- **The held-out bundle froze in an older case format.** Phase 1 converted it with `--pre-given-specs` (owner item 49). Phase 2 needs a new held-out set, frozen in the current format and never opened by implementers.
+- **The held-out bundle froze in an older case format.** Phase 1 converted it with `--pre-given-specs` (owner item 49). Phase 2 needs a new held-out set, frozen once the scope is locked and T2.1 has settled the case format, with a tested converter and a dry run of the held-out runner on a dummy bundle before the one-shot, and never opened by implementers.
 - **New register and decision IDs collide across lanes.** Give each lane its own ID block (for example P2B-1..19 and E1..9 for lane a) and have lanes write only in their own sub-table or section of shared docs.
 - **Shared docs conflict on rebase** (17 conflicts, mostly `tracker.md` and `decisions.md`). Each package writes only in its pre-created section.
 - **A lane venv that imports the lane checkout** gives false "passes now" results. Use non-editable installs.
