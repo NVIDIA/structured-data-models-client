@@ -152,10 +152,10 @@ A new reference commit (T2.0e): a candidate that adds a reference file
 checkpoint's decisions approves ``NEW`` (:func:`approved_references`): its
 status is the owner's approval as :func:`owner_approved` reads it, and its
 Decision cell, the second, holds the word "reference" and exactly one full
-40-hex SHA in backticks, ``NEW`` (the form the phase decisions file's
-header states: ``Reference: `<NEW>` ...``). Only the checkpoint's rows
-count, never one the candidate adds, as for a relaxation: the owner's row
-lands before the package that re-records. Then, each named when it fails:
+40-hex SHA in backticks, ``NEW`` (the form the Phase 2 decisions
+file's header states; KO2-1 begins ``Reference: `<NEW>```). Only the
+checkpoint's rows count, never one the candidate adds, as for a
+relaxation: the owner's row lands before the package that re-records. Then, each named when it fails:
 ``NEW`` is no recorded reference's name; it is the only file added, and
 the only one left (the old one removed); ``contract/reference-env.txt``
 names ``NEW`` in its one ``reference:`` line; no file outside ``docs/``
@@ -1356,8 +1356,8 @@ def approved_references(decisions: str) -> dict[str, str]:
     ID (T2.0e): a row of a phase's decisions file whose status is the
     owner's approval (:func:`owner_approved`) and whose Decision cell, its
     second, holds the word "reference" and exactly one full SHA in
-    backticks (``Reference: `<40 hex>` ...``, the form the decisions file's
-    header states). An abbreviated SHA, a row naming two, or any other
+    backticks (the form the Phase 2 decisions file's header states;
+    KO2-1 begins ``Reference: `<40 hex>```). An abbreviated SHA, a row naming two, or any other
     status approves nothing."""
     found: dict[str, str] = {}
     for ident, (line, status) in (
