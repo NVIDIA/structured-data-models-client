@@ -38,6 +38,11 @@ class PQLGrammarVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by PQLGrammarParser#detect.
+    def visitDetect(self, ctx:PQLGrammarParser.DetectContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by PQLGrammarParser#target.
     def visitTarget(self, ctx:PQLGrammarParser.TargetContext):
         return self.visitChildren(ctx)
