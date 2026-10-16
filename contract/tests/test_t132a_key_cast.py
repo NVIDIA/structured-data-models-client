@@ -570,17 +570,38 @@ def test_the_vectors_are_not_vacuous() -> None:
     assert outcomes.count(('success', None)) > 100
     assert outcomes.count(('refusal', 'INVALID_REQUEST')) > 100
     assert outcomes.count(('refusal', 'INTERNAL_ERROR')) > 100
-    assert set(outcomes) == {
+    assert set(outcomes) - {('unfinished', None)} == {
         ('success', None),
         ('refusal', 'INVALID_REQUEST'),
         ('refusal', 'INTERNAL_ERROR'),
     }
+    # The one vector the reference does not finish within the recorder's
+    # limit (the owner's approval of 2026-10-16 for a reference timeout
+    # outcome), and no other.
+    unfinished = [
+        v['reference']['public']
+        for v in RECORDED['vectors']
+        if v['reference']['public']['outcome'] == 'unfinished'
+    ]
+    assert [
+        v['id']
+        for v in RECORDED['vectors']
+        if v['reference']['public']['outcome'] == 'unfinished'
+    ] == ['decimal128-18-0.exponent.huge.decimal']
+    assert unfinished == [
+        {'outcome': 'unfinished', 'within_seconds': R.TIME_LIMIT_SECONDS}
+    ]
     marked = [v for v in RECORDED['vectors'] if v['register']['required']]
     assert 0 < len(marked) < len(RECORDED['vectors'])
     for vector in RECORDED['vectors']:
         assert vector['register']['required'] == bool(vector['register']['why'])
-    # The reference's own cast was observed wherever its engine cast.
-    assert all(v['reference']['cast'] for v in RECORDED['vectors'])
+    # The reference's own cast was observed wherever its engine cast, and
+    # wherever it finished.
+    assert all(
+        v['reference']['cast']
+        for v in RECORDED['vectors']
+        if v['reference']['public']['outcome'] != 'unfinished'
+    )
     # Round 2: derived expectations of each kind, and the four mixed
     # float-and-text vectors whose text the reference takes, marked with
     # their disposition.
