@@ -115,8 +115,10 @@ cheap tier and CI's ``rust-lint``; ``selftest.py`` seeds a fault for each
 rule.
 
 The base branch is a setting (E56(c)): ``--base``, else the environment's
-``SDM_FREEZE_BASE``, else ``origin/rust-core-phase-1``, so the check keeps
-working once the phase branch has merged and gone; a blank one is refused.
+``SDM_FREEZE_BASE``, else ``origin/`` and the phase branch (``phases.py``,
+T2.0: ``SDM_PHASE_BRANCH``, else the phase of the branch CI runs on or the
+branch checked out, else the phase in progress), so the check keeps
+working once a phase branch has merged and gone; a blank one is refused.
 
     scripts/rust_core/bridge_freeze.py [--write] [--base REF]
 """
@@ -138,11 +140,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import phases  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BASELINE = Path('scripts/rust_core/bridge_freeze.json')
 CHANGES = Path('scripts/rust_core/bridge_changes.json')
-#: The base branch when neither ``--base`` nor ``BASE_ENV`` names one.
-BASE_REF = 'origin/rust-core-phase-1'
+#: The base branch when neither ``--base`` nor ``BASE_ENV`` names one:
+#: ``origin/`` and the phase branch (:func:`phase_base`).
+BASE_REF = 'origin/<the phase branch>'
 #: The environment's setting of the base branch (E56(c)).
 BASE_ENV = 'SDM_FREEZE_BASE'
 #: The baseline's format this copy writes: the fingerprints alone.
@@ -785,10 +791,22 @@ def base_ref(
 ) -> str:
     """The branch whose merge base with HEAD holds the baseline: ``given``
     (``--base``), else ``BASE_ENV`` when it is set, even blank, else
-    ``BASE_REF``."""
+    :func:`phase_base`."""
     if given is not None:
         return given
-    return (os.environ if environ is None else environ).get(BASE_ENV, BASE_REF)
+    environ = os.environ if environ is None else environ
+    if BASE_ENV in environ:
+        return environ[BASE_ENV]
+    return phase_base(environ)
+
+
+def phase_base(environ: Mapping[str, str]) -> str:
+    """``origin/`` and the phase branch ``phases.phase_branch`` names:
+    ``SDM_PHASE_BRANCH``, else the phase of CI's branch
+    (``GITHUB_REF_NAME``) or of the branch checked out, else the phase in
+    progress."""
+    branch = environ.get('GITHUB_REF_NAME') or phases.checked_out()
+    return 'origin/' + phases.phase_branch(branch=branch, environ=environ)
 
 
 def problems(root: Path = REPO_ROOT, ref: str | None = None) -> list[str]:

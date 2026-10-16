@@ -55,9 +55,11 @@ from typing import Any
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from phases import checked_out, phase_branch  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 CI = '.github/workflows/ci.yml'
-PHASE = 'origin/rust-core-phase-1'
 #: The actions a replayable job may use; anything else is left to CI.
 REPLAYABLE_USES = (
     'actions/checkout@',
@@ -355,7 +357,13 @@ class Replay:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n', 1)[0])
-    parser.add_argument('--base', help=f'default: the merge base with {PHASE}')
+    phase = 'origin/' + phase_branch(branch=checked_out())
+    parser.add_argument(
+        '--base',
+        help=f'default: the merge base with {phase} (phases.py: '
+        "SDM_PHASE_BRANCH, else the branch checked out's phase, else the "
+        'phase in progress)',
+    )
     parser.add_argument('--job', action='append', default=[])
     parser.add_argument('--all', action='store_true')
     parser.add_argument(
@@ -397,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
             if not (args.all and why_unreplayable(jobs[n]))
         }
     else:
-        base = args.base or git('merge-base', 'HEAD', PHASE).strip()
+        base = args.base or git('merge-base', 'HEAD', phase).strip()
         try:
             base_text = git('show', f'{base}:{CI}')
         except subprocess.CalledProcessError:

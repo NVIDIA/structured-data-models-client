@@ -6,7 +6,8 @@
 
 The landing job's step, its text as CI runs it (``bash -e``), against real
 temporary git repositories: it says skip for an empty landing commit pushed
-to the phase branch or a branch under it, and for nothing else. Every other
+to a phase branch (``rust-core-phase-N``, any N; T2.0) or a branch under
+it, and for nothing else. Every other
 job is left out when it says skip, directly or through the jobs it needs.
 Every job has a timeout. Each image is named once and pinned by digest,
 and ``scripts/rust_core/pull_image.sh`` retries a pull, refuses an image
@@ -789,10 +790,10 @@ def test_ci4_an_empty_landing_commit_runs_everything_but_on_a_push(
 @pytest.mark.parametrize(
     'ref',
     [
-        'rust-core-phase-10',
+        # Every phase's branches are phase branches (T2.0): what is not one.
         'rust-core-phase-1x',
-        'rust-core-phase-2',
-        'rust-core-phase-2-lane-a',
+        'rust-core-phase-01',
+        'rust-core-phase-2x-lane-a',
         'xrust-core-phase-1',
         'rust-core-phase-',
         'refs/heads/rust-core-phase-1',
@@ -1115,7 +1116,9 @@ _TOKEN = re.compile(
 def _evaluate(condition: str, context: dict[str, str]) -> bool:
     r"""A GitHub Actions ``if:`` of the forms CI uses: contexts, strings,
     ``==``, ``!=``, ``!``, ``&&``, ``||``, parentheses, ``startsWith``,
-    ``endsWith``, ``contains`` and the status functions, every earlier
+    ``endsWith``, ``contains``, ``fromJSON``, ``format`` and the status
+    functions,
+    every earlier
     step having succeeded. With no status function, ``success()`` is
     implied, as GitHub implies it."""
     text = _expression(condition)
@@ -1136,10 +1139,21 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
         'failure': False,
         'cancelled': False,
     }
+
+    def contains(a: Any, b: Any) -> bool:
+        # An array holds the item, a string the substring (GitHub's).
+        if isinstance(a, list):
+            return str(b).lower() in [str(x).lower() for x in a]
+        return str(b).lower() in str(a).lower()
+
     functions = {
         'startsWith': lambda a, b: str(a).lower().startswith(str(b).lower()),
         'endsWith': lambda a, b: str(a).lower().endswith(str(b).lower()),
-        'contains': lambda a, b: str(b).lower() in str(a).lower(),
+        'contains': contains,
+        'fromJSON': lambda a: json.loads(str(a)),
+        'format': lambda text, *args: re.sub(
+            r'\{(\d+)\}', lambda m: str(args[int(m[1])]), str(text)
+        ),
     }
     pos = 0
 
@@ -1220,6 +1234,11 @@ def _evaluate(condition: str, context: dict[str, str]) -> bool:
         ('push', LANE, False),
         ('push', f'{PHASE}-t1.99', False),
         ('push', f'{PHASE}-archive-lane-a-t1.99', False),
+        # Every phase alike (T2.0), as far as the workflow's list goes; a
+        # phase past it fails in the landing step instead.
+        ('push', 'rust-core-phase-2', True),
+        ('push', 'rust-core-phase-9', True),
+        ('push', 'rust-core-phase-2-lane-a', False),
         ('push', 'rust-core-phase-10', False),
         ('push', 'main', False),
         ('push', 'rust-core', False),
@@ -1307,9 +1326,11 @@ class _Phase:
         _git(tmp_path, 'init', '-q', '--bare', str(self.origin))
         _git(tmp_path, 'clone', '-q', str(self.origin), str(self.work))
         _git(self.work, 'checkout', '-q', '-b', PHASE)
-        script = self.work / 'scripts/rust_core/ratchet.py'
-        script.parent.mkdir(parents=True)
-        script.write_bytes((ROOT / 'scripts/rust_core/ratchet.py').read_bytes())
+        # ratchet.py and the branch names it reads (phases.py, T2.0).
+        for name in ('ratchet.py', 'phases.py'):
+            script = self.work / 'scripts/rust_core' / name
+            script.parent.mkdir(parents=True, exist_ok=True)
+            script.write_bytes((ROOT / 'scripts/rust_core' / name).read_bytes())
         _git(self.work, 'add', '-A')
         _git(
             self.work, 'commit', '-q', '-m',
@@ -1665,3 +1686,112 @@ def test_ci4_the_skip_step_reads_runs_with_the_workflow_token(
         assert re.search(r'\b(gh|curl)\b', run), run
 
     _held(request, check)
+
+
+# --- every phase alike (T2.0) ---------------------------------------------------
+#
+# The workflow names no phase: patterns match every rust-core-phase-N, and
+# where an expression cannot match a pattern (the concurrency, the phase
+# check's condition) it lists rust-core-phase-0 to -9, the same list in
+# both places, and the landing step fails a push to a phase branch past it.
+
+PHASE_2 = 'rust-core-phase-2'
+LANE_2 = f'{PHASE_2}-lane-a'
+LISTED = [f'rust-core-phase-{n}' for n in range(10)]
+
+
+def _phase_lists() -> list[list[str]]:
+    text = CI.read_text(encoding='utf-8')
+    return [
+        json.loads(found.replace('{0}', prefix))
+        for found, prefix in re.findall(
+            r"fromJSON\(format\('(\[[^']*)', '(rust-core-phase-)'\)\)", text
+        )
+    ]
+
+
+def test_t20_the_workflow_names_no_one_phase() -> None:
+    text = CI.read_text(encoding='utf-8')
+    # No phase is named but the lists' bounds, in comments.
+    assert not re.search(r'rust-core-phase-[1-9]', text)
+    branches = _workflow()[True]['push']['branches']
+    assert 'rust-core-phase-*' in branches
+    assert '!rust-core-phase-*-archive-*' in branches
+
+
+def test_t20_the_phase_lists_are_phases_0_to_9_alike() -> None:
+    lists = _phase_lists()
+    assert len(lists) == 2, lists
+    assert all(found == LISTED for found in lists), lists
+
+
+@pytest.mark.parametrize(
+    ('ref', 'cancels', 'saves'),
+    [
+        (PHASE, False, False),
+        (PHASE_2, False, False),
+        (LANE, False, True),
+        (LANE_2, False, True),
+        ('rust-core-phase-7-lane-b', False, True),
+        (f'{PHASE_2}-t2.3', True, False),
+        ('rust-core', True, True),
+        ('main', True, True),
+        ('feature-x', True, False),
+    ],
+)
+def test_t20_concurrency_and_caches_alike_in_every_phase(
+    ref: str, cancels: bool, saves: bool
+) -> None:
+    workflow = _workflow()
+    context = {
+        'github.event_name': 'push',
+        'github.ref_name': ref,
+        'github.ref': f'refs/heads/{ref}',
+    }
+    condition = workflow['concurrency']['cancel-in-progress']
+    assert _evaluate(condition, context) is cancels, condition
+    condition = workflow['env']['SAVE_CACHES']
+    assert _evaluate(condition, context) is saves, condition
+
+
+@pytest.mark.parametrize('ref', [PHASE_2, LANE_2, f'{PHASE_2}-t2.3'])
+def test_t20_an_empty_landing_commit_under_phase_2_skips_on_its_green_run(
+    tmp_path: Path, ref: str
+) -> None:
+    repo = _repo(tmp_path)
+    _landing(repo)
+    seeded = [
+        _run(sha, 100 + n, branch=LANE_2)
+        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
+    ]
+    found, _ = _decide(repo, tmp_path, 'push', ref, seeded)
+    assert found == 'true'
+
+
+@pytest.mark.parametrize('ref', [PHASE_2, LANE_2])
+def test_t20_another_phase_s_green_run_is_no_evidence(
+    tmp_path: Path, ref: str
+) -> None:
+    # The candidate's only green run is on a Phase 1 lane: judged against
+    # Phase 1's checkpoint, it does not stand for a Phase 2 landing.
+    repo = _repo(tmp_path)
+    _landing(repo)
+    seeded = [
+        _run(sha, 100 + n, branch=LANE)
+        for n, sha in enumerate(_git(repo, 'rev-list', 'HEAD').split())
+    ]
+    found, _ = _decide(repo, tmp_path, 'push', ref, seeded)
+    assert found == 'false'
+
+
+@pytest.mark.parametrize('ref', ['rust-core-phase-10', 'rust-core-phase-12'])
+def test_t20_a_phase_past_the_workflow_s_lists_fails_the_landing_step(
+    tmp_path: Path, ref: str
+) -> None:
+    repo = _repo(tmp_path)
+    _landing(repo)
+    found, _ = _decide(repo, tmp_path, 'push', ref, [])
+    assert found == 'failed'
+    # Its lanes are judged as any lane's: the gate's own checks run there.
+    found, _ = _decide(repo, tmp_path, 'push', f'{ref}-lane-a', [])
+    assert found == 'false'

@@ -10,7 +10,7 @@
 #   scripts/rust_core/gate.sh (--base REV | --phase-push BEFORE)
 #       [--protected-paths TEXT] [--run RUNNERS] [--observations FILE]...
 #       [--out DIR] [--no-l0]
-#       [--only CHECK | --locked 1a|1b [--evidence DIR]
+#       [--only CHECK | --locked HALF [--evidence DIR]
 #        [--wheel FILE --test-ops-wheel FILE [--wheel-run ID]]]
 #
 # --base is the phase-branch tip recorded at package start (or, in CI on a
@@ -21,7 +21,13 @@
 # script then checks the checkpoint out into a worktree of its own and runs
 # the checkpoint's gate.sh there, which resolves the checkpoint again with
 # its own ratchet.py, refuses to judge from any other commit, and runs the
-# checkpoint's harness against the candidate. A checkpoint with no ratchet.py
+# checkpoint's harness against the candidate. A phase's first checkpoint is
+# its fork point from the epic branch, no landing commit (T2.0); when that
+# commit's own ratchet.py predates fork points and refuses it (Phase 2's
+# fork point, the bootstrap T2.0 records), the merged phase's last landing
+# stands in (ratchet.py stand-in): its harness judges, handed --base <that
+# landing>, which its own ratchet.py resolves to that landing, and the
+# stand-in is printed. A checkpoint with no ratchet.py
 # is the bootstrap, before T1.14's landing: the candidate's harness runs, and
 # no acceptance claim is made. Each run prints the commit whose harness
 # judged: from T1.14's landing on, that is the checkpoint, a landing commit.
@@ -69,9 +75,19 @@
 #                 the observations (--run or --observations) and the
 #                 effective expectations (ratchet.py effective), with no
 #                 ratchet check.
-#   --locked HALF the locked acceptance checks of HALF, 1a or 1b (design,
-#                 "Locked acceptance checks"): every check above, the
-#                 observations always, and the locked checks' own steps:
+#   --locked HALF the locked acceptance checks of HALF (design, "Locked
+#                 acceptance checks"), as the judging harness's tree names
+#                 them (T2.0): each phase's
+#                 docs/design/rust-core/phase-N/locked-set.yaml lists its
+#                 halves (Phase 1's 1a and 1b), each half its own steps,
+#                 its numbered checks and the steps each holds, the checks
+#                 whose reference comparisons gate only in the reference's
+#                 cell, the check that holds every step, and, for an
+#                 inventory step, the inventory file, its case count and
+#                 the cases added to it; a half no file names, or a file
+#                 not of that format, is a usage error. Every check above,
+#                 the observations always, and the locked checks' own
+#                 steps:
 #                   runners      the observations cover python-core,
 #                                python-old and rust-host;
 #                   l1           cargo test --workspace on the candidate:
@@ -94,12 +110,13 @@
 #                                commit holds them); the evidence records
 #                                each wheel's name, SHA-256 and identity
 #                                commit, and the CI run --wheel-run names;
-#                   inventory    (1b) the 40 cases of the Phase 1b
-#                                inventory and base.adventureworks are
+#                   inventory    (1b) the cases of the half's inventory (the
+#                                Phase 1b inventory's 40) and the cases
+#                                added to it (base.adventureworks) are
 #                                acceptance cases.
-#                 Check 1 is runners, observations, ratchet, compare,
-#                 coverage and l1; 2 is seeded; 3 is wheel-smoke; 4 is
-#                 runners, observations, ratchet, compare, l1 and
+#                 For Phase 1: check 1 is runners, observations, ratchet,
+#                 compare, coverage and l1; 2 is seeded; 3 is wheel-smoke;
+#                 4 is runners, observations, ratchet, compare, l1 and
 #                 inventory; 5 is observations, ratchet, compare and
 #                 inventory; 6, in both halves, is l0 and every step run.
 #                 It prints the table of the half's checks, writes
@@ -134,7 +151,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --base | --phase-push)
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
-      where=("$1" "$2"); for_harness+=("$1" "$2"); shift 2 ;;
+      where=("$1" "$2"); shift 2 ;;
     --protected-paths)
       [ $# -ge 2 ] || { echo "gate.sh: $1 needs a value" >&2; exit 2; }
       protected=(--protected-paths "$2"); for_harness+=("$1" "$2"); shift 2 ;;
@@ -177,10 +194,12 @@ case "$only" in
   l0) [ "$l0" = 1 ] || { echo 'gate.sh: --only l0 with --no-l0 runs nothing' >&2; exit 2; } ;;
   *) echo "gate.sh: --only takes observations, ratchet, compare, l0 or coverage, not $only" >&2; exit 2 ;;
 esac
-case "$locked" in
-  '' | 1a | 1b) ;;
-  *) echo "gate.sh: --locked takes 1a or 1b, not $locked" >&2; exit 2 ;;
-esac
+# A half's name here; whether a locked set names it, once the judging
+# harness is known (below).
+if [ -n "$locked" ] && ! [[ "$locked" =~ ^[0-9]+[a-z]*$ ]]; then
+  echo "gate.sh: --locked takes a half a locked set names (Phase 1's 1a or 1b), not $locked" >&2
+  exit 2
+fi
 if [ -n "$only" ] && [ -n "$locked" ]; then
   echo 'gate.sh: --only runs one check and --locked the locked ones; give one' >&2
   exit 2
@@ -221,7 +240,25 @@ if [ "$harness" = 0 ]; then
   if [ "$kind" = harness ]; then
     git -C "$candidate" worktree add --quiet --detach "$scratch/checkpoint" "$checkpoint" || exit 1
     worktrees+=("$scratch/checkpoint")
-    "$scratch/checkpoint/scripts/rust_core/gate.sh" --harness-for "$candidate" "${for_harness[@]}"
+    # The bootstrap of a fork point (T2.0): no landing commit, and its own
+    # ratchet.py refuses it, so the merged phase's last landing stands in.
+    case "$(git -C "$candidate" log -1 --format=%s "$checkpoint")" in
+      'Land '*) ;;
+      *)
+        if ! "$PYTHON" "$scratch/checkpoint/scripts/rust_core/ratchet.py" checkpoint \
+          --repo "$candidate" "${where[@]}" >/dev/null 2>&1; then
+          stand=$("$PYTHON" "$candidate/scripts/rust_core/ratchet.py" stand-in \
+            --repo "$candidate" "$checkpoint") || exit 1
+          echo "gate.sh: the checkpoint $checkpoint is the phase's fork point, and its own ratchet.py refuses it; the merged phase's last landing $stand stands in, its harness judging" >&2
+          git -C "$candidate" worktree add --quiet --detach "$scratch/stand-in" "$stand" || exit 1
+          worktrees+=("$scratch/stand-in")
+          "$scratch/stand-in/scripts/rust_core/gate.sh" --harness-for "$candidate" \
+            --base "$stand" "${for_harness[@]+"${for_harness[@]}"}"
+          exit $?
+        fi ;;
+    esac
+    "$scratch/checkpoint/scripts/rust_core/gate.sh" --harness-for "$candidate" \
+      "${where[@]}" "${for_harness[@]+"${for_harness[@]}"}"
     exit $?
   fi
   here=$candidate
@@ -261,6 +298,120 @@ elif [ "$(git -C "$here" rev-parse HEAD)" != "$checkpoint" ]; then
 else
   judge="the checkpoint's harness, at landing $(git -C "$here" log -1 --format='%h %s' "$checkpoint")"
 fi
+
+# The locked set (T2.0): HALF as the judging harness's tree names it, in
+# one of docs/design/rust-core/phase-*/locked-set.yaml.
+locked_steps=''
+locked_checks=()
+locked_reference=''
+locked_every=''
+inventory_file=''
+inventory_count=''
+inventory_also=''
+if [ -n "$locked" ]; then
+  set_lines=$("$PYTHON" - "$here" "$locked" <<'EOF'
+import glob, os, re, sys
+import yaml
+root, half = sys.argv[1:]
+COMMON = ['runners', 'observations', 'ratchet', 'compare', 'coverage', 'l1']
+STEPS = set(COMMON) | {'l0'}
+OWN = {'seeded', 'wheel-smoke', 'inventory'}
+CASE = re.compile(r'[a-z0-9][a-z0-9._-]*')
+def fail(why):
+    sys.exit(f'gate.sh: {why}')
+found = {}
+for path in sorted(glob.glob(os.path.join(root, 'docs/design/rust-core/phase-*/locked-set.yaml'))):
+    name = os.path.relpath(path, root)
+    try:
+        with open(path, encoding='utf-8') as file:
+            loaded = yaml.safe_load(file)
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, RecursionError):
+        fail(f'{name}: not a locked set it reads')
+    if not isinstance(loaded, dict) or not isinstance(loaded.get('halves'), dict) or \
+            not set(loaded) <= {'format', 'halves'} or \
+            loaded.get('format', 'sdm-locked-set/1') != 'sdm-locked-set/1':
+        fail(f'{name}: not a locked set (halves, format sdm-locked-set/1)')
+    for key, value in loaded['halves'].items():
+        if not isinstance(key, str) or not re.fullmatch(r'[0-9]+[a-z]*', key):
+            fail(f'{name}: the half {key!r} is not a half name')
+        if key in found:
+            fail(f'{name}: the half {key} is also in {found[key][0]}')
+        found[key] = (name, value)
+if half not in found:
+    named = ', '.join(sorted(found)) or 'none'
+    fail(f'--locked takes a half a locked set names ({named}), not {half}')
+name, spec = found[half]
+where = f'{name}, half {half}'
+keys = {'steps', 'checks', 'reference', 'every', 'inventory', 'cases'}
+if not isinstance(spec, dict) or not set(spec) <= keys or 'inventory' in spec and 'cases' in spec:
+    fail(f'{where}: not a half (cases or inventory, and steps, checks, reference, every)')
+if 'cases' in spec:
+    cases = spec['cases']
+    if not isinstance(cases, list) or not cases or len(set(map(str, cases))) != len(cases) \
+            or not all(isinstance(x, str) and CASE.fullmatch(x) for x in cases):
+        fail(f'{where}: cases is a list of case IDs')
+locks = 'cases' in spec or 'inventory' in spec
+# The short form: the cases alone, one check holding every common step
+# and the inventory step, l0 and every step the next.
+own = spec.get('steps', ['inventory'] if locks else [])
+if not isinstance(own, list) or not all(isinstance(x, str) and x in OWN for x in own) \
+        or len(set(own)) != len(own):
+    fail(f'{where}: steps are some of {", ".join(sorted(OWN))}')
+run = STEPS | set(own)
+checks = spec.get('checks', {'1': COMMON + own})
+if not isinstance(checks, dict) or not checks:
+    fail(f'{where}: no checks')
+lines = [f'steps {" ".join(own)}']
+for number, steps in checks.items():
+    if not isinstance(number, str) or not number.isdigit() or not isinstance(steps, list) \
+            or not steps or not all(isinstance(x, str) and x in run for x in steps):
+        fail(f'{where}: check {number!r} is not a number and steps the half runs')
+    lines.append(f'check {number}:{" ".join(steps)}')
+if not set(own) <= {step for steps in checks.values() for step in steps}:
+    fail(f'{where}: a step of its own no check holds')
+every = spec.get('every', str(max(int(n) for n in checks) + 1))
+if not isinstance(every, str) or not every.isdigit() or every in checks:
+    fail(f'{where}: every is a check number of its own')
+lines.append(f'every {every}')
+reference = spec.get('reference', [n for n, steps in checks.items() if 'compare' in steps][:1])
+if not isinstance(reference, list) or not all(isinstance(x, str) and x in checks for x in reference):
+    fail(f'{where}: reference lists checks of the half')
+lines.append(f'reference {" ".join(reference)}')
+if ('inventory' in own) != locks:
+    fail(f'{where}: an inventory step and its cases or inventory go together')
+if 'inventory' in spec:
+    inventory = spec['inventory']
+    if not isinstance(inventory, dict) or set(inventory) != {'file', 'count', 'also'} \
+            or not isinstance(inventory['file'], str) \
+            or not re.fullmatch(r'docs/design/rust-core/[A-Za-z0-9/._-]+\.yaml', inventory['file']) \
+            or '..' in inventory['file'] \
+            or not isinstance(inventory['count'], int) or isinstance(inventory['count'], bool) \
+            or inventory['count'] < 1 or not isinstance(inventory['also'], list) \
+            or not all(isinstance(x, str) and CASE.fullmatch(x) for x in inventory['also']):
+        fail(f'{where}: inventory is a file, a count and the cases added')
+    lines += [f'inventory-file {inventory["file"]}', f'inventory-count {inventory["count"]}',
+              f'inventory-also {" ".join(inventory["also"])}']
+elif 'cases' in spec:
+    lines += ['inventory-count 0', f'inventory-also {" ".join(spec["cases"])}']
+print('\n'.join(lines))
+EOF
+  ) || exit 2
+  while IFS= read -r line; do
+    case "$line" in
+      'steps') locked_steps='' ;;
+      'steps '*) locked_steps=${line#steps } ;;
+      'check '*) locked_checks+=("${line#check }") ;;
+      'every '*) locked_every=${line#every } ;;
+      'reference') locked_reference='' ;;
+      'reference '*) locked_reference=${line#reference } ;;
+      'inventory-file '*) inventory_file=${line#inventory-file } ;;
+      'inventory-count '*) inventory_count=${line#inventory-count } ;;
+      'inventory-also') inventory_also='' ;;
+      'inventory-also '*) inventory_also=${line#inventory-also } ;;
+    esac
+  done <<<"$set_lines"
+fi
+locked_has() { [[ " $locked_steps " == *" $1 "* ]]; }
 echo "gate: candidate $head"
 echo "gate: base $base, checkpoint $checkpoint"
 echo "gate: judged by $judge"
@@ -473,15 +624,18 @@ smoke() {
   return $status
 }
 inventory() {
-  "$PYTHON" - "$candidate" "$head" <<'EOF'
+  # shellcheck disable=SC2086 # the cases added, a word each
+  "$PYTHON" - "$candidate" "$head" "$inventory_file" "$inventory_count" $inventory_also <<'EOF'
 import json, subprocess, sys
 import yaml
-repo, head = sys.argv[1:]
+repo, head, inventory, count = sys.argv[1:5]
+count, also = int(count or 0), sys.argv[5:]
 def show(path):
     return subprocess.run(['git', '-C', repo, 'show', f'{head}:{path}'],
                           capture_output=True, text=True, check=True).stdout
 try:
-    listed = yaml.safe_load(show('docs/design/rust-core/phase-0/phase-1b-inventory.yaml'))
+    # The half's inventory file, or (the short form) its cases alone.
+    listed = yaml.safe_load(show(inventory)) if inventory else {'cases': []}
     wanted = [str(case['id']) for case in listed['cases']]
     names = subprocess.run(['git', '-C', repo, 'ls-tree', '-r', '-z', '--name-only', head,
                             'contract/cases'], capture_output=True, text=True, check=True).stdout
@@ -493,24 +647,25 @@ try:
 except (subprocess.CalledProcessError, yaml.YAMLError, ValueError, RecursionError, KeyError,
         TypeError):
     sys.exit('the inventory or the cases: not what it reads')
-if len(set(wanted)) != 40:
-    sys.exit(f'the inventory holds {len(set(wanted))} cases, not the locked 40')
-short = [case for case in wanted + ['base.adventureworks'] if status.get(case) != 'acceptance']
+if inventory and len(set(wanted)) != count:
+    sys.exit(f'the inventory holds {len(set(wanted))} cases, not the locked {count}')
+short = [case for case in wanted + also if status.get(case) != 'acceptance']
 if short:
-    sys.exit(f'{len(short)} of 41 not acceptance cases: {", ".join(short)}')
-print('the 40 inventory cases and base.adventureworks are acceptance cases')
+    sys.exit(f'{len(short)} of {count + len(also)} not acceptance cases: {", ".join(short)}')
+if inventory:
+    print(f'the {count} inventory cases' + (f' and {" and ".join(also)}' if also else '')
+          + ' are acceptance cases')
+else:
+    print(f'the {len(also)} locked cases are acceptance cases')
 EOF
 }
 if [ -n "$locked" ]; then
   step runners runners_cover
   step l1 sh -c 'cd "$1/rust" && CARGO_TARGET_DIR="$1/rust/target" cargo test --workspace --locked' \
     sh "$candidate"
-  if [ "$locked" = 1a ]; then
-    step seeded seeded_suite
-    step wheel-smoke smoke
-  else
-    step inventory inventory
-  fi
+  if locked_has seeded; then step seeded seeded_suite; fi
+  if locked_has wheel-smoke; then step wheel-smoke smoke; fi
+  if locked_has inventory; then step inventory inventory; fi
 fi
 
 echo
@@ -528,17 +683,14 @@ if [ -n "$locked" ]; then
     done
     echo missing
   }
-  if [ "$locked" = 1a ]; then
-    checks=('1:runners observations ratchet compare coverage l1' '2:seeded' '3:wheel-smoke')
-  else
-    checks=('4:runners observations ratchet compare l1 inventory' '5:observations ratchet compare inventory')
-  fi
+  checks=("${locked_checks[@]}")
   every=l0
   for name in "${names[@]}"; do [ "$name" = l0 ] || every+=" $name"; done
-  checks+=("6:$every")
-  # The reference comparisons of checks 1 and 4 gate only in the reference's
-  # cell (H1; compare.py reports them elsewhere): in another, or with no
-  # one cell observed, the check is reported, not gated, and fails.
+  checks+=("$locked_every:$every")
+  # The reference comparisons of the half's reference checks (Phase 1's 1
+  # and 4) gate only in the reference's cell (H1; compare.py reports them
+  # elsewhere): in another, or with no one cell observed, the check is
+  # reported, not gated, and fails.
   cell=$(cat "$scratch/cell" 2>/dev/null)
   reference=ref-pandas3
   echo
@@ -551,7 +703,7 @@ if [ -n "$locked" ]; then
     for name in ${entry#*:}; do
       [ "$(result_of "$name")" = ok ] || verdict=FAIL
     done
-    if [ "$verdict" = ok ] && { [ "$number" = 1 ] || [ "$number" = 4 ]; } &&
+    if [ "$verdict" = ok ] && [[ " $locked_reference " == *" $number "* ]] &&
       [ "$cell" != "$reference" ]; then
       verdict=FAIL
       note=" (reported, not gated: observed in ${cell:-no one cell}, gated in $reference)"
@@ -565,6 +717,7 @@ if [ -n "$locked" ]; then
   for i in "${!names[@]}"; do steps+=("${names[$i]}=${results[$i]}"); done
   mkdir -p "$evidence/gate" &&
     SDM_GATE_WHEEL=$wheel SDM_GATE_TEST_OPS_WHEEL=$test_ops_wheel SDM_GATE_WHEEL_RUN=$wheel_run \
+    SDM_GATE_EVERY=$locked_every \
     "$PYTHON" - "$evidence/gate/$head.json" "$head" "$locked" "$checkpoint" "$base" \
       "$cell" "$failed" "${#steps[@]}" "${steps[@]}" "${table[@]}" <<'EOF'
 import json, os, sys
@@ -574,10 +727,13 @@ checks = {}
 for item in sys.argv[9 + int(count):]:
     number, verdict, names = item.split('=', 2)
     checks[number] = {'result': verdict, 'steps': names.split()}
-# Check 3's wheels, as given: each file's name and SHA-256, the commit its
-# identity file (a build record, not an attestation) names, and the CI run
-# the operator says they came from.
-if '3' in checks:
+# The wheel-smoke check's wheels (Phase 1's check 3), as given: each
+# file's name and SHA-256, the commit its identity file (a build record,
+# not an attestation) names, and the CI run the operator says they came
+# from.
+smoke = [number for number, check in checks.items()
+         if 'wheel-smoke' in check['steps'] and number != os.environ.get('SDM_GATE_EVERY')]
+if smoke:
     import hashlib
     def wheel(given):
         if not given or not os.path.isfile(given):
@@ -591,7 +747,7 @@ if '3' in checks:
             commit = None
         return {'name': os.path.basename(given), 'sha256': digest,
                 'commit': commit if isinstance(commit, str) else None}
-    checks['3']['wheels'] = {
+    checks[smoke[0]]['wheels'] = {
         'production': wheel(os.environ.get('SDM_GATE_WHEEL')),
         'test-ops': wheel(os.environ.get('SDM_GATE_TEST_OPS_WHEEL')),
         'run': os.environ.get('SDM_GATE_WHEEL_RUN') or None,

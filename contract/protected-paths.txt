@@ -28,6 +28,9 @@ contract/compare-policy.yaml
 contract/availability.yaml
 contract/protected-paths.txt
 docs/design/rust-core/phase-0/phase-1b-inventory.yaml
+# Each phase's locked acceptance checks, as gate.sh --locked reads them
+# (T2.0).
+docs/design/rust-core/phase-*/locked-set.yaml
 # The scope manifests coverage.py holds the corpus to (T1.15): a path or
 # cell dropped needs the owner (scope-format.md, rule 8).
 docs/design/rust-core/phase-0/scope-python.yaml

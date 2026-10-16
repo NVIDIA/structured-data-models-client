@@ -16,12 +16,13 @@ on:
     # The Rust core migration's epic branch and its phase branches run the
     # same gates as main; the reference and archive branches deliberately
     # do not, including a lane package's archive branch,
-    # rust-core-phase-1-archive-*, which keeps an abandoned tip (E43, CI2).
+    # rust-core-phase-N-archive-*, which keeps an abandoned tip (E43, CI2).
+    # Every phase alike (T2.0): no phase is named here.
     branches:
       - main
       - rust-core
       - 'rust-core-phase-*'
-      - '!rust-core-phase-1-archive-*'
+      - '!rust-core-phase-*-archive-*'
 
 permissions:
   contents: read
@@ -37,10 +38,16 @@ permissions:
 # so the next push there must not cancel it. A run still queued there can
 # be: GitHub keeps one pending run per group, and a newer push supersedes
 # it. land.py refuses a candidate whose newest run was cancelled, and
-# land.py verify asks for a rerun rather than a revert.
+# land.py verify asks for a rerun rather than a revert. Every phase alike
+# (T2.0): a phase branch is one of rust-core-phase-0 to -9, a list made
+# with format() so that no phase is named (an expression has no pattern
+# match; the phase-check step's condition makes the same list,
+# tests/test_ci_workflow.py holds both alike, and the landing step fails a
+# push to a phase branch past them), a lane a branch under one holding
+# "-lane-".
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !(github.ref_name == 'rust-core-phase-1' || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
+  cancel-in-progress: ${{ !(contains(fromJSON(format('["{0}0", "{0}1", "{0}2", "{0}3", "{0}4", "{0}5", "{0}6", "{0}7", "{0}8", "{0}9"]', 'rust-core-phase-')), github.ref_name) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and the DuckDB
@@ -57,7 +64,7 @@ env:
   # pip's caches are saved on main alone (E131): one per job and Python on
   # every long-lived branch took half the 10 GiB, and evicted the Rust
   # builds, which cost far more to redo. Every branch restores main's.
-  SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core"]'), github.ref_name) || startsWith(github.ref_name, 'rust-core-phase-1-lane-')) }}
+  SAVE_CACHES: ${{ github.event_name == 'push' && (contains(fromJSON('["main", "rust-core"]'), github.ref_name) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
   SAVE_PIP_CACHES: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
   # The images CI pulls, each named here once and pinned by digest (E131),
   # but wheel-smoke's, which scripts/rust_core/wheel_smoke.py names. A pull
@@ -108,7 +115,8 @@ jobs:
       # of this workflow on a push to the phase branch or a branch under it
       # (never an archive branch) one that completed with success, read
       # with gh. No such run (none, failed, cancelled, unfinished, or the
-      # API unreadable) runs every job.
+      # API unreadable) runs every job. The phase branch is the one the
+      # push is to or under, rust-core-phase-N for any N (T2.0).
       - id: landing
         name: An empty landing commit is not tested again
         env:
@@ -120,16 +128,28 @@ jobs:
             [ "$(git rev-parse "$1^{tree}")" = "$(git rev-parse "$1^^{tree}")" ]
           }
           skip=false
-          why='not a push of an empty landing commit under rust-core-phase-1'
-          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
-            push:rust-core-phase-1 | push:rust-core-phase-1-*)
+          why='not a push of an empty landing commit under a phase branch'
+          phase=''
+          if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
+            [[ "${GITHUB_REF_NAME:-}" =~ ^(rust-core-phase-(0|[1-9][0-9]*))(-.+)?$ ]]; then
+            phase=${BASH_REMATCH[1]}
+          fi
+          # The concurrency and the phase check name the phase branches as
+          # a list, rust-core-phase-0 to -9: a push to one past it fails
+          # here rather than go unchecked.
+          if [ "$phase" = "${GITHUB_REF_NAME:-}" ] && ! [[ "$phase" =~ ^rust-core-phase-[0-9]$ ]]; then
+            echo "$phase is a phase branch ci.yml's lists (concurrency, the phase check) lack: add it"
+            exit 1
+          fi
+          case "$phase" in
+            ?*)
               moved=$(git log -1 --format='%(trailers:key=Moved-from,valueonly)' HEAD)
               if [ -z "$moved" ] && empty_landing HEAD; then
                 if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
                 tested=$(git rev-parse HEAD^)
                 while empty_landing "$tested"; do tested=$(git rev-parse "$tested^"); done
                 newest=$(gh api "repos/${GITHUB_REPOSITORY:-}/actions/workflows/ci.yml/runs?head_sha=$tested&event=push&per_page=100" \
-                  --jq '[.workflow_runs[] | select(.head_branch == "rust-core-phase-1" or ((.head_branch | startswith("rust-core-phase-1-")) and (.head_branch | startswith("rust-core-phase-1-archive-") | not)))]
+                  --jq '[.workflow_runs[] | select(.head_branch == "'"$phase"'" or ((.head_branch | startswith("'"$phase"'-")) and (.head_branch | startswith("'"$phase"'-archive-") | not)))]
                     | sort_by(.created_at) | last | if . == null then "none" else "\(.id) \(.status) \(.conclusion)" end') || newest=unreadable
                 case "$newest" in
                   *' completed success') skip=true; why="its tree is green in run ${newest%% *} at $tested" ;;
@@ -142,11 +162,18 @@ jobs:
       # On the phase branch, every push, a landing's included, lands one
       # package as a fast-forward, its landing commit's Base-SHA the
       # previous tip: ratchet.py's --phase-push check, which the gate makes
-      # when the jobs run, made here whether or not they are left out.
+      # when the jobs run, made here whether or not they are left out. The
+      # epic branch is fetched for a phase's first landing, whose checkpoint
+      # is the phase's fork point from it (T2.0), when the remote has it:
+      # without it a fork point is refused, by name. The phase branches as
+      # the concurrency's list names them.
       - name: A push to the phase branch lands one package
-        if: github.event_name == 'push' && github.ref_name == 'rust-core-phase-1'
+        if: github.event_name == 'push' && contains(fromJSON(format('["{0}0", "{0}1", "{0}2", "{0}3", "{0}4", "{0}5", "{0}6", "{0}7", "{0}8", "{0}9"]', 'rust-core-phase-')), github.ref_name)
         run: |
           if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+          if git ls-remote --exit-code --heads origin rust-core >/dev/null; then
+            git fetch --quiet origin +refs/heads/rust-core:refs/remotes/origin/rust-core
+          fi
           where=$(python3 scripts/rust_core/ratchet.py where)
           python3 scripts/rust_core/ratchet.py checkpoint --repo . $where
 
@@ -206,8 +233,9 @@ jobs:
       - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
       # The L0 guards (T1.10c): the crate graph (l0_deps.py), with the
       # bridge freeze (bridge_freeze.py, E50), whose baseline ratchets
-      # against the merge base with origin/rust-core-phase-1, which the full
-      # checkout above fetches; and the vocabulary, SQL-fragment, skip and
+      # against the merge base with origin/<the phase branch> (phases.py:
+      # the phase this branch is under, else the phase in progress), which
+      # the full checkout above fetches; and the vocabulary, SQL-fragment, skip and
       # ignore, clippy-ban and step-variant scans (l0_scan.py). The bans
       # themselves are enforced by the clippy runs above, from
       # rust/clippy.toml.
@@ -326,11 +354,12 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      # On the phase branch and its lanes the gate step below runs this
-      # comparison with the checkpoint's comparator, each baselined case's
-      # outcome against its effective expectation (an approved change
-      # included), so this one runs only elsewhere (T1.14); whether the
-      # gate runs is the gate step's to decide, failing closed.
+      # On a phase branch and its lanes, and on the epic branch (T2.0), the
+      # gate step below runs this comparison with the checkpoint's
+      # comparator, each baselined case's outcome against its effective
+      # expectation (an approved change included), so this one runs only
+      # elsewhere (T1.14); whether the gate runs is the gate step's to
+      # decide, failing closed.
       - run: |
           pip install jsonschema pyyaml
           where=$(python scripts/rust_core/ratchet.py where) || exit 1
@@ -350,22 +379,25 @@ jobs:
       # checkpoint is the push's previous tip, and the push lands exactly
       # one package; on a lane or topic branch, the merge base with the
       # phase branch's tip, a landing commit judged against its own
-      # recorded base. Before T1.14 lands, the bootstrap: the candidate's
-      # harness runs.
+      # recorded base; on the epic branch rust-core (T2.0), the merged
+      # phase's last landing, so rust-core is judged like a moved landing
+      # of that phase's head. Before T1.14 lands, the bootstrap: the
+      # candidate's harness runs.
       # Whether the gate runs fails closed (T1.18), decided in the step
       # itself so a local replay runs it too (replay_jobs.py takes no
-      # conditions): on a push to the phase branch or any branch under it
-      # the gate must run, from GitHub's own event and ref, not from the
-      # candidate's ratchet.py, whose `where` then only names the base; an
-      # error or an empty answer there fails. Elsewhere there is no ratchet.
+      # conditions): on a push to rust-core, to a phase branch
+      # (rust-core-phase-N, any N) or to any branch under one the gate must
+      # run, from GitHub's own event and ref, not from the candidate's
+      # ratchet.py, whose `where` then only names the base; an error or an
+      # empty answer there fails. Elsewhere there is no ratchet.
       # tests/test_contract_ci_gate.py runs this step's text.
       - name: gate (rust-host)
         run: |
           where=$(python scripts/rust_core/ratchet.py where) || { echo 'gate: ratchet.py where failed'; exit 1; }
-          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
-            push:rust-core-phase-1 | push:rust-core-phase-1-*)
-              [ -n "$where" ] || { echo "gate: ratchet.py where named no base on $GITHUB_REF_NAME, where the gate must run"; exit 1; } ;;
-          esac
+          if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
+            [[ "${GITHUB_REF_NAME:-}" =~ ^rust-core(-phase-(0|[1-9][0-9]*)(-.+)?)?$ ]]; then
+            [ -n "$where" ] || { echo "gate: ratchet.py where named no base on $GITHUB_REF_NAME, where the gate must run"; exit 1; }
+          fi
           [ -n "$where" ] || { echo 'gate: no ratchet off the phase branch'; exit 0; }
           scripts/rust_core/gate.sh $where --run rust-host
         working-directory: .
@@ -826,10 +858,10 @@ jobs:
         run: |
           set -o pipefail
           where=$(python scripts/rust_core/ratchet.py where) || { echo 'gate: ratchet.py where failed'; exit 1; }
-          case "${GITHUB_EVENT_NAME:-}:${GITHUB_REF_NAME:-}" in
-            push:rust-core-phase-1 | push:rust-core-phase-1-*)
-              [ -n "$where" ] || { echo "gate: ratchet.py where named no base on $GITHUB_REF_NAME, where the gate must run"; exit 1; } ;;
-          esac
+          if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
+            [[ "${GITHUB_REF_NAME:-}" =~ ^rust-core(-phase-(0|[1-9][0-9]*)(-.+)?)?$ ]]; then
+            [ -n "$where" ] || { echo "gate: ratchet.py where named no base on $GITHUB_REF_NAME, where the gate must run"; exit 1; }
+          fi
           mkdir -p gate-observations
           status=0
           if [ -z "$where" ]; then
@@ -885,8 +917,8 @@ jobs:
   # not its to catch: contract/pinned/base.regression.core.json, the fixed
   # expectation both hosts are held to, stays for that (E81(c)). It fails
   # when either side's file is missing, empty or not that runner's, and
-  # judges outcomes against the effective expectations on the phase branch
-  # and its lanes, as the gate does. contract/tests/test_cross_host.py runs
+  # judges outcomes against the effective expectations on the phase
+  # branches, their lanes and the epic branch, as the gate does. contract/tests/test_cross_host.py runs
   # this step's text.
   cross-host:
     name: cross-host (python-core, rust-host)

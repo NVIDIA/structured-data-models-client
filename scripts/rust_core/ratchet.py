@@ -8,12 +8,14 @@ r"""The ratchet: a candidate judged against its checkpoint (design,
 H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
 
     ratchet.py checkpoint [--repo DIR] (--base REV | --phase-push BEFORE)
+        [--epic REF]
     ratchet.py check [--repo DIR] --checkpoint SHA [--protected-paths TEXT]
         [--observations FILE]... [--effective-out FILE]
     ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
     ratchet.py effective [--repo DIR] (--base REV | --phase-push BEFORE)
-        --out FILE
-    ratchet.py where
+        [--epic REF] --out FILE
+    ratchet.py where [--repo DIR]
+    ratchet.py stand-in [--repo DIR] SHA
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
 ``HEAD``: ``git merge-base CANDIDATE BASE``, never read from evidence.
@@ -34,6 +36,21 @@ advancing the phase branch to an unreviewed commit cannot make that commit
 a checkpoint. It prints the checkpoint and whether its harness judges: a
 checkpoint without this file is the bootstrap, before T1.14's landing, where
 the candidate's harness runs and no acceptance claim is made.
+
+One merge base that is no landing commit is accepted (T2.0): a phase's
+first checkpoint, the commit the phase branch was cut at from the epic
+branch ``rust-core``, its fork point ``git merge-base PHASE EPIC`` (PHASE
+``origin/<phase branch>``, else the local branch, the phase branch as
+``phases.py`` names it for CI's branch or the branch checked out; EPIC
+``--epic``, else ``origin/rust-core``, else ``rust-core``). The owner put
+that commit there, by merging the previous phase and committing to the
+epic branch, which is judged against the merged phase's last landing
+(``where`` below). Any other commit that is no landing commit, a phase's
+own product commit, an older epic commit or an unreviewed commit pushed to
+the phase branch, is still refused. A fork point whose own ``ratchet.py``
+predates this (Phase 2's) cannot resolve itself; ``gate.sh`` then judges
+with the merged phase's last landing's harness (:func:`epic_checkpoint`,
+``ratchet.py stand-in``), the bootstrap T2.0 records.
 
 ``check`` holds the candidate, ``--repo``'s committed ``HEAD``, to the
 checkpoint's files, read from git at ``--checkpoint``:
@@ -108,9 +125,23 @@ passes there too and an unapproved one fails. It fails on a register
 entries count; a checkpoint before the ratchet (the bootstrap) has no
 baselines, and so no expectations.
 
+``stand-in`` prints the merged phase's last landing ``SHA`` holds
+(:func:`epic_checkpoint`), whose harness ``gate.sh`` judges with when a
+fork point's own harness cannot (T2.0).
+
 ``where`` prints the gate's ``--base`` or ``--phase-push`` for the CI run
-it is in, from GitHub's environment, or nothing outside the phase branch and
-its lanes (:func:`ci_base`).
+it is in, from GitHub's environment, or nothing outside the phase branches
+and the epic branch (:func:`ci_base`): on a push to a phase branch
+(``rust-core-phase-N``, any N) ``--phase-push``, on a branch under one
+``--base origin/<that phase branch>``, and on a push to ``rust-core``
+``--base`` the merged phase's last landing, so the epic branch is judged
+like a moved landing of that phase's head (T2.0).
+
+The decisions the rules read (owner approvals of relaxations) are every
+phase's: each ``docs/design/rust-core/phase-N/decisions.md`` of the
+checkpoint, Phase 1's rows in force and each later phase's added; a file
+missing, unreadable or malformed fails the ``decisions`` rule by name
+(``capture_check.phase_decisions``, T2.0).
 
 Exit status 1 on any problem. Each problem names its rule and its case;
 input values are never printed.
@@ -143,7 +174,8 @@ REFERENCE = 'contract/reference'
 CASES = 'contract/cases'
 BASES = 'contract/bases.yaml'
 REGISTER = 'docs/design/rust-core/register.yaml'
-DECISIONS = 'docs/design/rust-core/phase-1/decisions.md'
+#: Where every phase's ``decisions.md`` is (T2.0).
+DECISIONS_DIR = 'docs/design/rust-core'
 KNOWN_DIFFERING = 'rust/crates/sdm-core/tests/pql/known-differing.json'
 #: The cell the baselines were taken in: the reference machine's (design,
 #: "Runtime cells"). Their projection is platform-independent, so every cell
@@ -154,8 +186,27 @@ PYTHON = ('python-ref', 'python-core', 'python-old')
 #: The core operations that read data, whose case has a driver record on
 #: rust-host.
 READS = ('describe_source', 'materialize', 'predict')
+
+
+def _phases() -> ModuleType:
+    r"""This harness's ``phases.py``: the branch names and package IDs."""
+    name = 'sdm_ratchet_phases'
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, HERE / 'phases.py')
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        # Registered first: a dataclass reads its module from sys.modules.
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+PHASES = _phases()
 #: A landing commit's subject, as land.py writes it.
-LANDING = re.compile(r'Land (T[0-9]+\.[0-9]+[a-z]?|CI[0-9]+): ')
+LANDING = re.compile(rf'Land ({PHASES.PACKAGE_ID.pattern}): ')
+#: The epic branch's ref the fork point is read from when ``--epic`` names
+#: none: the remote's, else a local branch.
+EPIC_REFS = (f'refs/remotes/origin/{PHASES.EPIC}', f'refs/heads/{PHASES.EPIC}')
 #: An owner's approval, as a decisions row's status (its last column) reads
 #: it: these words at its start and a date, followed by nothing, a
 #: parenthesis, or a note after "; " or ", " (the forms decisions.md uses).
@@ -340,6 +391,69 @@ def landed_on(repo: Path, sha: str, base: str) -> str | None:
     return None
 
 
+def epic_checkpoint(repo: Path, sha: str) -> str | None:
+    r"""The merged phase's last landing as ``sha`` holds it (T2.0): the
+    second parent of the newest merge on ``sha``'s first-parent history,
+    ``sha`` included, whose second parent is a landing commit; None when
+    there is none."""
+    out = git(repo, 'rev-list', '--first-parent', '--parents', sha)
+    for line in out.splitlines():
+        parents = line.split()[1:]
+        if len(parents) >= 2 and is_landing(repo, parents[1]):
+            return parents[1]
+    return None
+
+
+def epic_tip(repo: Path, epic: str | None) -> tuple[str, str] | None:
+    r"""The epic branch's tip and the ref it was read from: ``epic`` when
+    given, else the first of :data:`EPIC_REFS` the repository holds."""
+    for ref in (epic,) if epic else EPIC_REFS:
+        try:
+            return git(repo, 'rev-parse', f'{ref}^{{commit}}').strip(), ref
+        except Unreadable:
+            continue
+    return None
+
+
+def phase_name(repo: Path, environ: dict[str, str] | None = None) -> str:
+    r"""The phase branch the run is on: ``phases.phase_branch`` of CI's
+    branch (``GITHUB_REF_NAME``) or the branch checked out, after
+    ``SDM_PHASE_BRANCH``."""
+    environ = dict(os.environ) if environ is None else environ
+    try:
+        return str(
+            PHASES.phase_branch(
+                branch=environ.get('GITHUB_REF_NAME') or _checked_out(repo),
+                environ=environ,
+            )
+        )
+    except PHASES.PhaseError as error:
+        raise Unreadable(str(error)) from None
+
+
+def fork_point(
+    repo: Path, phase: str | None, epic: str | None
+) -> tuple[str | None, str]:
+    r"""The phase branch's fork point from the epic branch, ``git
+    merge-base PHASE EPIC`` (``origin/<phase>``, else the local branch;
+    the epic ``epic``, else :data:`EPIC_REFS`), and how it was read."""
+    phase = phase or phase_name(repo)
+    tip = epic_tip(repo, epic)
+    if tip is None:
+        return None, f'no epic branch {epic or PHASES.EPIC} here'
+    for ref in (f'refs/remotes/origin/{phase}', f'refs/heads/{phase}'):
+        try:
+            head = git(repo, 'rev-parse', f'{ref}^{{commit}}').strip()
+        except Unreadable:
+            continue
+        try:
+            fork = git(repo, 'merge-base', head, tip[0]).strip()
+        except Unreadable:
+            return None, f'{ref} and {tip[1]} have no merge base'
+        return fork, f'git merge-base {ref} {tip[1]}'
+    return None, f'no phase branch {phase} here'
+
+
 @dataclass
 class Checkpoint:
     sha: str
@@ -350,9 +464,15 @@ class Checkpoint:
 
 
 def resolve(
-    repo: Path, base: str | None = None, phase_push: str | None = None
+    repo: Path,
+    base: str | None = None,
+    phase_push: str | None = None,
+    epic: str | None = None,
+    phase: str | None = None,
 ) -> tuple[Checkpoint | None, list[str]]:
-    r"""The candidate's checkpoint, or the problems that leave it none."""
+    r"""The candidate's checkpoint, or the problems that leave it none;
+    ``epic`` the epic branch's ref and ``phase`` the phase branch
+    (:func:`phase_name` by default) the fork point is read from."""
     candidate = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
     notes: list[str] = []
     # A base the run read from the live phase branch, which may move while
@@ -429,11 +549,27 @@ def resolve(
             'would be its own checkpoint; judge it against the base recorded '
             'before the phase branch advanced'
         )
-    if not is_landing(repo, found):
-        problems.append(
-            f'the checkpoint {found[:12]} is not a landing commit, so not a '
-            'reviewed one: the phase branch holds an unlanded commit'
-        )
+    if found != candidate and not is_landing(repo, found):
+        # A phase's first checkpoint (T2.0): its fork point from the epic
+        # branch, the one commit the phase branch holds that no package
+        # landed.
+        fork, read = fork_point(repo, phase, epic)
+        if fork != found:
+            problems.append(
+                f'the checkpoint {found[:12]} is not a landing commit, so not '
+                'a reviewed one: the phase branch holds an unlanded commit; '
+                + (
+                    f'nor is it the fork point of the phase branch ({read})'
+                    if fork is None
+                    else f'nor the fork point of the phase branch from the '
+                    f'epic branch, {fork[:12]} ({read})'
+                )
+            )
+        else:
+            notes.append(
+                f'the checkpoint {found[:12]} is no landing commit but the '
+                f'first of the phase branch: its fork point ({read})'
+            )
     if problems:
         return None, problems
     if found != base:
@@ -1339,6 +1475,21 @@ def check_relaxations(
             report.note(rule, f'{change}: approved by {decision}')
 
 
+def checkpoint_decisions(report: Report, checkpoint: Tree) -> str:
+    r"""Every phase's decisions at the checkpoint, as one text
+    (``capture_check.phase_decisions``, T2.0); a file missing, unreadable
+    or malformed fails the ``decisions`` rule by name, and then no row
+    approves anything."""
+    module = capture_check()
+    try:
+        return module.phase_decisions(
+            checkpoint.files(DECISIONS_DIR), checkpoint.read
+        )
+    except module.DecisionsError as error:
+        report.fail('decisions', f"the checkpoint's {error}")
+        return ''
+
+
 def check_known_differing(
     report: Report, checkpoint: Tree, candidate: Tree
 ) -> None:
@@ -1624,7 +1775,7 @@ def check(
             report, checkpoint, candidate, changed, trailer, bootstrap
         )
         check_reference(report, checkpoint, candidate, entries, removed)
-        decisions = checkpoint.read(DECISIONS)
+        decisions = checkpoint_decisions(report, checkpoint)
         old_policy = _yaml(checkpoint.read(POLICY), POLICY)
         new_policy = _yaml(candidate.read(POLICY), POLICY)
         check_relaxations(
@@ -1813,18 +1964,42 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
     return []
 
 
-def ci_base(environ: dict[str, str]) -> str:
+def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     r"""The gate's base for a CI run, from GitHub's environment: on a push
-    to the phase branch, ``--phase-push`` and the push's previous tip (from
-    the event file); on a push to a lane or another branch under it, or with
-    no CI environment (a local replay), ``--base`` the phase branch's
-    remote tip; elsewhere nothing, since there is no ratchet to run."""
+    to a phase branch (``rust-core-phase-N``, any N), ``--phase-push`` and
+    the push's previous tip (from the event file); on a push to a lane or
+    another branch under one, ``--base`` that phase branch's remote tip; on
+    a push to the epic branch, ``--base`` the merged phase's last landing
+    ``repo``'s ``HEAD`` holds (:func:`epic_checkpoint`; T2.0), so the epic
+    branch is judged like a moved landing of that phase's head, and with
+    none it fails; with no CI environment (a local replay), ``--base`` the
+    remote tip of the phase branch ``phases.phase_branch`` names for the
+    branch checked out; elsewhere nothing, since there is no ratchet to
+    run."""
     ref = environ.get('GITHUB_REF_NAME')
     if ref is None:
-        return '--base origin/rust-core-phase-1'
+        try:
+            phase = PHASES.phase_branch(
+                branch=_checked_out(repo), environ=environ
+            )
+        except PHASES.PhaseError as error:
+            raise Unreadable(str(error)) from None
+        return f'--base origin/{phase}'
     if environ.get('GITHUB_EVENT_NAME') != 'push':
         return ''
-    if ref == 'rust-core-phase-1':
+    if ref == PHASES.EPIC:
+        head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
+        landing = epic_checkpoint(repo, head)
+        if landing is None:
+            raise Unreadable(
+                f'{PHASES.EPIC} holds no merged phase: no merge on its '
+                'first-parent history has a landing commit as second parent'
+            )
+        return f'--base {landing}'
+    phase = PHASES.phase_of(ref)
+    if phase is None:
+        return ''
+    if ref == phase:
         event = _json(
             Path(environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'),
             'the event',
@@ -1835,9 +2010,16 @@ def ci_base(environ: dict[str, str]) -> str:
         ):
             raise Unreadable('the push event names no previous tip')
         return f'--phase-push {before}'
-    if ref.startswith('rust-core-phase-1-'):
-        return '--base origin/rust-core-phase-1'
-    return ''
+    return f'--base origin/{phase}'
+
+
+def _checked_out(repo: Path) -> str | None:
+    try:
+        return (
+            git(repo, 'symbolic-ref', '--short', '-q', 'HEAD').strip() or None
+        )
+    except Unreadable:
+        return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1848,6 +2030,7 @@ def main(argv: list[str] | None = None) -> int:
     where = point.add_mutually_exclusive_group(required=True)
     where.add_argument('--base')
     where.add_argument('--phase-push')
+    point.add_argument('--epic')
     judge = commands.add_parser('check')
     judge.add_argument('--repo', type=Path, default=Path('.'))
     judge.add_argument('--checkpoint', required=True)
@@ -1855,12 +2038,17 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--bootstrap', action='store_true')
     judge.add_argument('--observations', type=Path, action='append', default=[])
     judge.add_argument('--effective-out', type=Path)
-    commands.add_parser('where')
+    spot = commands.add_parser('where')
+    spot.add_argument('--repo', type=Path, default=Path('.'))
+    stand = commands.add_parser('stand-in')
+    stand.add_argument('--repo', type=Path, default=Path('.'))
+    stand.add_argument('sha')
     expect = commands.add_parser('effective')
     expect.add_argument('--repo', type=Path, default=Path('.'))
     among = expect.add_mutually_exclusive_group(required=True)
     among.add_argument('--base')
     among.add_argument('--phase-push')
+    expect.add_argument('--epic')
     expect.add_argument('--out', type=Path, required=True)
     take = commands.add_parser('accept')
     take.add_argument('--repo', type=Path, default=Path('.'))
@@ -1871,11 +2059,27 @@ def main(argv: list[str] | None = None) -> int:
     arguments = parser.parse_args(argv)
     try:
         if arguments.command == 'where':
-            print(ci_base(dict(os.environ)))
+            print(ci_base(dict(os.environ), arguments.repo))
+            return 0
+        if arguments.command == 'stand-in':
+            sha = git(
+                arguments.repo, 'rev-parse', f'{arguments.sha}^{{commit}}'
+            )
+            landing = epic_checkpoint(arguments.repo, sha.strip())
+            if landing is None:
+                print(
+                    f'stand-in: {arguments.sha} holds no merged phase',
+                    file=sys.stderr,
+                )
+                return 1
+            print(landing)
             return 0
         if arguments.command == 'checkpoint':
             found, problems = resolve(
-                arguments.repo, arguments.base, arguments.phase_push
+                arguments.repo,
+                arguments.base,
+                arguments.phase_push,
+                arguments.epic,
             )
             for problem in problems:
                 print(f'checkpoint: {problem}', file=sys.stderr)
@@ -1891,7 +2095,10 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if arguments.command == 'effective':
             found, problems = resolve(
-                arguments.repo, arguments.base, arguments.phase_push
+                arguments.repo,
+                arguments.base,
+                arguments.phase_push,
+                arguments.epic,
             )
             if found is not None:
                 problems = write_effective(

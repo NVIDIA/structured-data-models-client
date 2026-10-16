@@ -41,17 +41,29 @@ import copy
 import json
 import re
 import sys
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 POLICY = Path(__file__).resolve().parents[1] / 'compare-policy.yaml'
-#: The decisions an exclusion must name, each by a row whose status reads
-#: "approved by owner".
-DECISIONS = (
-    Path(__file__).resolve().parents[2]
-    / 'docs/design/rust-core/phase-1/decisions.md'
+#: The repository this file is in.
+ROOT = Path(__file__).resolve().parents[2]
+#: Where every phase's decisions file is, ``phase-N/decisions.md``: the
+#: decisions an exclusion must name, each by a row whose status reads
+#: "approved by owner", are read from all of them (T2.0), Phase 1's rows in
+#: force and each later phase's added (:func:`phase_decisions`).
+DECISIONS_DIR = 'docs/design/rust-core'
+#: A phase's decisions file, as a repository path; the phase's number.
+DECISIONS_FILE = re.compile(
+    r'docs/design/rust-core/phase-(0|[1-9][0-9]*)/decisions\.md'
 )
+#: A phase's design, whose phase must have a decisions file.
+DESIGN_FILE = re.compile(
+    r'docs/design/rust-core/phase-(0|[1-9][0-9]*)/design\.md'
+)
+#: The decisions file of Phase 1, the first phase with a ratchet: every
+#: tree since holds it, and its rows stay in force.
+FIRST_DECISIONS = 'docs/design/rust-core/phase-1/decisions.md'
 #: The policy's format, and what a rule may be.
 POLICY_FORMAT = 'sdm-compare-policy/1'
 RULE_CLASSES = ('gate', 'diagnostic')
@@ -88,9 +100,111 @@ class PolicyError(Exception):
     r"""``compare-policy.yaml`` is not a policy this checker can apply."""
 
 
-def _decision_rows(path: Path) -> dict[str, tuple[str, str]]:
-    r"""decisions.md's rows by ID: each row's whole text and its status,
-    the last cell."""
+class DecisionsError(Exception):
+    r"""The phases' decisions files cannot be read as a whole: each problem
+    named by its file (and row), so nothing they approve counts."""
+
+
+#: A decision row's start: its ID cell.
+ROW = re.compile(r'\| ([A-Z][A-Z0-9-]*) \|')
+
+
+def phase_decisions(
+    paths: Iterable[str], read: Callable[[str], str | None]
+) -> str:
+    r"""Every phase's decisions, as one text :func:`decision_rows` reads:
+    each ``phase-N/decisions.md`` among ``paths`` (repository paths under
+    :data:`DECISIONS_DIR`), in phase order, ``read`` giving a path's text
+    (None when it is missing). It fails closed, raising
+    :class:`DecisionsError` that names each problem's file, when:
+
+    - a file a phase needs is missing: Phase 1's, any phase's below the
+      highest phase with one (a gap), and a phase's that has a
+      ``design.md``;
+    - a file is not UTF-8 text or cannot be read (``read`` raising) or
+      reads as None though listed;
+    - a decision row is malformed: no status in its last cell;
+    - a row's ID is in two places, in one file or in two, so which row
+      approves would be a guess."""
+    listed = set(paths)
+    files: dict[int, str] = {}
+    designs: set[int] = set()
+    for path in listed:
+        found = DECISIONS_FILE.fullmatch(path)
+        if found:
+            files[int(found.group(1))] = path
+        found = DESIGN_FILE.fullmatch(path)
+        if found:
+            designs.add(int(found.group(1)))
+    needed = {1} | set(range(1, max(files, default=1) + 1)) | designs
+    problems = [
+        f'{DECISIONS_DIR}/phase-{number}/decisions.md: missing'
+        for number in sorted(needed - set(files))
+    ]
+    texts: list[str] = []
+    seen: dict[str, str] = {}
+    for number in sorted(files):
+        path = files[number]
+        try:
+            text = read(path)
+        except UnicodeDecodeError:
+            problems.append(f'{path}: not UTF-8')
+            continue
+        except Exception as error:  # the reader's own, named: fail closed
+            problems.append(f'{path}: unreadable ({error})')
+            continue
+        if text is None:
+            problems.append(f'{path}: missing')
+            continue
+        for line in text.splitlines():
+            found = ROW.match(line)
+            if not found:
+                continue
+            row = found.group(1)
+            cells = [
+                cell.strip() for cell in line.strip().strip('|').split('|')
+            ]
+            if len(cells) < 2 or not cells[-1]:
+                problems.append(f'{path}: row {row} is malformed: no status')
+            if row in seen:
+                problems.append(
+                    f'{path}: row {row} is also in {seen[row]}'
+                    if seen[row] != path
+                    else f'{path}: row {row} is there twice'
+                )
+            seen.setdefault(row, path)
+        texts.append(text)
+    if problems:
+        raise DecisionsError('; '.join(problems))
+    return '\n'.join(texts)
+
+
+def repository_decisions(root: Path = ROOT) -> str:
+    r""":func:`phase_decisions` of the files under ``root``'s
+    :data:`DECISIONS_DIR`."""
+    base = root / DECISIONS_DIR
+    paths = [
+        path.relative_to(root).as_posix()
+        for path in sorted(base.glob('phase-*/*.md'))
+        if path.is_file()
+    ]
+
+    def read(path: str) -> str | None:
+        file = root / path
+        return file.read_text(encoding='utf-8') if file.is_file() else None
+
+    return phase_decisions(paths, read)
+
+
+def _decision_rows(path: Path | None) -> dict[str, tuple[str, str]]:
+    r"""The rows by ID of every phase's decisions file (``None``: this
+    repository's, :func:`repository_decisions`), or of the one file
+    ``path`` names: each row's whole text and its status, the last cell."""
+    if path is None:
+        try:
+            return decision_rows(repository_decisions())
+        except DecisionsError as error:
+            raise PolicyError(f'the decisions: {error}') from None
     return decision_rows(path.read_text(encoding='utf-8'))
 
 
@@ -99,7 +213,7 @@ def decision_rows(text: str) -> dict[str, tuple[str, str]]:
     :func:`_decision_rows`; the ratchet reads the checkpoint's this way."""
     rows = {}
     for line in text.splitlines():
-        found = re.match(r'\| ([A-Z][A-Z0-9-]*) \|', line)
+        found = ROW.match(line)
         if found:
             cells = [
                 cell.strip() for cell in line.strip().strip('|').split('|')
@@ -147,10 +261,13 @@ def _exclusion_problem(
     return None
 
 
-def policy(path: Path = POLICY, decisions: Path = DECISIONS) -> dict[str, Any]:
+def policy(
+    path: Path = POLICY, decisions: Path | None = None
+) -> dict[str, Any]:
     r"""The comparator's policy, checked: every rule a gate or diagnostic;
     every exclusion value only (``keeps: [presence, type]``), of a payload,
-    naming a decision whose row in ``decisions`` reads "approved by owner"
+    naming a decision whose row in ``decisions`` (by default every phase's
+    decisions file, :func:`repository_decisions`) reads "approved by owner"
     with the exclusion's own status, and the one path that row approves
     (:func:`_exclusion_problem`; an exclusion waits for the owner,
     decisions.md's preamble, and an unapproved or widened one is refused
