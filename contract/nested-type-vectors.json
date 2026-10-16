@@ -1,7 +1,7 @@
 {
  "format": "sdm-nested-type-vectors/1",
  "recorded_by": "contract/tools/nested_type_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cell": "ref-pandas3",
  "environment": {
   "python": "3.12.13",

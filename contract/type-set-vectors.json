@@ -2636,7 +2636,7 @@
    },
    "core": "success",
    "reach": "DECIMAL(9,2) with arrow_output_version '1.5'",
-   "reference": "refusal UNNAMED",
+   "reference": "success",
    "evidence": "probe: RuntimeError at from_source",
    "witness": [
     "SET arrow_output_version = '1.5'",
@@ -2645,12 +2645,15 @@
    "duckdb_arrow": "decimal32(9, 2)",
    "reference_answer": {
     "outcome": {
-     "result": "refusal",
-     "stage": "from_source",
-     "error": "RuntimeError",
+     "result": "success",
+     "stage": "predict",
+     "error": null,
      "code": null
     },
-    "described": null
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
    }
   },
   {
@@ -2676,7 +2679,7 @@
    },
    "core": "success",
    "reach": "DECIMAL(18,2) with arrow_output_version '1.5'",
-   "reference": "refusal UNNAMED",
+   "reference": "success",
    "evidence": "probe: RuntimeError at from_source",
    "witness": [
     "SET arrow_output_version = '1.5'",
@@ -2685,12 +2688,15 @@
    "duckdb_arrow": "decimal64(18, 2)",
    "reference_answer": {
     "outcome": {
-     "result": "refusal",
-     "stage": "from_source",
-     "error": "RuntimeError",
+     "result": "success",
+     "stage": "predict",
+     "error": null,
      "code": null
     },
-    "described": null
+    "described": {
+     "dtype": "float64",
+     "stype": "categorical"
+    }
    }
   },
   {
@@ -2716,7 +2722,7 @@
    },
    "core": "success",
    "reach": "DECIMAL(18,0) with arrow_output_version '1.5'",
-   "reference": "refusal UNNAMED",
+   "reference": "success",
    "evidence": "probe: RuntimeError at from_source",
    "witness": [
     "SET arrow_output_version = '1.5'",
@@ -2725,12 +2731,15 @@
    "duckdb_arrow": "decimal64(18, 0)",
    "reference_answer": {
     "outcome": {
-     "result": "refusal",
-     "stage": "from_source",
-     "error": "RuntimeError",
+     "result": "success",
+     "stage": "predict",
+     "error": null,
      "code": null
     },
-    "described": null
+    "described": {
+     "dtype": "int64",
+     "stype": "categorical"
+    }
    }
   },
   {
@@ -4416,12 +4425,12 @@
    "TimeZone_UTC": "timestamp[ns]"
   },
   "TIMESTAMPTZ": {
-   "default": "timestamp[us, tz=America/Los_Angeles]",
-   "arrow_lossless_conversion": "timestamp[us, tz=America/Los_Angeles]",
-   "arrow_large_buffer_size": "timestamp[us, tz=America/Los_Angeles]",
-   "string_views": "timestamp[us, tz=America/Los_Angeles]",
-   "list_views": "timestamp[us, tz=America/Los_Angeles]",
-   "arrow_output_version_1.5": "timestamp[us, tz=America/Los_Angeles]",
+   "default": "timestamp[us, tz=Etc/UTC]",
+   "arrow_lossless_conversion": "timestamp[us, tz=Etc/UTC]",
+   "arrow_large_buffer_size": "timestamp[us, tz=Etc/UTC]",
+   "string_views": "timestamp[us, tz=Etc/UTC]",
+   "list_views": "timestamp[us, tz=Etc/UTC]",
+   "arrow_output_version_1.5": "timestamp[us, tz=Etc/UTC]",
    "TimeZone_UTC": "timestamp[us, tz=UTC]"
   },
   "INTERVAL": {
@@ -4517,7 +4526,7 @@
  },
  "recorded": {
   "by": "contract/tools/type_set_record.py",
-  "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+  "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
   "cell": "ref-pandas3",
   "environment": {
    "python": "3.12.13",
