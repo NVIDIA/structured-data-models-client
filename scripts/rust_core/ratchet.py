@@ -75,12 +75,11 @@ checkpoint's files, read from git at ``--checkpoint``:
   approved by an earlier landing authorized that landing's change, not
   every later one to the same case or base;
 - ``epic``: with ``--epic`` (the epic branch's head, as ``where`` names it
-  for a push to ``rust-core``), each commit after the phase merge that
-  brought the checkpoint in, and that merge, that changes a protected path
-  is named by an owner-approved row of the checkpoint's own decisions (by a
-  SHA prefix of 8 or more digits, or a range ``A..B``, in backticks),
-  whatever its subject or trailers, since no landing will
-  (:func:`check_epic`, T2.0; its threat model is honest drift);
+  for a push to ``rust-core``), every protected path, by the checkpoint's
+  list or the head's, has the same entry in the head's tree as in the
+  checkpoint's: a protected change reaches the epic branch only through a
+  reviewed phase landing the owner merges (:func:`check_epic`, T2.0; its
+  threat model is honest drift);
 - ``register``: ``register.py validate``, with the checkpoint's register for
   never-reused IDs; entries added or changed are listed, ``approved_by:
   owner`` ones first, for the owner's check-ins;
@@ -1526,72 +1525,6 @@ def check_relaxations(
             report.note(rule, f'{change}: approved by {decision}')
 
 
-#: A commit an owner's row names: a SHA prefix of at least 8 hex digits, or
-#: a range ``A..B`` (git's: the first-parent commits after A up to B), each
-#: in backticks.
-NAMED_COMMIT = re.compile(r'`([0-9a-f]{8,40})(?:\.\.([0-9a-f]{8,40}))?`')
-
-
-def owner_named(repo: Path, decisions: str, commit: str) -> bool:
-    r"""Whether a row of ``decisions`` approved by the owner names
-    ``commit`` (:data:`NAMED_COMMIT`)."""
-    for row, status in capture_check().decision_rows(decisions).values():
-        if not owner_approved(status):
-            continue
-        for start, end in NAMED_COMMIT.findall(row):
-            if not end and commit.startswith(start):
-                return True
-            if end:
-                try:
-                    inside = git(
-                        repo, 'rev-list', '--first-parent', f'{start}..{end}'
-                    ).split()
-                except Unreadable:
-                    continue
-                if commit in inside:
-                    return True
-    return False
-
-
-def entry(repo: Path, tree: str, path: str) -> str:
-    r"""``path``'s tree entry at ``tree`` (a commit or tree): its mode,
-    type and object ID, so a mode change is a change; an empty string when
-    it has no such path."""
-    out = git(repo, 'ls-tree', '-z', tree, '--', f':(literal){path}')
-    for record in out.split('\0'):
-        meta, tab, name = record.partition('\t')
-        if tab and name == path:
-            return meta
-    return ''
-
-
-def merge_of(repo: Path, ours: str, theirs: str) -> tuple[str, set[str]] | None:
-    r"""git's own merge of ``ours`` and ``theirs`` (``git merge-tree
-    --write-tree``, objects written, no ref): its tree and the paths it
-    leaves conflicted; None when git cannot merge them at all."""
-    done = subprocess.run(
-        ['git', '-C', str(repo), 'merge-tree', '--write-tree', '--name-only',
-         '-z', ours, theirs],
-        capture_output=True,
-        text=True,
-        check=False,
-    )  # fmt: skip
-    if done.returncode not in (0, 1):
-        return None
-    parts = done.stdout.split('\0')
-    conflicted: set[str] = set()
-    if done.returncode == 1:
-        for name in parts[1:]:
-            if not name:
-                break
-            conflicted.add(name)
-    return parts[0].strip(), conflicted
-
-
-#: git's empty tree, the parent a root commit's change is read against.
-EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
-
-
 def changed_paths(repo: Path, before: str, after: str) -> list[str]:
     r"""The paths ``after`` changes against ``before``, read NUL-separated
     so a name past ASCII or holding a control character is its own, never
@@ -1611,108 +1544,39 @@ def epic_head(repo: Path, head: str) -> bool:
 
 
 def check_epic(
-    report: Report, repo: Path, checkpoint: Tree, head: str, decisions: str
+    report: Report, repo: Path, checkpoint: Tree, candidate: Tree, head: str
 ) -> None:
     r"""Rule ``epic`` (T2.0), run on the epic branch's head (``--epic``,
-    which ``where`` prints for a push to ``rust-core``): no landing will
-    name a protected change made on the epic branch after the merged
-    phase's last landing L, the checkpoint, so an owner-approved row of L's
-    own decisions must name each commit that makes one.
+    which ``where`` prints for a push to ``rust-core``) judged against the
+    merged phase's last landing L, the checkpoint: every protected path has
+    the same entry in the head's tree as in L's, its presence, mode and
+    object ID (``git diff --no-renames L HEAD``, read NUL-separated), the
+    protected paths being those L's ``contract/protected-paths.txt``
+    matches and those the head's own list matches, so a head can't shrink
+    the list to hide a change. Any difference fails, naming the path.
 
-    The commits judged: what the phase merge M that brought L in (the
-    merge on the head's first-parent history whose second parent is L)
-    holds beyond L, each path the change of the epic-side commits that made
-    it (``L..M^1``, each against its first parent), and of M itself unless
-    git's own merge of M's parents is clean there and M's entry (mode and
-    object) is that merge's (``git merge-tree``; a conflicted path is
-    always M's, and needs a follow-up reviewed landing); and
-    every commit after M (``git rev-list M..HEAD``), each against its first
-    parent, a merge included, so a merge taking a protected file from any
-    older parent is seen, and a change a later commit undoes still
-    counts. Nothing after L is a landing here, whatever
-    its subject or trailers: a later landing reaches the epic branch only
-    by the owner's merge, which makes it the next checkpoint. The rows are
-    L's alone, reviewed and landed, never the head's, so no push approves
-    itself.
+    No commit is walked and no row approves anything: a protected change
+    reaches the epic branch only through a reviewed phase landing the owner
+    merges, which then is the checkpoint. (Fix 7 replaced an attribution
+    of changes to commits, which missed a git edge case in each of five
+    review rounds: renames, merges, conflicts, modes.)
 
     Threat model (as decision E56(b) states it for the L0 guards): honest
     drift. CI on ``rust-core`` runs the pushed head's own ``ci.yml`` and
     ``gate.sh``, so a push crafted to evade the rule (changing either) can;
     only the owner pushes ``rust-core``, and this rule catches an honest
-    protected change no reviewed landing names."""
-    rules = patterns(checkpoint.read(PROTECTED))
-    merge = None
-    for line in git(
-        repo, 'rev-list', '--first-parent', '--parents', head
-    ).splitlines():
-        parents = line.split()
-        if parents[2:3] == [checkpoint.sha]:
-            merge = parents[0]
-            break
-    if merge is None:
-        report.fail(
-            'epic',
-            f'the checkpoint {checkpoint.sha[:12]} is no landing a phase '
-            "merge on the head's first-parent history brings in",
-        )
-        return
-    makers: dict[str, list[str]] = {}
-
-    def made(commit: str, paths: list[str]) -> None:
-        if paths:
-            makers.setdefault(commit, []).extend(paths)
-
-    def protected_between(before: str, after: str) -> list[str]:
-        return [
-            path
-            for path in changed_paths(repo, before, after)
-            if protects(rules, path)
-        ]
-
-    # The merge, for what it brings beyond L. Where git's own merge of its
-    # two parents (the epic side and L) is clean for a path and M's entry
-    # (mode and object) is that merge's, M added nothing of its own: the
-    # change is the epic-side commits' that made it (each against its first
-    # parent; L is reviewed). Anywhere else (a path git leaves conflicted,
-    # or M's entry other than git's merge) the path is M's own change,
-    # which no row of L's decisions can name, so it fails: an owner who
-    # resolves a protected conflict lands the resolution through a phase.
-    brought = set(protected_between(checkpoint.sha, merge))
-    for commit in git(repo, 'rev-list', f'{checkpoint.sha}..{merge}^1').split():
-        parent = git(repo, 'rev-list', '--parents', '-n', '1', commit).split()
-        before = parent[1] if len(parent) > 1 else EMPTY_TREE
-        made(
-            commit,
-            [p for p in protected_between(before, commit) if p in brought],
-        )
-    merged = merge_of(repo, f'{merge}^1', checkpoint.sha) if brought else None
-    made(
-        merge,
-        sorted(
-            p
-            for p in brought
-            if merged is None
-            or p in merged[1]
-            or entry(repo, merge, p) != entry(repo, merged[0], p)
-        ),
+    protected change no reviewed landing brought."""
+    lists = (
+        patterns(checkpoint.read(PROTECTED)),
+        patterns(candidate.read(PROTECTED)),
     )
-    # Every commit after the merge, a merge against its first parent.
-    for commit in git(repo, 'rev-list', f'{merge}..{head}').split():
-        made(commit, protected_between(f'{commit}^1', commit))
-    for commit, paths in sorted(makers.items()):
-        if owner_named(repo, decisions, commit):
-            report.note(
-                'epic',
-                f'{commit[:12]}: {len(paths)} protected paths, named by an '
-                "owner-approved row of the checkpoint's decisions",
-            )
-            continue
-        for path in paths:
+    for path in sorted(changed_paths(repo, checkpoint.sha, head)):
+        if any(protects(rules, path) for rules in lists):
             report.fail(
                 'epic',
-                f'{path}: changed on the epic branch by {commit[:12]}, '
-                "which no owner-approved row of the checkpoint's decisions "
-                'names',
+                f'{path}: differs on the epic branch from the merged '
+                f'landing {checkpoint.sha[:12]}; a protected change reaches '
+                'rust-core only through a reviewed phase landing',
             )
 
 
@@ -2019,7 +1883,7 @@ def check(
         check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
         if epic:
-            check_epic(report, repo, checkpoint, head, decisions)
+            check_epic(report, repo, checkpoint, candidate, head)
         elif epic_head(repo, head):
             report.note(
                 'epic',

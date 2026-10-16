@@ -43,20 +43,11 @@ It lands alone, first, on `rust-core-phase-2`, with two reviewers.
    So `rust-core` is judged like a moved landing of that phase's head, by that landing's harness, with every comparison as it was.
    `ci.yml`'s gate steps must run on `rust-core` too: an empty `where` there fails.
    `contract/tests/test_runners.py` reads `where` the same way.
-   On the epic branch no landing will name a protected change made after the checkpoint L (the merged phase's last landing), so the ratchet's rule `epic` (fixes 1 and 2) fails each such change unless an owner-approved row names its commit.
+   On the epic branch no landing will name a protected change made after the checkpoint L (the merged phase's last landing), so the ratchet's rule `epic` (fix 7) holds the head's tree to L's on every protected path.
    - **When it applies:** with `--epic`, which `where` prints for a push to `rust-core` and `gate.sh` hands the harness. So a replay of an older push, or a local replay (`gate.sh --base L --epic`), judges the rule, whatever the remote tip is (fix 4). A check without `--epic` on the epic branch's head (the tip of `origin/rust-core`, or `rust-core` checked out) says rule `epic` did not run and how to run it (fix 5).
-   - **What it covers:**
-     - What the phase merge M that brought L in holds beyond L. Each such path counts as the change of the epic-side commits that made it (`L..M^1`).
-       - It is also M's own change, which no row can name, unless git's own merge of M's two parents (`git merge-tree --write-tree M^1 L`, which writes objects but no ref) is clean there and M's entry, mode and object ID, is that merge's (fix 6).
-       - So a clean merge of an approved epic change and the landing's change in one file passes.
-       - A merge that changes a protected mode fails, as does any resolution of a path git leaves conflicted, other than taking the landing's own version.
-       - The owner's cost: resolving a protected-path conflict any other way needs a follow-up reviewed landing.
-     - Entries are compared by mode and object ID throughout, ordinary commits included: a mode-only change is a change (fix 6).
-     - Every commit after M (`M..HEAD`), each against its first parent, a merge included. So a merge that takes a protected file from an older parent is seen, and a change a later commit undoes still counts (fix 4).
-     - Paths are read NUL-separated, so a name past ASCII or holding a control character is seen (fix 4), and the protected patterns span a newline in a name (fix 5).
-     - Nothing after L counts as a landing, whatever its subject or trailers: a later landing reaches `rust-core` only by the owner's merge, which makes it the next checkpoint.
-   - **Where the rows come from:** only L's own phase decisions files, reviewed and landed, never the head being judged, so no push approves itself. A row added after L counts once a later reviewed landing carries it and the owner merges that landing.
-   - **How a row names a commit:** a SHA prefix of 8 or more digits, or a range `A..B` (git's meaning, first-parent), in backticks.
+   - **What it checks:** tree equality. Every path that L's `contract/protected-paths.txt` matches, or that the head's own list matches (so a head can't shrink the list to hide a change), has the same entry (presence, mode and object ID) in the head's tree as in L's. That is `git diff --no-renames L HEAD`, read NUL-separated, so any name is seen, and the patterns span a newline. Any difference fails, naming the path. No commit is walked, nothing is attributed, and no row approves anything.
+   - **Why tree equality (fix 7):** from fix 1 to fix 6 the rule attributed each protected change to the commit that made it and let an owner row in L's decisions approve it. That attribution missed a git edge case in each of five review rounds running: quoted names, landing-shaped commits, merges taking an older parent's file, conflicts, modes, renames and earlier merges. By the plan's stop rule the method changed rather than getting another patch.
+   - **The owner's cost:** no direct protected commit on `rust-core`. A protected change reaches `rust-core` only through a reviewed phase landing that the owner merges, which then is the checkpoint. That includes a protected-path conflict the owner resolves when merging a phase: the resolution goes through a phase landing too.
    - **Threat model:** honest drift, as decision E56(b) states it for the L0 guards. CI on `rust-core` runs the pushed head's own `ci.yml` and `gate.sh`, so a push crafted to evade the rule (by changing either) can. Only the owner pushes `rust-core`. The rule catches an honest protected change that no reviewed landing names; it is a tripwire, not a control against a deliberate push.
    - **What runs it:** the rule is in T2.0's `ratchet.py`, and the gate runs the checkpoint's harness.
      - Today `rust-core`'s head holds Phase 1's `ci.yml`, which names no ratchet base, so `rust-core` stays red on its approved differences, as since the Phase 1 merge, and runs no rule `epic`.
@@ -145,7 +136,7 @@ These were run on T2.0's tree before the first push.
   - `gate.sh --only coverage`: ok.
   - `gate.sh --only l0`: ok.
 
-  The first round passed here because protected changes on the epic branch were only notes, which round 1 found to be a hole: rule `epic` (fixes 1 and 2) now fails each unnamed one once `rust-core`'s checkpoint is T2.0's landing or later.
+  The first round passed here because protected changes on the epic branch were only notes, which round 1 found to be a hole: rule `epic` (tree equality since fix 7) now fails each one once `rust-core`'s checkpoint is T2.0's landing or later.
   The comparisons themselves are the acceptance tests' (`contract/tests/test_t20_checkpoints.py`):
   - raw against the reference, the real `python-core` observations fail (the red runs reproduced);
   - held to `where`'s effective expectations, they pass;
@@ -187,7 +178,7 @@ These questions are deliberately left open, not fixed:
 
 - **H2:** authorize the one-time substitution of `bd44b342`'s harness for the fork point's, as described under "The bootstrap route".
 - **The window before T2.0's landing is merged into `rust-core`:** `rust-core` has no rule `epic` until the owner's `--no-ff` merge of T2.0's landing. The owner is asked to make that merge as soon as T2.0 lands (round 3, Codex P1-2).
-- **Where epic approvals come from:** rows count only from the checkpoint, so a protected change made directly on `rust-core` needs its approving row landed through a phase, and then merged, first.
+- **No direct protected commits on `rust-core`:** under rule `epic`'s tree equality (fix 7), a protected change, the 13 handoff commits' kind included, reaches `rust-core` only through a reviewed phase landing the owner merges. The handoff commits are ancestors of T2.0's landing, so the owner's `--no-ff` merge of it makes them part of the checkpoint.
 - **The bootstrap recognises T2.0 by commit subject:** another package's commits titled as T2.0's would pass it. That window closes when T2.0 lands or `rust-core` moves, and `land.py`'s lane registration stands behind subjects (round 3, reviewer P3-1).
 - **A push to `rust-core` editing `ci.yml` or `gate.sh` evades every check by construction:** whether `rust-core` gets branch protection (owner-only pushes) is the owner's call (round 3, reviewer P3-3).
 - **`ci.yml`'s phase predicate:** GitHub expressions can't express "digits only". The concurrency and the phase check's condition still let a name with a letter before its last digit, a leading zero or a dot (`rust-core-phase-x1`, `-02`, `-2.0`) through as a phase branch. Such a run isn't cancelled, and its phase check fails by name.
@@ -231,3 +222,8 @@ These questions are deliberately left open, not fixed:
   - A clean merge of approved and landed changes passes.
   - A mode change fails, and so does a conflicted protected path resolved other than to the landing's version.
   - `gate.sh` no longer prints "observed in None".
+- Round 6 (reviewer), fix 7:
+  - The reviewer found a rename and an earlier phase merge that the attribution missed.
+  - Under the stop rule, rule `epic` is now tree equality of protected paths against the checkpoint.
+  - The attribution, the merge-tree comparison and the epic rows are removed.
+  - `where`'s base choice, `--epic` and the note stay.
