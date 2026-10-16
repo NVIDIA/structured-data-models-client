@@ -14,9 +14,9 @@ committed as landings, plus every other file of this checkout that cites
 the reference SHA in full outside ``docs/`` (the vector files the
 reference SHA consistency tests check, wherever they are), so the
 temporary repository holds every citation the real one does. A test lands
-an owner row in ``phase-2/decisions.md`` (the checkpoint, which every
-candidate also holds, so the tests stand whichever of the two the
-implementation reads), then commits a candidate that re-records the
+an owner row in ``phase-2/decisions.md`` at the checkpoint (the
+orchestrator's decision: the ratchet reads the approval only there, never
+from the candidate), then commits a candidate that re-records the
 reference under a fake new SHA: the old file replaced by one named for the
 new SHA, its lines' identity moved to the new SHA, and every citation of
 the old SHA outside ``docs/`` (``reference-env.txt`` and the vector files)
@@ -34,8 +34,8 @@ recording carries every case the old one did, a dropped case named; a case
 whose recording differs is named in the report for the reviewers.
 Exit 2 (seeded faults): a row without the SHA, a row naming another SHA, a
 row that is not an owner approval, an abbreviated SHA, a row without the
-word "reference", a row outside a ``phase-*/decisions.md``, two reference
-files left behind.
+word "reference", a row outside a ``phase-*/decisions.md``, a row the
+candidate writes itself, two reference files left behind.
 Exit 5: after the change lands, the next package passes, the per-case rules
 hold the new recording, and the row does not admit a further replacement.
 
@@ -457,6 +457,29 @@ def test_a_row_outside_a_phase_decisions_file_admits_nothing(
     )
     commit(repo, 'T2.0c: the reference re-recorded', rerecord(NEW))
     assert refused_by_name(run(repo, checkpoint).problems)
+
+
+@PENDING
+def test_a_row_the_candidate_writes_itself_admits_nothing(repo: Path) -> None:
+    r"""Exit 2 (orchestrator's decision: the approval row is read only at
+    the checkpoint, never from the candidate): a candidate that replaces
+    the reference and adds its own owner-approval row naming the new SHA
+    to ``phase-2/decisions.md`` is refused by today's name, as with no
+    row. The twin, the same row landed at the checkpoint, passes first, so
+    the refusal is the row's placement."""
+    start = git(repo, 'rev-parse', 'HEAD')
+    good = approved_checkpoint(repo)
+    twin_passes(repo, good)
+    git(repo, 'reset', '-q', '--hard', start)
+
+    def both(r: Path) -> None:
+        rerecord(NEW)(r)
+        decisions(row(approval(NEW)))(r)
+
+    commit(repo, 'T2.0c: the reference re-recorded, approved by itself', both)
+    assert row(approval(NEW)) in (repo / DECISIONS).read_text()
+    found = run(repo, start).problems
+    assert refused_by_name(found), found
 
 
 @PENDING
