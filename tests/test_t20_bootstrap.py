@@ -31,16 +31,22 @@ One test runs the real pin on the real history.
   another Checkpoint-SHA; another package's candidate, first landing and
   phase push (Codex's round 2 P2-2); a first landing with no Reviewed-by.
 
-The epic branch (rule ``epic``), on a push to ``rust-core``: each commit
-after the checkpoint L (the merged phase's last landing) that changes a
-protected path fails unless an owner-approved row of L's own decisions
-names it, by SHA prefix or by range. The fixture: Phase 2 cut at the fork
-point, ``rust-core`` taking a commit U that changes a protected path, a
-Phase 2 landing L2 whose decisions name U, and ``rust-core`` merging L2.
-Seeded, each failing: no row; a row that is not the owner's; a row the
-head adds itself (Codex's round 2 P1-1); a landing-shaped commit after L2
-(P1-2); an older push replayed while ``origin/rust-core`` is later
-(P1-3).
+The epic branch (rule ``epic``, ``--epic``, as ``where`` names it for a push
+to ``rust-core``): every protected path, by the checkpoint L's list or the
+head's, has the same tree entry (presence, mode, type and object ID) in
+the head as in L, read with ``git ls-tree``, which no configuration
+changes. Fixtures: Phase 2 cut at the fork point, a landing L2, and
+``rust-core`` merging it ``--no-ff``. A clean owner merge, and a head
+differing from L2 only in unprotected paths, pass. Seeded, each failing: a
+direct protected edit under any name; a mode-only change; a shrunk
+protected list; a protected submodule change git is told to ignore; an
+epic edit carried through the landing's rename; an earlier merge's kept
+epic version after a later landing; the real rust-core against Phase 1's
+landing. ``where`` refuses a landing commit on rust-core's first-parent
+history (a fast-forward, or a landing-shaped head) and a merged landing
+record with no Reviewed-by; ``check --epic`` refuses a checkpoint other
+than the merged landing; a run without ``--epic`` on the epic head says
+the rule did not run.
 """
 
 from __future__ import annotations
@@ -613,6 +619,82 @@ def test_a_mode_only_change_fails(merged: dict[str, Any]) -> None:
     ]
 
 
+@pytest.mark.parametrize('ignored_by', ['.gitmodules', 'diff.ignoreSubmodules'])
+def test_a_protected_submodule_change_fails_whatever_git_is_told_to_ignore(
+    merged: dict[str, Any], ignored_by: str
+) -> None:
+    r"""Codex's round 7 P1-1 (the reviewer's P3-1): a submodule pinned at a
+    protected path, git told to ignore submodules (``ignore = all`` in
+    .gitmodules, or ``diff.ignoreSubmodules=all``), still differs from L."""
+    work, shas = at_merge(merged)
+    path = 'scripts/rust_core/sub'
+    (work / '.gitmodules').write_text(
+        f'[submodule "sub"]\n\tpath = {path}\n\turl = ./sub\n'
+        + ('\tignore = all\n' if ignored_by == '.gitmodules' else ''),
+        encoding='utf-8',
+    )
+    git(work, 'add', '.gitmodules')
+    git(
+        work,
+        'update-index',
+        '--add',
+        '--cacheinfo',
+        f'160000,{shas["L1"]},{path}',
+    )
+    git(work, 'commit', '-q', '-m', 'Handoff: a dependency')
+    environ = (
+        {
+            'GIT_CONFIG_COUNT': '1',
+            'GIT_CONFIG_KEY_0': 'diff.ignoreSubmodules',
+            'GIT_CONFIG_VALUE_0': 'all',
+        }
+        if ignored_by == 'diff.ignoreSubmodules'
+        else {}
+    )
+    done = ratchet_run(
+        work, 'check', '--repo', '.', '--checkpoint', shas['L2'], '--epic',
+        **environ,
+    )  # fmt: skip
+    assert done.returncode == 1, done.stdout
+    assert path in epic_failures(done), done.stdout
+
+
+def test_check_epic_by_hand_refuses_a_checkpoint_other_than_the_merged_landing(
+    merged: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 7 P3-3: the head judged against itself, or
+    against a commit no phase merge brings in, is refused."""
+    work, shas = at_merge(merged)
+    head = commit(
+        work, 'Handoff: a tool', write('scripts/rust_core/t.py', 'x\n')
+    )
+    for checkpoint in (head, shas['M2']):
+        done = epic_check(work, checkpoint)
+        assert done.returncode == 1, (checkpoint, done.stdout)
+        assert "is not the merged phase's last landing the head holds" in (
+            done.stdout
+        ), done.stdout
+
+
+def test_rust_core_fast_forwarded_to_a_landing_is_refused_by_name(
+    merged: dict[str, Any],
+) -> None:
+    r"""The reviewer's round 7 note: rust-core fast-forwarded to a landing
+    instead of merged --no-ff says so."""
+    work, shas = merged['work'], merged['shas']
+    git(work, 'checkout', '-q', '--detach', shas['L2'])
+    where = ratchet_run(
+        work,
+        'where',
+        '--repo',
+        '.',
+        GITHUB_EVENT_NAME='push',
+        GITHUB_REF_NAME=EPIC,
+    )
+    assert where.returncode == 1, where.stdout
+    assert 'must be a --no-ff merge' in where.stdout + where.stderr
+
+
 def test_a_shrunk_protected_list_hides_nothing(merged: dict[str, Any]) -> None:
     r"""The head drops scripts/rust_core/** from its list and adds a file
     there: the list itself, and the file by L's list, fail."""
@@ -744,9 +826,8 @@ def test_a_landing_shaped_head_never_chooses_its_own_base(
     merged: dict[str, Any],
 ) -> None:
     r"""The reviewer's round 3 P1-1 (a): a head titled and trailered as a
-    landing on Phase 1's last landing is still judged, with --epic,
-    against the merged phase's last landing where names, and its change
-    fails; a base other than that landing is refused."""
+    landing on Phase 1's last landing never chooses its own base: where
+    and --epic refuse it by name, and its change fails."""
     work, shas = at_merge(merged)
     commit(
         work,
@@ -767,17 +848,16 @@ def test_a_landing_shaped_head_never_chooses_its_own_base(
         GITHUB_EVENT_NAME='push',
         GITHUB_REF_NAME=EPIC,
     )
-    assert where.stdout.split() == ['--base', shas['L2'], '--epic'], (
-        where.stderr
-    )
-    done = ratchet_run(work, 'checkpoint', '--repo', '.', *where.stdout.split())
-    assert done.stdout.split()[:1] == [shas['L2']], done.stdout + done.stderr
-    assert epic_failures(epic_check(work, shas['L2']))
-    done = ratchet_run(
-        work, 'checkpoint', '--repo', '.', '--base', shas['L1'], '--epic'
-    )
-    assert done.returncode == 1, done.stdout
-    assert "is not the merged phase's last landing" in done.stderr
+    # A landing commit on the first-parent history is refused (fix 8:
+    # rust-core moves only by --no-ff merges), never taken as the base.
+    assert where.returncode == 1, where.stdout
+    assert 'must be a --no-ff merge' in where.stdout + where.stderr
+    for base in (shas['L1'], shas['L2']):
+        done = ratchet_run(
+            work, 'checkpoint', '--repo', '.', '--base', base, '--epic'
+        )
+        assert done.returncode == 1, (base, done.stdout)
+    assert epic_check(work, shas['L2']).returncode == 1
 
 
 def test_a_landing_record_without_reviewed_by_is_no_epic_base(

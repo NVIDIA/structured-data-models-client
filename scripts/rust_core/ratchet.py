@@ -406,10 +406,20 @@ def epic_merge(repo: Path, sha: str) -> tuple[str, str] | None:
     merge's second parent counts, never a landing-shaped commit elsewhere
     in the history, and the landing's record must carry Reviewed-by, as
     every landing ``land.py`` makes does: one without it fails here, by
-    name, never giving way to an older merge."""
+    name, never giving way to an older merge. A landing commit on the
+    first-parent history itself, before any such merge, is the epic branch
+    fast-forwarded to a landing rather than merged: refused, by name, since
+    the owner's merge of a phase must be ``--no-ff``."""
     out = git(repo, 'rev-list', '--first-parent', '--parents', sha)
     for line in out.splitlines():
         merge, *parents = line.split()
+        if len(parents) < 2 and is_landing(repo, merge):
+            raise Unreadable(
+                f"{merge[:12]}, a landing commit, is on the epic branch's "
+                'first-parent history itself: the epic branch was '
+                "fast-forwarded to a landing, and the owner's merge of a "
+                'phase into it must be a --no-ff merge'
+            )
         if len(parents) >= 2 and is_landing(repo, parents[1]):
             if not trailers(repo, parents[1]).get('Reviewed-by'):
                 raise Unreadable(
@@ -1525,12 +1535,28 @@ def check_relaxations(
             report.note(rule, f'{change}: approved by {decision}')
 
 
-def changed_paths(repo: Path, before: str, after: str) -> list[str]:
-    r"""The paths ``after`` changes against ``before``, read NUL-separated
-    so a name past ASCII or holding a control character is its own, never
+def tree_entries(repo: Path, rev: str) -> dict[str, str]:
+    r"""Every entry of ``rev``'s tree, by path: its mode, type and object ID
+    (``git ls-tree -r -z --full-tree``), a submodule's commit included. No
+    configuration changes what it lists (``diff.ignoreSubmodules``, a
+    ``.gitmodules`` ``ignore``), and names are read NUL-separated, never
     git's quoting."""
-    out = git(repo, 'diff', '--name-only', '--no-renames', '-z', before, after)
-    return [path for path in out.split('\0') if path]
+    out = git(repo, 'ls-tree', '-r', '-z', '--full-tree', rev)
+    found = {}
+    for record in out.split('\0'):
+        meta, tab, path = record.partition('\t')
+        if tab:
+            found[path] = meta
+    return found
+
+
+def changed_paths(repo: Path, before: str, after: str) -> list[str]:
+    r"""The paths whose entry (presence, mode, type, object ID) differs
+    between ``before``'s tree and ``after``'s (:func:`tree_entries`)."""
+    old, new = tree_entries(repo, before), tree_entries(repo, after)
+    return sorted(
+        p for p in old.keys() | new.keys() if old.get(p) != new.get(p)
+    )
 
 
 def epic_head(repo: Path, head: str) -> bool:
@@ -1550,7 +1576,7 @@ def check_epic(
     which ``where`` prints for a push to ``rust-core``) judged against the
     merged phase's last landing L, the checkpoint: every protected path has
     the same entry in the head's tree as in L's, its presence, mode and
-    object ID (``git diff --no-renames L HEAD``, read NUL-separated), the
+    object ID (:func:`tree_entries`, which no git configuration changes), the
     protected paths being those L's ``contract/protected-paths.txt``
     matches and those the head's own list matches, so a head can't shrink
     the list to hide a change. Any difference fails, naming the path.
@@ -1847,10 +1873,7 @@ def check(
     # Without rename detection, a move lists both its paths, so a protected
     # file moved out of (or onto) a protected path is seen at both; and
     # NUL-separated, so a path past ASCII is its name, not git's quoting.
-    changed = git(
-        repo, 'diff', '--name-only', '--no-renames', '-z', checkpoint_sha, head
-    ).split('\0')
-    changed = [path for path in changed if path]
+    changed = changed_paths(repo, checkpoint_sha, head)
     try:
         mine = check_register(report, checkpoint, candidate, repo)
         entries = approved(mine)
@@ -1883,7 +1906,21 @@ def check(
         check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
         if epic:
-            check_epic(report, repo, checkpoint, candidate, head)
+            found_merge = epic_merge(repo, head)
+            if (
+                head == checkpoint.sha
+                or found_merge is None
+                or (found_merge[1] != checkpoint.sha)
+            ):
+                report.fail(
+                    'epic',
+                    f'--epic: the checkpoint {checkpoint.sha[:12]} is not the '
+                    "merged phase's last landing the head holds ("
+                    + (found_merge[1][:12] if found_merge else 'none')
+                    + ')',
+                )
+            else:
+                check_epic(report, repo, checkpoint, candidate, head)
         elif epic_head(repo, head):
             report.note(
                 'epic',
