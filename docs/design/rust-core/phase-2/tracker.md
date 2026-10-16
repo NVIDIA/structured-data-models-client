@@ -59,6 +59,7 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 | 8 | 6ae9a8c7 | CHANGES REQUIRED (8 of 9 fixed; 0 P1, 2 P2, 4 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 2 | Fix 8: Postgres in the judging CI jobs (T2.3 part 1, alone, never skipped); `--ci-run` through `final_gate.sh` and `phase_end.sh`; moved landings; check numbers of the CI patterns; the edit gate's retirement alone; the locked file's `inventory`, `reference` and `every` |
 | 9 | e852d2b8 | CHANGES REQUIRED (5 of 7 fixed; 0 P1, 2 P2, 4 P3) | CHANGES REQUIRED (0 P1, 1 P2, 3 P3) | 0 | 3 | Fix 9: the kit run against the Python providers in `contract-python (*)`, with seeded faults per host; the Postgres CI service moved into T2.1a with `SDM_REQUIRE_POSTGRES`; the `pyo3` tree check under `rust-test*`; the interim edit gate retired only with shown replacements; the landing count |
 | 10 | 6dcfcecf | CHANGES REQUIRED (8 of 10 fixed; 0 P1, 1 P2, 3 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 1 | Fix 10: the reference's and the core's SQLite and Postgres drivers installed in T2.1a's judging landing with the service, and a seeded unreachable-service fault; no service in `cross-host*`; the kit's two sides share one fixture and one answers file; check 5 names the jobs that run each side |
+| 11 | 6ba078b4 | APPROVE (0 P1, 0 P2, 3 P3) | APPROVE (0 P1, 0 P2, 1 P3) | 0 | 0 | Both approve 6ba078b4. Closure fixes: check 5's single Python-kit cell justified; the Postgres-required tests named; the kit fixture's path. Then one closure check |
 
 ## Carried rows (plan section 8)
 
