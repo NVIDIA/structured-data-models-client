@@ -10,7 +10,7 @@ The design is updated in the same change as a row that changes it.
 ## Kickoff answers
 
 The owner's answers to the questions in [design.md](design.md), "Owner questions".
-Rows `K2-1` onward; none yet.
+Rows `KO2-1` onward; none yet.
 Phase 2's row IDs carry `2-` so they never collide with Phase 1's (`C1`, `E1`, ...) once every phase's decisions file is read (T2.0), and start with a capital letter, as `capture_check.py` and `coverage.py` read row IDs.
 
 | # | Decision | Reason | Status |
