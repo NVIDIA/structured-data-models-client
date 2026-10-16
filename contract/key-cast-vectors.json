@@ -31556,8 +31556,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31598,8 +31600,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31640,8 +31644,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31682,8 +31688,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31724,8 +31732,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31766,8 +31776,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31808,8 +31820,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31850,8 +31864,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31892,8 +31908,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31934,8 +31952,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -31976,8 +31996,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32015,7 +32037,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32055,6 +32078,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-18-0.text.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -32094,7 +32118,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32155,8 +32180,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32202,7 +32229,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32247,8 +32275,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32284,8 +32314,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32321,8 +32353,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32358,8 +32392,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32422,6 +32458,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-18-0.mixed.int-text, decimal128-18-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
@@ -32459,8 +32496,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32496,8 +32535,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32533,8 +32574,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32580,7 +32623,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32617,8 +32661,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32654,8 +32700,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32691,8 +32739,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32733,8 +32783,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32780,7 +32832,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32817,8 +32870,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32856,6 +32911,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-18-0.int.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -32916,6 +32972,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-18-0.text.digits, decimal128-18-0.mixed.float-text, which the reference answers differently"
     ],
@@ -32978,8 +33035,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33041,7 +33100,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33101,6 +33161,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-18-0.text.digits, decimal128-18-0.mixed.int-text, which the reference answers differently"
     ],
@@ -33153,8 +33214,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33202,8 +33265,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33251,8 +33316,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33302,8 +33369,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33365,7 +33434,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a bool entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a bool entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33402,8 +33472,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33441,8 +33513,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33478,8 +33552,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33539,8 +33615,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33586,7 +33664,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33633,8 +33712,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33682,7 +33763,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33728,8 +33810,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33779,7 +33863,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a time entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a time entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33825,8 +33910,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33864,7 +33951,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33911,7 +33999,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a bytes entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a bytes entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33953,8 +34042,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33995,8 +34086,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34037,8 +34130,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34079,8 +34174,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34121,8 +34218,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34163,8 +34262,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34205,8 +34306,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34247,8 +34350,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34289,8 +34394,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34382,7 +34489,8 @@
     "required": true,
     "why": [
      "the reference accepts a number as a different number (pandas' cast changes its value)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -34436,8 +34544,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34478,8 +34588,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34520,8 +34632,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34562,8 +34676,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34604,8 +34720,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34646,8 +34764,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34688,8 +34808,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34730,8 +34852,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34772,8 +34896,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34809,8 +34935,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34846,8 +34974,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34885,7 +35015,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34925,6 +35056,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-38-10.text.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -34964,7 +35096,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35018,8 +35151,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35063,8 +35198,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35105,8 +35242,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35147,8 +35286,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35189,8 +35330,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35231,8 +35374,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35285,8 +35430,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35327,8 +35474,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35374,7 +35523,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35411,8 +35561,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35453,8 +35605,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35490,8 +35644,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35527,8 +35683,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35569,8 +35727,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35611,8 +35771,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35648,8 +35810,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35685,8 +35849,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35729,6 +35895,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-38-10.int.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -35780,8 +35947,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35834,8 +36003,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35888,8 +36059,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35939,8 +36112,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35999,8 +36174,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36048,8 +36225,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36097,8 +36276,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36148,8 +36329,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36202,8 +36385,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36239,8 +36424,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36278,8 +36465,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36315,8 +36504,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36369,8 +36560,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36414,8 +36607,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36458,8 +36653,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36505,8 +36702,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36548,7 +36747,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36591,7 +36791,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36634,7 +36835,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36673,7 +36875,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36715,8 +36918,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36762,8 +36967,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36809,7 +37016,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36854,8 +37062,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36901,8 +37111,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36948,8 +37160,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36995,8 +37209,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37042,8 +37258,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37089,8 +37307,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37136,8 +37356,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37183,8 +37405,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37230,8 +37454,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37277,8 +37503,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37319,8 +37547,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37361,8 +37591,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37422,8 +37654,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37464,8 +37698,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37506,8 +37742,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37548,8 +37786,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37590,8 +37830,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37632,8 +37874,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37674,8 +37918,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37716,8 +37962,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37758,8 +38006,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37800,8 +38050,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37842,8 +38094,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37881,7 +38135,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37921,6 +38176,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-38-0.text.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -37960,7 +38216,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38021,8 +38278,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38068,7 +38327,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38113,8 +38373,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38150,8 +38412,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38187,8 +38451,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38224,8 +38490,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38288,6 +38556,7 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-38-0.mixed.int-text, decimal128-38-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
@@ -38325,8 +38594,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38362,8 +38633,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38399,8 +38672,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38446,7 +38721,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38483,8 +38759,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38520,8 +38798,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38557,8 +38837,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38599,8 +38881,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38646,7 +38930,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38683,8 +38968,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38722,6 +39009,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-38-0.int.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -38782,6 +39070,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-38-0.text.digits, decimal128-38-0.mixed.float-text, which the reference answers differently"
     ],
@@ -38844,8 +39133,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38907,7 +39198,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38967,6 +39259,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-38-0.text.digits, decimal128-38-0.mixed.int-text, which the reference answers differently"
     ],
@@ -39019,8 +39312,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39068,8 +39363,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39117,8 +39414,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39168,8 +39467,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39231,7 +39532,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a bool entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a bool entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39268,8 +39570,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39307,8 +39611,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39344,8 +39650,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39405,8 +39713,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39452,7 +39762,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39499,8 +39810,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39548,7 +39861,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39594,8 +39908,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39645,7 +39961,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a time entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a time entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39691,8 +40008,10 @@
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39730,7 +40049,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39777,7 +40097,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a bytes entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a bytes entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -44802,7 +45123,8 @@
    "register": {
     "required": true,
     "why": [
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -44855,7 +45177,8 @@
    "register": {
     "required": true,
     "why": [
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -44910,7 +45233,8 @@
    "register": {
     "required": true,
     "why": [
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -44959,8 +45283,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -45017,7 +45343,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a number as a different number (pandas' cast changes its value)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -45073,7 +45400,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference accepts a text entity as a number key (pandas' cast changes its kind)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -45120,8 +45448,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -45173,7 +45503,8 @@
     "required": true,
     "why": [
      "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -46089,6 +46420,7 @@
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host hands the core the text column ['1e+16', '1.5e-7', '0'], the same as that text given as text, which the reference answers otherwise (success)"
     ],
     "disposition": "as_text"

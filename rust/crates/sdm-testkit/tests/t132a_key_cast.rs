@@ -28,12 +28,17 @@
 //!   only under an entry of `docs/design/rust-core/register.yaml`,
 //!   proposed or approved, whose `refs` name it with the transition it
 //!   makes (`contract/key-cast-vectors.json#<id or glob> <from> -> <to>`,
-//!   each `success` or `refusal <CODE>`); an entry covers only the
+//!   each `success`, `refusal <CODE>` or `unfinished`, the reference not
+//!   answering within the recorder's limit under the owner's approval of
+//!   2026-10-16 for a reference timeout outcome); an entry covers only the
 //!   transition it declares. Every other vector is held to the reference
 //!   exactly.
 //! - A mix of kinds the host hands over as text (`disposition: as_text`)
 //!   answers as the reference answers that text given as text, where the
-//!   reference does not fail with INTERNAL_ERROR on it.
+//!   reference does not fail with INTERNAL_ERROR on it, unless the vector
+//!   is marked and an entry names it with the transition from the
+//!   reference's answer to that text to this host's (since main's eb6c68eb
+//!   the reference reads a decimal key's text as a double).
 //! - A refusal by a rule the core does not take yet (`UNSUPPORTED_REQUEST`)
 //!   never passes: the reference gives none on these vectors.
 //!
@@ -115,6 +120,7 @@ fn transition(item: &str) -> Option<(String, String, String)> {
     let (old, new) = classes.split_once(" -> ")?;
     let class = |c: &str| {
         c == "success"
+            || c == "unfinished"
             || c.strip_prefix("refusal ").is_some_and(|code| {
                 !code.is_empty()
                     && code.starts_with(|ch: char| ch.is_ascii_uppercase())
@@ -190,10 +196,12 @@ fn covered(id: &str, old: &str, new: &str, entries: &[Transition]) -> Option<Str
         .map(|(entry, ..)| entry.clone())
 }
 
-/// `success` or `refusal <CODE>`.
+/// `success`, `unfinished` or `refusal <CODE>`.
 fn outcome_class(answer: &Value) -> String {
     if answer["outcome"] == "success" {
         "success".to_owned()
+    } else if answer["outcome"] == "unfinished" {
+        "unfinished".to_owned()
     } else {
         format!("refusal {}", answer["code"].as_str().unwrap_or("-"))
     }
@@ -302,9 +310,14 @@ fn problem(vector: &Value, got: &Value, entries: &[Transition]) -> Option<String
     if vector["register"]["disposition"] == "as_text" {
         let text = &reference["as_text"];
         if outcome_class(text) != "refusal INTERNAL_ERROR" && !agrees(got, text) {
-            return Some(format!(
-                "{id}: got {got}, the reference's answer to its text {text}"
-            ));
+            let (old, new) = (outcome_class(text), outcome_class(got));
+            if vector["register"]["required"] != true || covered(id, &old, &new, entries).is_none()
+            {
+                return Some(format!(
+                    "{id}: got {got}, the reference's answer to its text {text}: \
+                     no register entry names it with the transition {old} -> {new}"
+                ));
+            }
         }
     }
     if agrees(got, public) {
@@ -439,6 +452,7 @@ fn the_vectors_are_the_reference_s_and_not_vacuous() {
     );
     let mut seen = BTreeSet::new();
     let (mut success, mut invalid, mut internal, mut marked) = (0, 0, 0, 0);
+    let mut unfinished = Vec::new();
     for vector in vectors {
         let id = vector["id"].as_str().unwrap();
         assert!(seen.insert(id.to_owned()), "{id} twice");
@@ -447,6 +461,18 @@ fn the_vectors_are_the_reference_s_and_not_vacuous() {
             (Some("success"), _) => success += 1,
             (Some("refusal"), Some("INVALID_REQUEST")) => invalid += 1,
             (Some("refusal"), Some("INTERNAL_ERROR")) => internal += 1,
+            // The owner's approval of 2026-10-16 for a reference timeout
+            // outcome: the reference did not answer within the recorder's
+            // limit, and the vector is marked.
+            (Some("unfinished"), None) => {
+                assert!(
+                    public["within_seconds"].as_u64().is_some_and(|s| s > 0),
+                    "{id}"
+                );
+                assert_eq!(vector["reference"]["cast"], Value::Null, "{id}");
+                assert_eq!(vector["register"]["required"], true, "{id}");
+                unfinished.push(id.to_owned());
+            }
             other => panic!("{id}: an answer the vectors do not hold: {other:?}"),
         }
         let required = vector["register"]["required"].as_bool().unwrap();
@@ -462,6 +488,7 @@ fn the_vectors_are_the_reference_s_and_not_vacuous() {
     }
     assert!(success > 100 && invalid > 100 && internal > 100);
     assert!(marked > 0 && marked < vectors.len());
+    assert_eq!(unfinished, ["decimal128-18-0.exponent.huge.decimal"]);
 }
 
 #[test]
@@ -614,6 +641,15 @@ fn the_glob_the_transitions_and_the_derived_matches_hold() {
     );
     assert_eq!(read("*.time.*"), None);
     assert_eq!(read("*.time.* refusal -> success"), None);
+    assert_eq!(
+        read("*.exponent.huge.* unfinished -> refusal INVALID_REQUEST"),
+        Some((
+            "*.exponent.huge.*".to_owned(),
+            "unfinished".to_owned(),
+            "refusal INVALID_REQUEST".to_owned()
+        ))
+    );
+    assert_eq!(read("*.time.* unfinished 300 -> success"), None);
     // An entry covers only the transition it declares; none, nothing.
     let entries = vec![(
         "X-1".to_owned(),
@@ -673,6 +709,62 @@ fn the_glob_the_transitions_and_the_derived_matches_hold() {
     assert!(!matches(&named, &bare));
     let by_name = serde_json::json!({"outcome": "refusal", "code": "INVALID_REQUEST", "fields": {"field": "indices", "reason": "out_of_range"}});
     assert!(matches(&named, &by_name));
+}
+
+#[test]
+fn an_unfinished_or_text_answer_differs_only_under_its_transition() {
+    let all = vectors();
+    let vectors = all["vectors"].as_array().unwrap();
+    let entry = |id: &str, old: &str, new: &str| {
+        (
+            "SEEDED".to_owned(),
+            id.to_owned(),
+            old.to_owned(),
+            new.to_owned(),
+        )
+    };
+    // The vector the reference did not finish: held with no entry, and
+    // excused only by one declaring unfinished -> this host's answer.
+    let late = vectors
+        .iter()
+        .find(|v| v["reference"]["public"]["outcome"] == "unfinished")
+        .unwrap();
+    let id = late["id"].as_str().unwrap();
+    // Refused by name, as the vector's derived expectation asks.
+    let refused = serde_json::json!({
+        "outcome": "refusal",
+        "code": "INVALID_REQUEST",
+        "fields": {"field": "indices", "reason": "out_of_range"}
+    });
+    assert!(problem(late, &refused, &[]).is_some());
+    assert!(problem(late, &refused, &[entry(id, "unfinished", "success")]).is_some());
+    assert!(
+        problem(
+            late,
+            &refused,
+            &[entry(id, "unfinished", "refusal INVALID_REQUEST")]
+        )
+        .is_none()
+    );
+    // A marked as_text vector the reference refuses, whose text it reads
+    // as doubles: an exact answer passes only with both transitions named.
+    let text = vectors
+        .iter()
+        .find(|v| {
+            v["register"]["disposition"] == "as_text"
+                && v["register"]["required"] == true
+                && v["reference"]["as_text"]["outcome"] == "success"
+                && v["reference"]["public"]["outcome"] == "refusal"
+                && v["key"].as_str().unwrap().starts_with("decimal")
+        })
+        .unwrap();
+    let id = text["id"].as_str().unwrap();
+    let public = outcome_class(&text["reference"]["public"]);
+    let exact = serde_json::json!({"outcome": "success", "entities": [["s", "1"]]});
+    assert!(problem(text, &exact, &[]).is_some());
+    let as_text = entry(id, "success", "success");
+    assert!(problem(text, &exact, std::slice::from_ref(&as_text)).is_some());
+    assert!(problem(text, &exact, &[as_text, entry(id, &public, "success")]).is_none());
 }
 
 #[test]
