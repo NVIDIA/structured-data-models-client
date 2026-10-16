@@ -440,6 +440,16 @@ def test_a_first_landing_without_reviewed_by_is_refused(
 def test_the_real_bootstrap_on_the_real_history(tmp_path: Path) -> None:
     r"""The pinned bootstrap itself: a candidate on 9604074a holding this
     tree is judged by bd44b342's harness, which the gate says."""
+    for sha in (REAL_FORK, REAL_STAND):
+        held = subprocess.run(
+            ['git', '-C', str(ROOT), 'cat-file', '-e', f'{sha}^{{commit}}'],
+            capture_output=True,
+            check=False,
+        )
+        assert held.returncode == 0, (
+            f'{sha} is not in this checkout: the job must check out every '
+            'commit (actions/checkout fetch-depth: 0)'
+        )
     clone = tmp_path / 'real'
     git(
         tmp_path,

@@ -664,7 +664,12 @@ jobs:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
+      # Every commit: the root suite runs the gate's real bootstrap on the
+      # real history (tests/test_t20_bootstrap.py, T2.0), which a shallow
+      # checkout lacks.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
