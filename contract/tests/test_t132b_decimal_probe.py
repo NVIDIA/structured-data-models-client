@@ -35,9 +35,12 @@ as proof.
 
 The reference's answer is ``static.gt-float-scale-30.d38-30``'s, recorded
 by ``decimal_probe.py observe python-ref`` in the reference environment of
-``contract/reference-env.txt`` (b413e9ad) on 2026-10-14, as ``REFERENCE``
-below; recorded again with the column holding round 2's values
-``[0.7, -1, 0, 0.25, 1, 2, 3.75, null]``, it is the same answer. The
+``contract/reference-env.txt`` (b413e9ad) on 2026-10-14, and again at
+6298913c on 2026-10-16 (T2.0c: only the payload's digest moved, since
+main's 26ecdd28 sends no inference config the caller did not set), as
+``REFERENCE`` below; recorded again with the column holding round 2's
+values ``[0.7, -1, 0, 0.25, 1, 2, 3.75, null]``, it is the same answer, at
+both. The
 constant's exact value at scale 30, 699999999999999955591079014994, was
 computed apart, in Python:
 ``int((Decimal(0.7) * 10**30).quantize(1, ROUND_HALF_EVEN))``.
@@ -133,7 +136,7 @@ REFERENCE: dict[str, Any] = {
         {
             'method': 'POST',
             'path': '/v1/predictions',
-            'digest': 'a93397602c500f99a18ec4edc8b49922272b4c5ebc876c8f777c3eed79202e28',
+            'digest': '6736f014e8b429e9a7dd0009ddc6c933fea7b3fc0fbfa5626b14044b9c62ad6b',
             'tables': {
                 'context.instance_table': {'rows': 5, 'nulls': 0},
                 'context.related_tables.orders': {'rows': 50, 'nulls': 0},
