@@ -97,6 +97,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
+#: The marker the implementer deletes (see the module docstring).
+PENDING = pytest.mark.xfail(
+    strict=True,
+    reason='T2.0f: the <case>@<database> keys are not implemented yet',
+)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -486,7 +491,6 @@ def test_an_approved_removal_removes_the_case_s_database_lines(
 # --- ratchet.py accept writes the database baselines ----------------------------
 
 
-@PENDING
 def test_accept_writes_the_database_baselines_check_then_needs(
     recorded: Path, tmp_path: Path
 ) -> None:
@@ -574,7 +578,6 @@ def _moved_on_postgres(
     return landed, files, _suggested(suggesting[0])
 
 
-@PENDING
 def test_the_suggested_entry_approves_a_database_baseline_move(
     held: Path, tmp_path: Path
 ) -> None:
@@ -595,7 +598,6 @@ def test_the_suggested_entry_approves_a_database_baseline_move(
     assert found == [], '\n'.join(found)
 
 
-@PENDING
 def test_an_entry_in_the_same_form_approves_a_changed_database_reference_line(
     held: Path, tmp_path: Path
 ) -> None:
