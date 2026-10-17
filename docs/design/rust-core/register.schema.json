@@ -77,7 +77,7 @@
           "items": {"type": "string", "minLength": 1}
         },
         "more_exact": {
-          "description": "Where the core answers more exactly than the reference (T2.0g, approved by the owner on 2026-10-17): per case, the core runners and the exact fields, each a path as compare.py prints a difference ('*' any one key or index), whose value compare.py leaves out on both sides for that case and runner, comparing every other field. Read only from an entry approved by the owner.",
+          "description": "Where the core answers more exactly than the reference (T2.0g, approved by the owner on 2026-10-17): per case, the core runners and the exact fields, each a path as compare.py prints a difference ('*' any one key or index), whose value compare.py leaves out on both sides for that case and runner, comparing every other field. Read only from an entry approved by the owner whose decision_ref names a row of the checkpoint's decisions approved by the owner; each path should end in a named key or index, or in the parts of one number.",
           "type": "array",
           "minItems": 1,
           "items": {

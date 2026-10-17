@@ -891,9 +891,10 @@ def _left_out(
 
 
 def _one(value: Any) -> bool:
-    r"""Whether ``value`` is one value: a string, a number or a boolean, or
-    a payload number as :func:`_lossless` reads it; never a null, a dict or
-    a list."""
+    r"""Whether ``value`` is one value: a string, a number or a boolean, a
+    payload number as :func:`_lossless` reads it, or that number's exact
+    value (a ``Decimal``, the path compare prints for a changed number);
+    never a null, a dict or a list."""
     if isinstance(value, list):
         # Only _lossless's own form: its kind, its exact value (a Decimal,
         # which no JSON value is) and its sign.
@@ -904,7 +905,7 @@ def _one(value: Any) -> bool:
             and isinstance(value[2], Decimal)
             and isinstance(value[3], bool)
         )
-    return isinstance(value, (str, int, float))
+    return isinstance(value, (str, int, float, Decimal))
 
 
 def _matches(path: str, field: str) -> bool:
@@ -1164,7 +1165,8 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
     r"""The fields each entry of ``register`` lists under ``more_exact``, by
     case and runner, from an entry approved by the owner whose
     ``decision_ref`` names a row of this harness's (the checkpoint's)
-    decisions the owner approved, so a candidate cannot approve its own:
+    decisions the owner approved, so a candidate cannot invent an approval
+    (that the row is the right one is review's):
     only a core runner's, only a path under a root the host and payload
     rules compare; anything else, and a file it cannot read, excuses
     nothing."""
@@ -1183,7 +1185,8 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
             and entry.get('status') == 'approved'
             and entry.get('approved_by') == 'owner'
             and isinstance(entry.get('decision_ref'), dict)
-            and entry['decision_ref'].get('row') in approved
+            and isinstance(entry['decision_ref'].get('row'), str)
+            and entry['decision_ref']['row'] in approved
             and isinstance(entry.get('more_exact'), list)
         ):
             continue

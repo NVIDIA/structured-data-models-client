@@ -130,6 +130,16 @@ def test_an_approved_more_exact_entry_excuses_only_its_fields(
     whole = copy.deepcopy(entry)
     whole['more_exact'][0]['fields'] = ['public.payloads/*', DIGEST]
     assert 'payload' in _differences(tmp_path, whole)
+    # The path compare prints for a changed number, its exact value (fix 3).
+    printed = copy.deepcopy(entry)
+    printed['more_exact'][0]['fields'] = [f'{TARGET}/2', DIGEST]
+    assert 'payload' not in _differences(tmp_path, printed)
+    # A row that is no ID excuses nothing, and does not crash (fix 3).
+    listed = {
+        **entry,
+        'decision_ref': {**entry['decision_ref'], 'row': ['KO2-35']},
+    }
+    assert {'payload', 'result'} <= _differences(tmp_path, listed)
     # A list shaped like a number, but not one, at the named path: not one
     # value, so it still differs (fix 2).
     fake = ['number', {'unexpected': True}, ['wrong'], None]
