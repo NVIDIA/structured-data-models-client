@@ -16,7 +16,13 @@
     "query.materialize/indices-regression/duckdb",
     "query.materialize/indices-link-prediction/duckdb",
     "query.materialize/indices-ranking/duckdb",
-    "query.materialize/indices-forecast/duckdb"
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
   ],
   "seam": "decimal",
   "cells": [
