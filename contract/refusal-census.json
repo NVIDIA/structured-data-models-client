@@ -1,0 +1,1381 @@
+{
+  "format": "sdm-refusal-census/1",
+  "about": "The refusal census's probes (contract/tools/refusal_census.py; Phase 2 design, choice 10; T2.1a): one per refusal site the tool generates from the code, each a case's input on the base and the call it runs to, with materialize's keyword arguments the case format does not carry (options), the model predict asks (model) and, at a rule-less site, the detail fields that site's error sets (marks). `why` says what the probe tries and, where the site is not reached from the public calls this way, why; the run's evidence records whether each probe reached its site on python-core.",
+  "probes": [
+    {
+      "site": "rule:aggregation",
+      "why": "an aggregation outside SUM, COUNT, AVG, MIN and MAX; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT COUNT_DISTINCT(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:anchor_entity",
+      "why": "anchor_time='entity'",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "anchor_time": "entity"
+      }
+    },
+    {
+      "site": "rule:assuming",
+      "why": "an ASSUMING clause",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING COUNT(orders.*, 0, 7, days) > 1",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:column_type",
+      "why": "a struct column",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 1} AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:composite_key",
+      "why": "a primary key of two columns",
+      "input": {
+        "base": "shop",
+        "from_source": {
+          "primary_keys": {
+            "orders": [
+              "order_id",
+              "user_id"
+            ]
+          }
+        },
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:condition",
+      "why": "a target compared with text",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.country = 'US' FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:condition_value",
+      "why": "an integer past int64 compared; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) > 99999999999999999999 FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:context_anchor_time",
+      "why": "the context_anchor_time option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "context_anchor_time": "2024-01-01"
+      }
+    },
+    {
+      "site": "rule:empty_table",
+      "why": "a table with no rows",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "DELETE FROM orders"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:entity_filter",
+      "why": "FOR EACH with an entity filter",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.age > 20",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:entity_ids",
+      "why": "named entities",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR users.user_id = 1",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:entity_key",
+      "why": "the entity table's key moved off the query's entity column; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "edits": [
+          {
+            "op": "set_primary_key",
+            "table": "users",
+            "column": "age"
+          }
+        ],
+        "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:evaluate",
+      "why": "EVALUATE",
+      "input": {
+        "base": "shop",
+        "pql": "EVALUATE PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:exclude_cols_dict",
+      "why": "the exclude_cols_dict option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "exclude_cols_dict": {
+          "users": [
+            "age"
+          ]
+        }
+      }
+    },
+    {
+      "site": "rule:explain",
+      "why": "EXPLAIN",
+      "input": {
+        "base": "shop",
+        "pql": "EXPLAIN PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:float_nan",
+      "why": "a NaN in a float column's preview",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "UPDATE orders SET price = 'NaN'::DOUBLE WHERE order_id = 3"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:float_signed_zero",
+      "why": "0.0 and -0.0 in one preview",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "UPDATE orders SET price = CAST('0.0' AS DOUBLE) WHERE order_id = 3",
+          "UPDATE orders SET price = CAST('-0.0' AS DOUBLE) WHERE order_id = 4"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:inference_config_text",
+      "why": "an inference option given as text",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01",
+          "inference_config": {
+            "num_estimators": "4"
+          }
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:instance_id_type",
+      "why": "a model answer whose instance id is neither an integer nor text; the scripted endpoint answers every id as the request wrote it, so not reached here",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:key_name_order",
+      "why": "a table named as its key column; no probe found yet that makes another form of the name score",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE TABLE user_id AS SELECT i::BIGINT AS user_id, i AS x FROM range(20) t(i)"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:key_tie",
+      "why": "two key candidates of one score",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE TABLE things AS SELECT i::BIGINT AS thing_id, (i + 100)::BIGINT AS thingid FROM range(20) t(i)"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rule:key_type",
+      "why": "a DATE entity key; refused first by the core's own primary-key check, so not reached this way",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE DATE USING DATE '2020-01-01' + user_id::INTEGER",
+          "ALTER TABLE orders ALTER user_id TYPE DATE USING DATE '2020-01-01' + user_id::INTEGER"
+        ],
+        "from_source": {
+          "primary_keys": {
+            "users": "user_id"
+          }
+        },
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            "2020-01-01"
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:lag_timesteps",
+      "why": "the lag_timesteps option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "lag_timesteps": 2
+      }
+    },
+    {
+      "site": "rule:logical_target",
+      "why": "AND in the target",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 AND SUM(orders.price, 0, 30, days) > 100 FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:max_pq_iterations",
+      "why": "the max_pq_iterations option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "max_pq_iterations": 5
+      }
+    },
+    {
+      "site": "rule:model",
+      "why": "the tabular model; a multi-table request is refused first by its shape (prepare's unsupported), and a single table takes the host's tabular route, so not reached here",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "model": "KumoTabular"
+    },
+    {
+      "site": "rule:null_order",
+      "why": "a provider declaring no null order; DuckDB's declares one, so not reachable on DuckDB",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:num_hops",
+      "why": "the num_hops option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "num_hops": 3
+      }
+    },
+    {
+      "site": "rule:num_neighbors",
+      "why": "the num_neighbors option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "num_neighbors": [
+          16,
+          8
+        ]
+      }
+    },
+    {
+      "site": "rule:open_window",
+      "why": "an aggregation with no window start; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, -inf, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:parent_table",
+      "why": "an entity table with a foreign key",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT orders.price FOR EACH orders.order_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:prediction_statistic",
+      "why": "a prediction statistic that is not text; the core's option check refuses it first (INVALID_REQUEST, field prediction_statistic)",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "prediction_statistic": 7
+      }
+    },
+    {
+      "site": "rule:prediction_type",
+      "why": "a classification answer of another type than the target's; the scripted endpoint answers the first class, so not reached here",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.country FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:problem_type",
+      "why": "a CLASSIFY problem type; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT users.country CLASSIFY FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:response_field",
+      "why": "an answer carrying scores or embeddings; the scripted endpoint answers predictions only, so not reached here",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:return_embeddings",
+      "why": "the return_embeddings option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "return_embeddings": true
+      }
+    },
+    {
+      "site": "rule:seed_size",
+      "why": "a seed of 10**38; the core's seed check refuses it first (INVALID_REQUEST, field seed)",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "random_seed": 100000000000000000000000000000000000000
+      }
+    },
+    {
+      "site": "rule:static_target",
+      "why": "a static column of another table; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT orders.price FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:target_filter",
+      "why": "an aggregation of a filtered column",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT COUNT(orders.* WHERE orders.price > 1, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:target_stype",
+      "why": "a timestamp static target; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMP '2023-01-01' + to_days(user_id::INTEGER) AS signup FROM users"
+        ],
+        "pql": "PREDICT users.signup FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:target_transform_null",
+      "why": "a null target transform",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01",
+          "inference_config": {
+            "target_transforms": [
+              null
+            ]
+          }
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:target_type",
+      "why": "a decimal static target",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "ALTER TABLE users ALTER age TYPE DECIMAL(10,2)"
+        ],
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "rule:text_time",
+      "why": "a text time column with one value outside the core's formats",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "ALTER TABLE orders ALTER ts TYPE VARCHAR USING strftime(ts, '%Y-%m-%d %H:%M:%S')",
+          "UPDATE orders SET ts = 'March 3rd 2023' WHERE order_id = 5"
+        ],
+        "from_source": {
+          "time_columns": {
+            "orders": "ts"
+          }
+        },
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:text_time_order",
+      "why": "a text time column whose day and month order the values leave open",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "ALTER TABLE orders ALTER ts TYPE VARCHAR USING strftime(ts, '%m/%d/%Y')"
+        ],
+        "from_source": {
+          "time_columns": {
+            "orders": "ts"
+          }
+        },
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:text_time_rules",
+      "why": "a provider declaring the client's text-time rules (frames, Phase 4); DuckDB's declares none, so not reachable on DuckDB",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:text_time_zones",
+      "why": "mixed UTC offsets in a text time column",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "ALTER TABLE orders ALTER ts TYPE VARCHAR USING CASE WHEN order_id % 2 = 0 THEN strftime(ts, '%Y-%m-%dT%H:%M:%S+01:00') ELSE strftime(ts, '%Y-%m-%dT%H:%M:%S+02:00') END"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:text_times",
+      "why": "a provider declaring no text-time reading; DuckDB's declares one, so not reachable on DuckDB",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:time_type",
+      "why": "a DATE time column; DuckDB's provider hands it over as a timestamp, so not reached here",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "ALTER TABLE orders ALTER ts TYPE DATE"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rule:top_k",
+      "why": "the top_k option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "top_k": 3
+      }
+    },
+    {
+      "site": "rule:unseeded",
+      "why": "random_seed=None",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "random_seed": null
+      }
+    },
+    {
+      "site": "rule:use_prediction_time",
+      "why": "the use_prediction_time option",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "use_prediction_time": true
+      }
+    },
+    {
+      "site": "rule:wire_dtype",
+      "why": "an interval feature; refused first at admission (UNSUPPORTED_TYPE), so not reached this way",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, to_days(user_id::INTEGER) AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1",
+      "why": "an interval column",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, to_days(user_id::INTEGER) AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source",
+      "marks": [
+        "arrow_type",
+        "column"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::unsupported_type#1",
+      "why": "an interval column",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, to_days(user_id::INTEGER) AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source",
+      "marks": [
+        "arrow_type",
+        "column"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-host/src/admission.rs::admitted_type::admission::unsupported#1",
+      "why": "a UUID column; DuckDB hands it over as text, so not reached",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, '00000000-0000-0000-0000-000000000000'::UUID AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source",
+      "marks": [
+        "arrow_type",
+        "column"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-host/src/admission.rs::admitted_field::admission::unsupported#1",
+      "why": "a list of intervals",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, [to_days(1)] AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source",
+      "marks": [
+        "arrow_type",
+        "column"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1",
+      "why": "a struct holding an interval",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, {'a': to_days(1)} AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source",
+      "marks": [
+        "arrow_type",
+        "column"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1",
+      "why": "a multi-table request to the tabular model",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "model": "KumoTabular",
+      "marks": [
+        "model",
+        "unsupported"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2",
+      "why": "a task kind the model does not serve; the relational model serves every kind this build sends, so not reached here",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "model",
+        "supported",
+        "task"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3",
+      "why": "an output the model does not produce; the public calls ask none here, so not reached",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "model",
+        "supported_outputs",
+        "unsupported_outputs"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4",
+      "why": "more context rows than the relational model reads; num_context_samples past the limit is refused first, so not reached this way",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 50)::INTEGER AS age FROM range(20000) t(i)"
+        ],
+        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "options": {
+        "num_context_samples": 15000
+      },
+      "marks": [
+        "context_rows",
+        "context_rows_max",
+        "model"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1",
+      "why": "no context rows left; an anchor before the data is refused first (field anchor_time), so not reached this way",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2023-01-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "context_rows",
+        "model"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2",
+      "why": "a target of 15 classes, past the model's 10",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, 'c' || (i % 15)::VARCHAR AS country FROM range(60) t(i)"
+        ],
+        "pql": "PREDICT users.country FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "classes",
+        "limit",
+        "model"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3",
+      "why": "a classification whose every context row has one answer",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT COUNT(orders.*, 0, 30, days) >= 0 FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "classes_in_context",
+        "model",
+        "target"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4",
+      "why": "an explanation of more than one entity; the public predict here asks no explanation, so not reached",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "model",
+        "scored"
+      ]
+    },
+    {
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5",
+      "why": "an explanation outside the fast run mode; the public predict here asks no explanation, so not reached",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict",
+      "marks": [
+        "context_rows_fast",
+        "model"
+      ]
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment#1",
+      "why": "an inference option JSON has no finite form for (1e400 reads as infinity)",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01",
+          "inference_config": {
+            "num_estimators": 1e400
+          }
+        }
+      },
+      "until": "materialize"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor#1",
+      "why": "an anchor_time given as text",
+      "input": {
+        "base": "shop",
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize",
+      "options": {
+        "anchor_time": "2024-03-01"
+      }
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload#1",
+      "why": "an infinite feature value in the payload; refused first by the core's own payload check, so not reached this way",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "UPDATE orders SET price = 'inf'::DOUBLE WHERE order_id = 3"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "predict"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1",
+      "why": "primary_keys keyed by a table that is not a string; the case format's keys are strings, so not reached by a probe input",
+      "input": {
+        "base": "shop",
+        "from_source": {
+          "primary_keys": {
+            "users": "user_id"
+          }
+        },
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2",
+      "why": "a relationship that is not a Relationship; the runner builds each as one, so not reached by a probe input",
+      "input": {
+        "base": "shop",
+        "from_source": {
+          "relationships": [
+            {
+              "source_table": "orders",
+              "source_column": "user_id",
+              "target_table": "users",
+              "target_column": "user_id"
+            }
+          ]
+        },
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    }
+  ]
+}
