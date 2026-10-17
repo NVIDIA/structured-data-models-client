@@ -65,15 +65,24 @@ Kept as strings, those two requests could not name a relation of several parts, 
 
 ### Open: judged data in v25's shape
 
-These hold v25's wire shape, are the test author's or the gate's, and were not edited here (KO2-13):
+Measured on the phase head after T2.0c (`5a33dd7d`), with the v26 wheel in a venv holding the reference's pandas, pyarrow and DuckDB and the relational engine.
+These files hold v25's wire shape, are the test author's or the gate's, and were not edited here (KO2-13); each needs v26's shape (a source `{"source": [name]}`, a `neighbors` or `lookup` key a list, `key_counts`' and `time_bounds`' table a relation, the request state version 2) or a re-pin:
 
-- the pins `contract/pinned/base.regression.core.json` and `edits.core.json` (string sources and tables, request state version 1), and the family pins `refusal_map` holds;
-- the three AdventureWorks cases' `core.describe_source.source` (`contract/cases/s1/base.adventureworks*.json`) and `contract/refusal-maps/base.adventureworks.json`, which name sources as strings; `compare.py`'s `_case_inputs` holds the core's recorded inputs to them, and `sdm-testkit`'s host reads them as a `SourceSpec`;
-- the request vectors `contract/provider-vectors.json` and `contract/request-kinds.json`;
-- five client tests under `packages/structured-data-models-client/tests` that write v25's wire facts: `test_the_materialize_route.py` (tables named, the 2**70 seed reaching the sample), `test_the_predict_route.py` (state version 1, version 2 as "another"), `test_the_schema_route.py` (`_failing` matches `tables == [name]`).
+- `contract/cases/s1/base.adventureworks.json`, `base.adventureworks.churn.json`, `base.adventureworks.color.json`: `core.describe_source.source`'s tables name sources as strings;
+- `contract/refusal-maps/base.adventureworks.json`: its source spec, the same;
+- `contract/pinned/base.regression.core.json`: sources, tables, keys and the state version, re-pinned;
+- `contract/pinned/edits.core.json` and `contract/pinned/families.probes.json`: digests of inputs, starts, states and descriptions, re-pinned;
+- `contract/provider-vectors.json` and `contract/request-kinds.json`: requests in v25's shape;
+- client tests: `test_the_materialize_route.py` (`test_tables_named_are_sampled_as_the_old_route_samples_them`, `test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer`, a seed no provider can now declare), `test_the_predict_route.py` (`test_the_result_on_the_core_is_the_old_route_s`, state version 1; `test_another_request_state_version_is_refused_by_name`, which uses 2 as "another"), `test_the_schema_route.py` (`_failing` matches `tables == [name]`).
 
-Measured at `31941a3f`: `cargo test --workspace` fails only in `sdm-testkit`, 20 tests across `duckdb_provider`, `edit_cases`, `refusal_map`, `t128w_wire` and `t136_pre_given_specs`, each on the files above; `contract/tests` (the shared reference venv, the v26 wheel first on the path) fails 141, of which 118 are the venv's recorded-environment check (pyarrow 26 against the recorded 25.0.1), and the rest `test_refusal_map.py` (9), `test_gate_modes.py` (10), `test_gate_evidence_paths.py` (3) and `test_t20_locked_set.py` (1), whose gate runs meet the same files.
-Each needs its v26 shape (a source `{"source": [name]}`, a neighbors or lookup key a list, the state version 2) written by the test author, and the pins re-pinned, before the gate passes.
+What fails until then: `cargo test --workspace`, 19 tests of `sdm-testkit` (`duckdb_provider` 9, `edit_cases` 1, `refusal_map` 6, `t128w_wire` 2, `t136_pre_given_specs` 1), each on a file above; the client package, the 5 tests above; `contract/tests`, 46 (`test_gate_modes` 16, `test_refusal_map` 9, `test_gate_controls` 5, `test_cross_host` 3, `test_gate_evidence_paths` 3, `test_t20f_gate` 2, `test_t20_checkpoints` 2, and one each of `test_t20_locked_set`, `test_runners`, `test_edit_cases`, `test_schema_route`, `test_materialize_route`, `test_predict_route`): the gate runs fail on `compare.py`'s `_case_inputs` for the three AdventureWorks cases (`core.inputs: differs`, both core hosts), the route tests on the pins.
+The merge of `main` added no other file in v25's shape (a scan of every JSON and JSON-lines file under `contract/`, `tests/`, the crates' and packages' tests); it added `sdm-data`'s decimal family pins, rewritten here in v26's request shape, their statements unchanged.
+
+### T2.1a, which lands first
+
+A trial merge of `origin/rust-core-phase-2-lane-f` (`5d993580`) with this branch is clean.
+Its `run_python.py`, `compare.py` and case format change no wire shape this package changes: its SQLite and Postgres sources go through `Schema.from_source`, so the Python host gives them one-part relations.
+Its census (`contract/refusal-census.json`) will meet this package's new refusal sites: rule `relation` (in `sdm-data` and in `describe_source`), a request state with `batches`, and a page of another schema; each needs its probe.
 
 ### Probes
 
