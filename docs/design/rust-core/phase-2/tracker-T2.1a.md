@@ -24,7 +24,8 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 - Every S1 case's tables load on SQLite and on a local postgres:17 through the loader.
 - The reference (python-ref, 6298913c's environment) ran all 52 S1 cases on SQLite and on Postgres, every capture complete; compared with `--database` against the candidate's old client, what differs is the pre-merge client against the new reference (main's `inference_config` and sampling), which T2.0c's merge removes.
 - With a random Postgres schema per case, every `from_source` differed between two runs (`SELECT current_schema()`); each case now gets a database of its own, its tables in `public`.
-- The census, run on the phase head after T2.0c with a clean tree: 71 sites, 39 probes reaching their site on python-core, 23 sites where the core refuses what the reference answers (all of E92's class).
+- The census, run on the phase head after T2.0c with a clean tree: 71 sites, 33 probes reaching their site on python-core, 23 sites where the core refuses what the reference answers (all of E92's class).
+  From fix 1 a rule-less site counts as reached only when its refusal's code and detail fields are its alone; the two `unsupported_type` sites, the admission sites and the Python host's sites are not told apart by any outcome, so none counts.
   T2.0c's exact decimals lifted the decimal static target the `target_type` probe first used; its probe now sums a UBIGINT column past int64.
   Not reached, each said in its probe: sites the query validator shields on both routes, answers the scripted endpoint never gives, provider declarations DuckDB's provider makes, and host checks a case input cannot reach.
   Two probes show the core answering `PROVIDER_ERROR` where the reference fails with `INTERNAL_ERROR` (a text time column with a value outside the formats, and one with day and month order open).
@@ -35,3 +36,7 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 - Moved to T2.1c by the owner's lean plan, not built here: `coverage.py --gate S1` (G12, G16, G17), the L3 wiring over three databases, the `coverage-s1`, `l3` and `ci` step tools and `--ci-run`, `gate.sh` running the three databases, the common-input comparison (H24), C6 and C18.
 - `contract/tools/type_map_record.py` writes the decimal entry of `map` only; the full map is the loader's `TYPE_MAP`, which a loader test holds equal to the file.
 - The floor cell's SQLite and Postgres jobs take T2.0c's pins (pandas 2.2.2, NumPy 1.23.5).
+
+## Fix rounds
+
+- Fix 1 (round 1, Codex): a DuckDB line needs its query log; the loader keeps a NULL list's neighbours, an empty map, nested Postgres composites, and refuses a NaN SQLite would store as NULL; the census's reach needs a refusal only its site gives; the Rust loader takes `top_k` of any size.

@@ -1,7 +1,7 @@
 {
   "commit": {
     "clean": true,
-    "sha": "37d8b2bcfc514d11d835d6c7cbdce5c4a7246ccb"
+    "sha": "b9b9e7d0c1fef2f67b33fb7fc5060e344b7e8914"
   },
   "database": "duckdb",
   "departs": [
@@ -34,6 +34,7 @@
   "probes": [
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -61,6 +62,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -93,6 +95,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -125,6 +128,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -157,6 +161,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -183,6 +188,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -209,6 +215,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -236,6 +243,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -268,6 +276,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -300,6 +309,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -326,6 +336,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -352,6 +363,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -379,6 +391,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -405,6 +418,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -431,6 +445,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -457,6 +472,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -483,6 +499,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -509,6 +526,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -536,6 +554,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -551,6 +570,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -566,6 +586,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -592,6 +613,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -625,6 +647,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -651,6 +674,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -677,6 +701,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -703,6 +728,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -738,6 +764,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -753,6 +780,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -779,6 +807,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -805,6 +834,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -832,6 +862,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -858,6 +889,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -890,6 +922,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -905,6 +938,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -932,6 +966,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -947,6 +982,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -973,6 +1009,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1006,6 +1043,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1033,6 +1071,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1059,6 +1098,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1086,6 +1126,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1112,6 +1153,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1144,6 +1186,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "PROVIDER_ERROR",
@@ -1176,6 +1219,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "PROVIDER_ERROR",
@@ -1208,6 +1252,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1223,6 +1268,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1255,6 +1301,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1270,6 +1317,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1285,6 +1333,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1311,6 +1360,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1337,6 +1387,7 @@
     },
     {
       "departs": true,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1363,6 +1414,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1395,6 +1447,7 @@
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1422,11 +1475,12 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
+      "reached": false,
       "site": "rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1"
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1454,11 +1508,12 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
+      "reached": false,
       "site": "rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::unsupported_type#1"
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1474,6 +1529,7 @@
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1501,11 +1557,12 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
+      "reached": false,
       "site": "rust/crates/sdm-host/src/admission.rs::admitted_field::admission::unsupported#1"
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1533,11 +1590,12 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
+      "reached": false,
       "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1"
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1573,6 +1631,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1588,6 +1647,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1603,6 +1663,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1635,6 +1696,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1668,6 +1730,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1705,6 +1768,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1742,6 +1806,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1757,6 +1822,7 @@
     },
     {
       "departs": false,
+      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1772,6 +1838,7 @@
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1794,11 +1861,12 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
+      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment#1"
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1821,11 +1889,12 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
+      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor#1"
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1857,6 +1926,7 @@
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1872,6 +1942,7 @@
     },
     {
       "departs": false,
+      "identified": false,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1886,7 +1957,7 @@
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2"
     }
   ],
-  "reached": 39,
+  "reached": 33,
   "real_data": "not run: the public calls over the real datasets run at each lane's first landing (design, choice 10)",
   "reference": {
     "clean": true,
