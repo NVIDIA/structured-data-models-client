@@ -1831,6 +1831,19 @@ def compare(
         # DuckDB's, so elsewhere the reference's line is the expectation.
         on_duckdb = database == 'duckdb'
         case = {**case, 'id': runner.case_key(case['id'], database)}
+        if not on_duckdb:
+            # The core is started on this database's dialect.
+            case['core'] = {
+                op: (
+                    {
+                        **spec,
+                        'provider': {**spec['provider'], 'dialect': database},
+                    }
+                    if (spec.get('provider') or {}).get('dialect') == 'duckdb'
+                    else spec
+                )
+                for op, spec in case.get('core', {}).items()
+            }
         before = len(report.failures)
         ref = reference.get(case['id'])
         stops: dict[str, str | None] = {}

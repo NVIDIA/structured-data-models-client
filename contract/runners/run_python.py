@@ -169,6 +169,13 @@ def _indices(given: dict[str, Any]) -> str | None:
     return None
 
 
+def on_database(path: str, database: str) -> str:
+    r"""A case's DuckDB route or path as the same operation and mode over
+    ``database``'s source; any other is itself."""
+    head, _, backend = path.rpartition('/')
+    return f'{head}/{database}' if backend == 'duckdb' else path
+
+
 def case_key(case_id: str, database: str) -> str:
     r"""An observation's key on ``database``: DuckDB's the bare case ID,
     another's ``<case>@<database>``."""
@@ -2582,7 +2589,9 @@ def run(
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
         if mode == 'python-core':
-            os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
+            os.environ['SDM_CORE_ROUTES'] = ','.join(
+                on_database(route, database) for route in case['routes']
+            )
         try:
             outcome, shown, driver, public, origins = _call(
                 case, bases, driver_capture, database
