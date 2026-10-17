@@ -24,6 +24,7 @@ imports ``sdm_client._native``, and only on a core route.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 
 #: The environment variable that forces paths onto the core, for tests.
 ENVIRONMENT = 'SDM_CORE_ROUTES'
@@ -314,6 +315,42 @@ PREDICT_DUCKDB = (
     'client.predict/forecast/duckdb',
 )
 
+#: The same calls over a Postgres source (T2.3), routed as DuckDB's are.
+FROM_SOURCE_POSTGRES = (
+    'schema.from-source/all-tables/postgres',
+    'schema.from-source/catalog-keys/postgres',
+)
+FROM_SOURCE_POSTGRES_TABLES = (
+    'schema.from-source/tables/postgres',
+    'schema.from-source/catalog-keys/postgres',
+)
+MATERIALIZE_POSTGRES = (
+    'query.materialize/indices-binary/postgres',
+    'query.materialize/indices-multiclass/postgres',
+    'query.materialize/indices-regression/postgres',
+    'query.materialize/indices-link-prediction/postgres',
+    'query.materialize/indices-ranking/postgres',
+    'query.materialize/indices-forecast/postgres',
+)
+PREDICT_POSTGRES = (
+    'client.predict/binary/postgres',
+    'client.predict/multiclass/postgres',
+    'client.predict/regression/postgres',
+    'client.predict/link-prediction/postgres',
+    'client.predict/ranking/postgres',
+    'client.predict/forecast/postgres',
+)
+
+#: Each call's paths by the backend of the source it reads
+#: (``source.backend``), for every backend with a core route.
+FROM_SOURCE = {'duckdb': FROM_SOURCE_DUCKDB, 'postgres': FROM_SOURCE_POSTGRES}
+FROM_SOURCE_TABLES = {
+    'duckdb': FROM_SOURCE_DUCKDB_TABLES,
+    'postgres': FROM_SOURCE_POSTGRES_TABLES,
+}
+MATERIALIZE = {'duckdb': MATERIALIZE_DUCKDB, 'postgres': MATERIALIZE_POSTGRES}
+PREDICT = {'duckdb': PREDICT_DUCKDB, 'postgres': PREDICT_POSTGRES}
+
 #: The paths this build can run on the core.
 CORE_ROUTED = frozenset(
     S0
@@ -321,6 +358,10 @@ CORE_ROUTED = frozenset(
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB
     + PREDICT_DUCKDB
+    + FROM_SOURCE_POSTGRES
+    + FROM_SOURCE_POSTGRES_TABLES
+    + MATERIALIZE_POSTGRES
+    + PREDICT_POSTGRES
 )
 
 
@@ -364,3 +405,18 @@ def route(paths: tuple[str, ...]) -> str:
             f'not the others; one call runs them on one route'
         )
     return taken.pop()
+
+
+def on_the_core(paths: Mapping[str, tuple[str, ...]], source: object) -> bool:
+    r"""Whether a call over ``source`` that may end on its backend's
+    ``paths`` (one of :data:`FROM_SOURCE`, :data:`FROM_SOURCE_TABLES`,
+    :data:`MATERIALIZE` and :data:`PREDICT`) runs on the core: never for a
+    source of a backend with no core route, else as :func:`route` says.
+
+    Raises:
+        RouteError: As :func:`route` raises it.
+    """
+    backend = getattr(source, 'backend', None)
+    if not isinstance(backend, str) or backend not in paths:
+        return False
+    return route(paths[backend]) == 'core'

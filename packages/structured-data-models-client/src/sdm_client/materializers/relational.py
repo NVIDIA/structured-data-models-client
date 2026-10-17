@@ -283,15 +283,12 @@ class RelationalMaterializer:
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
-        # Over a DuckDB source on the core route (T1.11c), the core gathers
-        # and lays out the request, the rules around the gathering the
-        # core's (T1.28a); the old route holds its own.
+        # Over a source on the core route (T1.11c; Postgres from T2.3), the
+        # core gathers and lays out the request, the rules around the
+        # gathering the core's (T1.28a); the old route holds its own.
         from sdm_client import _routing
 
-        core = (
-            getattr(self.schema.source, 'backend', None) == 'duckdb'
-            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
-        )
+        core = _routing.on_the_core(_routing.MATERIALIZE, self.schema.source)
         if core:
             from sdm_client._rust import materialize as on_the_core
 

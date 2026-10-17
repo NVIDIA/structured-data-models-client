@@ -52,6 +52,7 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers.postgres import PostgresProvider
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -133,16 +134,20 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
+    # The provider of the source's backend, and its dialect, which
+    # sdm-data renders (DuckDB's, and Postgres's from T2.3).
+    providers = {'duckdb': DuckDBProvider, 'postgres': PostgresProvider}
+    provider: Any = providers[source.backend](source.connection)
     operation = {
         'op': 'describe_source',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': {'provider': 'sql', 'dialect': source.backend},
         'source': 1,
         'check_keys': bool(check_keys),
     }
     finished = run(
         operation,
         {1: codec.attachment(spec)},
-        provider=DuckDBProvider(source.connection),
+        provider=provider,
     )
     described = json.loads(finished.take(finished.result['description']))
     return build(cls, source, described)

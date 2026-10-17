@@ -93,13 +93,18 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # S0 and, from T1.11b, a DuckDB source's Schema.from_source with no
     # tables named (with tables named from T1.24), from T1.11c, materialize
     # with indices over a DuckDB source's schema, and from T1.11d, predict
-    # of a request materialized over one, have core routes.
+    # of a request materialized over one, have core routes; from T2.3 the
+    # same calls over a Postgres source.
     assert _routing.CORE_ROUTED == set(
         _routing.S0
         + _routing.FROM_SOURCE_DUCKDB
         + _routing.FROM_SOURCE_DUCKDB_TABLES
         + _routing.MATERIALIZE_DUCKDB
         + _routing.PREDICT_DUCKDB
+        + _routing.FROM_SOURCE_POSTGRES
+        + _routing.FROM_SOURCE_POSTGRES_TABLES
+        + _routing.MATERIALIZE_POSTGRES
+        + _routing.PREDICT_POSTGRES
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
     assert _routing.route(_routing.S0) == 'old'

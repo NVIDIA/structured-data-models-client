@@ -1257,26 +1257,25 @@ class Schema:
         if tables is not None:
             _require_table_names(tables)
 
-        if getattr(source, 'backend', None) == 'duckdb':
-            from sdm_client import _routing
+        from sdm_client import _routing
 
-            paths = (
-                _routing.FROM_SOURCE_DUCKDB
-                if tables is None
-                else _routing.FROM_SOURCE_DUCKDB_TABLES
+        if _routing.on_the_core(
+            _routing.FROM_SOURCE
+            if tables is None
+            else _routing.FROM_SOURCE_TABLES,
+            source,
+        ):
+            from sdm_client._rust import schema as on_the_core
+
+            return on_the_core.from_source(
+                cls,
+                source,
+                tables,
+                primary_keys=primary_keys,
+                time_columns=time_columns,
+                relationships=relationships,
+                check_keys=check_keys,
             )
-            if _routing.route(paths) == 'core':
-                from sdm_client._rust import schema as on_the_core
-
-                return on_the_core.from_source(
-                    cls,
-                    source,
-                    tables,
-                    primary_keys=primary_keys,
-                    time_columns=time_columns,
-                    relationships=relationships,
-                    check_keys=check_keys,
-                )
 
         read = EngineTables()
         engine_tables: dict[str, Any] | None = None

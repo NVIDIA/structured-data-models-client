@@ -845,11 +845,11 @@ def _predicts_on_the_core(request: Request) -> Any | None:
     """
     schema = getattr(request, 'schema', None)
     source = getattr(schema, 'source', None)
-    if getattr(source, 'backend', None) != 'duckdb' or not request.payloads:
+    if not request.payloads:
         return None
     from sdm_client import _routing
 
-    if _routing.route(_routing.PREDICT_DUCKDB) != 'core':
+    if not _routing.on_the_core(_routing.PREDICT, source):
         return None
     from sdm_client._rust import predict as on_the_core
 

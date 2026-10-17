@@ -59,6 +59,7 @@ from typing import TYPE_CHECKING, Any
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers.postgres import PostgresProvider
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -252,9 +253,14 @@ def gather(
     schema = materializer.schema
     anchor = options.get('anchor_time')
     described, held = description(schema)
+    source: Any = schema.source
+    # The provider of the source's backend, and its dialect, which
+    # sdm-data renders (DuckDB's, and Postgres's from T2.3).
+    providers = {'duckdb': DuckDBProvider, 'postgres': PostgresProvider}
+    provider: Any = providers[source.backend](source.connection)
     operation = {
         'op': 'materialize',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': {'provider': 'sql', 'dialect': source.backend},
         'schema': 1,
         'held': 4,
         'query': 2,
@@ -295,14 +301,13 @@ def gather(
         operation['most_parts'] = max(
             0, min(int(decompose.MOST_PARTS), 2**32 - 1)
         )
-    source: Any = schema.source
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
     finished = run(
         operation,
         attachments,
-        provider=DuckDBProvider(source.connection),
+        provider=provider,
         state=materializer._core_sampler_state,
     )
     state = finished.result['state']
