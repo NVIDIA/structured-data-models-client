@@ -969,10 +969,6 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
         ['orders', 'price'],
     ],
     # T2.0c's exact-decimal cases.
-    'decimal.class-target-collide': [
-        ['instance_table', 'TARGET'],
-        ['users', 't'],
-    ],
     **{
         f'decimal.{name}': [['instance_table', 'TARGET'], ['users', 'd']]
         for name in (

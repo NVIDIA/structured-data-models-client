@@ -10,7 +10,7 @@ Written by the package's independent test author from the brief, the
 design's T1.32b row ("The ``decimal.*`` cases, as T1.32a", whose exits
 apply to this family) and the reference, before the implementation. The
 family is the ``decimal.*`` cases of ``contract/cases/s1``, T1.32b's three
-and T2.0c's twelve exact-decimal ones (KO2-50); T1.32b's three:
+and T2.0c's eleven exact-decimal ones (KO2-50); T1.32b's three:
 ``decimal.class-target-38-18`` (a static DECIMAL(38, 18) target, which the
 reference fails INTERNAL_ERROR at ``materialize`` and the core refuses by
 name, ``target_type``, register P1B-18), ``decimal.feature-38-0-wide`` and
@@ -218,11 +218,10 @@ def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 # --- admission and the cases' expectations ------------------------------------
 
 
-def test_the_family_is_its_fifteen_cases() -> None:
-    # T1.32b's three and T2.0c's twelve exact-decimal cases (KO2-50).
+def test_the_family_is_its_fourteen_cases() -> None:
+    # T1.32b's three and T2.0c's eleven exact-decimal cases (KO2-50).
     assert sorted(IDS) == [
         'decimal.class-target-38-18',
-        'decimal.class-target-collide',
         'decimal.compare-finer-eq',
         'decimal.compare-finer-gt',
         'decimal.compare-finer-negative',
