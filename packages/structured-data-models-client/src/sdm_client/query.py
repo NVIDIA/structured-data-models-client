@@ -199,23 +199,21 @@ class PredictiveQuery:
             num_context_samples=num_context_samples,
             options=options,
             # The core bounds the context size on its route (T1.28a): a
-            # schema over a DuckDB source is relational (refused above if
+            # schema over a DuckDB or SQLite source is relational (refused above if
             # not), and goes to the core where the seam forces it there.
-            bounded_by_the_core=getattr(self.schema.source, 'backend', None)
-            == 'duckdb'
-            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core',
+            bounded_by_the_core=_routing.on_the_core(
+                self.schema.source, _routing.MATERIALIZE
+            ),
         )
 
         # Resolved once, and against the profile this request is for, because
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
-        # A forecast over a DuckDB source on the core route is split into
+        # A forecast over a DuckDB or SQLite source on the core route is split into
         # its steps by the core (T1.36 fix 21).
-        on_the_core = (
-            relational
-            and getattr(self.schema.source, 'backend', None) == 'duckdb'
-            and _routing.route(_routing.MATERIALIZE_DUCKDB) == 'core'
+        on_the_core = relational and _routing.on_the_core(
+            self.schema.source, _routing.MATERIALIZE
         )
         rewritten = parts_of(
             asked,

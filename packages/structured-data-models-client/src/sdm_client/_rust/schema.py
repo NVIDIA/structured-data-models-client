@@ -10,10 +10,10 @@
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 
-``Schema.from_source`` comes here on the core route, for a DuckDB source,
-with tables named or none (T1.24). The core's ``describe_source`` reads the
-source through
-the DuckDB provider (:mod:`.providers.duckdb`) and infers each table, its
+``Schema.from_source`` comes here on the core route, for a DuckDB source or,
+from T2.2, a SQLite one, with tables named or none (T1.24). The core's
+``describe_source`` reads the source through its backend's provider
+(:mod:`.providers`) and infers each table, its
 columns' data and semantic types, its key and its time column, by the
 reference's rules, with the source's declared foreign keys; from T1.21d it
 assembles the schema as the client's ``Schema.from_source`` does after the
@@ -51,7 +51,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec
-from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers import for_source
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -70,7 +70,7 @@ def from_source(
     check_keys: bool,
 ) -> Schema:
     r"""The schema of the tables named, or of every table, of the DuckDB
-    ``source``, described on the core.
+    or SQLite ``source``, described on the core.
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
@@ -133,16 +133,17 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
+    choice, provider = for_source(source)
     operation = {
         'op': 'describe_source',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': choice,
         'source': 1,
         'check_keys': bool(check_keys),
     }
     finished = run(
         operation,
         {1: codec.attachment(spec)},
-        provider=DuckDBProvider(source.connection),
+        provider=provider,
     )
     described = json.loads(finished.take(finished.result['description']))
     return build(cls, source, described)

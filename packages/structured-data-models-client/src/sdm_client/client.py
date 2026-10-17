@@ -838,18 +838,18 @@ class SDMClient:
 def _predicts_on_the_core(request: Request) -> Any | None:
     r"""The core's ``predict`` bridge, when this call runs on the core.
 
-    A request materialized over a DuckDB source predicts on the core when
-    the routing seam forces its paths there (T1.11d); every other call,
-    and every call by default, takes the old route. The bridge refuses, as
+    A request materialized over a DuckDB or SQLite source predicts on the
+    core when the routing seam forces its paths there (T1.11d, T2.2); every
+    other call, and every call by default, takes the old route. The bridge refuses, as
     the seam's own failure, a request the core did not materialize.
     """
     schema = getattr(request, 'schema', None)
     source = getattr(schema, 'source', None)
-    if getattr(source, 'backend', None) != 'duckdb' or not request.payloads:
+    if not request.payloads:
         return None
     from sdm_client import _routing
 
-    if _routing.route(_routing.PREDICT_DUCKDB) != 'core':
+    if not _routing.on_the_core(source, _routing.PREDICT):
         return None
     from sdm_client._rust import predict as on_the_core
 
