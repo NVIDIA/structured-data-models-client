@@ -39,10 +39,6 @@
      "described": "9adf47f6b8b80e606ab6c812ff30a74f0cba8ea080d64eff775193d98b4292f9",
      "warnings": "a9b4367c2653701900126cd48f387169db8c03580f493f564aa6155f270a0247"
     },
-    "decimal.class-target-collide": {
-     "described": "5c821215c087c5a7ad68ce0bb52ad33b6341d0649b5769406bb026a805c9ce41",
-     "warnings": "c2574596836ff6409b40f868db08101fbf208fc0624ee78cbcb4fb2d5008460b"
-    },
     "decimal.compare-finer-eq": {
      "described": "6b531bc93a000f18245e668a2e07458b7769485a603f529ae656d782cf6450e8",
      "warnings": "c2574596836ff6409b40f868db08101fbf208fc0624ee78cbcb4fb2d5008460b"

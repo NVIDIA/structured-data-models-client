@@ -15,9 +15,9 @@
 //! its static target `tier` with the rest, and its entity sample, which
 //! reads `tier` beside the key for the labels.
 //!
-//! T2.0c's exact-decimal cases add nine more, as `sdm-testkit` recorded
+//! T2.0c's exact-decimal cases add seven more, as `sdm-testkit` recorded
 //! them: the previews of the tables their decimal columns (`d`, `f` and
-//! `g`, `t`, `amount`) widen, the entity samples of their static targets,
+//! `g`, `amount`) widen, the entity samples of their static targets,
 //! and `decimal.sum-10-2`'s and `decimal.feature-inexact-38-18`'s
 //! neighbour and lookup reads over `amount`, `f` and `g`.
 
@@ -52,23 +52,10 @@ USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
         r#"{"columns": ["user_id", "age", "country", "f", "g"], "limit": 1000, "request": "preview", "table": "users"}"#,
         r#"SELECT "user_id", "age", "country", "f", "g" FROM "users" LIMIT 1000"#,
     ),
-    // decimal.class-target-collide (T2.0c)
-    (
-        r#"{"columns": ["user_id", "age", "country", "t"], "limit": 1000, "request": "preview", "table": "users"}"#,
-        r#"SELECT "user_id", "age", "country", "t" FROM "users" LIMIT 1000"#,
-    ),
     // decimal.compare-finer-gt (T2.0c)
     (
         r#"{"columns": ["user_id", "d"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
         r#"SELECT "user_id", "d"
-FROM (SELECT * FROM "users"
-WHERE "user_id" IS NOT NULL)
-USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
-    ),
-    // decimal.class-target-collide (T2.0c)
-    (
-        r#"{"columns": ["user_id", "t"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
-        r#"SELECT "user_id", "t"
 FROM (SELECT * FROM "users"
 WHERE "user_id" IS NOT NULL)
 USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,

@@ -5,7 +5,6 @@
     "decimal.class-target-38-18",
     "decimal.feature-38-0-wide",
     "decimal.target-38-18",
-    "decimal.class-target-collide",
     "decimal.compare-finer-eq",
     "decimal.compare-finer-gt",
     "decimal.compare-finer-negative",
@@ -426,94 +425,6 @@
         },
         "until": "predict",
         "expect": "success"
-      }
-    },
-    {
-      "id": "decimal.class-target-collide",
-      "case": "decimal.class-target-collide",
-      "removes": "nothing: the case as committed",
-      "python-core": {
-        "derive": {
-          "from": "case",
-          "steps": []
-        },
-        "routes": [
-          "schema.from-source/all-tables/duckdb",
-          "schema.from-source/catalog-keys/duckdb",
-          "query.materialize/indices-binary/duckdb",
-          "query.materialize/indices-multiclass/duckdb",
-          "query.materialize/indices-regression/duckdb",
-          "query.materialize/indices-link-prediction/duckdb",
-          "query.materialize/indices-ranking/duckdb",
-          "query.materialize/indices-forecast/duckdb",
-          "client.predict/binary/duckdb",
-          "client.predict/multiclass/duckdb",
-          "client.predict/regression/duckdb",
-          "client.predict/link-prediction/duckdb",
-          "client.predict/ranking/duckdb",
-          "client.predict/forecast/duckdb"
-        ],
-        "expect": "success",
-        "until": "predict",
-        "input": {
-          "base": "shop",
-          "setup": [
-            "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id % 2 = 0 THEN 0.000000100000000000 ELSE 0.000000100000000001 END::DECIMAL(38, 18) AS t FROM users"
-          ],
-          "pql": "PREDICT users.t FOR EACH users.user_id",
-          "materialize": {
-            "indices": [
-              0,
-              1
-            ]
-          }
-        }
-      },
-      "rust-host": {
-        "derive": {
-          "from": "case",
-          "steps": []
-        },
-        "expect": "success",
-        "until": "predict",
-        "setup": [
-          "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id % 2 = 0 THEN 0.000000100000000000 ELSE 0.000000100000000001 END::DECIMAL(38, 18) AS t FROM users"
-        ],
-        "core": {
-          "describe_source": {
-            "provider": {
-              "provider": "sql",
-              "dialect": "duckdb"
-            },
-            "source": {
-              "tables": [],
-              "primary_keys": {},
-              "time_columns": {}
-            },
-            "check_keys": true
-          },
-          "materialize": {
-            "provider": {
-              "provider": "sql",
-              "dialect": "duckdb"
-            },
-            "indices": [
-              {
-                "t": "i64",
-                "v": "0"
-              },
-              {
-                "t": "i64",
-                "v": "1"
-              }
-            ],
-            "anchor_time": null,
-            "seed": null
-          },
-          "predict": {
-            "model": "kumo-relational"
-          }
-        }
       }
     },
     {

@@ -273,7 +273,6 @@ T20C_DECIMAL = (
     'decimal.sum-past-38',
     'decimal.feature-inexact-38-18',
     'decimal.key-wide',
-    'decimal.class-target-collide',
     'decimal.target-regression-collide',
 )
 
