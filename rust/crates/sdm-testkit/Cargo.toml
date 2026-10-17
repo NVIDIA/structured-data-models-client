@@ -16,6 +16,10 @@ publish.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
+# The Postgres replay (KO2-20): a recorded answer is an Arrow IPC stream
+# in base64 text.
+arrow-ipc.workspace = true
+base64.workspace = true
 # vtab-arrow: the Arrow table function a key set is bound through, as the
 # provider binds a key set (a relation of the attachment's rows); it adds
 # the num crates to the test host only.

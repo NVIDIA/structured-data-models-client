@@ -536,6 +536,11 @@ class _Capture:
         #: schema, in order (T1.24b).
         self.edits: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
+        #: Each fetch with the answer the host replied with, in the order
+        #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
+        self.answered: list[dict[str, Any]] = []
+        self.recording = False
+        self._asked: dict[int, dict[str, Any]] = {}
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
         self.materialized: dict[str, Any] | None = None
@@ -660,8 +665,47 @@ class _Capture:
                 {'request': asked['request'], 'plan': asked['plan']}
                 for asked in step['requests']
             )
+            for asked in step['requests']:
+                self._asked[asked['id']] = {
+                    'request': asked['request'],
+                    'plan': asked['plan'],
+                }
         if step.get('step') == 'call_model':
             self._call = step['body']
+
+    def replied(self, message: bytes, attachments: Any) -> None:
+        r"""A fetch's answer as the host replies with it, kept beside the
+        fetch: its rows as an Arrow IPC stream in base64, or the provider's
+        error, as the replay's recording holds it (``sdm-testkit``'s
+        ``replay``)."""
+        if not self.recording:
+            return
+        reply = json.loads(message)
+        if reply.get('message') != 'fetch_reply':
+            return
+        asked = self._asked.pop(reply['id'], None)
+        if asked is None:
+            raise RunnerFailure('a fetch replied to that was never asked')
+        outcome = reply['outcome']
+        if outcome['outcome'] == 'error':
+            self.answered.append({**asked, 'error': outcome['error']})
+            return
+        import base64
+
+        import pyarrow as pa
+
+        table = pa.RecordBatchReader._import_from_c_capsule(
+            attachments[outcome['data']].__arrow_c_stream__()
+        ).read_all()
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, table.schema) as writer:
+            writer.write_table(table)
+        self.answered.append(
+            {
+                **asked,
+                'data': base64.b64encode(sink.getvalue().to_pybytes()).decode(),
+            }
+        )
 
     def failed(self, error: Any) -> None:
         self.error = {'kind': str(error.kind), 'code': str(error.code)}
@@ -962,6 +1006,7 @@ class _Handle:
         return taken
 
     def reply(self, message: bytes, attachments: Any) -> None:
+        self._capture.replied(message, attachments)
         try:
             self._handle.reply(message, attachments)
         except self._native.CoreError as error:
@@ -2561,6 +2606,7 @@ def run(
     reference: Path | None,
     driver_capture: bool = True,
     database: str = 'duckdb',
+    record_fetches: Path | None = None,
 ) -> list[dict[str, Any]]:
     r"""Every case's observation on ``database``, keyed by :func:`case_key`,
     or :class:`RunnerFailure`. A case that does not run on ``database``
@@ -2603,6 +2649,8 @@ def run(
     recorded = []
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
+        if capture is not None:
+            capture.recording = record_fetches is not None
         if mode == 'python-core':
             os.environ['SDM_CORE_ROUTES'] = ','.join(
                 on_database(route, database) for route in case['routes']
@@ -2689,7 +2737,58 @@ def run(
                 f'{case["id"]}: its observation is not valid: {problem}'
             )
         observations.append(observation)
+    if record_fetches is not None:
+        # The replay's recording (T2.3, KO2-20): each case's fetches, with
+        # the answers the Postgres provider replied with, in order, and the
+        # statements the driver ran for each, so the replay's record of what
+        # ran is python-core's.
+        record_fetches.write_text(
+            ''.join(
+                json.dumps(
+                    {
+                        'format': 'sdm-replay/1',
+                        'case': case_key(case['id'], database),
+                        'fetches': _with_statements(case, capture, driver),
+                    },
+                    sort_keys=True,
+                )
+                + '\n'
+                for case, _, _, _, capture, _, driver, *_ in recorded
+                if capture is not None and capture.answered
+            ),
+            encoding='utf-8',
+        )
     return observations
+
+
+def _with_statements(
+    case: dict[str, Any], capture: Any, driver: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    r"""Each fetch the core asked ``case``, with its answer and the text of
+    each statement the driver ran for it (``statements``), in order: the
+    driver capture's first statements, one per statement of each fetch's
+    plan (the core's calls come first; a call the case leaves on the old
+    route runs after them); a capture holding fewer is a runner failure."""
+    ran = [
+        statement['sql']
+        for statement in ((driver or {}).get('capture') or {}).get(
+            'statements', []
+        )
+    ]
+    planned = sum(
+        len(fetch['plan'].get('statements', [])) for fetch in capture.answered
+    )
+    if len(ran) < planned:
+        raise RunnerFailure(
+            f'{case["id"]}: the driver ran {len(ran)} statements for '
+            f'{planned} planned, so the recording cannot name them'
+        )
+    fetches = []
+    for fetch in capture.answered:
+        count = len(fetch['plan'].get('statements', []))
+        fetches.append({**fetch, 'statements': ran[:count]})
+        ran = ran[count:]
+    return fetches
 
 
 def legs_main(argv: list[str]) -> int:
@@ -2753,8 +2852,18 @@ def main(argv: list[str] | None = None) -> int:
         "are loaded from the case's DuckDB tables (databases.py), Postgres "
         "in a new database on SDM_POSTGRES_TEST_DSN's server",
     )
+    parser.add_argument(
+        '--record-fetches',
+        type=Path,
+        metavar='FILE',
+        help="python-core only: write each case's fetches with the answers "
+        "the provider gave, the recording rust-host's Postgres replay reads "
+        '(T2.3, KO2-20)',
+    )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
+    if arguments.record_fetches is not None and arguments.mode != 'python-core':
+        parser.error('--record-fetches is given in python-core mode only')
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):
         parser.error('--reference is given in python-ref mode, and only there')
     # A failed run leaves no output, not an earlier run's.
@@ -2772,6 +2881,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.reference,
             driver_capture=not arguments.no_capture,
             database=arguments.database,
+            record_fetches=arguments.record_fetches,
         )
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)

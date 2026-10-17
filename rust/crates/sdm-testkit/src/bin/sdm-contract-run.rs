@@ -7,7 +7,13 @@
 //! ```text
 //! sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --providers
+//! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
 //! ```
+//!
+//! `--replay` runs each case that runs on Postgres there, its fetches
+//! answered from a recording of a Postgres server's answers
+//! (`run_python.py --record-fetches`; [`sdm_testkit::replay`], KO2-20),
+//! each observation keyed `<case>@postgres`.
 //!
 //! `--providers` prints the databases this host has a provider for
 //! ([`sdm_testkit::PROVIDERS`]) as a JSON list, the staging rule's marker
@@ -31,19 +37,28 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::{Result, bail};
-use sdm_testkit::{bases, case, host, observation, pre_given};
+use sdm_testkit::{bases, case, host, observation, pre_given, replay};
 
 fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     let (pre_given_specs, arguments) = match arguments {
         [flag, rest @ ..] if flag == "--pre-given-specs" => (true, rest),
         _ => (false, arguments),
     };
+    let (recording, arguments) = match arguments {
+        [flag, path, rest @ ..] if flag == "--replay" => (
+            Some(replay::Recording::load(std::path::Path::new(path))?),
+            rest,
+        ),
+        _ => (None, arguments),
+    };
     let (out, cases) = match arguments {
         [flag, out, cases @ ..] if flag == "--out" && !cases.is_empty() => (
             PathBuf::from(out),
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
-        _ => bail!("usage: sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY..."),
+        _ => bail!(
+            "usage: sdm-contract-run [--pre-given-specs] [--replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
+        ),
     };
     let mut partial = out.clone().into_os_string();
     partial.push(".partial");
@@ -71,8 +86,21 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     let bases = bases::load(&bases_path)?;
     let bases_digest = case::sha256(&std::fs::read(&bases_path)?);
     let mut lines = String::new();
+    let mut count = 0;
     for each in &loaded {
-        let observed = host::run(&each.case, &bases)?;
+        let (observed, keyed) = match &recording {
+            None => (host::run(&each.case, &bases)?, each.clone()),
+            Some(recording) => {
+                if !each.case.databases().contains(&case::Database::Postgres) {
+                    continue;
+                }
+                let mut keyed = each.clone();
+                keyed.case.id = format!("{}@postgres", each.case.id);
+                (host::run_replayed(&each.case, recording)?, keyed)
+            }
+        };
+        let each = &keyed;
+        count += 1;
         let read_bases = each
             .case
             .core
@@ -82,9 +110,12 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         lines.push_str(&observation::write(&identity, each, &observed, digest).to_string());
         lines.push('\n');
     }
+    if count == 0 {
+        bail!("no case runs on the database asked for");
+    }
     std::fs::write(&partial, lines)?;
     std::fs::rename(&partial, &out)?;
-    Ok((out, loaded.len()))
+    Ok((out, count))
 }
 
 fn main() -> ExitCode {

@@ -23,10 +23,10 @@
 
 /// The databases the pure-Rust host has a provider for (rust-host's marker
 /// for the staging rule, `contract/runners/run_python.py`'s `check_legs`;
-/// T2.1a): its DuckDB ([`duck`]). T2.2's dev-only SQLite provider and
-/// T2.3's Postgres replay add theirs. `sdm-contract-run --providers` prints
-/// it.
-pub const PROVIDERS: &[&str] = &["duckdb"];
+/// T2.1a): its DuckDB ([`duck`]) and Postgres, by replaying recorded fetch
+/// results ([`replay`], T2.3, KO2-20). T2.2's dev-only SQLite provider adds
+/// its own. `sdm-contract-run --providers` prints it.
+pub const PROVIDERS: &[&str] = &["duckdb", "postgres"];
 
 pub mod bases;
 pub mod case;
@@ -37,4 +37,5 @@ pub mod endpoint;
 pub mod host;
 pub mod observation;
 pub mod pre_given;
+pub mod replay;
 pub mod values;
