@@ -635,15 +635,16 @@ impl Run {
     /// expected closed-set type, holding the field metadata the request
     /// requires, and no nulls where it expects none. A mismatch is
     /// `PROVIDER_SCHEMA_MISMATCH`, and ends the run, as a refusal of data
-    /// does; nothing is dropped, relabelled or filled. A discovery request
-    /// takes the schema the data declares.
+    /// does; nothing is dropped, relabelled or filled. Each page of a paged
+    /// answer is held to it as it arrives, as a whole answer is. A
+    /// discovery request takes the schema the data declares.
     pub fn submit_fetch(&mut self, id: ReplyId, result: FetchResult) -> Result<(), CoreError> {
         if let Some(err) = self.terminal() {
             return Err(err);
         }
         match &mut self.state {
             State::AwaitingFetch(pending) if pending.contains_key(&id) => {
-                if let FetchResult::Data(data) = &result
+                if let FetchResult::Data(data) | FetchResult::Page { data, .. } = &result
                     && let Err(mismatch) = check_expected(&pending[&id], data)
                 {
                     self.end()?;
@@ -824,11 +825,14 @@ pub(crate) fn internal(message: &str) -> CoreError {
 
 #[cfg(test)]
 mod tests {
-    use sdm_contract::ErrorCode;
-    use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema, FetchPlan};
-    use sdm_contract::run::Endpoint;
+    use std::sync::Arc;
 
-    use super::{Attachment, Run, RunState, lock};
+    use arrow_array::{Int64Array, RecordBatch};
+    use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema, FetchPlan, field};
+    use sdm_contract::run::Endpoint;
+    use sdm_contract::{ColumnType, ErrorCode};
+
+    use super::{ArrowData, Attachment, FetchResult, Run, RunState, Step, lock};
 
     fn describe() -> DataRequest {
         DataRequest::Describe {
@@ -874,5 +878,55 @@ mod tests {
         let err = run.next().unwrap_err();
         assert_eq!(err.code, ErrorCode::InternalError);
         assert_eq!(run.state(), RunState::Finished);
+    }
+
+    /// A page of one nullable `a` column holding `values`, more following.
+    fn page(values: Vec<Option<i64>>) -> FetchResult {
+        let schema = Arc::new(arrow_schema::Schema::new(vec![arrow_schema::Field::new(
+            "a",
+            arrow_schema::DataType::Int64,
+            true,
+        )]));
+        let batch = RecordBatch::try_new(
+            Arc::clone(&schema),
+            vec![Arc::new(Int64Array::from(values))],
+        )
+        .unwrap();
+        FetchResult::Page {
+            data: ArrowData::new(schema, vec![batch]),
+            continuation: "more".into(),
+        }
+    }
+
+    #[test]
+    fn every_page_is_held_to_the_expected_schema() {
+        // A null where the request takes none fails on the page that holds
+        // it, first or later, as it fails in an answer of one page.
+        for valid_before in [0, 1] {
+            let mut run = Run::new(|asker| async move {
+                let plan = FetchPlan::Host {
+                    expect: ExpectedSchema::Schema {
+                        fields: vec![field("a", ColumnType::Int64, false)],
+                    },
+                };
+                asker.ask_planned(describe(), plan).await;
+                unreachable!("the run ends on the page with a null")
+            });
+            for _ in 0..valid_before {
+                let Step::Fetch { requests } = run.next().unwrap() else {
+                    panic!("not a fetch")
+                };
+                run.submit_fetch(requests[0].id, page(vec![Some(1)]))
+                    .unwrap();
+            }
+            let Step::Fetch { requests } = run.next().unwrap() else {
+                panic!("not a fetch")
+            };
+            let err = run
+                .submit_fetch(requests[0].id, page(vec![None]))
+                .unwrap_err();
+            assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{err:?}");
+            assert_eq!(run.state(), RunState::Finished);
+        }
     }
 }
