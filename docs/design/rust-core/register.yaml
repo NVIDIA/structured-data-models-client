@@ -5821,7 +5821,7 @@ entries:
     average the reference computes as floats, a DECIMAL sum past 38
     digits, or a DECIMAL class target with distinct values one float32
     cannot tell apart.
-  cases: [key.decimal-38-10, decimal.sum-10-2, decimal.sum-past-38, decimal.feature-inexact-38-18, decimal.class-target-collide]
+  cases: [key.decimal-38-10, decimal.class-target-38-18, decimal.sum-10-2, decimal.sum-past-38, decimal.feature-inexact-38-18, decimal.class-target-collide]
   refs:
   - eb6c68eb
   - P1B-18
@@ -5884,6 +5884,10 @@ entries:
     and its rounding of a comparison's constant to the column's scale
     (KO2-50) are gone, so P1B-18's and P1B-53's refusal of
     decimal.class-target-38-18 no longer holds.
+  case_outcomes:
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
+
 - id: P2B-2
   title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
   kind: change
