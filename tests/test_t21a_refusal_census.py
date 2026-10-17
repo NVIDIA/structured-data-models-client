@@ -48,10 +48,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 TOOL = ROOT / 'contract/tools/refusal_census.py'
 
-PENDING = pytest.mark.xfail(
-    reason='T2.1a: the refusal census (contract/tools/refusal_census.py)',
-    strict=True,
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -178,7 +174,6 @@ def test_the_oracle_finds_the_sites_the_design_names() -> None:
         assert any(call.startswith(f'{relative}:') for call in calls), relative
 
 
-@PENDING
 def test_every_site_of_the_code_is_listed() -> None:
     r"""Exit: the list is generated from the code: every named rule, every
     rule-less constructor's call, and the Python host's own refusals."""
@@ -193,14 +188,12 @@ def test_every_site_of_the_code_is_listed() -> None:
     assert any(where.startswith(host) for where in wheres)
 
 
-@PENDING
 def test_every_site_has_a_probe() -> None:
     r"""Exit: on this tree, the census's site check passes."""
     done = _run('check', '--root', str(ROOT))
     assert done.returncode == 0, done.stdout + done.stderr
 
 
-@PENDING
 @pytest.mark.parametrize(
     ('relative', 'code', 'named'),
     [
@@ -233,7 +226,6 @@ def test_a_site_with_no_probe_fails_by_name(
     assert named in seeded.stdout + seeded.stderr
 
 
-@PENDING
 def test_the_first_duckdb_run_probed_every_site_on_both_routes() -> None:
     r"""Exit: the first run is on DuckDB; every site the code has now was
     probed there on both routes, each hit is keyed by rule or by site and
