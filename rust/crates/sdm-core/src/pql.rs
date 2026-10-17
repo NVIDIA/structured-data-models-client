@@ -109,6 +109,24 @@ pub fn validate(
     })
 }
 
+/// `query` as the PQL library writes it back (its `to_string()`, the text a
+/// host sends materialize after validating, redundant parentheses dropped),
+/// or `None` when it does not parse. Read for training with no current year,
+/// on the adapter's stack ([`on_adapter_stack`]).
+pub fn normalized(query: &str) -> Option<String> {
+    on_adapter_stack(|| {
+        let reader = parser::dates::Reader {
+            year: None,
+            pads_year: true,
+        };
+        let parse = parser::parse(query, parser::Mode::Training, reader);
+        parse
+            .outcome
+            .ok()
+            .map(|parsed| parsed.query.to_string_with(false, false))
+    })
+}
+
 /// The stack a validation runs on, as deep as the deepest query the parser
 /// takes needs in a debug build; reserved, not committed, so only what a
 /// query touches is used.
