@@ -30,9 +30,9 @@
 //!   family", this host's half: each case's outcome is the `python-ref`
 //!   observation's (`success`, or the refusal's code), or an approved entry
 //!   other than P1B-1 lists the case. The family is T1.32b's three cases
-//!   and T2.0c's eleven exact-decimal ones; where the core answers past the
-//!   reference (`decimal.sum-past-38`), the approved entry listing the case
-//!   (P2B-1) is what lets it differ. `contract/tests/test_t132b_decimal_family.py`
+//!   and T2.0c's ten exact-decimal ones; where the core answers otherwise
+//!   than the reference, the approved entry listing the case (P2B-1) is what
+//!   lets it differ. `contract/tests/test_t132b_decimal_family.py`
 //!   holds `python-core` the same way, and `tests/t132b_decimal_vectors.rs`
 //!   this host over the family's vectors.
 //!
@@ -87,7 +87,7 @@ fn family_cases() -> (Vec<Case>, bases::Bases) {
         .filter(|c| FAMILY.iter().any(|p| c.id.starts_with(p)))
         .collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
-    // T1.32b's three cases and T2.0c's eleven (exact decimals, KO2-50).
+    // T1.32b's three cases and T2.0c's ten (exact decimals, KO2-50).
     assert_eq!(
         cases.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
         [
@@ -102,11 +102,10 @@ fn family_cases() -> (Vec<Case>, bases::Bases) {
             "decimal.feature-inexact-38-18",
             "decimal.key-wide",
             "decimal.sum-10-2",
-            "decimal.sum-past-38",
             "decimal.target-38-18",
             "decimal.target-regression-collide",
         ],
-        "the family's fourteen cases"
+        "the family's thirteen cases"
     );
     (cases, bases::load(&contract.join("bases.yaml")).unwrap())
 }

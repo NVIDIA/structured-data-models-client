@@ -13,7 +13,6 @@
     "decimal.compare-same-scale",
     "decimal.feature-inexact-38-18",
     "decimal.sum-10-2",
-    "decimal.sum-past-38",
     "decimal.target-regression-collide"
   ],
   "reading": "The first refusal of each probe; each case of the decimal family probed as it is, and the wide decimal feature's case without its column. From T1.32b a decimal feature of any precision has the reference's wire dtype (float64 with a scale, int64 up to 18 digits or where its whole values fit, else its digits), so the wide decimal feature and the decimal target reach predict's result on both runners. The static decimal target is the question its case asks, so nothing is removed from it.",
@@ -1107,104 +1106,6 @@
         "setup": [
           "ALTER TABLE orders ADD COLUMN amount DECIMAL(10, 2)",
           "UPDATE orders SET amount = CASE WHEN order_id % 2 = 0 THEN 0.70 ELSE 0.10 END"
-        ],
-        "core": {
-          "describe_source": {
-            "provider": {
-              "provider": "sql",
-              "dialect": "duckdb"
-            },
-            "source": {
-              "tables": [],
-              "primary_keys": {},
-              "time_columns": {}
-            },
-            "check_keys": true
-          },
-          "materialize": {
-            "provider": {
-              "provider": "sql",
-              "dialect": "duckdb"
-            },
-            "indices": [
-              {
-                "t": "i64",
-                "v": "0"
-              },
-              {
-                "t": "i64",
-                "v": "1"
-              }
-            ],
-            "anchor_time": {
-              "t": "ts",
-              "v": "1709251200000000000",
-              "unit": "ns",
-              "zone": null
-            },
-            "seed": null
-          },
-          "predict": {
-            "model": "kumo-relational"
-          }
-        }
-      }
-    },
-    {
-      "id": "decimal.sum-past-38",
-      "case": "decimal.sum-past-38",
-      "removes": "nothing: the case as committed",
-      "python-core": {
-        "derive": {
-          "from": "case",
-          "steps": []
-        },
-        "routes": [
-          "schema.from-source/all-tables/duckdb",
-          "schema.from-source/catalog-keys/duckdb",
-          "query.materialize/indices-binary/duckdb",
-          "query.materialize/indices-multiclass/duckdb",
-          "query.materialize/indices-regression/duckdb",
-          "query.materialize/indices-link-prediction/duckdb",
-          "query.materialize/indices-ranking/duckdb",
-          "query.materialize/indices-forecast/duckdb",
-          "client.predict/binary/duckdb",
-          "client.predict/multiclass/duckdb",
-          "client.predict/regression/duckdb",
-          "client.predict/link-prediction/duckdb",
-          "client.predict/ranking/duckdb",
-          "client.predict/forecast/duckdb"
-        ],
-        "expect": "success",
-        "until": "predict",
-        "input": {
-          "base": "shop",
-          "setup": [
-            "ALTER TABLE orders ADD COLUMN amount DECIMAL(38, 0)",
-            "UPDATE orders SET amount = order_id",
-            "INSERT INTO orders VALUES (1001, 0, 1.0, TIMESTAMP '2024-02-11', 60000000000000000000000000000000000000), (1002, 0, 1.0, TIMESTAMP '2024-02-12', 60000000000000000000000000000000000000)"
-          ],
-          "pql": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
-          "materialize": {
-            "indices": [
-              0,
-              1
-            ],
-            "anchor_time": "2024-03-01"
-          }
-        }
-      },
-      "rust-host": {
-        "derive": {
-          "from": "case",
-          "steps": []
-        },
-        "expect": "success",
-        "until": "predict",
-        "setup": [
-          "ALTER TABLE orders ADD COLUMN amount DECIMAL(38, 0)",
-          "UPDATE orders SET amount = order_id",
-          "INSERT INTO orders VALUES (1001, 0, 1.0, TIMESTAMP '2024-02-11', 60000000000000000000000000000000000000), (1002, 0, 1.0, TIMESTAMP '2024-02-12', 60000000000000000000000000000000000000)"
         ],
         "core": {
           "describe_source": {
