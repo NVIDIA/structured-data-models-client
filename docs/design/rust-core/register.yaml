@@ -6180,3 +6180,170 @@ entries:
     Approver: reviewer. Not a refusal: the same error, without the answered
     steps main's client keeps on it. Found by T2.0c's round 1 review (the
     Claude subagent's P3-13). Temporary: it lapses when T2.8c lands.
+
+- id: P2B-10
+  title: On SQLite, an empty table is refused by name where the reference raises an unnamed RuntimeError, as on DuckDB (P1B-11)
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a SQLite source holding an
+    empty table raises an unnamed RuntimeError ("Table 'orders' is empty")
+    from its engine's preview, as it does over DuckDB.
+  new_behavior: >-
+    On the core route over SQLite (T2.2) the same call is refused at
+    from_source with StructuredDataError, INVALID_REQUEST, rule empty_table,
+    as P1B-11 refuses it over DuckDB; python-core and rust-host alike.
+  affected_inputs: >-
+    Schema.from_source over a SQLite source holding a table with no rows,
+    under a forced core route.
+  cases: [empty.fact-table]
+  refs: [P1B-11]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Approver: reviewer. P1B-11's behavior on the SQLite leg of its case,
+    under the same owner decision (E66(b): a reference's unnamed or
+    internal error becoming a named refusal is approved as a class; KO2-11
+    class (a)). Measured at T2.2 with python-core and rust-host on SQLite
+    against python-ref's committed empty.fact-table line.
+
+- id: P2B-11
+  title: On SQLite, text times outside the core's list or with their order of day and month open are refused by name, as DT-15 and DT-16 refuse them
+  kind: change
+  old_behavior: >-
+    Over SQLite, where a time is stored as text and no CAST reads it, the
+    reference reads a text time column value by value with pandas:
+    time.text-us-date's 01/01/2023 month first, answered; time.text-one-bad-
+    value's unreadable value refused INVALID_REQUEST at materialize.
+  new_behavior: >-
+    The core reads SQLite's stored text by its fixed list of formats
+    (DT-7's capability, the readings of DT-15 and DT-16): an order of day
+    and month the values leave open is refused, UNSUPPORTED_REQUEST rule
+    text_time_order (DT-16), and a value outside the list UNSUPPORTED_REQUEST
+    rule text_time (DT-15), at materialize; python-core and rust-host
+    alike. Over DuckDB the reference fails both on its own CAST (DT-12).
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source whose time column's
+    stored text the core's list does not read, or leaves the order of day
+    and month open, under a forced core route.
+  cases: [time.text-us-date, time.text-one-bad-value]
+  refs: [DT-7, DT-15, DT-16]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
+  notes: >-
+    Approver: owner. The readings are DT-15's and DT-16's, owner-approved
+    under E68, applied to the SQLite legs of their cases (T2.2). New on
+    SQLite: time.text-us-date is a refusal of an input the reference
+    answers (it reads the slash date month first), where over DuckDB the
+    reference fails on its CAST; so it goes to the owner rather than
+    passing as the DuckDB legs' class. Measured at T2.2 against
+    python-ref's committed lines.
+
+- id: P2B-12
+  title: On SQLite, an unsigned key past int64 is joined by its stored text where the reference fails INTERNAL_ERROR ingesting it
+  kind: change
+  old_behavior: >-
+    SQLite stores a UBIGINT key as its digits (TEXT, the type map); the
+    reference reads the sampled keys back as integers, and ADBC's ingest of
+    its key table refuses an unsigned value past int64, so materialize
+    fails INTERNAL_ERROR.
+  new_behavior: >-
+    The core keeps the keys as the source answers them, text, binds them
+    as text, and joins each fact row to its own entity; materialize and
+    predict answer. python-core and rust-host alike.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source whose key holds an
+    unsigned value past int64 (stored as its digits), under a forced core
+    route.
+  cases: [key.uint64-above-int64-max]
+  refs:
+  - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.hugeint'
+  - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.ubigint'
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer (KO2-11 class (a): a reference's internal error
+    becoming a correct answer). The two key-pair vectors are the test
+    author's register.required ones; each answers with a right join on the
+    core (every row joined to its own entity), measured at T2.2.
+
+- id: P2B-13
+  title: On SQLite, a time of day stored as text is a categorical feature, where the reference reads it as today's timestamp and refuses
+  kind: change
+  old_behavior: >-
+    SQLite stores a time of day as text (HH:MM:SS); the reference's
+    inference reads it with pandas, which takes a bare time as that time of
+    the day it runs, so the column is a timestamp and the users table's
+    time column, and materialize then refuses INVALID_REQUEST; the answer
+    depends on the date the call runs.
+  new_behavior: >-
+    The core's list of text formats reads no bare time of day as a time
+    (DT-15's list, E68), so the column is categorical text, the table has
+    no time column, and materialize and predict answer; python-core and
+    rust-host alike.
+  affected_inputs: >-
+    Schema.from_source and materialize over a SQLite source with a TIME
+    column (stored as text), under a forced core route.
+  cases: [time.feature-time-of-day]
+  refs: [DT-15]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner (not a crash replaced, so outside KO2-11's reviewer
+    classes): the core answers where the reference refuses, its reading the
+    owner's E68 list. Measured at T2.2.
+
+- id: P2B-14
+  title: On SQLite, a column declared INTERVAL holding text is text, where the reference takes it as an integer by its declared name
+  kind: change
+  old_behavior: >-
+    The reference's SQLite table reads a declared type naming INT as an
+    integer column (SQLiteTable._to_dtype matches the substring), so an
+    INTERVAL column, which the type map stores as ISO 8601 duration text,
+    is described as int64, categorical.
+  new_behavior: >-
+    The core takes a SQLite column's declared type only where the values
+    cannot say (a column holding no value, which the driver types as
+    integers), and otherwise the values' type: such a column is text,
+    categorical. Its rows and the request sent are the reference's; only
+    the described dtype differs.
+  affected_inputs: >-
+    Schema.from_source over a SQLite source with a column whose declared
+    type names INT but whose values are text (INTERVAL, POINT and the like).
+  cases: [time.feature-interval]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. Measured at T2.2 with the case's routes widened to
+    materialize and predict (its committed routes stop at from_source,
+    where DuckDB's reference refuses): the payload, warnings and result
+    match, the schema's dtype does not.
+
+- id: P2B-15
+  title: On SQLite, a sample seed past 2**64 - 1 is refused by name, where the reference takes any non-negative integer
+  kind: change
+  old_behavior: >-
+    The reference's seeded SQLite draw (RS-2) takes a seed of any size,
+    seeding numpy's legacy stream by the seed's 32-bit words.
+  new_behavior: >-
+    The SQLite dialect declares max_seed 2**64 - 1, the largest the
+    contract's ProviderCapabilities.max_seed carries (T2.1b), and the core
+    refuses a larger seed INVALID_REQUEST naming the seed (RS-7's
+    refusal); every seed up to it draws RS-2's stream exactly
+    (sdm-data's mt19937, tests/rs2.json past 2**126).
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source with random_seed of
+    2**64 or more, under a forced core route.
+  cases: [T2.2]
+  refs: [RS-2, RS-7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner (a refusal of input the reference accepts). Lifting it
+    needs max_seed wider than u64 in the contract. Found by reading, not
+    measured by a case.
