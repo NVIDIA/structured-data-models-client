@@ -314,6 +314,30 @@ PREDICT_DUCKDB = (
     'client.predict/forecast/duckdb',
 )
 
+
+def _on(paths: tuple[str, ...], backend: str) -> tuple[str, ...]:
+    r"""``paths``, DuckDB's, as the same operations and modes over
+    ``backend``'s source."""
+    return tuple(path.rsplit('/', 1)[0] + '/' + backend for path in paths)
+
+
+#: The same calls over a SQLite source (T2.2), routed as DuckDB's are.
+FROM_SOURCE_SQLITE = _on(FROM_SOURCE_DUCKDB, 'sqlite')
+FROM_SOURCE_SQLITE_TABLES = _on(FROM_SOURCE_DUCKDB_TABLES, 'sqlite')
+MATERIALIZE_SQLITE = _on(MATERIALIZE_DUCKDB, 'sqlite')
+PREDICT_SQLITE = _on(PREDICT_DUCKDB, 'sqlite')
+
+#: The backends whose sources the core reads, and each call's paths over
+#: each: ``Schema.from_source`` with no tables named and with tables
+#: named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
+FROM_SOURCE = {'duckdb': FROM_SOURCE_DUCKDB, 'sqlite': FROM_SOURCE_SQLITE}
+FROM_SOURCE_TABLES = {
+    'duckdb': FROM_SOURCE_DUCKDB_TABLES,
+    'sqlite': FROM_SOURCE_SQLITE_TABLES,
+}
+MATERIALIZE = {'duckdb': MATERIALIZE_DUCKDB, 'sqlite': MATERIALIZE_SQLITE}
+PREDICT = {'duckdb': PREDICT_DUCKDB, 'sqlite': PREDICT_SQLITE}
+
 #: The paths this build can run on the core.
 CORE_ROUTED = frozenset(
     S0
@@ -321,6 +345,10 @@ CORE_ROUTED = frozenset(
     + FROM_SOURCE_DUCKDB_TABLES
     + MATERIALIZE_DUCKDB
     + PREDICT_DUCKDB
+    + FROM_SOURCE_SQLITE
+    + FROM_SOURCE_SQLITE_TABLES
+    + MATERIALIZE_SQLITE
+    + PREDICT_SQLITE
 )
 
 
@@ -364,3 +392,16 @@ def route(paths: tuple[str, ...]) -> str:
             f'not the others; one call runs them on one route'
         )
     return taken.pop()
+
+
+def on_the_core(source: object, paths: dict[str, tuple[str, ...]]) -> bool:
+    r"""Whether a call over ``source`` that may end on ``paths[backend]``
+    runs on the core: a source of a backend the core reads, routed there.
+
+    Raises:
+        RouteError: As :func:`route` does.
+    """
+    backend = getattr(source, 'backend', None)
+    if not isinstance(backend, str) or backend not in paths:
+        return False
+    return route(paths[backend]) == 'core'
