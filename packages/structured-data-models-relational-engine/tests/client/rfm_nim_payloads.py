@@ -112,7 +112,7 @@ _NIM_V1_SMOKE_PAYLOAD: dict[str, Any] = {
 
 
 def nim_v1_smoke_payload() -> dict[str, Any]:
-    """Payload mirrored from kumo_rfm_nim/scripts/run_container_smoke.sh."""
+    """Payload mirrored from the relational NIM's container smoke test."""
     return deepcopy(_NIM_V1_SMOKE_PAYLOAD)
 
 

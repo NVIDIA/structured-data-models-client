@@ -16,6 +16,26 @@
 # [tool.ruff] extends this file, so the lint baseline below applies to every
 # first-party tree and a package cannot drop rules by shadowing the block.
 
+# Not a distribution. This exists so that `uv lock` has a workspace root to
+# resolve from, which is what gives nSpect's open source scan something to
+# inventory: a Python project with no lock file is reported as having zero
+# open source components. Nothing is built or published from here, and
+# nothing installs from the lock.
+[project]
+name = "workspace"
+version = "0"
+requires-python = ">=3.10"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+structured-data-models-api = { workspace = true }
+structured-data-models-pql = { workspace = true }
+structured-data-models-client = { workspace = true }
+structured-data-models-connectors = { workspace = true }
+structured-data-models-relational-engine = { workspace = true }
+
 [tool.ruff]
 line-length = 80
 target-version = "py310"
@@ -36,9 +56,9 @@ extend-exclude = [
 select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
 
 [tool.ruff.lint.per-file-ignores]
-# Databricks injects `spark`, `dbutils` and `display` into a notebook (F821),
-# and each cell imports what it uses so it can be rerun on its own (E402).
-"examples/databricks/*.ipynb" = ["F821", "E402"]
+# Each cell imports what it uses so it can be rerun on its own (E402). The
+# names Databricks injects are declared in examples/databricks/ruff.toml.
+"examples/databricks/*.ipynb" = ["E402"]
 
 [tool.ruff.format]
 quote-style = "single"

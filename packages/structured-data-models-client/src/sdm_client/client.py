@@ -24,7 +24,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import warnings
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any
 
@@ -47,6 +47,7 @@ from sdm_client.models import MODELS, Model, spec_for
 from sdm_client.request import (
     Question,
     Request,
+    _envelope_rows,
     warn_of_rows_scored_from_their_own_answers,
 )
 from sdm_client.result import PredictionResult
@@ -191,18 +192,18 @@ class FittedModel:
             self._pinned_over_a_window,
             _pinned_dtypes(self._pinned),
         )
-        parts = [
-            self._adapter.normalize(
+        parts = _numbered_across_calls(
+            self._adapter.session_prediction_plan(
+                request, self._outputs, self._pinned
+            ),
+            lambda payload: self._adapter.normalize(
                 self._client._transport.session_predict(
                     self._session_id, payload
                 ),
                 self._outputs,
                 {**self._pinned, **payload},
-            )
-            for payload in self._adapter.session_prediction_plan(
-                request, self._outputs, self._pinned
-            )
-        ]
+            ),
+        )
         if not parts:
             raise StructuredDataError(
                 'the adapter produced no scoring call for this request',
@@ -449,10 +450,12 @@ class SDMClient:
         # Every call's rows are kept. A request past the endpoint's per-call
         # cap is split by the adapter, and each call answers about its own
         # rows, so returning only the last would drop the earlier batches.
-        parts = [
-            adapter.normalize(self._send(adapter, payload), fields, payload)
-            for payload in adapter.prediction_plan(request, fields)
-        ]
+        parts = _numbered_across_calls(
+            adapter.prediction_plan(request, fields),
+            lambda payload: adapter.normalize(
+                self._send(adapter, payload), fields, payload
+            ),
+        )
         if not parts:
             raise StructuredDataError(
                 'the adapter produced no call for this request',
@@ -510,15 +513,23 @@ class SDMClient:
                     step = details.pop('forecast_step', None)
                 raise about_the_part(error, rewritten, step or 1) from error
             return _report_absent(merged, outputs, spec_for(model).model_id)
-        answers = []
+        answers: list[PredictionResult] = []
+        answered: list[int] = []
         for position, (part, (_, about)) in enumerate(
             zip(request.parts or (), rewritten.parts, strict=True)
         ):
             if position in unscored:
                 continue
+            answered.append(position)
             try:
                 answers.append(self.predict(part, model=model, outputs=wanted))
-            except StructuredDataError as error:
+            except Exception as error:
+                answered.pop()
+                _carry_the_steps_already_paid_for(
+                    error, answers, rewritten, answered, ranking
+                )
+                if not isinstance(error, StructuredDataError):
+                    raise
                 raise about_the_part(error, rewritten, about) from error
         if ranking:
             parts = rewritten.parts
@@ -549,11 +560,12 @@ class SDMClient:
         ranking with nothing left before it spends a call.
 
         A candidate is scored or not for the whole ranking, because each
-        candidate is one call: this client never asks the engine to batch, and
-        it caps the entities below the size a batch would split at. Were a
-        ranking ever split, the engine would sample a context per batch, and
-        one cold batch would drop the candidate from every row rather than
-        from its own, which the result has no way to say.
+        candidate is one call: a part is never batched, and a ranking over
+        more entities than one call scores is refused when it is gathered.
+        Were a part ever split, the engine would sample a context per batch,
+        and one cold batch would drop the candidate from every row rather
+        than from its own, since ``unscored_candidates`` names a candidate
+        for the whole result rather than per row.
         """
         positions = []
         for position, (part, (_, about)) in enumerate(
@@ -842,6 +854,124 @@ def _predicts_on_the_core(request: Request) -> Any | None:
     from sdm_client._rust import predict as on_the_core
 
     return on_the_core
+
+
+def _numbered_across_calls(
+    plan: Iterable[dict[str, Any]],
+    answer: Callable[[dict[str, Any]], PredictionResult],
+) -> list[PredictionResult]:
+    r"""Answer each call, numbering its rows from where the last call's ended.
+
+    The endpoint numbers every call's rows from zero, so a request sent in
+    several calls would otherwise give each ``row_index`` once per call, and
+    ``to_pandas()``, which orders by it, would interleave the batches.
+
+    Every call is counted before the first is sent, because a call whose rows
+    cannot be counted leaves the ones after it unnumberable, and finding that
+    out between two sends spends calls on an answer that cannot be returned.
+
+    A call that fails ends the request, and the answers already paid for are
+    carried on the error as ``details['answered']``, with the rows they cover
+    as ``details['rows_answered']``: the caller can keep them and ask again
+    for the rest rather than resend the whole population.
+    """
+    calls = list(plan)
+    counted = [_envelope_rows(payload, 'predict') for payload in calls]
+    if any(rows is None for rows in counted[:-1]):
+        raise StructuredDataError(
+            'a request sent in several calls has a call whose rows could not '
+            'be counted, so the rows of the calls after it cannot be numbered',
+            code='INTERNAL_ERROR',
+        )
+    answers: list[PredictionResult] = []
+    start = 0
+    for payload, rows in zip(calls, counted, strict=True):
+        try:
+            answers.append(_numbered_from(answer(payload), start))
+        except Exception as error:
+            _carry_the_answers_already_paid_for(error, answers, start)
+            raise
+        start += rows or 0
+    return answers
+
+
+def _carry_the_steps_already_paid_for(
+    error: BaseException,
+    answers: list[PredictionResult],
+    rewritten: Decomposition,
+    answered: Sequence[int],
+    ranking: bool,
+) -> None:
+    r"""Record on ``error`` the parts answered before the one that failed.
+
+    A forecast's steps are kept as the answer they would have been: numbered
+    by step, since a step's rows are numbered from its own zero and only the
+    step tells two of them apart.
+
+    A ranking's are counted and not kept. Its parts are not an answer until
+    they are all in: what a caller asked for is an order over the candidates,
+    and an order over some of them is a different claim, not a partial one.
+    """
+    if not answers:
+        return
+    held = getattr(error, 'details', None)
+    error.details = {  # type: ignore[attr-defined]
+        **(held if isinstance(held, dict) else {}),
+        'parts_answered': len(answers),
+        **(
+            {}
+            if ranking
+            else {
+                'answered': _by_step(
+                    answers,
+                    dataclasses.replace(
+                        rewritten,
+                        parts=tuple(rewritten.parts[at] for at in answered),
+                    ),
+                )
+            }
+        ),
+    }
+
+
+def _carry_the_answers_already_paid_for(
+    error: BaseException, answers: list[PredictionResult], rows: int
+) -> None:
+    r"""Record on ``error`` the calls that were answered before it.
+
+    A request sent in fifty calls that fails on the thirty-seventh has
+    thirty-six answers the endpoint was already paid for. Dropping them makes
+    the caller buy them again; the error keeps its own type and code, so
+    nothing branching on either has to know they are there.
+
+    The same holds of a question asked in parts, where what was answered is
+    whole parts rather than batches of one. ``about_the_part`` copies the
+    error's ``__dict__``, so what is recorded here survives being said of the
+    part it happened in.
+    """
+    if not answers:
+        return
+    # Not every failure is this client's own: the Databricks transport lets
+    # its OAuth refresh raise, and those calls were paid for too.
+    held = getattr(error, 'details', None)
+    error.details = {  # type: ignore[attr-defined]
+        **(held if isinstance(held, dict) else {}),
+        'answered': PredictionResult.merge(answers),
+        'calls_answered': len(answers),
+        'rows_answered': rows,
+    }
+
+
+def _numbered_from(result: PredictionResult, start: int) -> PredictionResult:
+    r"""``result`` with each row numbered ``start`` places further on."""
+    if start:
+        result.items = tuple(
+            dataclasses.replace(item, row_index=item.row_index + start)
+            if item.row_index is not None
+            else item
+            for item in result.items
+        )
+    return result
 
 
 def _report_absent(

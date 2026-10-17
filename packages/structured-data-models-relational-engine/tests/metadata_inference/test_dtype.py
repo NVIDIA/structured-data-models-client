@@ -117,3 +117,22 @@ def test_infer_dtype_still_refuses_a_type_it_cannot_carry() -> None:
     r"""The widening must not become "accept anything numeric-looking"."""
     with pytest.raises(ValueError, match='Unsupported data type'):
         infer_dtype(pd.Series(np.arange(4), dtype='complex128'))
+
+
+def test_an_arrow_decimal_is_named_as_the_payload_names_it() -> None:
+    r"""A scale-0 decimal wider than 64 bits was inferred an integer, and
+    then stayed a decimal, since no int64 holds it.
+    """
+    import decimal
+
+    def _series(values: list, precision: int, scale: int) -> pd.Series:
+        arrow = pa.array(
+            [None if v is None else decimal.Decimal(v) for v in values],
+            pa.decimal128(precision, scale),
+        )
+        return pd.Series(arrow, dtype=pd.ArrowDtype(arrow.type))
+
+    assert infer_dtype(_series(['7', None], 10, 0)) == Dtype.int
+    assert infer_dtype(_series(['123456789012345678'], 38, 0)) == Dtype.int
+    assert infer_dtype(_series([str(10**30)], 38, 0)) == Dtype.string
+    assert infer_dtype(_series(['1.25'], 10, 2)) == Dtype.float
