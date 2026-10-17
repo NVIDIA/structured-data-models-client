@@ -1188,15 +1188,18 @@ def moves(
     case's reference line changes in this change (``after``, in semantic
     projection), the new line's refusal and outcome are the ones judged
     (fix 2, the comparator relaxing from it) and only the entries this
-    change adds or changes count (``this_change``); a case with no line at
-    either side relaxes nothing. A move made now and one held since in a
-    baseline are held to the same rule."""
+    change adds or changes count (``this_change``); a case new in this
+    change, with no line at the checkpoint, starts from its new line the
+    same way (T2.0g); a case with no line now relaxes nothing. A move made
+    now and one held since in a baseline are held to the same rule."""
     found: dict[str, list[str]] = {}
     for case, by_runner in sorted(projected.items()):
         line, now = before.get(case), after.get(case)
-        if line is None or now is None:
+        if now is None:
             continue
-        changed = semantic(line, ordered) != semantic(now, ordered)
+        changed = line is None or semantic(line, ordered) != semantic(
+            now, ordered
+        )
         # Where this change re-records the line, its stop and outcome are
         # the new line's, the one the comparator relaxes from (fix 2).
         stop = projection(now if changed else line, list(OUTCOME_FIELDS))

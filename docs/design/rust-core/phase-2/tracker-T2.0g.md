@@ -5,14 +5,15 @@ The previous package, T2.0a, landed at `5e972867` (`Land T2.0a: the Phase 2 desi
 
 ## T2.0g
 
-T2.0g makes two narrow gate fixes T2.0c's merge of `main` needs, each judged by the checkpoint's copy:
+T2.0g makes three narrow gate fixes T2.0c's merge of `main` needs, each judged by the checkpoint's copy:
 
 1. The bridge freeze accepts a covered function that `main` deleted.
 2. `compare.py` leaves out the fields where the core is more exact than the reference, as an owner-approved register entry lists them (the owner's "A ok", 2026-10-17; a KO2 row for the next owner-row docs landing).
+3. `ratchet.py`'s `moves()` counts a case new in a change as moved past the reference's refusal when an entry of that change moves it from `none`.
 
 ### Judging-path files touched
 
-`scripts/rust_core/bridge_freeze.py`, `scripts/rust_core/compare.py`, `scripts/rust_core/gate.sh` (passes the candidate's register to `compare.py`) and `docs/design/rust-core/register.schema.json` (the `more_exact` field).
+`scripts/rust_core/bridge_freeze.py`, `scripts/rust_core/ratchet.py`, `scripts/rust_core/compare.py`, `scripts/rust_core/gate.sh` (passes the candidate's register to `compare.py`) and `docs/design/rust-core/register.schema.json` (the `more_exact` field).
 The package does not rely on its own change for its gate: it declares no `main` reason, deletes no covered function and lists no `more_exact` field.
 
 ### What changed: the bridge freeze
@@ -30,6 +31,12 @@ The package does not rely on its own change for its gate: it declares no `main` 
 - It reads the candidate's register (`--register`, which `gate.sh` gives), as the ratchet reads an entry's case outcomes; HOST-5 is still read from the harness's own register.
 - For T2.0c: P2B-1 lists `decimal.feature-inexact-38-18`, `decimal.sum-10-2` and `key.decimal-38-10` with the paths its gate run prints.
 
+### What changed: a new case moved past the reference's stop
+
+`moves()` skipped every case with no line at the checkpoint's reference, so a new case whose core answer an approved entry moves from `none` past the new reference line's refusal was never moved, and `compare.py` held its payload, result and statement counts to that refusal.
+It now takes a new case's new line as the starting point, as for a line this change re-records: only entries this change adds or changes count.
+A case with no line now still moves nothing.
+
 ### Tests and probes
 
 - `tests/test_t20g_bridge_main_deleted.py`: on a temporary repository with T2.0c's history shape, a covered function `main` deleted fails undeclared, by name, and passes declared `main` naming the deleting commit.
@@ -39,3 +46,6 @@ The package does not rely on its own change for its gate: it declares no `main` 
 - A one-off probe of the deleting-commit rule: `main` changes the function in one commit and deletes it in the next; the declaration naming the changing commit is refused ("does not delete the entry"), the one naming the deleting commit passes.
 - `contract/tests/test_t20g_more_exact.py`: `base.regression`'s reference observed as `python-core` but for a payload target and the result digest; proposed, both fail; approved by the owner and naming both, neither fails; a third, unnamed field (`metadata.source_query`) still fails `payload`.
   Without the change the test fails (`compare()` takes no register of improvements).
+- `tests/test_t20g_new_case_moves.py`: a new case refused at materialize by its new reference line, moved to success at predict by an entry of this change, is moved; by an entry of an earlier change, it is not.
+  Without the fix the first half fails.
+- On T2.0c's candidate (`f36a8e9f`, checkpoint `5e972867`), `write_effective`'s `@moved` names `python-core` and `rust-host` for `decimal.sum-past-38` and `decimal.class-target-collide`; without the fix it names neither.
