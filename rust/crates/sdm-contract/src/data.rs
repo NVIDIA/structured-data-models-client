@@ -53,8 +53,52 @@ pub const SEED_BATCH: &str = "batch";
 /// answers, by its batch position: the reference's own name.
 pub const BATCH_COLUMN: &str = "__kumo_batch__";
 /// The column of a `lookup` result counting the rows that hold the seed's
-/// key: the reference's own name.
+/// key: the reference's own name. A dialect may leave it out of an answer
+/// whose seeds say the count is not read ([`SEED_COUNT_UNREAD`]) or that
+/// the source enforces the key unique ([`SEED_KEY_UNIQUE`]), each key then
+/// held by one row.
 pub const MATCHES_COLUMN: &str = "__kumo_matches__";
+/// The metadata key, on a `lookup`'s seed [`SEED_KEY`] column, saying the
+/// source enforces the looked-up key unique (the described column's
+/// `unique`), with the value [`MARKED`]: set by the core so a SQL layer
+/// whose reference reads such a key by a plain join, counting nothing,
+/// renders that join (SQLite's `_by_pkey`); a host provider may ignore it.
+pub const SEED_KEY_UNIQUE: &str = "sdm:key_unique";
+/// The metadata key, on a `lookup`'s [`SEED_BATCH`] column, saying the
+/// core does not read how many rows hold each seed's key, with the value
+/// [`MARKED`]: set by the core on the lookups of the walk, which the
+/// reference counts on none of its SQL sources but DuckDB; a provider may
+/// still count.
+pub const SEED_COUNT_UNREAD: &str = "sdm:count_unread";
+/// The metadata key, on a window bound's seed column, holding one value
+/// of the window's column as the source stores it, as text, which the
+/// core read before the table's first windowed read (a `scan` of one
+/// non-null value): set only for a provider whose data layer says its
+/// source compares a bound with that stored text
+/// (`DataLayer::compares_stored_times`, SQLite's, which has no time type),
+/// so the layer spells each bound as that value is spelled.
+pub const SEED_STORED_TIME: &str = "sdm:stored_time";
+/// The value of a metadata flag the core sets ([`SEED_KEY_UNIQUE`],
+/// [`SEED_COUNT_UNREAD`]).
+pub const MARKED: &str = "true";
+
+/// A sample's seed as an integer, when the scalar it travels as is one:
+/// the narrowest exact scalar `materialize` writes, a `u64` or a decimal
+/// of scale 0, or any other integer scalar; `None` for any other scalar.
+/// The one reading of a seed the core's checks and every dialect's
+/// rendering share (carried row U12).
+pub fn seed_integer(seed: &Scalar) -> Option<i128> {
+    Some(match seed {
+        Scalar::Int32(v) => i128::from(*v),
+        Scalar::Int64(v) => i128::from(*v),
+        Scalar::UInt32(v) => i128::from(*v),
+        Scalar::UInt64(v) => i128::from(*v),
+        Scalar::Decimal128 {
+            scale: 0, value, ..
+        } => *value,
+        _ => return None,
+    })
+}
 
 /// Names an attachment that travels beside a control message: Arrow data
 /// (a fetch's result, a key set, a predict result) or bytes (a model
@@ -802,6 +846,20 @@ pub trait DataLayer: Send + Sync {
     fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
         let _ = provider;
         None
+    }
+
+    /// Whether the run's provider compares a window's bounds with the
+    /// stored text of the window's column, as a source with no time type
+    /// does (SQLite's reference spells each bound as one stored value is
+    /// spelled, `_time_spelling`): the core then reads one non-null value
+    /// of a table's time column (a `scan` of one row) before that table's
+    /// first windowed read in a run, and names it on each bound's seed
+    /// column ([`SEED_STORED_TIME`]), for the layer to spell the bounds by.
+    /// `false`, the default and a host provider's: the bounds are compared
+    /// as times.
+    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
     }
 }
 

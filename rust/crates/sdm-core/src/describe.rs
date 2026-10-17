@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
-use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
+use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{DataRequest, DescribePart, RELATION_RULE, Relation, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
@@ -175,7 +175,7 @@ pub(crate) async fn run(
             // refuses one it cannot read.
             return Err(not_held());
         }
-        let constraints = declared_keys(keys)?;
+        let constraints = key_columns(&asker, &table.source, declared_keys(keys)?).await?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
         let preview = ask(
             &asker,
@@ -813,6 +813,46 @@ fn declared_keys(answer: CatalogAnswer) -> Result<Vec<CatalogKey>, CoreError> {
         CatalogAnswer::Keys(keys) => Ok(keys),
         _ => Err(another_part()),
     }
+}
+
+/// `keys`, each one the catalog lists as an index by its name (SQLite's
+/// unique indexes) with its columns read by that name, one index after
+/// another in the catalog's order, as the reference reads each
+/// (`PRAGMA index_info`); the index is its table's schema's object, so its
+/// relation is `source`'s with the index's name last.
+async fn key_columns(
+    asker: &Asker,
+    source: &Relation,
+    keys: Vec<CatalogKey>,
+) -> Result<Vec<CatalogKey>, CoreError> {
+    let mut read = Vec::with_capacity(keys.len());
+    for mut key in keys {
+        if let Some(index) = &key.index {
+            let mut relation = source.clone();
+            if let Some(last) = relation.source.last_mut() {
+                last.clone_from(index);
+            }
+            let answer = describe(
+                asker,
+                DataRequest::Describe {
+                    tables: vec![relation],
+                    part: DescribePart::IndexColumns,
+                },
+            )
+            .await?;
+            let CatalogAnswer::IndexColumns(columns) = answer else {
+                return Err(another_part());
+            };
+            // An index over an expression names no column, and keys none
+            // the core can read.
+            match columns.into_iter().collect::<Option<Vec<String>>>() {
+                Some(columns) if !columns.is_empty() => key.columns = columns,
+                _ => key.kind = KeyKind::Other,
+            }
+        }
+        read.push(key);
+    }
+    Ok(read)
 }
 
 fn foreign_keys(answer: CatalogAnswer) -> Result<Vec<CatalogForeignKey>, CoreError> {

@@ -419,11 +419,16 @@ pub fn preview(
             .collect()
     };
     let declared_primary = single(&[KeyKind::Primary]);
-    let declared_unique = single(&[KeyKind::Primary, KeyKind::Unique]);
+    // A column the source keeps unique by itself (a SQLite rowid alias) is
+    // unique as a key of its own is.
+    let kept_unique = catalog.iter().filter(|c| c.unique).map(|c| c.name.clone());
+    let mut declared_unique = single(&[KeyKind::Primary, KeyKind::Unique]);
+    declared_unique.extend(kept_unique.clone());
     let unique = constraints
         .iter()
         .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique))
         .map(|c| c.columns.iter().cloned().collect::<BTreeSet<_>>())
+        .chain(kept_unique.map(|name| BTreeSet::from([name])))
         .collect::<Vec<_>>();
 
     let mut columns = Vec::with_capacity(catalog.len());
@@ -437,7 +442,16 @@ pub fn preview(
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
-        let dtype = dtype_of(field.data_type())?;
+        // A column holding no value has the type its declared type fixes,
+        // where the catalog reads one (SQLite's driver types such a column
+        // as integers, whatever it declares); any other, its values' type.
+        let empty = batches
+            .iter()
+            .all(|b| b.column(index).null_count() == b.num_rows());
+        let dtype = match declared.dtype {
+            Some(declared) if empty => declared,
+            _ => dtype_of(field.data_type())?,
+        };
         if matches!(
             dtype,
             Dtype::Intlist

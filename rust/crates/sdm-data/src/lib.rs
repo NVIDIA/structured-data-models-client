@@ -34,7 +34,10 @@
 
 mod duckdb;
 mod keys;
+mod mt19937;
+mod quote;
 mod read;
+mod sqlite;
 
 pub use keys::canonical_decimal_text;
 
@@ -46,12 +49,13 @@ use sdm_contract::data::{
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
-/// The SQL dialects this build knows by name. It renders DuckDB's; the
-/// others are refused by name, as a dialect it has no rendering for, and a
-/// name it does not know is refused without being repeated.
+/// The SQL dialects this build knows by name. It renders DuckDB's and
+/// SQLite's; the others are refused by name, as a dialect it has no
+/// rendering for, and a name it does not know is refused without being
+/// repeated.
 const KNOWN: &[&str] = &[
     duckdb::NAME,
-    "sqlite",
+    sqlite::NAME,
     "postgres",
     "databricks",
     "snowflake",
@@ -64,17 +68,19 @@ const KNOWN: &[&str] = &[
 /// native module reports it as `PROVIDERS`, and a database's core legs run
 /// exactly when it is listed. A dialect's package adds its name with its
 /// rendering.
-pub const PROVIDERS: &[&str] = &[duckdb::NAME];
+pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME];
 
 /// A dialect this build renders.
 enum Rendered {
     Duckdb,
+    Sqlite,
 }
 
 /// The dialect `dialect` names, if this build renders it.
 fn rendered(dialect: &Dialect) -> Result<Rendered, CoreError> {
     match dialect.name() {
         duckdb::NAME => Ok(Rendered::Duckdb),
+        sqlite::NAME => Ok(Rendered::Sqlite),
         _ => Err(no_dialect(dialect)),
     }
 }
@@ -95,6 +101,7 @@ impl DataLayer for Data {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => Ok(duckdb::capabilities()),
+                Rendered::Sqlite => Ok(sqlite::capabilities()),
             },
         }
     }
@@ -110,6 +117,7 @@ impl DataLayer for Data {
             }),
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::plan(request),
+                Rendered::Sqlite => sqlite::plan(request),
             },
         }
     }
@@ -119,7 +127,17 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => None,
             ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
                 Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
+                Rendered::Sqlite => None,
             },
+        }
+    }
+
+    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Sql { dialect } => {
+                matches!(rendered(dialect), Ok(Rendered::Sqlite))
+            }
         }
     }
 
@@ -141,6 +159,7 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => read::host(*part, batches)?,
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::read(*part, batches)?,
+                Rendered::Sqlite => sqlite::read(request, *part, batches)?,
             },
         };
         debug_assert_eq!(answer.part(), *part);
