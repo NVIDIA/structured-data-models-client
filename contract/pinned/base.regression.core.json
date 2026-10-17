@@ -70,7 +70,11 @@
     "primary_key": [
      "order_id"
     ],
-    "source": "orders",
+    "source": {
+     "source": [
+      "orders"
+     ]
+    },
     "time_column": "ts",
     "time_column_inferred": null
    },
@@ -118,7 +122,11 @@
     "primary_key": [
      "user_id"
     ],
-    "source": "users",
+    "source": {
+     "source": [
+      "users"
+     ]
+    },
     "time_column": null,
     "time_column_inferred": null
    }
@@ -217,7 +225,11 @@
     "part": "columns",
     "request": "describe",
     "tables": [
-     "orders"
+     {
+      "source": [
+       "orders"
+      ]
+     }
     ]
    }
   },
@@ -262,7 +274,11 @@
     "part": "keys",
     "request": "describe",
     "tables": [
-     "orders"
+     {
+      "source": [
+       "orders"
+      ]
+     }
     ]
    }
   },
@@ -289,7 +305,11 @@
     ],
     "limit": 1000,
     "request": "preview",
-    "table": "orders"
+    "table": {
+     "source": [
+      "orders"
+     ]
+    }
    }
   },
   {
@@ -354,7 +374,11 @@
     "part": "columns",
     "request": "describe",
     "tables": [
-     "users"
+     {
+      "source": [
+       "users"
+      ]
+     }
     ]
    }
   },
@@ -399,7 +423,11 @@
     "part": "keys",
     "request": "describe",
     "tables": [
-     "users"
+     {
+      "source": [
+       "users"
+      ]
+     }
     ]
    }
   },
@@ -425,7 +453,11 @@
     ],
     "limit": 1000,
     "request": "preview",
-    "table": "users"
+    "table": {
+     "source": [
+      "users"
+     ]
+    }
    }
   },
   {
@@ -490,7 +522,11 @@
     "part": "foreign_keys",
     "request": "describe",
     "tables": [
-     "orders"
+     {
+      "source": [
+       "orders"
+      ]
+     }
     ]
    }
   },
@@ -556,7 +592,11 @@
     "part": "foreign_keys",
     "request": "describe",
     "tables": [
-     "users"
+     {
+      "source": [
+       "users"
+      ]
+     }
     ]
    }
   },
@@ -610,13 +650,21 @@
       "columns": [
        "order_id"
       ],
-      "table": "orders"
+      "table": {
+       "source": [
+        "orders"
+       ]
+      }
      },
      {
       "columns": [
        "user_id"
       ],
-      "table": "users"
+      "table": {
+       "source": [
+        "users"
+       ]
+      }
      }
     ],
     "request": "key_counts"
@@ -703,7 +751,11 @@
     "columns": [
      {
       "column": "ts",
-      "table": "orders"
+      "table": {
+       "source": [
+        "orders"
+       ]
+      }
      }
     ],
     "request": "time_bounds"
@@ -742,7 +794,11 @@
      "t": "u64",
      "v": "42"
     },
-    "table": "users"
+    "table": {
+     "source": [
+      "users"
+     ]
+    }
    }
   },
   {
@@ -806,7 +862,9 @@
      "price",
      "ts"
     ],
-    "key": "user_id",
+    "key": [
+     "user_id"
+    ],
     "order": null,
     "per_seed": null,
     "request": "neighbors",
@@ -847,7 +905,11 @@
       }
      ]
     },
-    "table": "orders",
+    "table": {
+     "source": [
+      "orders"
+     ]
+    },
     "window": {
      "column": "ts",
      "lower": {
@@ -905,7 +967,9 @@
      "age",
      "country"
     ],
-    "key": "user_id",
+    "key": [
+     "user_id"
+    ],
     "request": "lookup",
     "seeds": {
      "attachment": 2,
@@ -926,7 +990,11 @@
       }
      ]
     },
-    "table": "users"
+    "table": {
+     "source": [
+      "users"
+     ]
+    }
    }
   },
   {
@@ -983,7 +1051,9 @@
      "price",
      "ts"
     ],
-    "key": "user_id",
+    "key": [
+     "user_id"
+    ],
     "order": [
      {
       "as_timestamp": true,
@@ -1028,7 +1098,11 @@
       }
      ]
     },
-    "table": "orders",
+    "table": {
+     "source": [
+      "orders"
+     ]
+    },
     "window": {
      "column": "ts",
      "lower": null,
@@ -1148,7 +1222,11 @@
       "primary_key": [
        "order_id"
       ],
-      "source": "orders",
+      "source": {
+       "source": [
+        "orders"
+       ]
+      },
       "time_column": "ts",
       "time_column_inferred": null
      },
@@ -1196,7 +1274,11 @@
       "primary_key": [
        "user_id"
       ],
-      "source": "users",
+      "source": {
+       "source": [
+        "users"
+       ]
+      },
       "time_column": null,
       "time_column_inferred": null
      }
@@ -10522,7 +10604,7 @@
      }
     },
     "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-    "version": 1
+    "version": 2
    }
   }
  ],
@@ -19841,7 +19923,7 @@
    }
   },
   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-  "version": 1
+  "version": 2
  },
  "predicted": {
   "body": {
