@@ -227,11 +227,22 @@ def problems(
             path = root / ref['file']
             if not path.is_file():
                 found.append(f'{where}: decision_ref: no file {ref["file"]}')
-            elif str(ref['row']) not in decision_rows(path):
-                found.append(
-                    f'{where}: decision_ref: {ref["row"]} is not a row of '
-                    f'{ref["file"]}'
-                )
+            else:
+                try:
+                    rows = decision_rows(path)
+                except (OSError, UnicodeDecodeError):
+                    # Named here, not raised: the decisions rule names the
+                    # unreadable file in its own words (T2.0c fix 3).
+                    found.append(
+                        f'{where}: decision_ref: {ref["file"]} cannot be read '
+                        'as UTF-8 text'
+                    )
+                else:
+                    if str(ref['row']) not in rows:
+                        found.append(
+                            f'{where}: decision_ref: {ref["row"]} is not a row '
+                            f'of {ref["file"]}'
+                        )
         for outcome in entry.get('case_outcomes', []):
             found += _outcome_problems(entry, outcome, corpus, accepted)
         for item in entry.get('more_exact', []):
