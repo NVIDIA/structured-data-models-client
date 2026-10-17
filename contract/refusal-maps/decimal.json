@@ -4,11 +4,47 @@
   "cases": [
     "decimal.class-target-38-18",
     "decimal.feature-38-0-wide",
-    "decimal.target-38-18"
+    "decimal.target-38-18",
+    "decimal.class-target-collide",
+    "decimal.compare-finer-eq",
+    "decimal.compare-finer-gt",
+    "decimal.compare-finer-negative",
+    "decimal.compare-past-precision",
+    "decimal.compare-past-precision-gt",
+    "decimal.compare-same-scale",
+    "decimal.feature-inexact-38-18",
+    "decimal.sum-10-2",
+    "decimal.sum-past-38"
   ],
   "reading": "The first refusal of each probe; each case of the decimal family probed as it is, and the wide decimal feature's case without its column. From T1.32b a decimal feature of any precision has the reference's wire dtype (float64 with a scale, int64 up to 18 digits or where its whole values fit, else its digits), so the wide decimal feature and the decimal target reach predict's result on both runners. The static decimal target is the question its case asks, so nothing is removed from it.",
   "gaps": [],
-  "entries": [],
+  "entries": [
+    {
+      "id": "predict/one_class_context",
+      "operation": "predict (the context)",
+      "rule": "UNSUPPORTED_REQUEST: every context row has the same answer, so a classification has one class to learn from",
+      "owner": "T1.28b",
+      "register": "none",
+      "reference": "same",
+      "where": "rust/crates/sdm-request/src/predict.rs:529",
+      "holds": "every context row has the same answer",
+      "why": "The reference's own refusal at predict, in stage, class and code: a comparison whose context holds one answer, which decimal.compare-finer-eq (no d equals 1.5) and the past-precision comparisons (every d below, or none above, a constant past DECIMAL(38, 0)) give on both, the core's refusal since T1.28b; T2.0c's exact comparison reaches it as the reference does",
+      "observed": {
+        "python-core": {
+          "stage": "predict",
+          "error": "UnsupportedRequestError",
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": null,
+          "rule": null
+        },
+        "rust-host": {
+          "code": "UNSUPPORTED_REQUEST",
+          "operation": null,
+          "rule": null
+        }
+      }
+    }
+  ],
   "probes": [
     {
       "id": "decimal.class-target-38-18",
@@ -389,6 +425,915 @@
         },
         "until": "predict",
         "expect": "success"
+      }
+    },
+    {
+      "id": "decimal.class-target-collide",
+      "case": "decimal.class-target-collide",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id % 2 = 0 THEN 0.000000100000000000 ELSE 0.000000100000000001 END::DECIMAL(38, 18) AS t FROM users"
+          ],
+          "pql": "PREDICT users.t FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id % 2 = 0 THEN 0.000000100000000000 ELSE 0.000000100000000001 END::DECIMAL(38, 18) AS t FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.compare-finer-eq",
+      "case": "decimal.compare-finer-eq",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "predict/one_class_context",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+          ],
+          "pql": "PREDICT users.d = 1.5 FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "predict/one_class_context",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.compare-finer-gt",
+      "case": "decimal.compare-finer-gt",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+          ],
+          "pql": "PREDICT users.d > 1.5 FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.compare-finer-negative",
+      "case": "decimal.compare-finer-negative",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+          ],
+          "pql": "PREDICT users.d > -1.5 FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.compare-past-precision",
+      "case": "decimal.compare-past-precision",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "predict/one_class_context",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+          ],
+          "pql": "PREDICT users.d < 1e39 FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "predict/one_class_context",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.compare-past-precision-gt",
+      "case": "decimal.compare-past-precision-gt",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "predict/one_class_context",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+          ],
+          "pql": "PREDICT users.d > 1e39 FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "predict/one_class_context",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (user_id % 5 - 2)::DECIMAL(38, 0) AS d FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.compare-same-scale",
+      "case": "decimal.compare-same-scale",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (1.4 + (user_id % 3) * 0.1)::DECIMAL(38, 1) AS d FROM users"
+          ],
+          "pql": "PREDICT users.d >= 1.5 FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ]
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (1.4 + (user_id % 3) * 0.1)::DECIMAL(38, 1) AS d FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": null,
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.feature-inexact-38-18",
+      "case": "decimal.feature-inexact-38-18",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "CREATE OR REPLACE TABLE users AS SELECT *, (0.123456789012345678 + user_id)::DECIMAL(38, 18) AS f, (9007199254740993.5 + user_id)::DECIMAL(38, 1) AS g FROM users"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, (0.123456789012345678 + user_id)::DECIMAL(38, 18) AS f, (9007199254740993.5 + user_id)::DECIMAL(38, 1) AS g FROM users"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.sum-10-2",
+      "case": "decimal.sum-10-2",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE orders ADD COLUMN amount DECIMAL(10, 2)",
+            "UPDATE orders SET amount = CASE WHEN order_id % 2 = 0 THEN 0.70 ELSE 0.10 END"
+          ],
+          "pql": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "ALTER TABLE orders ADD COLUMN amount DECIMAL(10, 2)",
+          "UPDATE orders SET amount = CASE WHEN order_id % 2 = 0 THEN 0.70 ELSE 0.10 END"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal.sum-past-38",
+      "case": "decimal.sum-past-38",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE orders ADD COLUMN amount DECIMAL(38, 0)",
+            "UPDATE orders SET amount = order_id",
+            "INSERT INTO orders VALUES (1001, 0, 1.0, TIMESTAMP '2024-02-11', 60000000000000000000000000000000000000), (1002, 0, 1.0, TIMESTAMP '2024-02-12', 60000000000000000000000000000000000000)"
+          ],
+          "pql": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              0,
+              1
+            ],
+            "anchor_time": "2024-03-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "ALTER TABLE orders ADD COLUMN amount DECIMAL(38, 0)",
+          "UPDATE orders SET amount = order_id",
+          "INSERT INTO orders VALUES (1001, 0, 1.0, TIMESTAMP '2024-02-11', 60000000000000000000000000000000000000), (1002, 0, 1.0, TIMESTAMP '2024-02-12', 60000000000000000000000000000000000000)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
       }
     }
   ]
