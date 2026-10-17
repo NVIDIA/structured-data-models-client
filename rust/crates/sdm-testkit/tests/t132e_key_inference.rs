@@ -432,8 +432,17 @@ fn the_key_vectors_are_the_reference_s_and_not_vacuous() {
         let why = vector["register"]["why"].as_array().unwrap();
         assert_eq!(required, !why.is_empty(), "{id}: a mark says why");
         marked += usize::from(required);
+        // At 6298913c (main's eb6c68eb reads a decimal key as an integer)
+        // the reference fails no vector unnamed or with INTERNAL_ERROR.
+        let outcome = &vector["reference"]["outcome"];
+        assert!(
+            outcome["code"] != "INTERNAL_ERROR"
+                && !(outcome["result"] == "refusal" && outcome["code"].is_null()),
+            "{id}: {outcome}"
+        );
     }
-    assert!(marked > 0 && marked < vectors.len());
+    // So none is marked; the comparison's test holds a marked one, seeded.
+    assert_eq!(marked, 0);
 }
 
 #[test]
@@ -568,8 +577,10 @@ fn rust_host_refuses_no_table_for_a_null_in_its_key() {
 
 /// P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling reaches
 /// a table whose key mixes a null with real text or decimal values, which
-/// the reference refuses or fails on, the core leaves the null-key rows
-/// out and succeeds, with one warning per table. Each vector and its twin
+/// the reference refused or failed on at b413e9ad, the core leaves the
+/// null-key rows out and succeeds, with one warning per table. At 6298913c
+/// (main's eb6c68eb) the reference answers the decimal one exactly as its
+/// integer twin (register P2B-5); it still refuses the text one. Each vector and its twin
 /// (the same layout with an integer key, which the reference answers).
 const OPTION_B: [(&str, &str); 2] = [
     ("nulls-1-decimal.200", "nulls-1.200"),
@@ -600,10 +611,19 @@ fn rust_host_leaves_null_key_rows_out_with_one_warning() {
     for (id, twin_id) in OPTION_B {
         let vector = find(id);
         let reference = &vector["reference"]["outcome"];
-        assert_eq!(
-            reference["result"], "refusal",
-            "{id}: the reference refuses"
-        );
+        if id == "nulls-1-decimal.200" {
+            assert_eq!(
+                vector["reference"],
+                find(twin_id)["reference"],
+                "{id}: the reference answers as its twin"
+            );
+        } else {
+            assert_eq!(
+                reference["result"], "refusal",
+                "{id}: the reference refuses"
+            );
+            assert_eq!(reference["code"], "INVALID_REQUEST", "{id}");
+        }
         let observed = |vector: &Value| host::run(&the_case(&all, vector), &bases);
         let (got, baseline) = match (observed(&vector), observed(&find(twin_id))) {
             (Ok(got), Ok(baseline)) => (got, baseline),
