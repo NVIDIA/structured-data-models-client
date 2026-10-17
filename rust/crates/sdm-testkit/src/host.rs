@@ -240,6 +240,14 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
     })
 }
 
+/// `pql` as the PQL library writes a query back (`to_string()`), read
+/// through the core's adapter: the Python host sends materialize that text; `pql` as
+/// it is where it does not parse (or holds a date literal whose year needs
+/// the current one, which no host fact here places).
+fn written_back(pql: &str) -> String {
+    sdm_host::normalized_query(pql).unwrap_or_else(|| pql.to_owned())
+}
+
 /// The query schema of `description`, as the core reads a description for
 /// a query (`sdm-core`'s materialize) and the Python host builds one from a
 /// schema it described: each table's columns with their data and semantic
@@ -1234,7 +1242,20 @@ fn start_materialize(
     // holds it (decision E67).
     let schema_bytes = serde_json::to_vec(schema)?;
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
-    let query_bytes = serde_json::to_vec(&case.input.pql)?;
+    // Off DuckDB the call is the Python host's on the core route (T2.1d):
+    // it sends the validated query as the PQL library writes it back
+    // (`to_string()`), which `sdm-pql` writes the same way; a query it does
+    // not parse is sent as the case gives it.
+    let off_duckdb = !matches!(
+        &provider,
+        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+    );
+    let query = if off_duckdb {
+        written_back(&case.input.pql)
+    } else {
+        case.input.pql.clone()
+    };
+    let query_bytes = serde_json::to_vec(&query)?;
     // The call's option values, as the client passes them (T1.28a's
     // `Materialize.values`, `_rust/materialize.py`): the context size, none
     // here, since the case format carries none, and of the options whose
@@ -1733,5 +1754,30 @@ mod query_dtype_tests {
         ] {
             assert_eq!(query_dtype(described), written, "{described:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod written_back_tests {
+    use super::written_back;
+
+    #[test]
+    fn a_query_is_written_back_as_the_python_host_sends_it() {
+        // s0.boundary.deepest's query, its 400 redundant parentheses as the
+        // PQL library's to_string() drops them (python-core's materialize
+        // input on SQLite).
+        let deepest = format!(
+            "PREDICT COUNT(orders.* WHERE {}orders.price > 1{}, 0, 30, days) FOR EACH users.user_id",
+            "(".repeat(400),
+            ")".repeat(400)
+        );
+        assert_eq!(
+            written_back(&deepest),
+            "PREDICT COUNT(orders.* WHERE orders.price > 1, 0, 30, days) FOR EACH users.user_id"
+        );
+        let plain = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id";
+        assert_eq!(written_back(plain), plain);
+        // A query that does not parse is sent as it is.
+        assert_eq!(written_back("PREDICT COUNT("), "PREDICT COUNT(");
     }
 }
