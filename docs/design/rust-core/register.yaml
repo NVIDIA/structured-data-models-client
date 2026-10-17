@@ -2727,10 +2727,10 @@ entries:
     approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
     the independent subagent), relayed by the orchestrator:
     APPROVE-P1B-18-first-admission-rows.
-    T2.0c: at the reference 6298913c the reference answers
-    decimal.class-target-38-18, so this entry's two outcomes on it, a
-    refusal of an input the reference accepts, moved to P2B-1, which the
-    owner approved under KO2-45 (until T2.17). For the reviewers.
+    T2.0c: with exact decimals the core answers
+    decimal.class-target-38-18, as the reference at 6298913c does, so this
+    entry's two outcomes on it, a refusal, are taken out: the refusal no
+    longer exists (P2B-1). For the reviewers.
 
 - id: P1B-19
   title: A decimal feature past float64's precision is refused UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST
@@ -4867,10 +4867,10 @@ entries:
     Re-confirmed as narrowed to the package alone by both reviewers of
     T1.32g part 2b's final review round (Codex and the independent
     subagent), relayed by the orchestrator: APPROVE-P1B-53.
-    T2.0c: at the reference 6298913c the reference answers
-    decimal.class-target-38-18, so this entry's two outcomes on it, a
-    refusal of an input the reference accepts, moved to P2B-1, which the
-    owner approved under KO2-45 (until T2.17). For the reviewers.
+    T2.0c: with exact decimals the core answers
+    decimal.class-target-38-18, as the reference at 6298913c does, so this
+    entry's two outcomes on it, a refusal, are taken out: the refusal no
+    longer exists (P2B-1). For the reviewers.
   case_outcomes:
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -5791,83 +5791,65 @@ entries:
 # --- lane B entries (P2B-1..19) ---
 
 - id: P2B-1
-  title: The core refuses decimal inputs the reference at 6298913c answers, until T2.17
+  title: Exact decimals, where the reference at 6298913c rounds, merges or refuses
   kind: change
   old_behavior: >-
     Since main's eb6c68eb, merged into the reference at 6298913c, the
-    reference reads a DuckDB DECIMAL column as its declared data type in
-    Table._sanitize: int64 at scale 0, float64 otherwise, the column left
-    as it was where a value does not fit. So a decimal key (key.decimal-18-0,
-    key.decimal-38-10, a HUGEINT key in key.hugeint) and a decimal class
-    target (decimal.class-target-38-18) reach predict, where b413e9ad failed
-    INTERNAL_ERROR at materialize; decimal sums past 38 digits and decimal
-    features float64 cannot hold exactly are sent as float64 sums and
-    rounded values, where b413e9ad refused them INVALID_REQUEST.
+    reference reads a DuckDB DECIMAL by its declared type: int64 at scale 0
+    where it fits, float64 otherwise, through pyarrow's cast, which can be
+    one unit in the last place off (0.70 as 0.7000000000000001). So a key
+    with decimal places becomes a float, and distinct keys a float cannot
+    tell apart become one (a looked-up key merged silently, an entity's
+    refused as a repeated key); a decimal class target's distinct values a
+    float32 cannot tell apart become one class; its sums and averages are
+    float sums; a DECIMAL sum whose values do not fit int64 is still
+    refused INVALID_REQUEST past the column's digits.
   new_behavior: >-
-    The core keeps Phase 1's exact decimals (register P1B-3, P1B-18, P1B-31,
-    P1B-33, P1B-35 to P1B-37): it refuses each of these inputs by name, as
-    before, a refusal of inputs the reference now answers. T2.17 (exact
-    decimals, KO2-45) retires this entry by answering them, never merging
-    two distinct keys, rather than by matching the reference's float64
-    reading.
+    The core keeps decimals exact (T2.0c, the owner's KO2-35): a key with
+    decimal places is sent and read back as its exact digits, so a
+    result's id is text where the reference's is a float, and no two keys
+    merge; a feature is sent as the nearest double to its exact value; a
+    sum or an average is computed exactly, at any size, and read once at
+    float32; a class target's distinct values stay distinct classes,
+    spelled as the reference spells them unless two of them meet at one
+    float32. It answers every decimal input the reference answers, and
+    answers a sum past 38 digits, which the reference refuses.
   affected_inputs: >-
-    PredictiveQuery.materialize and SDMClient.predict over a DuckDB source
-    on the core route with a DECIMAL or HUGEINT key, a DECIMAL class target,
-    a DECIMAL sum past 38 digits, or a DECIMAL feature float64 cannot hold
-    exactly.
-  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, decimal.class-target-38-18]
+    PredictiveQuery.materialize and SDMClient.predict on the core route
+    over a DuckDB source with a DECIMAL key with decimal places, a DECIMAL
+    feature whose value pyarrow's cast rounds wrongly, a DECIMAL sum or
+    average the reference computes as floats, a DECIMAL sum past 38
+    digits, or a DECIMAL class target with distinct values one float32
+    cannot tell apart.
+  cases: [key.decimal-38-10, decimal.sum-10-2, decimal.sum-past-38, decimal.feature-inexact-38-18, decimal.class-target-collide]
   refs:
   - eb6c68eb
-  - P1B-3
   - P1B-18
   - P1B-53
-  - P1B-31
-  - P1B-33
+  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.huge.decimal unfinished -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-18-0.text.decimal-point refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-18-0.text.exponent refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-0.text.decimal-point refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-0.text.exponent refusal INVALID_REQUEST -> success'
-  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.huge.decimal unfinished -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.decimal.half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-exponent.mixed.float-text success -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.float.half success -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.numpy.float64-half success -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-10.decimal.half success -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.own.decimal success -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.own.float success -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-10-exponent.mixed.float-text success -> success'
-  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.tiny.decimal success -> refusal INVALID_REQUEST'
-  - 'contract/key-cast-vectors.json#decimal128-18-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
-  - 'contract/key-cast-vectors.json#decimal128-38-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-10.own.text success -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.text.half success -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10-wide.wide.decimal refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10-wide.wide.text refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10-wide.wide.trailing-zeros refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-37.wide.decimal success -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-37.wide.inexact success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-37.wide.text success -> success'
-  - 'contract/decimal-vectors.json#class.static-many.d18-0 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-many.d38-10 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-many.d4-2 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-three.d18-2 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-three.d38-0 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-three.d38-10 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-three.d4-0 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-three.d4-2 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#class.static-three.d9-9 success -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/decimal-vectors.json#feature.orders.d18-2.max success -> refusal INVALID_REQUEST'
   - 'contract/decimal-vectors.json#feature.orders.d19-19.spread success -> success'
-  - 'contract/decimal-vectors.json#feature.orders.d19-2.max success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#feature.orders.d38-10.max success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#feature.orders.d38-2.max success -> refusal INVALID_REQUEST'
   - 'contract/decimal-vectors.json#feature.orders.d38-38.max success -> success'
   - 'contract/decimal-vectors.json#feature.orders.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#feature.orders.d4-2.max success -> success'
   - 'contract/decimal-vectors.json#feature.orders.d9-9.max success -> success'
-  - 'contract/decimal-vectors.json#feature.users.d18-2.max success -> refusal INVALID_REQUEST'
   - 'contract/decimal-vectors.json#feature.users.d19-19.spread success -> success'
-  - 'contract/decimal-vectors.json#feature.users.d19-2.max success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#feature.users.d38-10.max success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#feature.users.d38-2.max success -> refusal INVALID_REQUEST'
   - 'contract/decimal-vectors.json#feature.users.d38-38.max success -> success'
   - 'contract/decimal-vectors.json#feature.users.d38-38.negative success -> success'
   - 'contract/decimal-vectors.json#feature.users.d38-38.spread success -> success'
@@ -5876,49 +5858,32 @@ entries:
   - 'contract/decimal-vectors.json#key.at-precision.d38-0 success -> success'
   - 'contract/decimal-vectors.json#key.both.d18-2 success -> success'
   - 'contract/decimal-vectors.json#key.both.d9-2 success -> success'
-  - 'contract/decimal-vectors.json#overflow.d18-0.sum-past success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d18-2.sum-past success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d38-38.sum-past success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d4-0.binary-past success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d4-0.sum-far-past success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d4-0.sum-past-negative success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d4-0.sum-past success -> refusal INVALID_REQUEST'
+  - 'contract/decimal-vectors.json#overflow.d19-0.sum-past refusal INVALID_REQUEST -> success'
+  - 'contract/decimal-vectors.json#overflow.d38-0.sum-past refusal INVALID_REQUEST -> success'
+  - 'contract/decimal-vectors.json#overflow.d38-38.sum-past success -> success'
   - 'contract/decimal-vectors.json#overflow.d4-2.sum-at success -> success'
-  - 'contract/decimal-vectors.json#overflow.d4-2.sum-past success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#overflow.d9-0.sum-past success -> refusal INVALID_REQUEST'
+  - 'contract/decimal-vectors.json#overflow.d4-2.sum-past success -> success'
   - 'contract/decimal-vectors.json#target.avg.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.count.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.max.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.min.d38-38.spread success -> success'
-  - 'contract/decimal-vectors.json#target.sum.d18-2.max success -> refusal INVALID_REQUEST'
   - 'contract/decimal-vectors.json#target.sum.d19-19.spread success -> success'
-  - 'contract/decimal-vectors.json#target.sum.d19-2.max success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#target.sum.d38-10.max success -> refusal INVALID_REQUEST'
-  - 'contract/decimal-vectors.json#target.sum.d38-2.max success -> refusal INVALID_REQUEST'
   - 'contract/decimal-vectors.json#target.sum.d38-38.max success -> success'
   - 'contract/decimal-vectors.json#target.sum.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.sum.d4-2.max success -> success'
   - 'contract/decimal-vectors.json#target.sum.d9-9.max success -> success'
   status: approved
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
   notes: >-
-    Approved by the owner on 2026-10-16 in one written answer to Q-I,
-    recorded as KO2-45 (relayed by the orchestrator): a blanket approval of
-    T2.0c's temporary entries for refusals of inputs the new reference
-    answers; the reviewers check this entry fits it. It also covers the
-    approved P1B-18 and P1B-53, whose refusal of decimal.class-target-38-18
-    (target_type) is now of an input the reference answers. Temporary:
-    it lapses when T2.17 lands, and the final gate fails while it remains.
-    The trace of every moved reference line and vector to eb6c68eb is in
-    phase-2/tracker-T2.0c-recording.md; case_outcomes come from ratchet.py
-    once the re-recorded observations are in.
-  case_outcomes:
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-
+    Approved by the owner on 2026-10-16 as KO2-35 ("better than main"),
+    whose registered differences these are, and on 2026-10-17, in the
+    orchestrator's chat, by moving T2.17's exact decimals into T2.0c: a
+    permanent entry, no temporary one. The core's three decimal refusals
+    (class targets, sums past 38 digits, features a double does not hold)
+    and its rounding of a comparison's constant to the column's scale
+    (KO2-50) are gone, so P1B-18's and P1B-53's refusal of
+    decimal.class-target-38-18 no longer holds.
 - id: P2B-2
   title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
   kind: change
@@ -6019,80 +5984,6 @@ entries:
     lands, and the final gate fails while it remains. No case covers it
     yet; T2.8c's test author adds one.
 
-- id: P2B-5
-  title: Option (b) leaves out decimal null-key rows the reference at 6298913c keeps, until T2.17
-  kind: change
-  old_behavior: >-
-    Since main's eb6c68eb, merged into the reference at 6298913c, the
-    reference reads a decimal key as an integer, so a null DECIMAL key
-    beside keys that are not null sorts, and materialize keeps the null-key
-    row with no further warning, exactly as for the integer twin
-    (contract/key-inference-vectors.json nulls-1-decimal.200,
-    contract/sampled-null-key-vectors.json mixed-null-decimal); at
-    b413e9ad it failed INTERNAL_ERROR, which P1B-40 (option (b), E85)
-    answered.
-  new_behavior: >-
-    The core keeps P1B-40's option (b) for decimal keys: it leaves the
-    rows with a null decimal key out of the request, the links naming them
-    dropped, and warns NULL_KEYS_LEFT_OUT, so its success differs from the
-    reference's success (the request and one more warning). T2.17 (exact
-    decimals, KO2-45) retires this entry.
-  affected_inputs: >-
-    materialize on the core route over a DuckDB source whose keyed table,
-    reached by the walk, holds a null DECIMAL key beside keys that are not
-    null.
-  cases: [T1.32e]
-  refs:
-  - eb6c68eb
-  - P1B-40
-  - 'contract/sampled-null-key-vectors.json#mixed-null-decimal success -> success'
-  - 'contract/key-inference-vectors.json#nulls-1-decimal.200 success -> success'
-  status: approved
-  approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
-  notes: >-
-    Approved by the owner on 2026-10-16 in one written answer to Q-I,
-    recorded as KO2-45 (relayed by the orchestrator), as one of T2.0c's
-    temporary decimal differences; for the owner to confirm at the next
-    check-in that KO2-45 covers it, since it turns P1B-40's approved
-    answer to a reference failure into a difference from a reference
-    success. Temporary: it lapses when T2.17 lands, and the final gate fails
-    while it remains. Found by the recorder at 4f1c3247.
-
-- id: P2B-6
-  title: The core rounds a constant compared with a decimal column to the column's scale, until T2.17
-  kind: change
-  old_behavior: >-
-    Since main's eb6c68eb, merged into the reference at 6298913c, the
-    reference reads a DuckDB DECIMAL(38, 0) column as int64 and compares it
-    with a constant as a number: PREDICT users.d > 1.5 labels user 2
-    (d = 2) True, which is right.
-  new_behavior: >-
-    The core compares the decimal column with the constant at the column's
-    scale, the constant 1.5 seemingly rounded to 2, so it labels user 2
-    False. T2.17 (exact decimals) retires this entry: an exact comparison of
-    a decimal with a constant of any scale is an explicit exit of T2.17,
-    with this case and its neighbours as tests (KO2-50).
-  affected_inputs: >-
-    PredictiveQuery.materialize on the core route over a DuckDB source whose
-    query compares a DECIMAL column with a constant of a finer scale than
-    the column's.
-  cases: [T2.0c]
-  refs:
-  - eb6c68eb
-  - P2B-1
-  - 'contract/tests/test_t136_refusal_codes.py::test_an_infinite_constant_elsewhere_materializes_alike[PREDICT users.d > 1.5 FOR EACH users.user_id]'
-  status: approved
-  approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-50}
-  notes: >-
-    Approved by the owner on 2026-10-17, recorded as KO2-50 (relayed by the
-    orchestrator): a temporary entry until T2.17, whose exit it names, so
-    the final gate fails if it is not fixed. Found by the recorder's
-    942752e8 at 6298913c; not measured further at T2.0c, whose port does not
-    touch the comparison. The test that shows it holds the two routes alike
-    and fails until T2.17, or until its test author holds it to this entry.
-
 - id: P2B-7
   title: python-old answers the four decimal cases as the reference at 6298913c, by main's eb6c68eb
   kind: change
@@ -6127,3 +6018,37 @@ entries:
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
   - {case: key.decimal-38-10, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
   - {case: key.hugeint, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+
+- id: P2B-8
+  title: An entity value that names no key exactly is refused by name, where the reference at 6298913c rounds it onto a key
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb the reference casts the entities to the decimal
+    key's int64 or float64 reading, so an entity that is no value of the
+    key's type is rounded onto one: Decimal('1E-30') for a DECIMAL(18, 0)
+    key becomes the key 0, a microsecond timestamp the key 1, an entity
+    with more digits than DECIMAL(38, 37) holds the nearest float; each is
+    answered as that key.
+  new_behavior: >-
+    The core casts an entity to the key's exact decimal and refuses one
+    that names no value of it exactly, INVALID_REQUEST naming indices and
+    why (inexact, type), as it did before T2.0c, rather than answer for a
+    key the caller did not name.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route with an entity that is
+    no exact value of a DECIMAL key's type.
+  cases: [T2.0c]
+  refs:
+  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.tiny.decimal success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-37.wide.inexact success -> refusal INVALID_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner. A refusal of inputs the reference accepts, so the
+    owner's: KO2-35 asks the core to answer everything main answers and to
+    never merge distinct keys, and these entities would be answered only by
+    being taken for another key. The alternative is to round them onto a
+    key as the reference does. Found by the key-cast vectors at T2.0c.
