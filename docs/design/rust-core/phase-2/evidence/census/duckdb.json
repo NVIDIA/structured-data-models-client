@@ -1,7 +1,7 @@
 {
   "commit": {
-    "clean": false,
-    "sha": "cad41294417966460ad3b73cc55bd12d2f9d5f25"
+    "clean": true,
+    "sha": "37d8b2bcfc514d11d835d6c7cbdce5c4a7246ccb"
   },
   "database": "duckdb",
   "departs": [
@@ -25,7 +25,6 @@
     "rule:return_embeddings",
     "rule:target_filter",
     "rule:target_transform_null",
-    "rule:target_type",
     "rule:top_k",
     "rule:unseeded",
     "rule:use_prediction_time"
@@ -1112,7 +1111,7 @@
       "site": "rule:target_transform_null"
     },
     {
-      "departs": true,
+      "departs": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1130,7 +1129,13 @@
           "stage": "materialize"
         },
         "reference": {
-          "result": "success",
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
           "stage": "materialize"
         }
       },
