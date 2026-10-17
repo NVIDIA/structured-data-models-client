@@ -73,7 +73,7 @@ PANIC = 'INTERNAL_ERROR'
 #: (``ratchet.py check --locked``) fails, naming each, while an approved
 #: entry's ``decision_ref`` cites one. The package that lands the fix
 #: retires its entries (``rejected``, or citing a permanent row).
-TEMPORARY = ('KO2-45', 'KO2-50')
+TEMPORARY = ('KO2-45', 'KO2-50', 'KO2-56')
 
 
 class Unreadable(Exception):

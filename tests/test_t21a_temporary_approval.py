@@ -46,7 +46,7 @@ DECISIONS = 'docs/design/rust-core/phase-2/decisions.md'
 #
 #: ``register.py``'s ``TEMPORARY``: the temporary decision rows, the one
 #: place they are named.
-TEMPORARY = ('KO2-45', 'KO2-50')
+TEMPORARY = ('KO2-45', 'KO2-50', 'KO2-56')
 #: ``ratchet.py check ... --locked``: the locked run's ratchet step, which
 #: fails, naming each approved entry whose ``decision_ref`` row is one of
 #: them; without ``--locked`` the rule does not apply.
@@ -147,7 +147,7 @@ def _approved_temporary(path: Path) -> list[str]:
 
 
 def test_the_seed_s_rows_are_the_temporary_owner_rows() -> None:
-    r"""Control: KO2-45 and KO2-50 are rows of the phase's decisions file,
+    r"""Control: KO2-45, KO2-50 and KO2-56 are rows of the phase's decisions file,
     each approving until a package lands."""
     text = (ROOT / DECISIONS).read_text()
     for row in TEMPORARY:
