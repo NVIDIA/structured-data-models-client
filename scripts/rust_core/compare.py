@@ -1407,19 +1407,96 @@ def large_buffers(
 SQLITE_ARROW = {name: name for name in ('int64', 'double', 'string', 'binary')}
 
 
+#: The Arrow types the Python host's Postgres provider builds a column of
+#: each Postgres type as (``sdm_client._rust.providers.postgres``, T2.3),
+#: by the type's name as psycopg's description gives it, which the driver
+#: capture records: a type it reads as text, and a type the driver does
+#: not name (a composite or enum), as ``string``. ``numeric`` with a
+#: precision, an array, and a ``varchar`` or ``bpchar`` of a length are
+#: read by :func:`postgres_arrow_name`. A ``timestamptz`` is built in UTC,
+#: whatever the session's zone, so its name says its Arrow type.
+POSTGRES_ARROW = {
+    'bool': 'bool',
+    'int2': 'int16',
+    'int4': 'int32',
+    'int8': 'int64',
+    'oid': 'int64',
+    'float4': 'double',
+    'float8': 'double',
+    'bytea': 'binary',
+    'date': 'date32[day]',
+    'time': 'time64[us]',
+    'timestamp': 'timestamp[us]',
+    'timestamptz': 'timestamp[us, tz=UTC]',
+    'interval': 'month_day_nano_interval',
+    'numeric': 'string',
+    **{
+        name: 'string'
+        for name in (
+            'text',
+            'varchar',
+            'bpchar',
+            'char',
+            'name',
+            'uuid',
+            'xml',
+            'inet',
+            'cidr',
+            'macaddr',
+            'macaddr8',
+            'json',
+            'jsonb',
+            'money',
+            'bit',
+            'varbit',
+            'timetz',
+        )
+    },
+}
+#: A composite type the contract loader created, which the driver does not
+#: name and reads as text (``contract/runners/databases.py``'s
+#: ``composite_name``).
+_POSTGRES_COMPOSITE = re.compile(r'sdm_[0-9a-f]{32}')
+_POSTGRES_NUMERIC = re.compile(r'numeric\((\d+),(\d+)\)')
+_POSTGRES_LENGTH = re.compile(r'(varchar|bpchar|bit|varbit)\(\d+\)')
+
+
+def postgres_arrow_name(postgres_type: str) -> str | None:
+    r"""The Arrow type the Postgres provider builds a column of
+    ``postgres_type`` as, or None when :data:`POSTGRES_ARROW` does not say:
+    ``numeric(p,s)`` a ``decimal128`` to 38 digits and a ``decimal256``
+    past them; an array a list of its element's type, as pyarrow names it;
+    a length's type its type's."""
+    if postgres_type.endswith('[]'):
+        inner = postgres_arrow_name(postgres_type[:-2])
+        return None if inner is None else f'list<item: {inner}>'
+    found = _POSTGRES_NUMERIC.fullmatch(postgres_type)
+    if found:
+        width = 128 if int(found.group(1)) <= 38 else 256
+        return f'decimal{width}({found.group(1)}, {found.group(2)})'
+    found = _POSTGRES_LENGTH.fullmatch(postgres_type)
+    if found:
+        return POSTGRES_ARROW[found.group(1)]
+    if _POSTGRES_COMPOSITE.fullmatch(postgres_type):
+        return 'string'
+    return POSTGRES_ARROW.get(postgres_type)
+
+
 def row_arrow_name(
     database: str, row_type: str, large: bool = False
 ) -> str | None:
     r"""The Arrow type a row read's recorded type stands for, by the
     database's driver: DuckDB's name of its type (:func:`arrow_name`) on
     DuckDB, ADBC's Arrow name on SQLite (:data:`SQLITE_ARROW`); None where
-    the driver's vocabulary does not say, which never compares equal (a
-    database whose driver has no vocabulary here yet, Postgres, has
-    none)."""
+    the driver's vocabulary does not say, which never compares equal; on
+    Postgres, the Arrow type its provider builds the column as
+    (:func:`postgres_arrow_name`)."""
     if database == 'duckdb':
         return arrow_name(row_type, large)
     if database == 'sqlite':
         return SQLITE_ARROW.get(row_type)
+    if database == 'postgres':
+        return postgres_arrow_name(row_type)
     return None
 
 
