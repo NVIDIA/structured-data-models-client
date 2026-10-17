@@ -2727,9 +2727,10 @@ entries:
     approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
     the independent subagent), relayed by the orchestrator:
     APPROVE-P1B-18-first-admission-rows.
-  case_outcomes:
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+    T2.0c: at the reference 6298913c the reference answers
+    decimal.class-target-38-18, so this entry's two outcomes on it, a
+    refusal of an input the reference accepts, moved to P2B-1, which the
+    owner approved under KO2-45 (until T2.17). For the reviewers.
 
 - id: P1B-19
   title: A decimal feature past float64's precision is refused UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST
@@ -4866,6 +4867,10 @@ entries:
     Re-confirmed as narrowed to the package alone by both reviewers of
     T1.32g part 2b's final review round (Codex and the independent
     subagent), relayed by the orchestrator: APPROVE-P1B-53.
+    T2.0c: at the reference 6298913c the reference answers
+    decimal.class-target-38-18, so this entry's two outcomes on it, a
+    refusal of an input the reference accepts, moved to P2B-1, which the
+    owner approved under KO2-45 (until T2.17). For the reviewers.
   case_outcomes:
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -4929,8 +4934,6 @@ entries:
   - {case: key.hugeint, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
 
 - id: P1B-55
   title: The time and feature cases admitted to acceptance, each runner held to its observed outcome
@@ -5910,6 +5913,11 @@ entries:
     The trace of every moved reference line and vector to eb6c68eb is in
     phase-2/tracker-T2.0c-recording.md; case_outcomes come from ratchet.py
     once the re-recorded observations are in.
+  case_outcomes:
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
 
 - id: P2B-2
   title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
@@ -6050,3 +6058,37 @@ entries:
     answer to a reference failure into a difference from a reference
     success. Temporary: it lapses when T2.17 lands, and the final gate fails
     while it remains. Found by the recorder at 4f1c3247.
+
+- id: P2B-6
+  title: The core rounds a constant compared with a decimal column to the column's scale, until T2.17
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c, the
+    reference reads a DuckDB DECIMAL(38, 0) column as int64 and compares it
+    with a constant as a number: PREDICT users.d > 1.5 labels user 2
+    (d = 2) True, which is right.
+  new_behavior: >-
+    The core compares the decimal column with the constant at the column's
+    scale, the constant 1.5 seemingly rounded to 2, so it labels user 2
+    False. T2.17 (exact decimals) retires this entry: an exact comparison of
+    a decimal with a constant of any scale is an explicit exit of T2.17,
+    with this case and its neighbours as tests (KO2-50).
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a DuckDB source whose
+    query compares a DECIMAL column with a constant of a finer scale than
+    the column's.
+  cases: [T2.0c]
+  refs:
+  - eb6c68eb
+  - P2B-1
+  - 'contract/tests/test_t136_refusal_codes.py::test_an_infinite_constant_elsewhere_materializes_alike[PREDICT users.d > 1.5 FOR EACH users.user_id]'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-50}
+  notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-50 (relayed by the
+    orchestrator): a temporary entry until T2.17, whose exit it names, so
+    the final gate fails if it is not fixed. Found by the recorder's
+    942752e8 at 6298913c; not measured further at T2.0c, whose port does not
+    touch the comparison. The test that shows it holds the two routes alike
+    and fails until T2.17, or until its test author holds it to this entry.
