@@ -139,18 +139,41 @@ def citing(root: Path, sha: str) -> list[str]:
     )
 
 
+def _cited_at(text: str) -> str:
+    r"""The reference a JSON-lines recording names, by its first line."""
+    first = json.loads(text.splitlines()[0])
+    sha: str = first['identity']['reference']['commit']['sha']
+    return sha
+
+
 def build(tmp: Path) -> tuple[Path, str]:
     r"""The ratchet tests' repository, plus a landing that adds every file
     of this checkout citing the reference SHA that it lacks, so it holds
-    every citation the real repository does."""
+    every citation the real repository does; and the ratchet's frozen
+    recordings (``ratchet.FROZEN``), as they were at the move they were
+    frozen across: naming the reference the repository records. They
+    keep naming the reference they were recorded at (b413e9ad) since T2.0c
+    moved it to 6298913c, so this checkout's copies no longer cite it; the
+    landing names it in their place, every other byte theirs."""
     repo, _ = helpers.build(tmp)
     old = old_sha(repo)
     wanted = [name for name in citing(ROOT, old) if not (repo / name).exists()]
+    frozen = [
+        name
+        for name in getattr(ratchet, 'FROZEN', {})
+        if name not in wanted and not (repo / name).exists()
+    ]
 
     def add(r: Path) -> None:
         for name in wanted:
             (r / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / name, r / name)
+        for name in frozen:
+            text = (ROOT / name).read_text(encoding='utf-8')
+            recorded = _cited_at(text)
+            assert recorded != old and recorded in text, name
+            (r / name).parent.mkdir(parents=True, exist_ok=True)
+            (r / name).write_text(text.replace(recorded, old), encoding='utf-8')
 
     return repo, land(repo, 'T1.16', add)
 
@@ -779,10 +802,13 @@ def test_the_copied_history_cites_the_old_sha_where_the_real_one_does(
 ) -> None:
     r"""Not vacuous: the temporary repository cites the reference SHA in
     every file this checkout does (outside ``docs/``), the vector file
-    the seeds name and ``reference-env.txt`` among them, and the seeded
-    SHAs are none of the real one."""
+    the seeds name and ``reference-env.txt`` among them, and in the
+    ratchet's frozen recordings, which name it as at the move they were
+    frozen across; and the seeded SHAs are none of the real one."""
     source, _ = origin
     old = old_sha(source)
-    assert citing(source, old) == citing(ROOT, old)
+    assert citing(source, old) == sorted(
+        {*citing(ROOT, old), *getattr(ratchet, 'FROZEN', {})}
+    )
     assert {VECTORS, ENV} <= set(citing(source, old))
     assert old not in (NEW, OTHER, THIRD)
