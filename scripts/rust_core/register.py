@@ -24,6 +24,7 @@ It holds the file, as ``--root``'s tree has it, to:
   whose case part is a corpus case, but for a case it records as
   ``removed``;
 - each ``decision_ref`` a row of the decisions file it names;
+- each ``more_exact`` item's case one of its entry's ``cases`` (T2.0g);
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;
   and no entry accepting ``INTERNAL_ERROR``, the code a contained panic
@@ -233,6 +234,11 @@ def problems(
                 )
         for outcome in entry.get('case_outcomes', []):
             found += _outcome_problems(entry, outcome, corpus, accepted)
+        for item in entry.get('more_exact', []):
+            if item['case'] not in entry['cases']:
+                found.append(
+                    f'{where}: more_exact: {item["case"]} is not one of its cases'
+                )
     return found
 
 

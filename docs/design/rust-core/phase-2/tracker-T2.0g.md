@@ -27,8 +27,10 @@ The package does not rely on its own change for its gate: it declares no `main` 
 ### What changed: more exact than the reference
 
 - A register entry may list `more_exact` items: a case, the core runners (`python-core`, `rust-host`) and the fields, each a path as `compare.py` prints a difference, `*` for any one key or index, under `public.schema`, `public.result`, `public.payloads` or `core.predicted.body`, at least one level down.
-- `compare.py` reads them only from entries `status: approved`, `approved_by: owner`; for that case and runner the `schema`, `result` and `payload` rules replace the value at each path by one marker on both sides and compare the rest, so a field on one side only, another length, or any other field still differs.
-- It reads the candidate's register (`--register`, which `gate.sh` gives), as the ratchet reads an entry's case outcomes; HOST-5 is still read from the harness's own register.
+- `compare.py` reads them only from entries `status: approved`, `approved_by: owner` whose `decision_ref` names a row of the harness's own (the checkpoint's) decisions approved by the owner, as a policy relaxation is read (fix 1); P2B-1 cites KO2-35, at the checkpoint.
+- For that case and runner the `schema`, `result` and `payload` rules replace the value at each path by one marker on both sides, only where both sides hold one value there (a string, a number or a boolean); a dict, a list or a null there, a field on one side only, another length, or any other field still differs (fix 1).
+- It reads the candidate's register (`--register`, which `gate.sh` gives); HOST-5 is still read from the harness's own register.
+- `register.py validate` holds each `more_exact` item's case to one of its entry's `cases` (fix 1).
 - For T2.0c: P2B-1 lists `decimal.feature-inexact-38-18`, `decimal.sum-10-2` and `key.decimal-38-10` with the paths its gate run prints.
 
 ### What changed: a new case moved past the reference's stop
@@ -45,7 +47,12 @@ A case with no line now still moves nothing.
   Judged against itself (the post-landing state), both this copy and the candidate's own print `freeze: ok`.
 - A one-off probe of the deleting-commit rule: `main` changes the function in one commit and deletes it in the next; the declaration naming the changing commit is refused ("does not delete the entry"), the one naming the deleting commit passes.
 - `contract/tests/test_t20g_more_exact.py`: `base.regression`'s reference observed as `python-core` but for a payload target and the result digest; proposed, both fail; approved by the owner and naming both, neither fails; a third, unnamed field (`metadata.source_query`) still fails `payload`.
+  Fix 1 adds: the same entry with no owner-approved decision row excuses nothing, and `public.payloads/*` (whole payloads) excuses nothing; on the round-1 code both pass wrongly.
   Without the change the test fails (`compare()` takes no register of improvements).
 - `tests/test_t20g_new_case_moves.py`: a new case refused at materialize by its new reference line, moved to success at predict by an entry of this change, is moved; by an entry of an earlier change, it is not.
   Without the fix the first half fails.
 - On T2.0c's candidate (`f36a8e9f`, checkpoint `5e972867`), `write_effective`'s `@moved` names `python-core` and `rust-host` for `decimal.sum-past-38` and `decimal.class-target-collide`; without the fix it names neither.
+
+### Review rounds
+
+- Round 1 (Codex approve; Claude two P2s, two P3s): fix 1 ties a `more_exact` entry to an owner-approved row of the checkpoint's decisions and excuses one value only, never a dict, a list or a null; P3-1 taken (the item's case one of the entry's cases); P3-2, the brief's scope, is the orchestrator's (the owner's answers of 2026-10-17 re-admit the rule and add the `moves()` fix).

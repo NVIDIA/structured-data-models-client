@@ -95,10 +95,13 @@ standing for any one key or index. For that case and runner, the
 ``schema``, ``result`` and ``payload`` rules leave out the value at each
 such path, on both sides, and compare everything else; a field present on
 one side only, a list of another length, or any other field still differs.
-The register is the candidate's (``--register``; ``gate.sh`` gives it), so
-the entry is read as the ratchet reads an entry's case outcomes, its
-approval the owner's and review's to check; an entry not approved by the
-owner, or a field that is not such a path, excuses nothing.
+A value is left out only where both sides hold one value there (a
+string, a number or a boolean), never a dict, a list or a null. The
+register is the candidate's (``--register``; ``gate.sh`` gives it), but an
+entry counts only when its ``decision_ref`` names a row of this harness's
+(the checkpoint's) decisions approved by the owner, as a policy relaxation
+does; an entry not approved so, or a field that is not such a path,
+excuses nothing.
 
 Past the reference's stop (E112): for a case and runner whose effective
 expectation is an approved entry's move (``--expect``'s ``@moved``) of the
@@ -841,30 +844,59 @@ def _path_of(
 ) -> str | None:
     r"""Where two values first differ, as a path, never the values; the
     value at each ``excused`` path (:func:`more_exact`) left out on both
-    sides."""
+    sides where both hold one value there (:func:`_left_out`)."""
     if excused:
-        mine = _left_out(mine, path, excused)
-        theirs = _left_out(theirs, path, excused)
+        mine, theirs = _left_out(mine, theirs, path, excused)
     found: str | None = _capture_check()._first_difference(mine, theirs, path)
     return found
 
 
-def _left_out(value: Any, path: str, excused: tuple[str, ...]) -> Any:
-    r"""``value``, found at ``path``, with what is at each ``excused`` path
-    replaced by one marker; its keys and lengths kept."""
+def _left_out(
+    mine: Any, theirs: Any, path: str, excused: tuple[str, ...]
+) -> tuple[Any, Any]:
+    r"""Both sides, found at ``path``, with what is at each ``excused`` path
+    replaced by one marker where both hold one value there (:func:`_one`);
+    a dict, a list or a null there, on either side, is kept, so it still
+    differs, and so do keys and lengths."""
     if any(_matches(path, field) for field in excused):
-        return _MORE_EXACT
-    if isinstance(value, dict):
-        return {
-            key: _left_out(item, f'{path}/{key}', excused)
-            for key, item in value.items()
+        if _one(mine) and _one(theirs):
+            return _MORE_EXACT, _MORE_EXACT
+        return mine, theirs
+    if isinstance(mine, dict) and isinstance(theirs, dict):
+        pairs = {
+            key: _left_out(mine[key], theirs[key], f'{path}/{key}', excused)
+            for key in mine.keys() & theirs.keys()
         }
-    if isinstance(value, (list, tuple)):
-        return [
-            _left_out(item, f'{path}/{index}', excused)
-            for index, item in enumerate(value)
+        return (
+            {
+                key: pairs[key][0] if key in pairs else v
+                for key, v in mine.items()
+            },
+            {
+                key: pairs[key][1] if key in pairs else v
+                for key, v in theirs.items()
+            },
+        )
+    if (
+        isinstance(mine, (list, tuple))
+        and isinstance(theirs, (list, tuple))
+        and len(mine) == len(theirs)
+    ):
+        pairs_of = [
+            _left_out(a, b, f'{path}/{index}', excused)
+            for index, (a, b) in enumerate(zip(mine, theirs, strict=True))
         ]
-    return value
+        return [a for a, _ in pairs_of], [b for _, b in pairs_of]
+    return mine, theirs
+
+
+def _one(value: Any) -> bool:
+    r"""Whether ``value`` is one value: a string, a number or a boolean, or
+    a payload number as :func:`_lossless` reads it; never a null, a dict or
+    a list."""
+    if isinstance(value, list):
+        return len(value) == 4 and value[0] == 'number'
+    return isinstance(value, (str, int, float))
 
 
 def _matches(path: str, field: str) -> bool:
@@ -1091,17 +1123,50 @@ def owner_approved(entry: str, register: Path = REGISTER) -> bool:
     )
 
 
+@functools.cache
+def _ratchet() -> ModuleType:
+    r"""``ratchet.py``, whose reading of the owner's approval in a decision
+    row's status this shares."""
+    spec = importlib.util.spec_from_file_location(
+        'compare_ratchet', Path(__file__).resolve().parent / 'ratchet.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _owner_rows() -> set[str]:
+    r"""The IDs of this harness's (the checkpoint's) decision rows the owner
+    approved, every phase's; none when they cannot be read."""
+    check = _capture_check()
+    try:
+        rows = check.decision_rows(check.repository_decisions())
+    except check.DecisionsError:
+        return set()
+    return {
+        name
+        for name, (_, status) in rows.items()
+        if _ratchet().owner_approved(status)
+    }
+
+
 def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
-    r"""The fields each owner-approved entry of ``register`` lists under
-    ``more_exact``, by case and runner: only a core runner's, only a path
-    under a root the host and payload rules compare; anything else, and a
-    file it cannot read, excuses nothing."""
+    r"""The fields each entry of ``register`` lists under ``more_exact``, by
+    case and runner, from an entry approved by the owner whose
+    ``decision_ref`` names a row of this harness's (the checkpoint's)
+    decisions the owner approved, so a candidate cannot approve its own:
+    only a core runner's, only a path under a root the host and payload
+    rules compare; anything else, and a file it cannot read, excuses
+    nothing."""
     import yaml
 
     try:
         loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
     except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
         return {}
+    approved = _owner_rows()
     entries = loaded.get('entries') if isinstance(loaded, dict) else None
     found: dict[tuple[str, str], tuple[str, ...]] = {}
     for entry in entries if isinstance(entries, list) else []:
@@ -1109,6 +1174,8 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
             isinstance(entry, dict)
             and entry.get('status') == 'approved'
             and entry.get('approved_by') == 'owner'
+            and isinstance(entry.get('decision_ref'), dict)
+            and entry['decision_ref'].get('row') in approved
             and isinstance(entry.get('more_exact'), list)
         ):
             continue

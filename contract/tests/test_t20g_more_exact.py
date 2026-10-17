@@ -9,7 +9,9 @@ field.
 
 The reference's own observation of ``base.regression``, observed as
 ``python-core`` but for a payload number and the result's digest, stands
-for the core's nearest double and exact text id.
+for the core's nearest double and exact text id. Fix 1 (review round 1):
+the entry counts only with an owner-approved decision row of the
+harness's own, and a path is excused only where both sides hold one value.
 """
 
 from __future__ import annotations
@@ -93,6 +95,11 @@ def test_an_approved_more_exact_entry_excuses_only_its_fields(
         'id': 'P2E-1',
         'status': 'approved',
         'approved_by': 'owner',
+        # A row of this harness's decisions the owner approved.
+        'decision_ref': {
+            'file': 'docs/design/rust-core/phase-2/decisions.md',
+            'row': 'KO2-35',
+        },
         'more_exact': [
             {
                 'case': 'base.regression',
@@ -109,3 +116,11 @@ def test_an_approved_more_exact_entry_excuses_only_its_fields(
     assert not {'payload', 'result'} & excused, excused
     # A difference in a field the entry does not name still fails.
     assert 'payload' in _differences(tmp_path, entry, other_field=True)
+    # Approved by the owner only in the candidate's own register, with no
+    # owner-approved decision row behind it: nothing is excused.
+    unbacked = {**entry, 'decision_ref': None}
+    assert {'payload', 'result'} <= _differences(tmp_path, unbacked)
+    # A path naming a whole payload, not one value, excuses nothing.
+    whole = copy.deepcopy(entry)
+    whole['more_exact'][0]['fields'] = ['public.payloads/*', DIGEST]
+    assert 'payload' in _differences(tmp_path, whole)
