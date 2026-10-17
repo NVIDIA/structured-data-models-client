@@ -10,7 +10,7 @@
 r"""``materialize`` on the core: the request (T1.11c, T1.28a).
 
 ``PredictiveQuery.materialize`` with ``indices`` over the schema of a DuckDB
-source comes here on the core route, in place of the relational
+or, from T2.2, a SQLite source comes here on the core route, in place of the relational
 materializer's own rules and gathering (``RelationalMaterializer
 .materialize``), once the client has checked the option names. From T1.28a the core holds the
 request's rules (design, "Host-held semantics"): the context size's bound
@@ -23,8 +23,8 @@ passes the call's values as the caller gave them, each refused by the core
 where the client would refuse its type, and hands back the payload, from
 which ``RelationalMaterializer.materialize`` builds the ``Request``.
 
-The core's ``materialize`` samples the source through the DuckDB provider
-(:mod:`.providers.duckdb`) and lays out the payload the engine lays out;
+The core's ``materialize`` samples the source through its backend's
+provider (:mod:`.providers`) and lays out the payload the engine lays out;
 this module hands it the description the core last answered of the
 schema and the schema as it stands (from T1.24b, decision E67), which the
 core reads together: what the schema says now, with what the description
@@ -58,7 +58,7 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
-from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers import for_source
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -252,9 +252,10 @@ def gather(
     schema = materializer.schema
     anchor = options.get('anchor_time')
     described, held = description(schema)
+    choice, provider = for_source(schema.source)
     operation = {
         'op': 'materialize',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': choice,
         'schema': 1,
         'held': 4,
         'query': 2,
@@ -295,14 +296,13 @@ def gather(
         operation['most_parts'] = max(
             0, min(int(decompose.MOST_PARTS), 2**32 - 1)
         )
-    source: Any = schema.source
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
     finished = run(
         operation,
         attachments,
-        provider=DuckDBProvider(source.connection),
+        provider=provider,
         state=materializer._core_sampler_state,
     )
     state = finished.result['state']
