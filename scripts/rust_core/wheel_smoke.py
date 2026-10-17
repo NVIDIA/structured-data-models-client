@@ -137,6 +137,12 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_only_the_test_ops_build_takes_a_test_operation',
         'test_importing_the_module_changes_nothing_in_the_process',
     ),
+    'test_paged_schema.py': (
+        'test_the_unpaged_reply_with_a_null_is_refused',
+        'test_a_null_in_the_first_page_is_refused',
+        'test_a_null_in_a_middle_page_is_refused',
+        'test_a_valid_paged_answer_reads_whole',
+    ),
     'test_test_ops.py': (
         'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
         'test_a_second_call_while_one_is_in_the_run_is_refused_as_busy',

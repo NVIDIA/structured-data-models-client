@@ -5818,12 +5818,12 @@ entries:
     call.
   cases: [base.adventureworks, base.adventureworks.churn, base.adventureworks.color]
   status: approved
-  approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-39}
+  approved_by: reviewer
+  decision_ref: null
   notes: >-
-    Approved by the owner on 2026-10-16 as KO2-39, the table source's
-    relation in Phase 2's one contract bump, of which this is the case
-    files' input migration. The cases hold the core's own describe_source
+    Approved by both of T2.1b's round 2 reviewers (APPROVE-P2A-1), as
+    P1B-31 was: the case files' input migration that the owner's KO2-39
+    (the table source's relation in Phase 2's one contract bump) brings. The cases hold the core's own describe_source
     message, which compare.py holds equal to the inputs each core host
     records, so the shape moves with the contract rather than in a
     runner. Found by T2.1b's round 1 review: the ratchet's case rule
