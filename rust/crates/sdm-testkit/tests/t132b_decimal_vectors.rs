@@ -816,6 +816,9 @@ fn the_vectors_are_the_reference_s_and_not_vacuous() {
     assert_eq!(
         refused,
         [
+            // The reference reads the DECIMAL(38, 2) primary key's
+            // 10**17 + i as float64, merging the users (the pair matrix).
+            "key.pair-merging.d38-2.d38-0",
             "overflow.d19-0.sum-past",
             "overflow.d38-0.sum-past",
             "time.epoch-declared",
@@ -1011,13 +1014,22 @@ fn the_payload_digest_and_columns_are_the_recorder_s() {
             }
         }
     }
-    // At 6298913c the decimal class target reaches predict too (main's
-    // eb6c68eb), beside the wide feature and the decimal target.
-    assert_eq!(read, 3, "the three cases that reach a request");
+    // At 6298913c ten of the family's fifteen cases reach a request: the
+    // decimal class target (main's eb6c68eb) beside the wide feature and the
+    // decimal target, and seven of T2.0c's exact-decimal cases (the others
+    // are refused at predict for one class, or at materialize).
+    assert_eq!(read, 10, "the ten cases that reach a request");
     for case in [
         "decimal.class-target-38-18",
+        "decimal.compare-finer-gt",
+        "decimal.compare-finer-negative",
+        "decimal.compare-same-scale",
         "decimal.feature-38-0-wide",
+        "decimal.feature-inexact-38-18",
+        "decimal.key-wide",
+        "decimal.sum-10-2",
         "decimal.target-38-18",
+        "decimal.target-regression-collide",
     ] {
         assert!(!all["cases"][case]["payload"].is_null(), "{case}");
     }
