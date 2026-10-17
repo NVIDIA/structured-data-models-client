@@ -5887,6 +5887,10 @@ entries:
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
+  - {case: decimal.class-target-collide, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T2.0c): two distinct values the reference merges into one class kept apart, where the reference refuses'}
+  - {case: decimal.class-target-collide, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T2.0c): two distinct values the reference merges into one class kept apart, where the reference refuses'}
+  - {case: decimal.sum-past-38, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T2.0c): a decimal sum past 38 digits summed exactly, where the reference refuses'}
+  - {case: decimal.sum-past-38, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T2.0c): a decimal sum past 38 digits summed exactly, where the reference refuses'}
 
 - id: P2B-2
   title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
