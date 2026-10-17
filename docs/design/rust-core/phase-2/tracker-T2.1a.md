@@ -1,6 +1,6 @@
 # T2.1a: the S1 judging path
 
-Lane A.
+Lane f (moved from lane A), on the phase head 5a33dd7d (T2.0c's merge of `main`); the test author's and the implementation commits were cherry-picked onto it in order.
 The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 8fa90a57); each implementation commit removes the PENDING marks of the tests it makes pass.
 
 ## What changed
@@ -24,14 +24,14 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 - Every S1 case's tables load on SQLite and on a local postgres:17 through the loader.
 - The reference (python-ref, 6298913c's environment) ran all 52 S1 cases on SQLite and on Postgres, every capture complete; compared with `--database` against the candidate's old client, what differs is the pre-merge client against the new reference (main's `inference_config` and sampling), which T2.0c's merge removes.
 - With a random Postgres schema per case, every `from_source` differed between two runs (`SELECT current_schema()`); each case now gets a database of its own, its tables in `public`.
-- The census: 71 sites, 39 probes reaching their site on python-core, 24 sites where the core refuses what the reference answers (all of E92's class).
+- The census, run on the phase head after T2.0c with a clean tree: 71 sites, 39 probes reaching their site on python-core, 23 sites where the core refuses what the reference answers (all of E92's class).
+  T2.0c's exact decimals lifted the decimal static target the `target_type` probe first used; its probe now sums a UBIGINT column past int64.
   Not reached, each said in its probe: sites the query validator shields on both routes, answers the scripted endpoint never gives, provider declarations DuckDB's provider makes, and host checks a case input cannot reach.
   Two probes show the core answering `PROVIDER_ERROR` where the reference fails with `INTERNAL_ERROR` (a text time column with a value outside the formats, and one with day and month order open).
 
 ## Deviations and what is left
 
-- The reference lines `<case>@sqlite` and `<case>@postgres` are not recorded into the committed reference yet: the reference file changes at T2.0c (6298913c), so the recording runs once T2.0c is under this branch.
-  `tests/test_t21a_reference_lines.py` stays PENDING until then, and the SQLite and Postgres CI jobs fail until then.
-- Not built here (the row's other parts): `coverage.py --gate S1` (G12, G16, G17), the L3 wiring over three databases, the `coverage-s1`, `l3` and `ci` step tools and `--ci-run`, `gate.sh` running the three databases, the common-input comparison (H24), C6 and C18.
+- The reference lines `<case>@sqlite` and `<case>@postgres` are recorded by the recorder (test-author role) into `contract/reference/6298913c...jsonl` with this tooling; `tests/test_t21a_reference_lines.py` stays PENDING, and the SQLite and Postgres CI jobs fail, until those lines land.
+- Moved to T2.1c by the owner's lean plan, not built here: `coverage.py --gate S1` (G12, G16, G17), the L3 wiring over three databases, the `coverage-s1`, `l3` and `ci` step tools and `--ci-run`, `gate.sh` running the three databases, the common-input comparison (H24), C6 and C18.
 - `contract/tools/type_map_record.py` writes the decimal entry of `map` only; the full map is the loader's `TYPE_MAP`, which a loader test holds equal to the file.
-- The census evidence must be re-run after T2.0c, whose merge moves the Python host's sites.
+- The floor cell's SQLite and Postgres jobs take T2.0c's pins (pandas 2.2.2, NumPy 1.23.5).
