@@ -411,6 +411,15 @@ fn describe(
             referenced_names = identifier(c::REFERENCED_COLUMNS),
             table = one()?,
         ),
+        // Never asked (no index advice is declared), and rendered: the
+        // index's columns in order, an expression's position a null name.
+        DescribePart::IndexColumns => {
+            let index = one()?;
+            format!(
+                "SELECT a.attname::text AS {name}\nFROM pg_catalog.pg_index i\nCROSS JOIN LATERAL unnest(i.indkey::int2[]) WITH ORDINALITY AS n(attnum, position)\nLEFT JOIN pg_catalog.pg_attribute a\n  ON a.attrelid = i.indrelid AND a.attnum = n.attnum\nWHERE i.indexrelid = {index}\nORDER BY n.position",
+                name = identifier(c::NAME),
+            )
+        }
         DescribePart::Indexes => {
             if !tables.is_empty() {
                 return Err(refused("this part of the catalog is read whole"));
