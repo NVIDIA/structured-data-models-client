@@ -895,7 +895,15 @@ def _one(value: Any) -> bool:
     a payload number as :func:`_lossless` reads it; never a null, a dict or
     a list."""
     if isinstance(value, list):
-        return len(value) == 4 and value[0] == 'number'
+        # Only _lossless's own form: its kind, its exact value (a Decimal,
+        # which no JSON value is) and its sign.
+        return (
+            len(value) == 4
+            and value[0] == 'number'
+            and value[1] in ('integer', 'float')
+            and isinstance(value[2], Decimal)
+            and isinstance(value[3], bool)
+        )
     return isinstance(value, (str, int, float))
 
 

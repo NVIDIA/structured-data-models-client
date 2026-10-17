@@ -50,7 +50,11 @@ DIGEST = 'public.result/digest'
 
 
 def _differences(
-    tmp_path: Path, entry: dict[str, Any], *, other_field: bool = False
+    tmp_path: Path,
+    entry: dict[str, Any],
+    *,
+    other_field: bool = False,
+    target_as: Any = None,
 ) -> set[str | None]:
     r"""The rules that fail, the observation differing from the reference
     in ``TARGET`` and ``DIGEST`` (and in ``metadata.source_query`` with
@@ -72,6 +76,8 @@ def _differences(
     parsed = observation['public']['payloads'][0]['parsed']
     target = parsed['context']['instance_table']['rows'][0][3]
     target['number'] += '1'
+    if target_as is not None:
+        parsed['context']['instance_table']['rows'][0][3] = target_as
     observation['public']['result']['digest'] = '0' * 64
     if other_field:
         parsed['metadata']['source_query'] = 'PREDICT x'
@@ -124,3 +130,7 @@ def test_an_approved_more_exact_entry_excuses_only_its_fields(
     whole = copy.deepcopy(entry)
     whole['more_exact'][0]['fields'] = ['public.payloads/*', DIGEST]
     assert 'payload' in _differences(tmp_path, whole)
+    # A list shaped like a number, but not one, at the named path: not one
+    # value, so it still differs (fix 2).
+    fake = ['number', {'unexpected': True}, ['wrong'], None]
+    assert 'payload' in _differences(tmp_path, entry, target_as=fake)

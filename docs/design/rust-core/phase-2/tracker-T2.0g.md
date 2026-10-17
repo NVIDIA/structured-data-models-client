@@ -56,3 +56,4 @@ A case with no line now still moves nothing.
 ### Review rounds
 
 - Round 1 (Codex approve; Claude two P2s, two P3s): fix 1 ties a `more_exact` entry to an owner-approved row of the checkpoint's decisions and excuses one value only, never a dict, a list or a null; P3-1 taken (the item's case one of the entry's cases); P3-2, the brief's scope, is the orchestrator's (the owner's answers of 2026-10-17 re-admit the rule and add the `moves()` fix).
+- Round 2 (Codex P1-1): fix 2 takes a list as one value only in `_lossless`'s own number form (its kind, a `Decimal` value and a boolean sign), so a JSON list shaped like it still differs.
