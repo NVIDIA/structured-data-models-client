@@ -220,14 +220,14 @@ def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
 def test_the_family_is_its_fifteen_cases() -> None:
     # T1.32b's three and T2.0c's twelve exact-decimal cases (KO2-50).
-    assert IDS == [
+    assert sorted(IDS) == [
         'decimal.class-target-38-18',
         'decimal.class-target-collide',
         'decimal.compare-finer-eq',
         'decimal.compare-finer-gt',
         'decimal.compare-finer-negative',
-        'decimal.compare-past-precision-gt',
         'decimal.compare-past-precision',
+        'decimal.compare-past-precision-gt',
         'decimal.compare-same-scale',
         'decimal.feature-38-0-wide',
         'decimal.feature-inexact-38-18',
@@ -237,7 +237,7 @@ def test_the_family_is_its_fifteen_cases() -> None:
         'decimal.target-38-18',
         'decimal.target-regression-collide',
     ]
-    assert sorted(COLUMNS) == IDS
+    assert sorted(COLUMNS) == sorted(IDS)
     # The vectors' file holds the reference's observation of each case, as
     # the recorder projects it (rust-host's reading is held to it).
     recorded = json.loads(
