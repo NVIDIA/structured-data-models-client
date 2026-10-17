@@ -155,6 +155,25 @@ def transitions(
     return out, malformed
 
 
+#: The decision rows whose approved entries are improvements on the
+#: reference (KO2-35, exact decimals): a vector such an entry names may
+#: differ in its statement counts too, where the core reads less than the
+#: reference does (its float merging of decimal keys is a statement more).
+IMPROVEMENT_ROWS = frozenset({'KO2-35'})
+
+
+def improvements(document: dict[str, Any] | None = None) -> set[str]:
+    r"""The approved entries whose decision row is an improvement's."""
+    if document is None:
+        document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    return {
+        str(entry['id'])
+        for entry in document['entries']
+        if entry.get('status') == 'approved'
+        and (entry.get('decision_ref') or {}).get('row') in IMPROVEMENT_ROWS
+    }
+
+
 def covered(
     vector_id: str, old: str, new: str
 ) -> tuple[str | None, str | None]:
@@ -195,8 +214,13 @@ def problem_of(
         return None
     if approved is not None and old == new:
         # success -> success, or the same refusal: a difference within the
-        # outcome is declared, the counts are still the reference's.
-        if counted is not None and counted != vector['statements']:
+        # outcome is declared, the counts are still the reference's, but
+        # under an improvement's entry (KO2-35).
+        if (
+            counted is not None
+            and counted != vector['statements']
+            and approved not in improvements()
+        ):
             return (
                 f'{vector["id"]}: statements {counted}, the reference '
                 f'{vector["statements"]}'
@@ -615,6 +639,18 @@ def test_every_vector_ref_names_its_transition() -> None:
     assert transitions()[1] == []
 
 
+def test_the_improvements_are_ko2_35_s_approved_entries() -> None:
+    # P2B-1, exact decimals, is approved under KO2-35; no entry under
+    # another decision row is an improvement's.
+    assert 'P2B-1' in improvements()
+    document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    rows = {
+        str(e['id']): (e.get('decision_ref') or {}).get('row')
+        for e in document['entries']
+    }
+    assert {rows[i] for i in improvements()} == {'KO2-35'}
+
+
 def test_a_difference_passes_only_under_an_approved_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -732,6 +768,17 @@ def test_a_difference_passes_only_under_an_approved_transition(
     assert problem_of(plain, plain['reference'], more) is not None
     entries[:] = [('A-3', 'approved', 'feature.users.*', 'success', 'success')]
     assert problem_of(plain, changed, counts) is None
+    assert problem_of(plain, changed, more) is not None
+    # Under an improvement's approved entry (KO2-35) the counts may differ
+    # too, for the vectors it names alone; the same entry not an
+    # improvement's still holds them.
+    monkeypatch.setattr(module, 'improvements', lambda: {'A-3'})
+    assert problem_of(plain, changed, more) is None
+    assert problem_of(plain, plain['reference'], more) is not None
+    entries[:] = [('A-3', 'approved', 'feature.orders.*', 'success', 'success')]
+    assert problem_of(plain, changed, more) is not None
+    monkeypatch.setattr(module, 'improvements', set)
+    entries[:] = [('A-3', 'approved', 'feature.users.*', 'success', 'success')]
     assert problem_of(plain, changed, more) is not None
 
 
