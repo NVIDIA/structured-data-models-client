@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
+use sdm_contract::data::Relation;
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
 
@@ -206,8 +207,8 @@ pub struct UnreadTimes {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredTable {
     pub name: String,
-    /// The source's name of the table read.
-    pub source: String,
+    /// The relation of the source the table is read from.
+    pub source: Relation,
     pub columns: Vec<InferredColumn>,
     /// The columns left out, in table order.
     pub left_out: Vec<LeftOut>,
@@ -271,7 +272,7 @@ fn invalid_request(refusal: CoreError) -> CoreError {
 /// caller asks the source and calls [`finish`].
 pub fn table(
     name: &str,
-    source: &str,
+    source: &Relation,
     catalog: &[CatalogColumn],
     constraints: &[CatalogKey],
     schema: &Schema,
@@ -398,7 +399,7 @@ fn choose(
 /// reference's engine does (its key's guess is by that name).
 pub fn preview(
     name: &str,
-    source: &str,
+    source: &Relation,
     catalog: &[CatalogColumn],
     constraints: &[CatalogKey],
     schema: &Schema,
@@ -555,7 +556,7 @@ pub fn preview(
     Ok(Previewed {
         table: InferredTable {
             name: name.to_owned(),
-            source: source.to_owned(),
+            source: source.clone(),
             columns,
             left_out,
             unread_times,

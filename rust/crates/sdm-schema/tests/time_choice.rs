@@ -131,7 +131,7 @@ fn of(columns: Vec<(&str, ArrayRef)>) -> Result<infer::InferredTable, String> {
         .collect();
     infer::table(
         "things",
-        "src_things",
+        &"src_things".into(),
         &catalog,
         &[],
         &schema,
@@ -181,11 +181,18 @@ fn things(stamps: &[&str], rows: i64, constant: bool) -> Result<infer::InferredT
             primary_key: false,
         })
         .collect();
-    infer::table("things", "things", &catalog, &[], &schema, &[batch], &Days).map_err(|err| {
-        match &err.fields["rule"] {
-            Detail::Scalar(Scalar::Utf8(rule)) => rule.clone(),
-            other => panic!("{other:?}"),
-        }
+    infer::table(
+        "things",
+        &"things".into(),
+        &catalog,
+        &[],
+        &schema,
+        &[batch],
+        &Days,
+    )
+    .map_err(|err| match &err.fields["rule"] {
+        Detail::Scalar(Scalar::Utf8(rule)) => rule.clone(),
+        other => panic!("{other:?}"),
     })
 }
 
@@ -435,7 +442,7 @@ fn a_list_column_is_left_out_and_other_nested_types_stay_refused() {
         }]
     );
     assert_eq!(table.columns.len(), 1);
-    assert_eq!(table.source, "src_things");
+    assert_eq!(table.source, "src_things".into());
     // A struct column stays refused, by name.
     let fields = arrow_schema::Fields::from(vec![Field::new("a", DataType::Int64, true)]);
     let nested: ArrayRef = Arc::new(arrow_array::StructArray::new(
@@ -533,7 +540,16 @@ fn previewed(stamps: &[&str], rows: i64, constant: bool) -> infer::Previewed {
             primary_key: false,
         })
         .collect();
-    infer::preview("things", "things", &catalog, &[], &schema, &[batch], &Days).unwrap()
+    infer::preview(
+        "things",
+        &"things".into(),
+        &catalog,
+        &[],
+        &schema,
+        &[batch],
+        &Days,
+    )
+    .unwrap()
 }
 
 /// A reading of the whole table: `rows`, and each column's range.
@@ -1043,7 +1059,16 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
             primary_key: false,
         })
         .collect();
-    let both = infer::preview("things", "things", &catalog, &[], &schema, &[batch], &Days).unwrap();
+    let both = infer::preview(
+        "things",
+        &"things".into(),
+        &catalog,
+        &[],
+        &schema,
+        &[batch],
+        &Days,
+    )
+    .unwrap();
     let table = infer::finish_unchecked(both).unwrap();
     assert_eq!(table.time_column.as_deref(), Some("shipped"));
     assert_eq!(table.time.unconfirmed.len(), 1);

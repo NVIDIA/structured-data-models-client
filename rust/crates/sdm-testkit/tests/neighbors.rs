@@ -216,6 +216,7 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
             id: step.id,
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),
+                continuation: None,
             },
         }))
         .unwrap(),

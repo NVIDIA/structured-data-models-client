@@ -41,7 +41,8 @@ pub use keys::canonical_decimal_text;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
+    DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice, Relation,
+    refuse_relation,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -145,6 +146,33 @@ impl DataLayer for Data {
         debug_assert_eq!(answer.part(), *part);
         Ok(answer)
     }
+}
+
+/// The one rendering of a relation every dialect's `FROM` goes through
+/// (design choice 12): each part of `relation` quoted alone by the
+/// dialect's `quote`, never split on a dot, joined by dots. A relation of
+/// no part, or of more than `most`, the parts the dialect accepts, is
+/// refused by name (rule `relation`, [`refuse_relation`]) as `field` of
+/// `request`. The design gives each dialect its count: DuckDB 1 to 3
+/// (database, schema, table); SQLite 1 or 2, the first naming `main` or an
+/// attached database; Postgres 1 or 2, schema and table; each declared
+/// with its dialect's rendering.
+pub(crate) fn relation(
+    request: &DataRequest,
+    field: &str,
+    relation: &Relation,
+    most: usize,
+    quote: fn(&str) -> String,
+) -> Result<String, CoreError> {
+    if let Some(refusal) = refuse_relation(request, field, relation, most) {
+        return Err(refusal);
+    }
+    Ok(relation
+        .source
+        .iter()
+        .map(|part| quote(part))
+        .collect::<Vec<_>>()
+        .join("."))
 }
 
 /// The refusal of a SQL dialect this build renders nothing for, naming it

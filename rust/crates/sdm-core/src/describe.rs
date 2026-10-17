@@ -33,7 +33,7 @@ use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
-use sdm_contract::data::{DataRequest, DescribePart, TableKey};
+use sdm_contract::data::{DataRequest, DescribePart, RELATION_RULE, Relation, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_engine::time::text::Reader;
@@ -120,7 +120,7 @@ pub(crate) async fn run(
         for name in listed {
             assemble::check_table_name(&name)?;
             tables.push(NamedTable {
-                source: name.clone(),
+                source: Relation::named(name.clone()),
                 name,
             });
         }
@@ -399,7 +399,7 @@ fn big_integer_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(St
 /// past it is refused by name.
 async fn whole_column_tiers(
     asker: &Asker,
-    source: &str,
+    source: &Relation,
     preview: ArrowData,
 ) -> Result<ArrowData, CoreError> {
     let big: Vec<(String, arrow_schema::DataType)> = preview
@@ -418,7 +418,7 @@ async fn whole_column_tiers(
     let read = match ask(
         asker,
         DataRequest::ColumnRanges {
-            table: source.to_owned(),
+            table: source.clone(),
             columns: asked.clone(),
         },
     )
@@ -532,12 +532,12 @@ fn not_held() -> CoreError {
 /// `source` named, whose answer is empty when it holds none (sdm-data's
 /// rendering decides how the dialect matches a name; the core matches
 /// none).
-async fn holds(asker: &Asker, source: &str) -> Result<bool, CoreError> {
+async fn holds(asker: &Asker, source: &Relation) -> Result<bool, CoreError> {
     let held = table_names(
         describe(
             asker,
             DataRequest::Describe {
-                tables: vec![source.to_owned()],
+                tables: vec![source.clone()],
                 part: DescribePart::Tables,
             },
         )
@@ -563,7 +563,15 @@ fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
     let mut seen = std::collections::BTreeSet::new();
     for table in &spec.tables {
         assemble::check_table_name(&table.name)?;
-        if table.source.is_empty() {
+        // A relation of no part is no source's (design choice 12): refused
+        // by its rule here, whatever reads it; how many parts a source takes
+        // is its dialect's or provider's to refuse.
+        if table.source.source.is_empty() {
+            return Err(
+                refuse("a relation names no part").with_field("rule", Detail::text(RELATION_RULE))
+            );
+        }
+        if table.source.source.iter().any(String::is_empty) {
             return Err(refuse("a table's name in the source is empty"));
         }
         if !seen.insert(table.name.as_str()) {
@@ -589,15 +597,18 @@ fn declared_links(
     tables: &[InferredTable],
 ) -> Vec<Vec<ColumnRef>> {
     // Source name to the table described under it, the last one winning,
-    // in the order each source name first appears.
+    // in the order each source name first appears. A relation of several
+    // parts names its table by them, which a foreign key's one name does
+    // not say: none refers to it (design choice 12; Phase 2's hosts give
+    // one part).
     let mut by_source: Vec<(&str, &InferredTable)> = Vec::new();
     for described in tables {
-        match by_source
-            .iter_mut()
-            .find(|(source, _)| *source == described.source)
-        {
+        let Some(name) = described.source.single() else {
+            continue;
+        };
+        match by_source.iter_mut().find(|(source, _)| *source == name) {
             Some(slot) => slot.1 = described,
-            None => by_source.push((&described.source, described)),
+            None => by_source.push((name, described)),
         }
     }
     let mut keys: Vec<(&String, &CatalogForeignKey)> = Vec::new();
@@ -838,6 +849,9 @@ fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
             Err(CoreError::provider(&error).with_field("request", Detail::text(request)))
         }
         Reply::Model(_) => Err(internal("a fetch was answered by the model")),
+        // The run reads a provider's pages as one answer before it reaches
+        // the body.
+        Reply::Fetch(FetchResult::Page { .. }) => Err(internal("a page reached the body")),
     }
 }
 

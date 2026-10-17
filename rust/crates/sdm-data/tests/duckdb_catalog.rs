@@ -82,7 +82,7 @@ fn rendered(request: &DataRequest) -> String {
 
 fn describe(tables: &[&str], part: DescribePart) -> DataRequest {
     DataRequest::Describe {
-        tables: tables.iter().map(|t| (*t).to_owned()).collect(),
+        tables: tables.iter().map(|t| (*t).into()).collect(),
         part,
     }
 }
@@ -356,7 +356,7 @@ fn a_table_named_as_the_seeds_are_is_still_the_table_read() {
     for table in ["__sdm_seeds__", "__SDM_Seeds__", "orders"] {
         let request = DataRequest::Lookup {
             table: table.into(),
-            key: "id".into(),
+            key: vec!["id".into()],
             columns: vec!["id".into()],
             seeds: KeySet {
                 attachment: AttachmentId(1),

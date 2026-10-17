@@ -89,10 +89,9 @@ impl DataAccess {
             return Err(undeclared(optional.name()));
         }
         if let DataRequest::SampleEntities { seed, .. } = request
-            && let Some(max) = self.capabilities.max_seed
-            && integer(seed).is_some_and(|seed| seed > i128::from(max))
+            && integer(seed).is_some_and(|seed| seed > i128::from(self.capabilities.max_seed))
         {
-            return Err(past_seed_range(request.name(), max));
+            return Err(past_seed_range(request.name(), self.capabilities.max_seed));
         }
         self.layer.plan(request, &self.provider)
     }

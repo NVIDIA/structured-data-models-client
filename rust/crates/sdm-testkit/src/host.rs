@@ -367,6 +367,7 @@ fn drive(
                             Ok(fetched) => (
                                 FetchOutcome::Data {
                                     data: AttachmentId(1),
+                                    continuation: None,
                                 },
                                 BTreeMap::from([(
                                     AttachmentId(1),
@@ -911,6 +912,8 @@ fn start_materialize(
             values: Some(AttachmentId(6)),
             options: vec![],
             most_parts: None,
+            most_entities: None,
+            most_calls: None,
             sampler_state: sampler
                 .as_ref()
                 .and_then(|held| held.as_ref())
@@ -1200,6 +1203,7 @@ fn predict(
                         })
                         .collect()
                 }),
+                batches: None,
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),

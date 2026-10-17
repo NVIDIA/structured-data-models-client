@@ -112,6 +112,7 @@ fn predict_run_setting(
             payload: AttachmentId(1),
             query: AttachmentId(2),
             forecast: None,
+            batches: None,
         },
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),

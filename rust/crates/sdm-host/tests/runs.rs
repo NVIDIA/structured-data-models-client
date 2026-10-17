@@ -319,11 +319,12 @@ fn fetching_run() -> Run {
         capabilities: ProviderCapabilities {
             optional: Default::default(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback: None,
         },
     };
     let access = sdm_host::default_root().data_access(&host).unwrap();
@@ -347,6 +348,7 @@ fn fetching_run() -> Run {
                     CoreError::provider(&error).code.as_str().to_owned()
                 }
                 Reply::Model(_) => "model".into(),
+                Reply::Fetch(FetchResult::Page { .. }) => "page".into(),
             });
         }
         Ok(OperationResult::ValidateQuery(QueryValidation {
@@ -386,6 +388,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
             first,
             FetchOutcome::Data {
                 data: AttachmentId(1),
+                continuation: None,
             },
         ),
         BTreeMap::from([(AttachmentId(1), Attachment::Arrow(table(data)))]),
@@ -435,6 +438,7 @@ fn a_reply_must_attach_exactly_what_it_names() {
         id,
         FetchOutcome::Data {
             data: AttachmentId(1),
+            continuation: None,
         },
     );
     for (attachments, why) in [
@@ -481,6 +485,7 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
                 id,
                 FetchOutcome::Data {
                     data: AttachmentId(9),
+                    continuation: None,
                 },
             ),
             BTreeMap::from([(AttachmentId(9), Attachment::Arrow(table(half)))]),
@@ -505,6 +510,7 @@ fn data_admission_refuses_ends_the_run_with_the_refusal() {
                 ReplyId(id.0 + 7),
                 FetchOutcome::Data {
                     data: AttachmentId(1),
+                    continuation: None,
                 },
             ),
             BTreeMap::from([(AttachmentId(1), Attachment::Arrow(table(half)))]),
@@ -621,10 +627,11 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
         let query = asker.attach(json(&"PREDICT users.age FOR EACH users.user_id"))?;
         Ok(OperationResult::Materialize(Materialized {
             state: RequestState {
-                version: 1,
+                version: sdm_contract::ops::REQUEST_STATE_VERSION,
                 payload,
                 query,
                 forecast: None,
+                batches: None,
             },
         }))
     }));
@@ -704,6 +711,8 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             values: None,
             options: vec![],
             most_parts: None,
+            most_entities: None,
+            most_calls: None,
             sampler_state: None,
         }),
         vec![],

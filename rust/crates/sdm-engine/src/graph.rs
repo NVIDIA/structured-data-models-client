@@ -21,10 +21,10 @@ pub struct Table {
     /// The name the schema gives the table, which the query and the
     /// payload use.
     pub name: String,
-    /// The source's name of the table, which every data request names, as
-    /// the reference's engine reads a table named otherwise by its source
-    /// name (decision E61).
-    pub source: String,
+    /// The relation of the source the table reads, which every data request
+    /// names (design choice 12), as the reference's engine reads a table
+    /// named otherwise by its source name (decision E61).
+    pub source: sdm_contract::data::Relation,
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Option<String>,
     pub time_column: Option<String>,

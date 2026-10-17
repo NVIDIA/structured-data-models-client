@@ -3,8 +3,14 @@
  "requests": {
   "fkey/ev": {
    "request": "neighbors",
-   "table": "ev",
-   "key": "uid",
+   "table": {
+    "source": [
+     "ev"
+    ]
+   },
+   "key": [
+    "uid"
+   ],
    "columns": [
     "eid",
     "uid",
@@ -41,8 +47,14 @@
   },
   "fkey/evtz": {
    "request": "neighbors",
-   "table": "evtz",
-   "key": "uid",
+   "table": {
+    "source": [
+     "evtz"
+    ]
+   },
+   "key": [
+    "uid"
+   ],
    "columns": [
     "eid",
     "uid",
@@ -79,8 +91,14 @@
   },
   "time/ev": {
    "request": "neighbors",
-   "table": "ev",
-   "key": "uid",
+   "table": {
+    "source": [
+     "ev"
+    ]
+   },
+   "key": [
+    "uid"
+   ],
    "columns": [
     "eid",
     "uid",
@@ -107,8 +125,14 @@
   },
   "time/ev/no-start": {
    "request": "neighbors",
-   "table": "ev",
-   "key": "uid",
+   "table": {
+    "source": [
+     "ev"
+    ]
+   },
+   "key": [
+    "uid"
+   ],
    "columns": [
     "eid",
     "uid",
@@ -132,8 +156,14 @@
   },
   "time/evtz": {
    "request": "neighbors",
-   "table": "evtz",
-   "key": "uid",
+   "table": {
+    "source": [
+     "evtz"
+    ]
+   },
+   "key": [
+    "uid"
+   ],
    "columns": [
     "eid",
     "uid",

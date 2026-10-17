@@ -41,7 +41,7 @@ fn described(setup: &[&str]) -> Observed {
             "describe_source": {
                 "provider": {"provider": "sql", "dialect": "duckdb"},
                 "source": {
-                    "tables": [{"name": "events", "source": "events"}],
+                    "tables": [{"name": "events", "source": {"source": ["events"]}}],
                     "primary_keys": {},
                     "time_columns": {},
                 },

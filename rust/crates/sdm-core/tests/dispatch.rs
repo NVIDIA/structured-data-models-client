@@ -212,11 +212,12 @@ fn every_operation_dispatches_to_a_run() {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::new(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback: None,
         },
     };
     // A table named is read by its source name, with no listing of the
@@ -276,11 +277,12 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
     ProviderCapabilities {
         optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
-        max_seed: None,
+        max_seed: u64::MAX,
         text_times: None,
         null_order: None,
         index_advice: None,
         sampling: Determinism::SeededStable,
+        fallback: None,
     }
 }
 
@@ -611,11 +613,12 @@ fn materialize(seed: Option<Seed>) -> Operation {
             capabilities: ProviderCapabilities {
                 optional: BTreeSet::new(),
                 max_keys_per_request: None,
-                max_seed: None,
+                max_seed: u64::MAX,
                 text_times: None,
                 null_order: None,
                 index_advice: None,
                 sampling: Determinism::SeededStable,
+                fallback: None,
             },
         },
         schema: AttachmentId(1),
@@ -629,6 +632,8 @@ fn materialize(seed: Option<Seed>) -> Operation {
         values: None,
         options: vec![],
         most_parts: None,
+        most_entities: None,
+        most_calls: None,
         sampler_state: None,
     })
 }

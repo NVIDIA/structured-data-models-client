@@ -27,11 +27,11 @@ use sdm_data::Data;
 /// Each request, as the contract writes it, and its statement.
 const PINS: &[(&str, &str)] = &[
     (
-        r#"{"columns": ["user_id", "age", "country", "tier"], "limit": 1000, "request": "preview", "table": "users"}"#,
+        r#"{"columns": ["user_id", "age", "country", "tier"], "limit": 1000, "request": "preview", "table": {"source": ["users"]}}"#,
         r#"SELECT "user_id", "age", "country", "tier" FROM "users" LIMIT 1000"#,
     ),
     (
-        r#"{"columns": ["user_id", "tier"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
+        r#"{"columns": ["user_id", "tier"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["users"]}}"#,
         r#"SELECT "user_id", "tier"
 FROM (SELECT * FROM "users"
 WHERE "user_id" IS NOT NULL)

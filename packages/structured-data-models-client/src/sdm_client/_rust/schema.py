@@ -98,9 +98,11 @@ def from_source(
                 code='INVALID_REQUEST',
                 details={'field': field, 'rule': 'table_not_a_name'},
             )
+    # Each table's source a relation of one part, its name never split on
+    # a dot (contract v26, design choice 12).
     spec = {
         'tables': [
-            {'name': name, 'source': named}
+            {'name': name, 'source': codec.relation(named)}
             for name, named in (tables or {}).items()
         ],
         'primary_keys': {
@@ -171,7 +173,9 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
                 column['name'], dtype, column['stype']
             )
         table_shape = SourceTable(
-            name=name, source_name=table['source'], columns=columns
+            name=name,
+            source_name=codec.relation_name(table['source']),
+            columns=columns,
         )
         keys = tuple(table['primary_key'])
         if keys:

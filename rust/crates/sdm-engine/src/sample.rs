@@ -226,7 +226,7 @@ pub fn by_fkey(
 ) -> Result<DataRequest, CoreError> {
     Ok(DataRequest::Neighbors {
         table: table.source.clone(),
-        key: fkey.to_owned(),
+        key: vec![fkey.to_owned()],
         columns,
         seeds: typed(seeds, table, fkey),
         window: table
@@ -265,7 +265,7 @@ pub fn by_time(
     })?;
     Ok(DataRequest::Neighbors {
         table: table.source.clone(),
-        key: fkey.to_owned(),
+        key: vec![fkey.to_owned()],
         columns,
         seeds: typed(seeds, table, fkey),
         window: Some(sdm_contract::data::Window {
@@ -301,7 +301,7 @@ pub fn by_pkey(
     Ok(DataRequest::Lookup {
         table: table.source.clone(),
         seeds: typed(seeds, table, &key),
-        key,
+        key: vec![key],
         columns,
     })
 }
