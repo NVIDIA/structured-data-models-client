@@ -266,6 +266,7 @@ The closure check compares the file with this table.
   T2.0c carries one core change (the inference options) with the re-recorded lines because each judges the other.
 - One class of judging part lands right after the product it judges, alone: a part that only adds judgement over product already landed, which nothing it judges relies on (T2.12's retirement, T2.2b, T2.3b).
 - A tooling-pinned fixture that is a frozen historical snapshot (the two `tests/golden/t132g-*` files) keeps naming the reference of its time, by an explicit list in the ratchet carried by T2.0f's rebase (orchestrator's decision).
+- An agent moves only its own lane branch, with `--force-with-lease` after archiving the old tip by a normal push, and never `rust-core`, `main`, `rust-core-reference` or the phase branch (KO2-51).
 - The orchestrator runs the reference machine's work and HO2; implementers and test authors never open held-out data.
 - E49(a) and E56(a) freeze tooling at bug fixes; T2.0 was a demonstrated integration failure, and T2.0e, T2.0f, T2.0b, T2.0d, T2.15, CI5, CI6 and CI7 run under KO2-15, KO2-18 and KO2-38 to KO2-40.
 
