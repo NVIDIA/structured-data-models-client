@@ -70,7 +70,14 @@ INTERNAL_PATTERNS = (
     re.compile(r'gitlab-master\.nvidia\.com'),
     re.compile(r'urm\.nvidia\.com'),
     re.compile(r'\bkumo-tfm-nims\b'),
+    # A repository this one is not, and which no reader can open.
+    re.compile(r'\bkumo-relational-client\b', re.IGNORECASE),
     re.compile(r'\bnv-shared-pypi\b'),
+    # Kitmaker's Portal is on the internal network, and its address shipped
+    # in a workflow script until the publish moved off CI. The service is
+    # named in SECURITY.md on purpose; the host a reader cannot reach is the
+    # part that does not belong here.
+    re.compile(r'kitmaker-portal|\bkm\.nvidia\.com\b', re.IGNORECASE),
     re.compile(r'\bnvbugs?\b', re.IGNORECASE),
     re.compile(r'\bnspect-\d', re.IGNORECASE),
     re.compile(r'\bcolossus\b', re.IGNORECASE),
@@ -87,6 +94,10 @@ INTERNAL_PATTERNS = (
     # ships either way.
     re.compile(r'\btfm-serving\b', re.IGNORECASE),
     re.compile(r'\bstructured-data-nims\b', re.IGNORECASE),
+    # A workspace inside that repository. The bare `rfm_nim` names the model
+    # a test talks to and stays; this is a path into a tree nobody outside
+    # can open, which is what shipped in a docstring until it was removed.
+    re.compile(r'\bkumo_rfm_nim\b', re.IGNORECASE),
     # Internal build names for the servers behind a model id. A reader
     # cannot look either up, and which build answers is not the client
     # story. The public repository and the five distributions it publishes
@@ -178,8 +189,6 @@ RETIRED_ALLOWLIST = {
             'nemotron_predict',
         }
     ),
-    # Why the engine's ported examples were removed.
-    'CHANGELOG.md': frozenset({'RelationalClient', 'client.relational('}),
     # The design rule that the model is an argument, never a method.
     'docs/about/architecture.md': frozenset({'client.relational('}),
 }

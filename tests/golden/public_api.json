@@ -303,6 +303,7 @@
         "bases": [],
         "kind": "class",
         "public_attributes": [
+          "conversion_notes",
           "source",
           "tables"
         ],

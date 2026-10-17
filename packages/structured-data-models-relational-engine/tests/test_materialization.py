@@ -448,6 +448,33 @@ def test_materialize_task_rejects_prediction_row_count_mismatch(
         model.materialize_task(_task(), verbose=False)
 
 
+@pytest.mark.parametrize(
+    ('batch_size', 'offers_fewer_entities'),
+    [(4, True), (1, False)],
+    ids=['a_batch_with_rows_to_lose', 'a_batch_of_one'],
+)
+def test_the_size_limit_offers_fewer_entities_only_where_there_are_some(
+    user_store_graph: Graph,
+    monkeypatch: Any,
+    batch_size: int,
+    offers_fewer_entities: bool,
+) -> None:
+    """A batch of one row cannot be split, so advising fewer entities per call
+    names a remedy with nothing left to divide.
+    """
+    from sdm_relational_engine.rfm import rfm as rfm_module
+
+    monkeypatch.setattr(rfm_module, '_MAX_SIZE', 1)
+    model = KumoRelational(user_store_graph, verbose=False)
+    with pytest.raises(ValueError) as refused:
+        with model.batch_mode(batch_size=batch_size):
+            model.materialize_task(_task(), verbose=False)
+    said = str(refused.value)
+    assert 'exceeds the 30MB limit' in said
+    assert ('entities predicted at once' in said) is offers_fewer_entities
+    assert 'tables in the graph' in said
+
+
 def test_materialize_task_rejects_sanitized_entity_reference() -> None:
     graph = Graph.from_data(
         {

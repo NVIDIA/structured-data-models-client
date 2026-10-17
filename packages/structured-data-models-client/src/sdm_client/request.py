@@ -716,6 +716,12 @@ class Request:
         Summed across envelopes, because a request gathered in several parts
         gives each part its own context: that is why a session refuses a split
         request rather than pinning the first one's.
+
+        A sum is not what any one call sends, and the endpoint's cap is per
+        call. A request batched for size gathers a context for each batch,
+        around that batch's own rows, so this counts every one of them;
+        `_context_rows_per_call` is the largest, which is the figure the cap
+        is held against, and `__repr__` says both.
         """
         return self._rows('context')
 
@@ -730,6 +736,20 @@ class Request:
                 _envelope_rows(payload, half) or 0 for payload in self.payloads
             )
         return len(getattr(self, half).instance_table)
+
+    def _context_rows_per_call(self) -> int:
+        r"""The most context rows any one call of this request sends.
+
+        The endpoint caps the context of each call, and a request gathered in
+        several calls sends a context with each, so ``context_rows``, their
+        sum, is not what any call carries.
+        """
+        if self.payloads:
+            return max(
+                _envelope_rows(payload, 'context') or 0
+                for payload in self.payloads
+            )
+        return len(self.context.instance_table)
 
     @property
     def nothing_to_score(self) -> bool:
@@ -753,10 +773,24 @@ class Request:
         return len(self.predict.instance_table) == 0
 
     def __repr__(self) -> str:
+        r"""What this request asks, and how much of it travels per call.
+
+        A request gathered in several calls carries a context in each, so the
+        total alone reads as a context far wider than any call carries. The
+        number of calls is said where there is more than one, and the context
+        is the widest one call's, since that is what the cap is held to.
+        """
         shape = 'relational' if self.is_relational else 'single-table'
+        calls = len(self.payloads or ())
+        context = (
+            f'up to {self._context_rows_per_call()} context rows per call '
+            f'across {calls} calls'
+            if calls > 1
+            else f'{self.context_rows} context rows'
+        )
         return (
             f'Request({self.task.kind}, target={self.task.target.column_name!r}, '
-            f'{self.context_rows} context rows, {self.predict_rows} to score, '
+            f'{context}, {self.predict_rows} to score, '
             f'{shape})'
         )
 

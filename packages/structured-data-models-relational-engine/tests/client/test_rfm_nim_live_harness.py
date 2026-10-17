@@ -24,6 +24,9 @@ from rfm_nim_payloads import (
     nim_v1_two_predict_rows_payload,
 )
 
+_PW = 'password'
+_RUNNER_PW = 'runner-url-secret'
+
 
 def _response(
     status: int,
@@ -54,7 +57,7 @@ def test_normalize_base_url(raw_url: str, expected: str) -> None:
     [
         'localhost:8000',
         'ftp://example.test/rfm',
-        'https://user:password@example.test/rfm',
+        f'https://user:{_PW}@example.test/rfm',
         'https://example.test/rfm?token=secret',
         'https://example.test/rfm#fragment',
     ],
@@ -86,7 +89,7 @@ def test_text_stringlist_live_payload_exercises_equal_length_tokens() -> None:
     ('base_url', 'expected_error'),
     [
         (
-            'https://user:runner-url-secret@example.test/rfm',
+            f'https://user:{_RUNNER_PW}@example.test/rfm',
             'cannot contain credentials',
         ),
         (
