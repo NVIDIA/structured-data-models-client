@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "refactor": "T2.2: the provider is chosen by the source's backend (providers.for_source) in place of DuckDBProvider imported here; no rule added"
+      "refactor": "T2.2: the bridge imports the SQLite provider beside DuckDB's and gains _provider, which picks the dialect and provider by the source's backend; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,13 +15,13 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "refactor": "T2.2: the provider choice and provider are the source's backend's (providers.for_source), SQLite's beside DuckDB's, and an unused local is gone; no rule added (T1.36 fix 21's forecast split stays as it moved)"
+      "refactor": "T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's, and an unused local is gone; no rule added (T1.36 fix 21's forecast split stays as it moved)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (providers.for_source), SQLite's beside DuckDB's; no rule added"
+      "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T1.36 fix 8: the module gains _id, the host's half of the entity reading moved into the core (sdm-request's predict::layout and entity, as the reference's _named_entities and as_declared): the bridge reads the id the core gives, as the JSON text of the reference's item value where the core's column cannot hold it"
@@ -87,10 +87,16 @@
       "refactor": "T2.1b: a held table's source sent as contract v26 writes it, a relation of one part (codec.relation); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "refactor": "T2.2: the provider is chosen by the source's backend (providers.for_source) in place of DuckDBProvider imported here; no rule added"
+      "refactor": "T2.2: the bridge imports the SQLite provider beside DuckDB's and gains _provider, which picks the dialect and provider by the source's backend; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::_provider": {
+      "refactor": "T2.2: the provider choice and provider of a run over a source, its backend's built-in SQL dialect (DuckDB's, SQLite's) on its connection; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_provider": {
+      "refactor": "T2.2: the provider choice and provider of a run over a source, its backend's built-in SQL dialect (DuckDB's, SQLite's) on its connection; no rule added"
     }
   }
 }
