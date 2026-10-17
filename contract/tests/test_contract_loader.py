@@ -148,3 +148,59 @@ def test_a_nanosecond_postgres_cannot_hold_is_refused_by_name() -> None:
         )
         == '1970-01-01 00:00:00.000001'
     )
+
+
+def _old_client(database: str, tmp_path: Path) -> dict[str, object]:
+    import os
+    import subprocess
+
+    out = tmp_path / f'{database}.jsonl'
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(RUNNERS / 'run_python.py'),
+            '--mode',
+            'python-old',
+            '--database',
+            database,
+            '--out',
+            str(out),
+            str(ROOT / 'contract/cases/s1/base.regression.json'),
+        ],
+        cwd=ROOT,
+        env=dict(os.environ),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert done.returncode == 0, done.stderr
+    [line] = [json.loads(text) for text in out.read_text().splitlines()]
+    return line
+
+
+@pytest.mark.parametrize('database', ['sqlite', 'postgres'])
+def test_the_runner_reads_the_loaded_database_through_the_capture(
+    database: str, tmp_path: Path
+) -> None:
+    r"""``run_python.py --database``: the old client over the loaded
+    database, its observation keyed ``<case>@<database>``, every statement
+    and result captured through the driver's own connection, and no DuckDB
+    query log."""
+    import os
+
+    if database == 'postgres' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
+        if os.environ.get('SDM_REQUIRE_POSTGRES'):
+            pytest.fail(
+                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+            )
+        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
+    line = _old_client(database, tmp_path)
+    assert line['case'] == f'base.regression@{database}'
+    assert line['outcome']['result'] == 'success'
+    driver = line['driver']
+    assert isinstance(driver, dict) and driver['query_log'] is None
+    capture = driver['capture']
+    assert capture['statements'] and not capture['incomplete']
+    assert any(statement['results'] for statement in capture['statements'])

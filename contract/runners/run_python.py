@@ -8,7 +8,8 @@ r"""The Python runner of the contract cases, in three modes.
 Run with ``python -I``, from the interpreter of the environment under test:
 
     python -I contract/runners/run_python.py --mode MODE [--reference DIR]
-        [--no-capture] [--inventory ID]... --out FILE [CASE_OR_DIRECTORY...]
+        [--database DATABASE] [--no-capture] [--inventory ID]... --out FILE
+        [CASE_OR_DIRECTORY...]
 
 - ``python-ref``: the reference, the oracle. ``--reference`` names the
   reference checkout, whose environment must be the interpreter's. Its guard
@@ -23,8 +24,12 @@ Run with ``python -I``, from the interpreter of the environment under test:
 - ``python-old``: the candidate on its default routes, a smoke runner that
   must complete every case (decision H10).
 
-Each case builds its DuckDB base on a fresh in-memory connection, then makes
-the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
+Each case builds its DuckDB base on a fresh in-memory connection; with
+``--database sqlite`` or ``postgres`` (T2.1a), the contract loader
+(``databases.py``) loads its tables into a new SQLite file or a fresh
+Postgres schema, and the source is given a driver connection to that, its
+observation keyed ``<case>@<database>``; a case whose ``databases`` leave
+the database out is not run. Then it makes the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
 then ``SDMClient.predict`` against the scripted endpoint
 (``scripted_endpoint.py``), served on localhost and reached through the
 client's real transport, as far as the case's ``until``.
@@ -1661,6 +1666,9 @@ class _Captured:
     """
 
     __slots__ = ('_driver', '_log', '_handle', '_statement')
+    #: Whether the driver's ``description`` names DuckDB's types, which a
+    #: result's ``values`` record; another driver's are not DuckDB's.
+    _DUCKDB_TYPES = True
 
     def __init__(self, driver: Any, log: DriverLog) -> None:
         object.__setattr__(self, '_driver', driver)
@@ -1681,7 +1689,7 @@ class _Captured:
     def cursor(self) -> Any:
         derived = self._driver.cursor()
         self._log.events.append({'event': 'cursor', 'handle': self._handle})
-        return _Captured(derived, self._log)
+        return type(self)(derived, self._log)
 
     def execute(self, *arguments: Any, **keywords: Any) -> Any:
         # Bound as the driver binds them: execute(query, parameters=None).
@@ -1706,6 +1714,17 @@ class _Captured:
         except BaseException as error:
             statement['error'] = type(error).__name__
             raise
+        if (
+            answer is not None
+            and answer is not self._driver
+            and hasattr(answer, 'fetchall')
+        ):
+            # A connection's execute that gives a new cursor (psycopg's):
+            # that cursor is derived, and reads the statement's result.
+            self._log.events.append({'event': 'cursor', 'handle': self._handle})
+            derived = type(self)(answer, self._log)
+            object.__setattr__(derived, '_statement', statement)
+            return derived
         return self._same(answer)
 
     def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
@@ -1718,6 +1737,8 @@ class _Captured:
         # driver's description, which runs nothing.
         described = _description(self._driver)
         names, types = described if described else ([], None)
+        if not self._DUCKDB_TYPES:
+            types = None
         if method in _ROWS or method in _ROW:
             if method in _ROWS:
                 rows = list(answer)
@@ -1783,6 +1804,32 @@ class _Captured:
         self._log.bindings.append(binding)
         return self._same(self._driver.register(name, value))
 
+    def adbc_ingest(
+        self, name: Any, data: Any, *arguments: Any, **keywords: Any
+    ) -> Any:
+        r"""ADBC's bulk load of an Arrow table under a name, recorded as a
+        relation bound by name, as DuckDB's ``register`` is."""
+        binding: dict[str, Any] = {
+            'handle': self._handle,
+            'stage': self._log.stage,
+            'name': name,
+            'type': f'{type(data).__module__}.{type(data).__qualname__}',
+        }
+        if type(data).__module__.startswith('pyarrow') and hasattr(
+            data, 'combine_chunks'
+        ):
+            binding['rows'] = data.num_rows
+            binding['schema'] = [
+                {'name': field.name, 'type': str(field.type)}
+                for field in data.schema
+            ]
+            binding['digest'] = _arrow_digest(data)
+            binding['values'] = arrow_values(data)
+        else:
+            self._log.incomplete.append('adbc_ingest:not_arrow')
+        self._log.bindings.append(binding)
+        return self._driver.adbc_ingest(name, data, *arguments, **keywords)
+
     def unregister(self, name: Any) -> Any:
         self._log.events.append(
             {'event': 'unregister', 'handle': self._handle, 'name': name}
@@ -1833,9 +1880,36 @@ class _Captured:
 _Captured.__module__ = 'duckdb.sdm_capture'
 
 
-def capture(connection: Any, log: DriverLog) -> Any:
-    r"""``connection`` as the capture hands it to a source."""
-    return _Captured(connection, log)
+class _CapturedSQLite(_Captured):
+    r"""The capture of an ADBC SQLite connection (T2.1a), under that
+    driver's package, which the reference's dispatch reads."""
+
+    __slots__ = ()
+    _DUCKDB_TYPES = False
+
+
+class _CapturedPostgres(_Captured):
+    r"""The capture of a psycopg connection (T2.1a), under that driver's
+    package, which the reference's dispatch reads."""
+
+    __slots__ = ()
+    _DUCKDB_TYPES = False
+
+
+_CapturedSQLite.__module__ = 'adbc_driver_sqlite.sdm_capture'
+_CapturedPostgres.__module__ = 'psycopg.sdm_capture'
+#: The capture's class for each database's driver.
+_CAPTURES = {
+    'duckdb': _Captured,
+    'sqlite': _CapturedSQLite,
+    'postgres': _CapturedPostgres,
+}
+
+
+def capture(connection: Any, log: DriverLog, database: str = 'duckdb') -> Any:
+    r"""``connection``, a driver connection to ``database``, as the capture
+    hands it to a source."""
+    return _CAPTURES[database](connection, log)
 
 
 def _logged_texts(
@@ -1898,6 +1972,88 @@ def _connection(case: dict[str, Any], bases: dict[str, list[str]]) -> Any:
                 f'{case["id"]}: its data could not be built'
             ) from None
     return connection
+
+
+def _open(
+    case: dict[str, Any], bases: dict[str, list[str]], database: str
+) -> tuple[Any, Any]:
+    r"""The case's data on ``database``, and what removes it after: on
+    DuckDB the in-memory connection its base and setup build; elsewhere
+    that connection's tables loaded by the contract loader
+    (``databases.py``) into a new SQLite file or a fresh Postgres schema of
+    ``SDM_POSTGRES_TEST_DSN``'s server, and a driver connection to it opened
+    as a user opens one (``adbc_driver_sqlite.dbapi.connect``,
+    ``psycopg.connect``). Setup is everything before it reaches the source."""
+    duck = _connection(case, bases)
+    if database == 'duckdb':
+        return duck, duck.close
+    loader = _sibling('databases')
+    undo: list[Any] = []
+
+    def cleanup() -> None:
+        while undo:
+            undo.pop()()
+
+    try:
+        if database == 'sqlite':
+            import tempfile
+
+            import adbc_driver_sqlite.dbapi
+
+            directory = tempfile.TemporaryDirectory(prefix='sdm-case-')
+            undo.append(directory.cleanup)
+            path = Path(directory.name) / 'case.sqlite'
+            loader.load(duck, 'sqlite', path)
+            connection = adbc_driver_sqlite.dbapi.connect(str(path))
+        else:
+            import uuid
+
+            import psycopg
+            from psycopg.conninfo import make_conninfo
+
+            dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+            if not dsn:
+                raise RunnerFailure(
+                    'a Postgres run needs SDM_POSTGRES_TEST_DSN, its server'
+                )
+            schema = f'sdm_case_{uuid.uuid4().hex[:16]}'
+            with psycopg.connect(dsn, autocommit=True) as admin:
+                admin.execute(f'CREATE SCHEMA {schema}')
+
+            def drop() -> None:
+                with psycopg.connect(dsn, autocommit=True) as admin:
+                    admin.execute(f'DROP SCHEMA {schema} CASCADE')
+
+            undo.append(drop)
+            scoped = make_conninfo(dsn, options=f'-c search_path={schema}')
+            loader.load(duck, 'postgres', scoped)
+            connection = psycopg.connect(scoped)
+        undo.append(connection.close)
+    except RunnerFailure:
+        cleanup()
+        raise
+    except Exception as error:  # noqa: BLE001 - loading is not the call
+        cleanup()
+        raise RunnerFailure(
+            f'{case["id"]}: its data could not be loaded on {database} '
+            f'({type(error).__name__}'
+            + (f': {error}' if isinstance(error, loader.Unloadable) else '')
+            + ')'
+        ) from None
+    finally:
+        duck.close()
+    return connection, cleanup
+
+
+def _source(database: str, connection: Any) -> Any:
+    r"""The public source a user builds over ``connection``."""
+    import sdm_connectors
+
+    return {
+        'duckdb': sdm_connectors.DuckDBSource,
+        'sqlite': sdm_connectors.SQLiteSource,
+        'postgres': sdm_connectors.PostgresSource,
+    }[database](connection)
 
 
 def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
@@ -2097,11 +2253,12 @@ def _call(
     case: dict[str, Any],
     bases: dict[str, list[str]],
     driver_capture: bool = True,
+    database: str = 'duckdb',
 ) -> tuple[dict[str, Any], list[str], dict[str, Any], dict[str, Any]]:
-    r"""Makes the case's public calls, with the driver capture on or off:
-    its outcome, warning classes, driver record and public projection."""
+    r"""Makes the case's public calls on ``database``, with the driver
+    capture on or off: its outcome, warning classes, driver record and
+    public projection."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-    from sdm_connectors import DuckDBSource
 
     serve = _sibling('scripted_endpoint').serve
 
@@ -2115,13 +2272,14 @@ def _call(
         raise RunnerFailure(
             f'{case["id"]}: its materialize arguments could not be built'
         ) from None
-    connection = _connection(case, bases)
+    connection, cleanup = _open(case, bases, database)
     # Setup is everything run before the connection reaches the source; the
-    # query log and the capture start after it.
-    enable_query_log(connection)
+    # query log (DuckDB's own) and the capture start after it.
+    if database == 'duckdb':
+        enable_query_log(connection)
     log = DriverLog() if driver_capture else None
     given_to_source = (
-        capture(connection, log) if log is not None else connection
+        capture(connection, log, database) if log is not None else connection
     )
     public: dict[str, Any] = {'schema': None, 'payloads': [], 'result': None}
     stage = 'from_source'
@@ -2134,7 +2292,7 @@ def _call(
         warnings.simplefilter('always')
         try:
             schema = Schema.from_source(
-                DuckDBSource(given_to_source), **from_source
+                _source(database, given_to_source), **from_source
             )
             _require_presented(schema)
             public['schema'] = _schema_projection(schema)
@@ -2167,22 +2325,26 @@ def _call(
             outcome = _outcome('refusal', stage, error)
         finally:
             try:
-                logged = query_log(connection)
+                logged = query_log(connection) if database == 'duckdb' else None
             finally:
-                connection.close()
+                cleanup()
         public['payloads'] = [
             {'method': method, 'path': path, **_payload(body)}
             for method, path, body in received.requests
         ]
-    compared, differing = _logged_texts(log, logged)
-    driver = {
-        'capture': log.record() if log is not None else None,
-        'query_log': {
+    query_logged = None
+    if logged is not None:
+        compared, differing = _logged_texts(log, logged)
+        query_logged = {
             'statements': sum(1 for text in logged if text),
             'bindings': sum(1 for text in logged if not text),
             'compared': compared,
             'differing': differing,
-        },
+        }
+    driver = {
+        'capture': log.record() if log is not None else None,
+        # DuckDB's own log; another database has none the run reads.
+        'query_log': query_logged,
     }
     return (
         outcome,
@@ -2254,8 +2416,17 @@ def run(
     cases: list[tuple[dict[str, Any], str]],
     reference: Path | None,
     driver_capture: bool = True,
+    database: str = 'duckdb',
 ) -> list[dict[str, Any]]:
-    r"""Every case's observation, or :class:`RunnerFailure`."""
+    r"""Every case's observation on ``database``, keyed by :func:`case_key`,
+    or :class:`RunnerFailure`. A case that does not run on ``database``
+    (its ``databases``) is left out; python-core runs on SQLite or
+    Postgres only when the core reports a provider for it
+    (``sdm_client._native.PROVIDERS``), as it does for DuckDB from the
+    start."""
+    cases = [pair for pair in cases if database in case_databases(pair[0])]
+    if not cases:
+        raise RunnerFailure(f'no case runs on {database}')
     os.environ.pop('SDM_CORE_ROUTES', None)
     guard = _Guard(reference) if reference is not None else None
     if guard is not None:
@@ -2268,6 +2439,14 @@ def run(
     versions = _versions()
     if 'duckdb' not in versions:
         raise RunnerFailure('duckdb is not installed')
+    if mode == 'python-core' and database != 'duckdb':
+        from sdm_client import _native
+
+        if database not in _native.PROVIDERS:
+            raise RunnerFailure(
+                f'the core reports no {database} provider: the {database} '
+                'job runs the reference side only'
+            )
     recorded = []
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
@@ -2275,7 +2454,7 @@ def run(
             os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
         try:
             outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture
+                case, bases, driver_capture, database
             )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
@@ -2320,7 +2499,7 @@ def run(
     ) in recorded:
         observation = {
             'format': 'sdm-observation/1',
-            'case': case['id'],
+            'case': case_key(case['id'], database),
             'identity': {
                 'runner': mode,
                 'cell': _cell(versions),
@@ -2376,6 +2555,14 @@ def main(argv: list[str] | None = None) -> int:
         help='hand the source the driver connection itself (the capture '
         "conservation control); DuckDB's query log is still read",
     )
+    parser.add_argument(
+        '--database',
+        choices=DATABASES,
+        default='duckdb',
+        help='the database each case runs on (default duckdb): the others '
+        "are loaded from the case's DuckDB tables (databases.py), Postgres "
+        "in a fresh schema of SDM_POSTGRES_TEST_DSN's server",
+    )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):
@@ -2394,6 +2581,7 @@ def main(argv: list[str] | None = None) -> int:
             cases,
             arguments.reference,
             driver_capture=not arguments.no_capture,
+            database=arguments.database,
         )
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)
