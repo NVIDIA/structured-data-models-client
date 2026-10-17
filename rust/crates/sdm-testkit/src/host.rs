@@ -27,7 +27,7 @@ use std::sync::Arc;
 
 use duckdb::arrow::array::{ArrayRef, RecordBatch};
 use duckdb::arrow::datatypes::{Field, Schema};
-use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, EditSchema, ForecastStep, Materialize, Operation, OperationResult, Predict,
@@ -42,9 +42,12 @@ use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, r
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
-use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput, ValidateQueryInput};
+use crate::case::{
+    Case, Database, DescribeSourceInput, MaterializeInput, PredictInput, ValidateQueryInput,
+};
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
+use crate::replay::{Recording, Replay, Replayed};
 use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
@@ -283,6 +286,79 @@ fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
     Ok((input, answer))
 }
 
+/// Where a case's fetches are answered: its DuckDB base, through the
+/// DuckDB provider, or a Postgres server's recorded answers, replayed
+/// ([`crate::replay`], KO2-20).
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Duck(&'a duckdb::Connection),
+    Replay(&'a Replay<'a>),
+}
+
+impl Source<'_> {
+    /// The provider choice a run over this source names: the case's own on
+    /// DuckDB; on a Postgres replay, Postgres's SQL dialect, as the Python
+    /// host names it for a Postgres source.
+    fn provider(self, given: ProviderChoice) -> ProviderChoice {
+        match self {
+            Source::Duck(_) => given,
+            Source::Replay(_) => ProviderChoice::Sql {
+                dialect: Dialect::new(Database::Postgres.name()),
+            },
+        }
+    }
+}
+
+/// Runs `case` on Postgres as [`run`] runs it on DuckDB, each fetch
+/// answered from `recording`'s fetches for the case's Postgres key
+/// (`<case>@postgres`), replayed in order: a case that reads no data runs
+/// as on DuckDB; one whose fetches are not those recorded, or that leaves
+/// recorded fetches unasked, is this host's failure. Its driver record is
+/// the statements the recording names, each with this host's read of the
+/// answer replayed.
+pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        return run_edited(case, &Bases::default(), &[]);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    let key = format!("{}@{}", case.id, Database::Postgres.name());
+    let replay = recording.replay(&key)?;
+    let mut log = DriverLog::default();
+    let mut observed = describe_on(case, spec, Source::Replay(&replay), &mut log, &edits)?;
+    if !replay.finished() {
+        bail!("{key}: the core asked fewer fetches than were recorded: record the case again");
+    }
+    // Its query log is the statements the recording names, in the order
+    // run, as the Postgres driver's own log gave them to python-core.
+    observed.driver = Some(log.record(&replay.ran()));
+    Ok(observed)
+}
+
+/// What the driver ran for a replayed fetch, recorded as run: each
+/// statement the recording names on the fetch's own cursor, the last with
+/// this host's read of the answer replayed (or its failure), as the DuckDB
+/// provider records a fetch it runs.
+fn log_replayed(log: &mut DriverLog, replayed: &Replayed<'_>) {
+    let handle = log.cursor();
+    let Some((last, before)) = replayed.statements.split_last() else {
+        return;
+    };
+    for text in before {
+        log.statement(handle, text);
+    }
+    log.statement(handle, last);
+    match &replayed.answer {
+        Ok(fetched) => log.answered(&fetched.schema, &fetched.batches),
+        Err(_) => log.failed(),
+    }
+}
+
 /// The case's DuckDB base, built on a fresh connection.
 fn database(case: &Case, bases: &Bases) -> Result<duckdb::Connection> {
     let Some(base) = bases.get(&case.input.base) else {
@@ -323,7 +399,7 @@ fn take_warnings(handle: &HostRun, into: &mut Vec<Value>) -> Result<()> {
 fn drive(
     case: &Case,
     handle: &HostRun,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<OperationResult, Answer>> {
@@ -362,23 +438,29 @@ fn drive(
                             }
                         }
                     }
-                    let (outcome, attachments) =
-                        match duck::answer_logged(connection, step, &keys, log) {
-                            Ok(fetched) => (
-                                FetchOutcome::Data {
-                                    data: AttachmentId(1),
-                                    continuation: None,
-                                },
-                                BTreeMap::from([(
-                                    AttachmentId(1),
-                                    Attachment::Arrow(ArrowData::new(
-                                        fetched.schema,
-                                        fetched.batches,
-                                    )),
-                                )]),
-                            ),
-                            Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
-                        };
+                    let answered = match source {
+                        Source::Duck(connection) => {
+                            duck::answer_logged(connection, step, &keys, log)
+                        }
+                        Source::Replay(replay) => {
+                            let replayed = replay.answer(step)?;
+                            log_replayed(log, &replayed);
+                            replayed.answer
+                        }
+                    };
+                    let (outcome, attachments) = match answered {
+                        Ok(fetched) => (
+                            FetchOutcome::Data {
+                                data: AttachmentId(1),
+                                continuation: None,
+                            },
+                            BTreeMap::from([(
+                                AttachmentId(1),
+                                Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
+                            )]),
+                        ),
+                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
+                    };
                     let reply = encode(&ControlMessage::FetchReply(FetchReply {
                         id: step.id,
                         outcome,
@@ -411,7 +493,7 @@ fn describe(
     // capture"), so the log holds what the case's operations ran.
     driver::enable_query_log(&connection)?;
     let mut log = DriverLog::default();
-    let mut observed = describe_on(case, spec, &connection, &mut log, edits)?;
+    let mut observed = describe_on(case, spec, Source::Duck(&connection), &mut log, edits)?;
     let logged = driver::query_log(&connection)?;
     observed.driver = Some(log.record(&logged));
     Ok(observed)
@@ -424,7 +506,7 @@ fn describe(
 fn describe_on(
     case: &Case,
     spec: &DescribeSourceInput,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     log: &mut DriverLog,
     edits: &[SchemaEdit],
 ) -> Result<Observed> {
@@ -434,14 +516,15 @@ fn describe_on(
             case.id
         )
     })?;
-    let source: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
+    let provider = source.provider(provider);
+    let spec_given: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
         anyhow!(
             "{}: core.describe_source.source is not a SourceSpec",
             case.id
         )
     })?;
     // What this host sends, as it encodes it, is what it records.
-    let source_bytes = serde_json::to_vec(&source)?;
+    let source_bytes = serde_json::to_vec(&spec_given)?;
     let input = json!({
         "op": "describe_source",
         "provider": serde_json::to_value(&provider)?,
@@ -478,7 +561,7 @@ fn describe_on(
         }
     };
     log.stage = "from_source";
-    let described = match drive(case, &handle, connection, &mut observed, log)? {
+    let described = match drive(case, &handle, source, &mut observed, log)? {
         Err(answer) => {
             observed.answer = answer;
             return Ok(observed);
@@ -500,7 +583,7 @@ fn describe_on(
     let mut schema: SourceDescription = serde_json::from_value(described)
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
     for edit in edits {
-        match edit_schema(case, &schema, edit, connection, &mut observed, log)? {
+        match edit_schema(case, &schema, edit, source, &mut observed, log)? {
             Ok(edited) => schema = edited,
             Err(answer) => {
                 observed.answer = answer;
@@ -525,8 +608,7 @@ fn describe_on(
     };
     // The schema materialize samples is this host's own description, with
     // the user's edits made: never one the case carries (decision E50).
-    let Some(state) = materialize(case, spec, &schema, connection, &mut observed, log, None)?
-    else {
+    let Some(state) = materialize(case, spec, &schema, source, &mut observed, log, None)? else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
@@ -544,7 +626,7 @@ fn edit_schema(
     case: &Case,
     schema: &SourceDescription,
     edit: &SchemaEdit,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<SourceDescription, Answer>> {
@@ -578,7 +660,7 @@ fn edit_schema(
         Ok(handle) => handle,
         Err(refused) => return Ok(Err(error_of(&refused)?)),
     };
-    match drive(case, &handle, connection, observed, log)? {
+    match drive(case, &handle, source, observed, log)? {
         Err(answer) => Ok(Err(answer)),
         Ok(OperationResult::EditSchema(edited)) => {
             let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(edited.schema) else {
@@ -766,7 +848,7 @@ fn materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
@@ -775,7 +857,7 @@ fn materialize(
         case,
         spec,
         schema,
-        connection,
+        source,
         observed,
         log,
         sampler,
@@ -836,7 +918,7 @@ fn start_materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
@@ -849,6 +931,7 @@ fn start_materialize(
             case.id
         )
     })?;
+    let provider = source.provider(provider);
     let indices: Vec<Scalar> = serde_json::from_value(Value::from(spec.indices.clone()))
         .map_err(|_| anyhow!("{}: core.materialize.indices are not scalars", case.id))?;
     let anchor_time: Option<Scalar> = serde_json::from_value(spec.anchor_time.clone())
@@ -951,7 +1034,7 @@ fn start_materialize(
             return Ok(None);
         }
     };
-    let driven = drive(case, &handle, connection, observed, log)?;
+    let driven = drive(case, &handle, source, observed, log)?;
     if let Some(held) = sampler {
         keep_sampler(&handle, held)?;
     }
@@ -984,7 +1067,13 @@ pub fn materialize_as(
     }
     let connection = database(case, bases)?;
     let mut log = DriverLog::default();
-    let mut observed = describe_on(&described_only, spec, &connection, &mut log, &[])?;
+    let mut observed = describe_on(
+        &described_only,
+        spec,
+        Source::Duck(&connection),
+        &mut log,
+        &[],
+    )?;
     let Answer::Described(described) = &observed.answer else {
         return Ok((observed, None));
     };
@@ -994,7 +1083,7 @@ pub fn materialize_as(
         case,
         materialize_spec,
         &schema,
-        &connection,
+        Source::Duck(&connection),
         &mut observed,
         &mut log,
         None,
@@ -1055,7 +1144,13 @@ pub fn materialize_repeatedly_holding(
         core.materialize = None;
         core.predict = None;
     }
-    let mut first = describe_on(&describing, describe_spec, &connection, &mut log, &[])?;
+    let mut first = describe_on(
+        &describing,
+        describe_spec,
+        Source::Duck(&connection),
+        &mut log,
+        &[],
+    )?;
     let described: SourceDescription = serde_json::from_value(
         first
             .described
@@ -1080,7 +1175,7 @@ pub fn materialize_repeatedly_holding(
             case,
             spec,
             &described,
-            &connection,
+            Source::Duck(&connection),
             &mut observed,
             &mut log,
             Some(&mut held),

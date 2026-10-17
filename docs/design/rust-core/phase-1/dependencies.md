@@ -27,6 +27,7 @@ A row changes with the dependency, in the same commit.
 | `anyhow` | 1 | `sdm-testkit` only | Use a library | Test-host plumbing only; `cargo-deny` refuses it elsewhere |
 | `base64` | 0.22 | contract | Use a library | Binary scalars travel as standard base64 text |
 | `proptest` | 1 (`std` only) | contract tests | Use a library | The bounded, property-based fuzz test of the contract's decoders |
+| `arrow-ipc`, `base64` in `sdm-testkit` | 58, 0.22 | `sdm-testkit` only | Use a library | The Postgres replay (T2.1d, KO2-20) reads each recorded answer as an Arrow IPC stream in base64 text, the form pyarrow writes it in at recording; both crates are already in the workspace |
 | `sha2` | 0.10 | contract tests; `sdm-testkit` | Use a library | Hashes the committed schema for the lock check, and each case file for an observation's identity |
 | `tracing` (features `std`, `log`) | 0.1.44 | first-party crates (`sdm-core` from T1.8) | Use a library | Logging in Rust (decision H8); the `log` feature emits each event to the `log` facade when no subscriber is set, which is what `pyo3-log` reads |
 | `serde_stacker` | 0.1.14 | contract | Use a library | Reads the validated-query format back at `MAX_DEPTH`, past `serde_json`'s recursion limit (H27), through `read_validated_query`, which refuses text nested past `MAX_JSON_DEPTH` (2,008) before reading; `sdm-contract` turns on `serde_json`'s `unbounded_depth` for it, which only adds the switch that reader uses: every other read keeps the 128-level limit |
