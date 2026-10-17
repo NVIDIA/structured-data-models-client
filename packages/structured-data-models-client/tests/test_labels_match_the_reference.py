@@ -94,7 +94,14 @@ OWNED = {
 #: keeps exact decimals. On these cases the core's labels are held to the
 #: mathematically exact aggregate over the case's own rows, rounded once to
 #: float32, and everything else to the reference's.
-EXACT_DECIMAL = {'sum-decimal': 'SUM', 'avg-decimal': 'AVG'}
+EXACT_DECIMAL = {
+    'sum-decimal': 'SUM',
+    'avg-decimal': 'AVG',
+    # Sums at float32's midpoint 1 + 2**-24: rounded once, user 1's
+    # 1.000000059604644776 is the next float32 up, where the reference's
+    # float64-then-float32 reading gives 1.0.
+    'sum-decimal-midpoint': 'SUM',
+}
 #: The same register entry for a decimal class target: one class per
 #: distinct exact value, where the reference's float reading merges
 #: values that differ past float32.
@@ -139,9 +146,12 @@ def _exact_labels(spec: dict[str, Any], rows: list[list[Any]]) -> list[float]:
             'AND ts <= CAST(? AS TIMESTAMP) + INTERVAL 30 DAY',
             [entity, anchor[:19], anchor[:19]],
         ).fetchone()
-        exact = (
-            Fraction(total) if aggregate == 'SUM' else Fraction(total) / count
-        )
+        if aggregate == 'SUM':
+            # An empty window sums to zero.
+            exact = Fraction(total) if count else Fraction(0)
+        else:
+            assert count, (entity, anchor, 'an average over no order')
+            exact = Fraction(total) / count
         labels.append(_float32_once(exact))
     return labels
 
