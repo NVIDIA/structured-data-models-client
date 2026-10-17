@@ -139,6 +139,7 @@ difference or runner failure.
 from __future__ import annotations
 
 import argparse
+import copy
 import functools
 import importlib.util
 import json
@@ -770,26 +771,126 @@ def _core_agree(
             )
 
 
+#: The dtype a column reaches a host with on a database that stores its type
+#: in a form of its own (the type map's ``<database>_value``): each such
+#: form is text there (``TEXT``, or ISO or JSON text), so the column is a
+#: string. A stored form not listed here fails closed.
+STORED_DTYPES = {
+    'canonical': 'string',
+    'digits': 'string',
+    'iso': 'string',
+    'json': 'string',
+}
+
+
+@functools.cache
+def _loader() -> ModuleType:
+    r"""The contract loader beside the runner, whose type map this reads."""
+    path = REPO / 'contract/runners/databases.py'
+    spec = importlib.util.spec_from_file_location('t21d_databases', path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class UnmappedColumn(Exception):
+    r"""A column whose type the type map does not place on a database."""
+
+
+def stored_schema(
+    schema: Any,
+    case: dict[str, Any],
+    bases: dict[str, list[str]],
+    database: str,
+) -> Any:
+    r"""The schema ``validate_query`` is handed for ``case`` on ``database``
+    (T2.1d): on DuckDB the case's; elsewhere the case's with each column's
+    dtype the one the contract loader's type map gives it there
+    (``contract/runners/databases.py``'s ``TYPE_MAP``, the same entries as
+    ``contract/type-map-vectors.json``'s ``map``): a type the database
+    stores in a form of its own reaches a host as that form's dtype
+    (:data:`STORED_DTYPES`), and any other type keeps the case's dtype.
+    Each column's type is read from the case's DuckDB base and setup, as
+    the loader reads it; a column it cannot place raises
+    :class:`UnmappedColumn`."""
+    if database == 'duckdb':
+        return schema
+    import duckdb
+
+    loader = _loader()
+    spec = case.get('input') or {}
+    out = copy.deepcopy(schema)
+    connection = duckdb.connect()
+    try:
+        for statement in [
+            *bases.get(spec.get('base'), []),
+            *(spec.get('setup') or []),
+        ]:
+            connection.execute(statement)
+        for table in (out or {}).get('tables') or []:
+            for column in table.get('columns') or []:
+                where = f'{table.get("name")}.{column.get("name")}'
+                try:
+                    kind = (
+                        connection.execute(
+                            f'SELECT {loader.quote(column["name"])} FROM '
+                            f'{loader.quote(table["name"])} LIMIT 0'
+                        )
+                        .to_arrow_table()
+                        .schema.field(0)
+                        .type
+                    )
+                    entry = loader.TYPE_MAP[loader.family(kind)]
+                except Exception:  # noqa: BLE001 - named below
+                    raise UnmappedColumn(
+                        f'{where}: its type is not in the type map'
+                    ) from None
+                stored = entry.get(f'{database}_value')
+                if stored is None:
+                    continue
+                if stored not in STORED_DTYPES:
+                    raise UnmappedColumn(
+                        f'{where}: no dtype for the stored form {stored}'
+                    )
+                column['dtype'] = STORED_DTYPES[stored]
+    finally:
+        connection.close()
+    return out
+
+
 def _case_inputs(
-    report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    database: str = 'duckdb',
+    bases: dict[str, list[str]] | None = None,
 ) -> None:
     r"""A core runner's recorded inputs are the case's ``core`` inputs, and
     the schema ``materialize`` sampled is the runner's own: the description
     its ``describe_source`` answered, where the case makes no edit to it
     (T1.21d; the case names no schema, and with edits the hosts' agreement
-    is the ``core`` rule's)."""
+    is the ``core`` rule's). Off DuckDB the schema ``validate_query`` is
+    handed holds each column's dtype as the type map stores it there
+    (:func:`stored_schema`, T2.1d: SQLite keeps a timestamp as text)."""
     core = observation['core']
     if core is None:
         return
     wanted = []
     if 'validate_query' in case.get('core', {}):
         spec = case['core']['validate_query']
+        try:
+            schema = stored_schema(spec['schema'], case, bases or {}, database)
+        except UnmappedColumn as problem:
+            report.fail(f'{case["id"]}: {who}: {problem}', 'inputs')
+            return
         wanted.append(
             {
                 'op': 'validate_query',
                 'query': case['input']['pql'],
                 'profile': spec['profile'],
-                'schema': spec['schema'],
+                'schema': schema,
             }
         )
     if 'describe_source' in case.get('core', {}):
@@ -2005,7 +2106,7 @@ def compare(
                         report, case, who, observation['outcome'], ref
                     )
             _route(report, case, who, observation)
-            _case_inputs(report, case, who, observation)
+            _case_inputs(report, case, who, observation, database, bases)
             if reach is not None:
                 _reach(report, case, who, observation, reach)
             found = counts(observation)
