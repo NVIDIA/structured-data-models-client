@@ -162,6 +162,19 @@ fn transitions(text: &str) -> (Vec<Transition>, Vec<String>) {
         if status != "proposed" && status != "approved" {
             continue;
         }
+        // An approved entry under an improvement's decision row (KO2-35,
+        // exact decimals) may let the statement counts differ too.
+        let improvement = block.lines().any(|l| {
+            l.starts_with("  decision_ref:")
+                && IMPROVEMENT_ROWS.iter().any(|row| {
+                    l.contains(&format!("row: {row}}}")) || l.contains(&format!("row: {row},"))
+                })
+        });
+        let status = if status == "approved" && improvement {
+            "approved improvement".to_owned()
+        } else {
+            status
+        };
         let lines: Vec<&str> = block.lines().collect();
         let Some(at) = lines.iter().position(|l| l.starts_with("  refs:")) else {
             continue;
@@ -202,14 +215,27 @@ fn transitions(text: &str) -> (Vec<Transition>, Vec<String>) {
     (out, malformed)
 }
 
+/// The decision rows whose approved entries are improvements on the
+/// reference (KO2-35, exact decimals): a vector such an entry names may
+/// differ in its statement counts too, where the core reads less than the
+/// reference does.
+const IMPROVEMENT_ROWS: [&str; 1] = ["KO2-35"];
+
 /// The approved entry naming `id` with exactly the transition `old -> new`.
 fn covered(id: &str, old: &str, new: &str, entries: &[Transition]) -> Option<String> {
     entries
         .iter()
         .find(|(_, status, pattern, from, to)| {
-            status == "approved" && from == old && to == new && glob(pattern, id)
+            status.starts_with("approved") && from == old && to == new && glob(pattern, id)
         })
         .map(|(entry, ..)| entry.clone())
+}
+
+/// Whether an improvement's approved entry names `id` with `old -> new`.
+fn improved(id: &str, old: &str, new: &str, entries: &[Transition]) -> bool {
+    entries.iter().any(|(_, status, pattern, from, to)| {
+        status == "approved improvement" && from == old && to == new && glob(pattern, id)
+    })
 }
 
 /// `success` or `refusal <CODE>` of an answer in this host's terms (the
@@ -224,7 +250,8 @@ fn outcome_class(answer: &Value) -> String {
 
 /// Whether this host's answer passes the vector: the reference's, or a
 /// difference an approved entry declares exactly (a declared difference
-/// within the same outcome still holds the statement counts).
+/// within the same outcome still holds the statement counts, but under an
+/// improvement's entry).
 fn passes(id: &str, got: &Value, want: &Value, entries: &[Transition]) -> bool {
     if agrees(got, want) {
         return true;
@@ -234,7 +261,9 @@ fn passes(id: &str, got: &Value, want: &Value, entries: &[Transition]) -> bool {
     if !answered || covered(id, &old, &new, entries).is_none() {
         return false;
     }
-    old != new || (got["statements"] == want["statements"] && got["complete"] == true)
+    old != new
+        || (got["complete"] == true
+            && (got["statements"] == want["statements"] || improved(id, &old, &new, entries)))
 }
 
 // --- the case -----------------------------------------------------------------
@@ -1207,6 +1236,29 @@ fn the_comparison_fails_closed() {
     assert!(passes("feature.users.d4-2.spread", &changed, &want, &same));
     changed["statements"]["materialize"] = json!(99);
     assert!(!passes("feature.users.d4-2.spread", &changed, &want, &same));
+    // Under an improvement's approved entry (KO2-35) the counts may differ
+    // too, for the vectors it names alone, the capture still complete.
+    let better = [entry(
+        "approved improvement",
+        "feature.*",
+        "success",
+        "success",
+    )];
+    assert!(passes(
+        "feature.users.d4-2.spread",
+        &changed,
+        &want,
+        &better
+    ));
+    assert!(!passes("key.both.d4-0", &changed, &want, &better));
+    let mut partial = changed.clone();
+    partial["complete"] = json!(false);
+    assert!(!passes(
+        "feature.users.d4-2.spread",
+        &partial,
+        &want,
+        &better
+    ));
     // The register's text: refs of proposed and approved entries, in both
     // forms; a rejected entry's and another file's ignored; a ref naming
     // vectors with no transition malformed.
@@ -1239,9 +1291,17 @@ fn the_comparison_fails_closed() {
 fn every_vector_ref_names_its_transition() {
     let register =
         std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
-    let (_, malformed) = transitions(&register);
+    let (entries, malformed) = transitions(&register);
     assert!(
         malformed.is_empty(),
         "vector refs naming no transition `<glob> <from> -> <to>`: {malformed:?}"
     );
+    // P2B-1 (exact decimals, KO2-35) is read as an improvement's entry, and
+    // no other entry is.
+    let improving: BTreeSet<&str> = entries
+        .iter()
+        .filter(|(_, status, ..)| status == "approved improvement")
+        .map(|(entry, ..)| entry.as_str())
+        .collect();
+    assert_eq!(improving, BTreeSet::from(["P2B-1"]));
 }
