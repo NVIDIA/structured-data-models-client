@@ -31,17 +31,23 @@
   "input": {
     "base": "shop",
     "setup": [
-      "ALTER TABLE orders ADD COLUMN amount DECIMAL(12, 2)",
-      "UPDATE orders SET amount = 1234567.00 + (order_id % 3) * 0.01"
+      "CREATE OR REPLACE TABLE users AS SELECT *, (1234567.00 + user_id * 0.01)::DECIMAL(12, 2) AS t FROM users"
     ],
-    "pql": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
+    "pql": "PREDICT users.t FOR EACH users.user_id",
     "materialize": {
       "indices": [
         0,
         1
-      ],
-      "anchor_time": "2024-03-01"
-    }
+      ]
+    },
+    "edits": [
+      {
+        "op": "set_stype",
+        "table": "users",
+        "column": "t",
+        "stype": "numerical"
+      }
+    ]
   },
   "until": "predict",
   "core": {
@@ -72,12 +78,7 @@
           "v": "1"
         }
       ],
-      "anchor_time": {
-        "t": "ts",
-        "v": "1709251200000000000",
-        "unit": "ns",
-        "zone": null
-      },
+      "anchor_time": null,
       "seed": null
     },
     "predict": {
@@ -87,8 +88,8 @@
   "expect": {
     "outcome": "success",
     "stage": "predict",
-    "today": "recorded at the reference 6298913c: task regression, 112 context examples; the labels: {\"number\": \"0.0\"}, {\"number\": \"1234567.0\"}"
+    "today": "recorded at the reference 6298913c: task regression; context labels by entity: {\"number\": \"2\"}: {\"number\": \"1234567.0\"}, {\"number\": \"3\"}: {\"number\": \"1234567.0\"}, {\"number\": \"4\"}: {\"number\": \"1234567.0\"}, {\"number\": \"5\"}: {\"number\": \"1234567.0\"}, {\"number\": \"6\"}: {\"number\": \"1234567.0\"}, {\"number\": \"7\"}: {\"number\": \"1234567.125\"}"
   },
-  "why": "A DECIMAL(12, 2) regression target whose distinct window sums (1234567.00, 1234567.01 and 1234567.02) land on one float32, 1234567.0",
-  "source": "T2.0c exact decimals (KO2-50), the Claude review's request"
+  "why": "A static DECIMAL(12, 2) regression target (users.t, set numerical) whose distinct values, 1234567.00 + user_id * 0.01, land on two float32 values (1234567.0 and 1234567.125)",
+  "source": "T2.0c exact decimals (KO2-50); the Claude review's request, made a static target by Codex's round 2"
 }
