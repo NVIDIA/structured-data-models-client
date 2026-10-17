@@ -617,11 +617,16 @@ def _keyed(line: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _with_reference_keys(*keys: str) -> Callable[[Path], None]:
+    r"""The reference's X line copied under each of ``keys`` it does not
+    already hold: from T2.1a it holds ``X@sqlite`` and ``X@postgres`` as
+    recorded, and a key twice is a fault of its own."""
+
     def edit(tree: Path) -> None:
         path = _reference_file(tree)
         lines = [json.loads(x) for x in path.read_text().splitlines()]
         bare = next(x for x in lines if x['case'] == X)
-        lines += [_keyed(bare, key) for key in keys]
+        held = {x['case'] for x in lines}
+        lines += [_keyed(bare, key) for key in keys if key not in held]
         path.write_text(''.join(json.dumps(x) + '\n' for x in lines))
 
     return edit
@@ -685,8 +690,9 @@ BAD_REFERENCE = 'nocase.reference-only@postgres'
 def test_compare_takes_database_keys_and_refuses_malformed_ones_by_name(
     repo: Path, tmp_path: Path, observed: Any
 ) -> None:
-    r"""Exit 3. Twin: the reference and both Python runners hold
-    ``X@sqlite`` and ``X@postgres``: ``--only compare`` passes. Seeded:
+    r"""Exit 3. Twin: the reference (as recorded, or seeded where it does
+    not) and both Python runners hold ``X@sqlite`` and ``X@postgres``:
+    ``--only compare`` passes. Seeded:
     python-old's lines for no case, an unknown database, ``@duckdb``, an
     empty part, two suffixes and upper case, and the reference's line for
     no case, each fail it, named by key or by file and line."""
