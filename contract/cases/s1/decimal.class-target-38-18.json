@@ -5,7 +5,8 @@
   "slice": "S1",
   "paths": [
     "schema.from-source/all-tables/duckdb",
-    "query.materialize/indices-multiclass/duckdb"
+    "query.materialize/indices-multiclass/duckdb",
+    "client.predict/multiclass/duckdb"
   ],
   "routes": [
     "schema.from-source/all-tables/duckdb",
