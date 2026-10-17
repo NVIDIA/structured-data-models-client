@@ -34,7 +34,9 @@ which is how the driver reads it); the values are the driver's, converted
 by pyarrow. Where the driver's value would lose what the server holds, the
 column is read as the server writes it instead: ``json`` and ``jsonb`` as
 their text, and an ``interval`` from its text, months, days and
-microseconds kept apart (``month_day_nano_interval``).
+microseconds kept apart (``month_day_nano_interval``, each value pyarrow's
+``MonthDayNano``). A ``timestamptz`` is built as the instant in UTC,
+whatever the session's zone.
 """
 
 from __future__ import annotations
@@ -175,7 +177,9 @@ def _read_as_the_server_writes(cursor: Any) -> None:
 
     class _Interval(Loader):
         def load(self, data: Any) -> Any:
-            return interval(bytes(data).decode())
+            import pyarrow as pa
+
+            return pa.MonthDayNano(interval(bytes(data).decode()))
 
     adapters = cursor.adapters
     for name in _SERVER_TEXT:
@@ -267,14 +271,6 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
 def _array(values: Any, kind: Any) -> Any:
     import pyarrow as pa
 
-    if pa.types.is_interval(kind):
-        return pa.array(
-            [
-                None if value is None else pa.MonthDayNano(value)
-                for value in values
-            ],
-            type=kind,
-        )
     return pa.array(values, type=kind)
 
 
@@ -323,18 +319,14 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
     if name == 'timestamp':
         return pa.timestamp('us')
     if name == 'timestamptz':
-        return pa.timestamp('us', tz=_zone(connection))
+        # The instant, in UTC whatever the session's zone, so the type is
+        # the same on every session (the comparator's vocabulary holds it).
+        return pa.timestamp('us', tz='UTC')
     if name == 'time':
         return pa.time64('us')
     if name == 'interval':
         return pa.month_day_nano_interval()
     return pa.string()
-
-
-def _zone(connection: Any) -> str:
-    r"""The session's time zone, the zone a ``timestamptz`` is read in."""
-    zone = connection.info.timezone
-    return str(getattr(zone, 'key', None) or 'UTC')
 
 
 def key_set_json(table: Any) -> str:
@@ -352,11 +344,40 @@ def key_set_json(table: Any) -> str:
                 None if value is None else '\\x' + value.hex()
                 for value in column.to_pylist()
             ]
+        elif pa.types.is_timestamp(kind) and kind.tz is None:
+            texts = [
+                None if ticks is None else _isoformat(ticks, kind.unit)
+                for ticks in column.cast(pa.int64()).to_pylist()
+            ]
         else:
             texts = pc.cast(column, pa.string()).to_pylist()
         columns.append(texts)
     rows = [list(row) for row in zip(*columns, strict=True)] if columns else []
     return json.dumps(rows, separators=(',', ':'), ensure_ascii=False)
+
+
+_PER_SECOND = {'s': 1, 'ms': 10**3, 'us': 10**6, 'ns': 10**9}
+
+
+def _isoformat(ticks: int, unit: str) -> str:
+    r"""A zone-less time as pandas' ``Timestamp.isoformat`` writes it, the
+    text the reference binds a seed time as: ``YYYY-MM-DDTHH:MM:SS``, then
+    six fractional digits where it has microseconds and nine where it has
+    nanoseconds, none where it has neither. A text time column is compared
+    with it as text, as the reference compares it."""
+    import datetime as dt
+
+    nanos = ticks * (10**9 // _PER_SECOND[unit])
+    seconds, fraction = divmod(nanos, 10**9)
+    moment = dt.datetime(1970, 1, 1) + dt.timedelta(seconds=seconds)
+    text = moment.strftime('%Y-%m-%dT%H:%M:%S')
+    if moment.year < 1000:
+        text = f'{moment.year:04d}' + text[text.index('-') :]
+    if fraction % 1000:
+        return f'{text}.{fraction:09d}'
+    if fraction:
+        return f'{text}.{fraction // 1000:06d}'
+    return text
 
 
 def _arrow_table(stream: Any) -> Any:

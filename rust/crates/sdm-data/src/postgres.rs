@@ -15,15 +15,15 @@
 //!
 //! The catalog is read from `pg_catalog`, each answer in the contract's own
 //! shape (`catalog_columns`), so the data layer reads it as it reads a host
-//! provider's ([`crate::read::host`]). A relation is found as Postgres
-//! finds the same name in a `FROM`: `to_regclass` over its parts, each
-//! quoted alone, so every statement of a run reads one relation, a view
-//! included, and a name the source does not hold answers no columns, which
-//! the core refuses as the reference refuses a table it cannot find. The
-//! reference reads a one-part name in `current_schema()` only; the two
-//! differ only where the search path finds the name elsewhere (a temporary
-//! table, `pg_catalog`, or a later schema), where the core reads the
-//! relation every other statement of the run reads.
+//! provider's ([`crate::read::host`]). A relation is found as the
+//! reference finds a table ([`regclass`]): a one-part name in
+//! `current_schema()` alone, two parts by schema and table, a view
+//! included; a name the source does not hold there answers no columns,
+//! which the core refuses as the reference refuses a table it cannot find.
+//! A one-part `FROM` reads that table unless the search path finds a
+//! temporary or `pg_catalog` relation of the name first; such a name also
+//! answers no columns, so every statement of a run reads the relation the
+//! reference reads, or none.
 //!
 //! A key set is bound as the reference's Postgres sampler binds one: JSON
 //! text in the statement's one parameter, `$1`, unpacked by a common table
@@ -39,7 +39,10 @@
 //! column's own declared type, through `jsonb_populate_record` over the
 //! table's row type, so a `uuid`, an enum or a `varchar` key is compared
 //! as itself (the reference casts to the type it read from the catalog);
-//! the batch as `bigint`; a seed time as `timestamp`.
+//! the batch as `bigint`; a seed time in the window column's own type, the
+//! column compared in that type and ordered by it, as the reference does
+//! (a text time column by its text, the seed's time in the text pandas
+//! writes it, which the provider writes).
 
 use std::collections::BTreeSet;
 
@@ -103,13 +106,30 @@ fn from(request: &DataRequest, field: &str, relation: &Relation) -> Result<Strin
     crate::relation(request, field, relation, MOST_PARTS, identifier)
 }
 
-/// The catalog's object id of `relation`, found as a `FROM` finds the same
-/// name (`to_regclass` over the quoted parts), or null where the source
-/// holds no relation of that name.
+/// The catalog's object id of `relation`, found as the reference finds a
+/// table (`PostgresTable`, its catalog read by schema and table name): a
+/// one-part name in `current_schema()` alone, two parts the schema and the
+/// table so named, each compared as written. Null where the source holds no
+/// such relation, and where the relation the same name reads in a `FROM`
+/// (`to_regclass` over the quoted parts) is another: a temporary or
+/// `pg_catalog` relation of a one-part name, which the search path finds
+/// first, so no statement of the run reads a relation the reference does
+/// not.
 fn regclass(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
+    let read = text(&from(request, field, relation)?);
+    let (schema, table) = match relation.source.as_slice() {
+        [table] => ("current_schema()".to_owned(), text(table)),
+        [schema, table] => (text(schema), text(table)),
+        _ => {
+            return Err(CoreError::new(
+                ErrorKind::Internal,
+                ErrorCode::InternalError,
+                "a relation past the parts the dialect takes reached its catalog read",
+            ));
+        }
+    };
     Ok(format!(
-        "to_regclass({})",
-        text(&from(request, field, relation)?)
+        "(SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = {schema} AND c.relname = {table}\n           AND c.oid = to_regclass({read}))"
     ))
 }
 
@@ -213,7 +233,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             order,
         } => {
             let seeds_name = seeds_for(table);
-            let cte = seed_cte(request, table, &seeds_name, key, seeds)?;
+            let cte = seed_cte(request, table, &seeds_name, key, seeds, window.as_ref())?;
             let table = from(request, "table", table)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
@@ -238,7 +258,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             seeds,
         } => {
             let seeds_name = seeds_for(table);
-            let cte = seed_cte(request, table, &seeds_name, key, seeds)?;
+            let cte = seed_cte(request, table, &seeds_name, key, seeds, None)?;
             let table = from(request, "table", table)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
@@ -459,17 +479,19 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
 }
 
 /// One `SELECT` per time column, in order, labelled by its position: the
-/// smallest and largest values in the source's own wall clock, `CAST(column
-/// AS timestamp)` (a `timestamptz` in the session's zone, a date at its
-/// midnight), the zone-less timestamps the request takes back. The
-/// reference reads the column's own type and converts it in the host.
+/// smallest and largest values as the reference takes them, `MIN` and `MAX`
+/// of the column in its own type (a text column's by its text), each then
+/// read as the zone-less timestamp the request takes back, `CAST(... AS
+/// timestamp)` (a `timestamptz` in the session's zone, a date at its
+/// midnight, a text by the source's reading of it), where the reference
+/// reads them in the host.
 fn time_bounds(request: &DataRequest, columns: &[TableColumn]) -> Result<String, CoreError> {
     let mut selects = Vec::with_capacity(columns.len());
     for (position, at) in columns.iter().enumerate() {
         let table = from(request, "columns", &at.table)?;
-        let time = format!("CAST({} AS timestamp)", identifier(&at.column));
+        let time = identifier(&at.column);
         selects.push(format!(
-            "SELECT {position} AS table_index, MIN({time}) AS min_date, MAX({time}) AS max_date\nFROM {table}"
+            "SELECT {position} AS table_index, CAST(MIN({time}) AS timestamp) AS min_date, CAST(MAX({time}) AS timestamp) AS max_date\nFROM {table}"
         ));
     }
     Ok(selects.join("\nUNION ALL\n"))
@@ -610,21 +632,25 @@ fn conditions(request: &DataRequest, filters: &[Filter], lead: &str) -> Result<S
 
 /// The common table expression `name` that unpacks the key set bound as
 /// `$1` (the module's binding): one row per JSON row, each key column read
-/// in the type `table` declares for the key column it joins, through
-/// `jsonb_populate_record` over the table's row type, and every other
-/// column of the key set (the batch and the seed times) in its own
-/// type, with its trailing line break.
+/// as [`key_type`] says, else in the type `table` declares for the key
+/// column it joins, through `jsonb_populate_record` over the table's row
+/// type; a seed time a bound of `window` names in the type `table` declares
+/// for the window's column, the same way, as the reference casts its seeds
+/// to the column's type; the batch as `bigint`; with its trailing line
+/// break.
 fn seed_cte(
     request: &DataRequest,
     table: &Relation,
     name: &str,
     key: &[String],
     seeds: &KeySet,
+    window: Option<&Window>,
 ) -> Result<String, CoreError> {
     let row_type = from(request, "table", table)?;
     let seed_keys = seed_key_columns(key.len());
     let mut selects = Vec::with_capacity(seeds.columns.len());
     let mut built = Vec::with_capacity(key.len());
+    let mut timed = Vec::new();
     for (position, column) in seeds.columns.iter().enumerate() {
         let cell = format!("r.value->>{position}");
         let read = if let Some(at) = seed_keys.iter().position(|k| *k == column.name) {
@@ -637,6 +663,18 @@ fn seed_cte(
             }
         } else if column.name == SEED_BATCH {
             format!("({cell})::bigint")
+        } else if let Some(window) = window.filter(|w| {
+            [&w.lower, &w.upper]
+                .into_iter()
+                .flatten()
+                .any(|bound| bound.seed_column == column.name)
+        }) {
+            let alias = format!("w{position}");
+            timed.push(format!(
+                "\n  CROSS JOIN LATERAL jsonb_populate_record(NULL::{row_type}, jsonb_build_object({}, r.value->{position})) AS {alias}",
+                text(&window.column)
+            ));
+            format!("{alias}.{}", identifier(&window.column))
         } else {
             match &column.column_type {
                 sdm_contract::ColumnType::Timestamp { zone: None, .. } => {
@@ -665,7 +703,7 @@ fn seed_cte(
             "the seeds do not carry every key column",
         ));
     }
-    let typed = if built.is_empty() {
+    let mut typed = if built.is_empty() {
         String::new()
     } else {
         format!(
@@ -673,6 +711,7 @@ fn seed_cte(
             built.join(", ")
         )
     };
+    typed.push_str(&timed.concat());
     Ok(format!(
         "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) AS r(value){typed}\n)\n",
         name = identifier(name),
@@ -732,14 +771,12 @@ fn positioned(
 }
 
 /// One term of a neighbor order, as Postgres orders it, each term's null
-/// order written out.
+/// order written out. A time term (`as_timestamp`) orders the column in its
+/// own type, as the reference's Postgres sampler orders it
+/// (`_neighbor_order_by`): a timestamp, a `timestamptz` and a date in time,
+/// a text by its text.
 fn order_term(term: &TieTerm) -> String {
-    let column = format!("t.{}", identifier(&term.column));
-    let value = if term.as_timestamp {
-        format!("CAST({column} AS timestamp)")
-    } else {
-        column
-    };
+    let value = format!("t.{}", identifier(&term.column));
     format!(
         "{value} {} {}",
         if term.descending { "DESC" } else { "ASC" },
@@ -753,7 +790,8 @@ fn order_term(term: &TieTerm) -> String {
 
 /// The reference's neighbor reads (`_by_time` and `_by_fkey` on Postgres):
 /// the rows of `table` whose `key` is a seed's key, within the seed's
-/// window in the source's own `CAST(column AS timestamp)` wall clock, and,
+/// window, the column compared in its own type with the seed's time read in
+/// that type ([`seed_cte`]) as the reference compares them, and,
 /// with a limit per seed, the first rows of each seed in `order`, read
 /// for each seed (`JOIN LATERAL`, as the reference reads them), the result
 /// in `(batch, order)`.
@@ -771,7 +809,7 @@ fn neighbors(
     let positioned = positioned(request, columns)?;
     let mut within = vec![seed_join(key)];
     if let Some(window) = window {
-        let time = format!("CAST(t.{} AS timestamp)", identifier(&window.column));
+        let time = format!("t.{}", identifier(&window.column));
         if let Some(upper) = &window.upper {
             let op = if upper.inclusive { "<=" } else { "<" };
             within.push(format!("{time} {op} s.{}", identifier(&upper.seed_column)));
