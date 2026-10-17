@@ -6,7 +6,7 @@ The design branch owns `tracker.md`; this file holds CI8's section until it fold
 
 On 2026-10-17 RustSec published three advisories against `zip` 6.0.0, all about extraction, and every branch's `rust-deny` job went red.
 `zip` 6 reaches the graph only as a build-dependency of `libduckdb-sys` 1.10506.0 (`zip = "6"`), so `cargo update -p zip` cannot reach the fixed `zip` 9.
-The owner chose a reviewed exception, removed at the next DuckDB upgrade (row KO2 in `phase-2/decisions.md`, the owner's).
+The owner chose a reviewed exception, removed at the next DuckDB upgrade (the owner's row KO2-49 in `phase-2/decisions.md`).
 CI8 changes a judging file, `rust/deny.toml` (a protected path), so it lands alone.
 
 ### What changed, by exit
