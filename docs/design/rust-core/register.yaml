@@ -3506,7 +3506,7 @@ entries:
     decimal128-38-10-wide, decimal128-38-37 or decimal-vectors' key groups
     fails INTERNAL_ERROR any more, so those eight refs, which named no
     vector, are taken out; the differences those vectors now make are
-    P2B-1's (KO2-45, until T2.17). For the reviewers.
+    P2B-1's (KO2-35, permanent). For the reviewers.
   case_outcomes:
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -4004,6 +4004,9 @@ entries:
     T1.17 round 1), whose own run of the CI artifacts showed the warning
     before the client's import in the floor lane alone; reviewer-owned
     (checkpoint 7), not the owner's.
+    T2.0c: measured in the floor-pandas2.2 cell at its old pins (pandas
+    2.2.0, NumPy 1.26.4); the cell is now pandas 2.2.2, pyarrow 14.0.1 and
+    NumPy 1.23.5 (KO2-37).
 
 - id: HOST-5
   title: In the floor cell the old route's sampler raises the runtime's BlockManager DeprecationWarnings the core route does not
@@ -4058,6 +4061,9 @@ entries:
     deprecation warnings raised only by the old route on old pandas, and
     harmless. Seeded in
     contract/tests/test_runtime_deprecations.py.
+    T2.0c: measured in the floor-pandas2.2 cell at its old pins (pandas
+    2.2.0, NumPy 1.26.4); the cell is now pandas 2.2.2, pyarrow 14.0.1 and
+    NumPy 1.23.5 (KO2-37).
 
 # --- PQL validation (T1.12) ---------------------------------------------------
 
@@ -5812,8 +5818,10 @@ entries:
     sum or an average is computed exactly, at any size, and read once at
     float32; a class target's distinct values stay distinct classes,
     spelled as the reference spells them unless two of them meet at one
-    float32. It answers every decimal input the reference answers, and
-    answers a sum past 38 digits, which the reference refuses.
+    float32 (a regression target's values are numbers, each the nearest
+    float32). It answers every decimal input the reference answers, except
+    the entities P1B-34 and P2B-8 refuse, and answers a sum past 38 digits,
+    which the reference refuses.
   affected_inputs: >-
     PredictiveQuery.materialize and SDMClient.predict on the core route
     over a DuckDB source with a DECIMAL key with decimal places, a DECIMAL
@@ -5922,7 +5930,9 @@ entries:
     (class targets, sums past 38 digits, features a double does not hold)
     and its rounding of a comparison's constant to the column's scale
     (KO2-50) are gone, so P1B-18's and P1B-53's refusal of
-    decimal.class-target-38-18 no longer holds.
+    decimal.class-target-38-18 no longer holds. The key-cast ref of
+    decimal128-18-0.exponent.huge.decimal, unfinished on the reference, is
+    KO2-48's outcome (approved by the owner on 2026-10-16), not KO2-35's.
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
@@ -5966,7 +5976,7 @@ entries:
     yet; T2.18's test author adds one.
 
 - id: P2B-3
-  title: The core refuses 1,001 to 10,000 entities, which the reference gathers, until T2.8c
+  title: The core refuses 1,001 to 100,000 entities, which the reference gathers, until T2.8c
   kind: change
   old_behavior: >-
     Since main's 1fc5a686, merged into the reference at 6298913c, materialize
@@ -6052,14 +6062,17 @@ entries:
     DECIMAL class target.
   cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, decimal.class-target-38-18]
   refs: [eb6c68eb]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
-    Approver: reviewer. The old route now matches the reference where it
-    crashed before (the old client's crash replaced by the reference's
-    answer), not a refusal of anything; the outcomes are the ratchet's own
-    proposals from the gate at T2.0c's candidate.
+    Approved by both reviewers in T2.0c's round 1 (Codex's APPROVE-P2B-7,
+    having run the four cases through python-old against the new
+    reference recordings; the Claude subagent's approval), relayed by the
+    orchestrator. The old route now matches the reference where it crashed
+    before (the old client's crash replaced by the reference's answer), not
+    a refusal of anything; the outcomes are the ratchet's own proposals
+    from the gate at T2.0c's candidate.
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
@@ -6100,3 +6113,30 @@ entries:
     inputs the reference accepts, kept since these entities would be
     answered only by being taken for a key the caller did not name. Found
     by the key-cast vectors at T2.0c.
+
+- id: P2B-9
+  title: On the core route a forecast failing at a step carries no answered steps, until T2.8c
+  kind: change
+  old_behavior: >-
+    Since main's 1fc5a686, merged into the reference at 6298913c, a
+    forecast asked in parts that fails at step k carries the steps already
+    answered on its error, details['answered'] with parts_answered
+    (client.py's _carry_the_steps_already_paid_for).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    forecast is predicted step by step by the core (T1.36 fix 21), and a
+    step's refusal is raised as the core gives it, with no answered steps
+    on it (client.py's early return through sdm_client._rust.predict). T2.8c
+    (multi-call predict, KO2-45) retires this entry.
+  affected_inputs: >-
+    SDMClient.predict of a forecast over a DuckDB source on the core route
+    whose call fails at a step after the first.
+  cases: [T2.0c]
+  refs: [1fc5a686, P2B-3, P2B-4]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. Not a refusal: the same error, without the answered
+    steps main's client keeps on it. Found by T2.0c's round 1 review (the
+    Claude subagent's P3-13). Temporary: it lapses when T2.8c lands.

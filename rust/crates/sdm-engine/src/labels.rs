@@ -663,13 +663,15 @@ pub enum Column {
     },
 }
 
-/// A decimal column as a target, read as the reference reads it since
-/// `main`'s eb6c68eb, so a class is spelled as the reference spells it:
-/// at scale 0, where every value fits, an int64; otherwise each value at
-/// float32 (float64, then float32, as [`decimal_to_f64`] reads it), and
-/// where two distinct values meet at one float32, each value's own digits
-/// instead, so no two values become one class (T2.0c).
-fn decimal_target(values: &[Option<i128>], scale: i8) -> (Vec<bool>, Labels) {
+/// A decimal column as a target. At scale 0, where every value fits, an
+/// int64, as the reference reads it since `main`'s eb6c68eb. Otherwise:
+/// - a regression's labels are numbers, each value rounded once to the
+///   nearest float32 (round 1: a regression has no classes to keep apart);
+/// - a classification's are spelled as the reference spells its classes
+///   (float64, then float32, as [`decimal_to_f64`] reads it), and where two
+///   distinct values meet at one float32, each value's own digits instead,
+///   so no two values become one class (T2.0c).
+fn decimal_target(values: &[Option<i128>], scale: i8, classes: bool) -> (Vec<bool>, Labels) {
     let mask: Vec<bool> = values.iter().map(Option::is_some).collect();
     let present: Vec<i128> = values.iter().flatten().copied().collect();
     if scale == 0
@@ -679,6 +681,10 @@ fn decimal_target(values: &[Option<i128>], scale: i8) -> (Vec<bool>, Labels) {
             .collect::<Result<Vec<_>, _>>()
     {
         return (mask, Labels::Int(ints));
+    }
+    if !classes {
+        let floats = present.iter().map(|&v| decimal_to_f32(v, scale)).collect();
+        return (mask, Labels::Float(floats));
     }
     let floats: Vec<f32> = present
         .iter()
@@ -738,8 +744,19 @@ pub struct Labelled {
     pub labels: Labels,
 }
 
-/// `target`'s labels, as the executor's `execute` gives them.
+/// `target`'s labels, as the executor's `execute` gives them, for any task
+/// but a classification of a column ([`label_classes`]).
 pub fn label(target: &Target) -> Result<Labelled, CoreError> {
+    labelled(target, false)
+}
+
+/// `target`'s labels for a classification: a decimal column's distinct
+/// values are kept as distinct classes ([`decimal_target`]).
+pub fn label_classes(target: &Target) -> Result<Labelled, CoreError> {
+    labelled(target, true)
+}
+
+fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
     match target {
         Target::Column(column) => {
             fn kept<T: Clone>(
@@ -775,7 +792,7 @@ pub fn label(target: &Target) -> Result<Labelled, CoreError> {
                     let (m, l) = kept(v, |_| true);
                     (m, Labels::Text(l))
                 }
-                Column::Decimal { values, scale, .. } => decimal_target(values, *scale),
+                Column::Decimal { values, scale, .. } => decimal_target(values, *scale, classes),
             };
             Ok(Labelled { mask, labels })
         }
@@ -1031,11 +1048,55 @@ mod tests {
             scale: 18,
         };
         assert_eq!(
-            label(&Target::Column(close)).unwrap().labels,
+            label_classes(&Target::Column(close)).unwrap().labels,
             Labels::Text(vec![
                 "0.000000100000000000".to_owned(),
                 "0.000000100000000001".to_owned(),
             ])
+        );
+    }
+
+    #[test]
+    fn a_decimal_regression_target_meeting_at_one_float32_stays_numbers() {
+        // Round 1 (Claude P1-1): a regression has no classes to keep apart,
+        // so values meeting at one float32 are numbers, each rounded once to
+        // the nearest float32, never text (which a regression's payload
+        // refuses as an internal error). DECIMAL(12, 2) amounts past
+        // 1,000,000 with cents meet at float32's step of 0.125 there.
+        let amounts = Column::Decimal {
+            values: vec![
+                Some(123_456_701),
+                Some(123_456_702),
+                None,
+                Some(-123_456_703),
+            ],
+            precision: 12,
+            scale: 2,
+        };
+        let regression = label(&Target::Column(amounts.clone())).unwrap();
+        assert_eq!(regression.mask, vec![true, true, false, true]);
+        assert_eq!(
+            regression.labels,
+            Labels::Float(vec![1_234_567.0, 1_234_567.0, -1_234_567.0])
+        );
+        // As a classification, the same values stay three classes.
+        assert_eq!(
+            label_classes(&Target::Column(amounts)).unwrap().labels,
+            Labels::Text(vec![
+                "1234567.01".to_owned(),
+                "1234567.02".to_owned(),
+                "-1234567.03".to_owned(),
+            ])
+        );
+        // Rounded once: a hair above a float32 midpoint rounds up.
+        let above = Column::Decimal {
+            values: vec![Some(1_000_000_059_604_644_775_390_625_000_001)],
+            precision: 38,
+            scale: 30,
+        };
+        assert_eq!(
+            label(&Target::Column(above)).unwrap().labels,
+            Labels::Float(vec![1.0 + f32::EPSILON])
         );
     }
 
