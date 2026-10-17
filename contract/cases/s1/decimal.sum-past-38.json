@@ -5,7 +5,8 @@
   "slice": "S1",
   "paths": [
     "schema.from-source/all-tables/duckdb",
-    "query.materialize/indices-regression/duckdb"
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
   ],
   "routes": [
     "schema.from-source/all-tables/duckdb",
@@ -79,6 +80,9 @@
         "zone": null
       },
       "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
     }
   },
   "expect": {
