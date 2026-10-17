@@ -841,28 +841,27 @@ fn columns(table: &Relation) -> String {
 /// so a one-part request renders as it did.
 fn in_catalog(relation: &Relation, table: &str, prefix: &str, indent: &str) -> String {
     let (database, schema) = (
-        fold(&format!("{prefix}database_name")),
-        fold(&format!("{prefix}schema_name")),
+        format!("{prefix}database_name"),
+        format!("{prefix}schema_name"),
     );
-    let named = |part: &str| text(&part.to_ascii_lowercase());
+    // A part against a catalog name, as DuckDB compares identifiers.
+    let named = |column: &str, part: &str| {
+        format!("{} = {}", fold(column), text(&part.to_ascii_lowercase()))
+    };
     match relation.source.as_slice() {
         [database_part, schema_part, name] => format!(
-            "{} = {}\n{indent}AND {database} = {} AND {schema} = {}",
-            fold(table),
-            named(name),
-            named(database_part),
-            named(schema_part)
+            "{}\n{indent}AND {} AND {}",
+            named(table, name),
+            named(&database, database_part),
+            named(&schema, schema_part)
         ),
-        [qualifier, name] => {
-            let qualifier = named(qualifier);
-            let schemas = fold("schema_name");
-            format!(
-                "{} = {}\n{indent}AND (({database} = {} AND {schema} = {qualifier})\n{indent}  OR ({database} = {qualifier} AND {schema} = 'main'\n{indent}      AND NOT EXISTS (SELECT 1 FROM duckdb_schemas() WHERE database_name = current_database() AND {schemas} = {qualifier})))",
-                fold(table),
-                named(name),
-                fold("current_database()"),
-            )
-        }
+        [qualifier, name] => format!(
+            "{}\n{indent}AND (({database} = current_database() AND {})\n{indent}  OR ({} AND {schema} = 'main'\n{indent}      AND NOT EXISTS (SELECT 1 FROM duckdb_schemas() WHERE database_name = current_database() AND {})))",
+            named(table, name),
+            named(&schema, qualifier),
+            named(&database, qualifier),
+            named("schema_name", qualifier),
+        ),
         parts => format!(
             "{table} = {}\n{indent}AND {database} = current_database() AND {schema} = current_schema()",
             text(parts.first().map(String::as_str).unwrap_or_default())
