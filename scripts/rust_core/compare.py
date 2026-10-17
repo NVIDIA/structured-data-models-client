@@ -7,10 +7,16 @@ r"""Compares runners' observations of the contract cases.
 
     scripts/rust_core/compare.py --cases DIR [--reference FILE]
         [--policy FILE] [--bases FILE] [--expect FILE] [--register FILE]
-        OBSERVATIONS...
+        [--database DATABASE] OBSERVATIONS...
 
 Each OBSERVATIONS file is one runner's output (run_python.py or
-sdm-contract-run); FILE is the committed reference observations
+sdm-contract-run) on one database, ``--database`` (``duckdb`` by default;
+T2.1a): the cases that run there (their ``databases``) are compared, each
+by its line's key there (the bare ID on DuckDB, ``<case>@<database>``
+elsewhere), and lines of another database are noted, not compared. Off
+DuckDB the case file's ``expect`` is DuckDB's, so the reference's line
+there is the expectation, and a capture is complete by its own record
+(DuckDB's query log is DuckDB's alone). FILE is the committed reference observations
 (``contract/reference/<reference-commit>.jsonl``), and ``--bases`` the
 bases file the cases build from (this checkout's ``contract/bases.yaml`` by
 default; ``gate.sh`` gives the candidate's, which the checkpoint's ratchet
@@ -1723,6 +1729,7 @@ def compare(
     expect_file: Path | None = None,
     register_file: Path = REGISTER,
     improvements: Path | None = None,
+    database: str = 'duckdb',
 ) -> Report:
     check = _capture_check()
     try:
@@ -1753,13 +1760,20 @@ def compare(
     except runner.RunnerFailure as failure:
         report.fail(f'cases: {failure}')
         return report
-    cases = [case for case, _ in loaded]
+    if database not in runner.DATABASES:
+        report.fail(f'--database: {database} is not one of {runner.DATABASES}')
+        return report
+    cases = [
+        case for case, _ in loaded if database in runner.case_databases(case)
+    ]
     try:
         bases = runner.load_bases(bases_file or runner.BASES)
     except runner.RunnerFailure as failure:
         report.fail(f'bases: {failure}')
         return report
-    digests = {case['id']: digest for case, digest in loaded}
+    digests = {
+        runner.case_key(case['id'], database): digest for case, digest in loaded
+    }
     digests[''] = runner.digest((bases_file or runner.BASES).read_bytes())
     reference: dict[str, dict[str, Any]] = {}
     if reference_file is not None:
@@ -1777,18 +1791,20 @@ def compare(
         observed[who] = by_case
     # A line's key is its case, or its case and database (``<case>@sqlite``,
     # ``<case>@postgres``; the schema holds its form): the part before ``@``
-    # must be a case. A database line is read, and compared once T2.1a
-    # brings the comparator for SQLite and Postgres.
-    known = {case['id'] for case in cases}
+    # must be a case. A line of another database than this run's is read,
+    # and compared by that database's run.
+    known = {case['id'] for case, _ in loaded}
     for who, by_case in [('python-ref', reference), *observed.items()]:
         for name in sorted(by_case):
-            if name.partition('@')[0] not in known:
+            bare, _, there = name.partition('@')
+            if bare not in known:
                 report.fail(
                     f'{name}: {who} observed a case that does not exist'
                 )
-            elif '@' in name:
+            elif (there or 'duckdb') != database:
                 report.note(
-                    f'{name}: {who}: a database line, not compared before T2.1a'
+                    f'{name}: {who}: a line of {there or "duckdb"}, not '
+                    f'compared in the {database} run'
                 )
     # A case the policy names must exist, among every case of the
     # repository, not only those compared now.
@@ -1809,6 +1825,10 @@ def compare(
         gating = case['status'] == 'acceptance'
         reach = policy['reach'].get(case['id'])
         ordered = policy['ordered'].get(case['id'], {})
+        # The case as this database's lines name it; its expect is
+        # DuckDB's, so elsewhere the reference's line is the expectation.
+        on_duckdb = database == 'duckdb'
+        case = {**case, 'id': runner.case_key(case['id'], database)}
         before = len(report.failures)
         ref = reference.get(case['id'])
         stops: dict[str, str | None] = {}
@@ -1817,7 +1837,8 @@ def compare(
         if ref is not None:
             _shape(report, case, 'python-ref', ref)
             _inputs(report, case, 'python-ref', ref, digests)
-            _expectation(report, case, 'python-ref', ref['outcome'])
+            if on_duckdb:
+                _expectation(report, case, 'python-ref', ref['outcome'])
             _route(report, case, 'python-ref', ref)
             if reach is not None:
                 _reach(report, case, 'python-ref', ref, reach)
@@ -1848,7 +1869,8 @@ def compare(
                     report, case, who, observation['outcome'], wanted, ref
                 )
             else:
-                _expectation(report, case, who, observation['outcome'])
+                if on_duckdb or ref is None:
+                    _expectation(report, case, who, observation['outcome'])
                 if ref is not None:
                     _against_reference(
                         report, case, who, observation['outcome'], ref
@@ -1920,6 +1942,7 @@ def main(argv: list[str] | None = None) -> int:
         help="the candidate's register, read for its owner-approved "
         "more_exact fields (default: this tree's)",
     )
+    parser.add_argument('--database', default='duckdb')
     parser.add_argument('observations', type=Path, nargs='+')
     arguments = parser.parse_args(argv)
     report = compare(
@@ -1930,6 +1953,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.bases,
         arguments.expect,
         improvements=arguments.register,
+        database=arguments.database,
     )
     for text in report.info:
         print(f'statements per public call: {text}')

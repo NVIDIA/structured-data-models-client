@@ -26,8 +26,8 @@ Run with ``python -I``, from the interpreter of the environment under test:
 
 Each case builds its DuckDB base on a fresh in-memory connection; with
 ``--database sqlite`` or ``postgres`` (T2.1a), the contract loader
-(``databases.py``) loads its tables into a new SQLite file or a fresh
-Postgres schema, and the source is given a driver connection to that, its
+(``databases.py``) loads its tables into a new SQLite file or a new
+Postgres database's public schema, and the source is given a driver connection to that, its
 observation keyed ``<case>@<database>``; a case whose ``databases`` leave
 the database out is not run. Then it makes the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
 then ``SDMClient.predict`` against the scripted endpoint
@@ -1361,7 +1361,10 @@ def _values(
 
 
 def result_values(
-    columns: list[str], types: list[str] | None, rows: Iterable[Any]
+    columns: list[str],
+    types: list[str] | None,
+    rows: Iterable[Any],
+    duckdb_types: bool = True,
 ) -> dict[str, Any]:
     r"""A result read as Python rows (``fetchall``), its columns and rows in
     canonical form (:func:`canonical_cell`): the SHA-256 of the rows in the
@@ -1371,9 +1374,12 @@ def result_values(
     the columns' types where the driver gives them (``description``), and
     ``unencodable`` names every value of a kind the canonical form does not
     hold, and every value of a column whose type the driver reads with less
-    than its precision (:data:`_LOSSY_AS_ROWS`)."""
+    than its precision (:data:`_LOSSY_AS_ROWS`; DuckDB's types alone,
+    ``duckdb_types``: another driver's types are its own)."""
     odd: list[str] = []
-    lossy = [_lossy_as_rows(kind) for kind in types or []]
+    lossy = (
+        [_lossy_as_rows(kind) for kind in types or []] if duckdb_types else []
+    )
     cells = []
     for row in rows:
         cells.append(
@@ -1605,14 +1611,18 @@ def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
 
 def _description(driver: Any) -> tuple[list[str], list[str]] | None:
     r"""The columns of the result a driver holds, as its ``description``
-    names them and their DuckDB types, or None when it gives none."""
+    names them and their types (DuckDB's names; off DuckDB the driver's
+    own: ADBC's Arrow type, psycopg's display of the Postgres type), or
+    None when it gives none."""
     try:
         described = driver.description
     except Exception:  # noqa: BLE001 - the capture's own reading
         return None
     if not described:
         return None
-    return [str(c[0]) for c in described], [str(c[1]) for c in described]
+    return [str(c[0]) for c in described], [
+        str(getattr(c, 'type_display', None) or c[1]) for c in described
+    ]
 
 
 class DriverLog:
@@ -1666,8 +1676,8 @@ class _Captured:
     """
 
     __slots__ = ('_driver', '_log', '_handle', '_statement')
-    #: Whether the driver's ``description`` names DuckDB's types, which a
-    #: result's ``values`` record; another driver's are not DuckDB's.
+    #: Whether the driver's ``description`` names DuckDB's types, whose
+    #: reads as rows may lose precision (:data:`_LOSSY_AS_ROWS`).
     _DUCKDB_TYPES = True
 
     def __init__(self, driver: Any, log: DriverLog) -> None:
@@ -1737,8 +1747,6 @@ class _Captured:
         # driver's description, which runs nothing.
         described = _description(self._driver)
         names, types = described if described else ([], None)
-        if not self._DUCKDB_TYPES:
-            types = None
         if method in _ROWS or method in _ROW:
             if method in _ROWS:
                 rows = list(answer)
@@ -1748,7 +1756,9 @@ class _Captured:
             result['digest'] = _rows_digest(rows)
             if described is None:
                 self._log.incomplete.append(f'{method}:no_description')
-            result['values'] = result_values(names, types, rows)
+            result['values'] = result_values(
+                names, types, rows, duckdb_types=self._DUCKDB_TYPES
+            )
         else:
             # The DuckDB types are recorded for an Arrow read too, and the
             # comparator requires them from every Python driver's read.
@@ -1980,8 +1990,9 @@ def _open(
     r"""The case's data on ``database``, and what removes it after: on
     DuckDB the in-memory connection its base and setup build; elsewhere
     that connection's tables loaded by the contract loader
-    (``databases.py``) into a new SQLite file or a fresh Postgres schema of
-    ``SDM_POSTGRES_TEST_DSN``'s server, and a driver connection to it opened
+    (``databases.py``) into a new SQLite file or the public schema of a new
+    database on ``SDM_POSTGRES_TEST_DSN``'s server, and a driver connection
+    to it opened
     as a user opens one (``adbc_driver_sqlite.dbapi.connect``,
     ``psycopg.connect``). Setup is everything before it reaches the source."""
     duck = _connection(case, bases)
@@ -2016,16 +2027,19 @@ def _open(
                 raise RunnerFailure(
                     'a Postgres run needs SDM_POSTGRES_TEST_DSN, its server'
                 )
-            schema = f'sdm_case_{uuid.uuid4().hex[:16]}'
+            # A database of its own, so the tables are in its public schema
+            # as a user's are, and what a source reads of its catalog
+            # (current_schema()) is the same on every run.
+            name = f'sdm_case_{uuid.uuid4().hex[:16]}'
             with psycopg.connect(dsn, autocommit=True) as admin:
-                admin.execute(f'CREATE SCHEMA {schema}')
+                admin.execute(f'CREATE DATABASE {name}')
 
             def drop() -> None:
                 with psycopg.connect(dsn, autocommit=True) as admin:
-                    admin.execute(f'DROP SCHEMA {schema} CASCADE')
+                    admin.execute(f'DROP DATABASE {name} WITH (FORCE)')
 
             undo.append(drop)
-            scoped = make_conninfo(dsn, options=f'-c search_path={schema}')
+            scoped = make_conninfo(dsn, dbname=name)
             loader.load(duck, 'postgres', scoped)
             connection = psycopg.connect(scoped)
         undo.append(connection.close)
@@ -2561,7 +2575,7 @@ def main(argv: list[str] | None = None) -> int:
         default='duckdb',
         help='the database each case runs on (default duckdb): the others '
         "are loaded from the case's DuckDB tables (databases.py), Postgres "
-        "in a fresh schema of SDM_POSTGRES_TEST_DSN's server",
+        "in a new database on SDM_POSTGRES_TEST_DSN's server",
     )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
