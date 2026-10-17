@@ -65,14 +65,18 @@ Kept as strings, those two requests could not name a relation of several parts, 
 
 ### Open: judged data in v25's shape
 
-These hold v25's wire shape, are the test author's or the gate's, and were not edited here:
+These hold v25's wire shape, are the test author's or the gate's, and were not edited here (KO2-13):
 
-- `contract/pinned/base.regression.core.json` and `edits.core.json` pin the core's inputs, fetches and description (string sources and tables, request state version 1), read by `contract/tests` and `sdm-testkit` tests;
-- the three AdventureWorks cases' `core.describe_source.source` (`contract/cases/s1/base.adventureworks*.json`) name sources as strings, which `compare.py`'s `_case_inputs` holds the core's recorded inputs to, and which `sdm-testkit`'s host reads as a `SourceSpec`.
-They need re-pinning and the three specs rewriting in v26's shape before the gate passes.
+- the pins `contract/pinned/base.regression.core.json` and `edits.core.json` (string sources and tables, request state version 1), and the family pins `refusal_map` holds;
+- the three AdventureWorks cases' `core.describe_source.source` (`contract/cases/s1/base.adventureworks*.json`) and `contract/refusal-maps/base.adventureworks.json`, which name sources as strings; `compare.py`'s `_case_inputs` holds the core's recorded inputs to them, and `sdm-testkit`'s host reads them as a `SourceSpec`;
+- the request vectors `contract/provider-vectors.json` and `contract/request-kinds.json`;
+- five client tests under `packages/structured-data-models-client/tests` that write v25's wire facts: `test_the_materialize_route.py` (tables named, the 2**70 seed reaching the sample), `test_the_predict_route.py` (state version 1, version 2 as "another"), `test_the_schema_route.py` (`_failing` matches `tables == [name]`).
+
+Measured at `31941a3f`: `cargo test --workspace` fails only in `sdm-testkit`, 20 tests across `duckdb_provider`, `edit_cases`, `refusal_map`, `t128w_wire` and `t136_pre_given_specs`, each on the files above; `contract/tests` (the shared reference venv, the v26 wheel first on the path) fails 141, of which 118 are the venv's recorded-environment check (pyarrow 26 against the recorded 25.0.1), and the rest `test_refusal_map.py` (9), `test_gate_modes.py` (10), `test_gate_evidence_paths.py` (3) and `test_t20_locked_set.py` (1), whose gate runs meet the same files.
+Each needs its v26 shape (a source `{"source": [name]}`, a neighbors or lookup key a list, the state version 2) written by the test author, and the pins re-pinned, before the gate passes.
 
 ### Probes
 
 - No route changes: the statements the core renders on the public route are byte for byte v25's (the golden), so no differential was rerun.
-- Outside JSON: no new reader; a relation and a continuation are read by the existing bounded readers.
+- Outside JSON: no new reader; a relation and a continuation are read by the existing bounded readers. Probed through the native module: a `source` nested 100,000 levels deep and a relation object with 100,000 extra keys are each refused `INVALID_MESSAGE`, and a relation of 100,000 parts is refused `UNSUPPORTED_REQUEST`, rule `relation`, `parts` 100000; none crashes.
 - The census (T2.0d, not on this base) will meet the new rule `relation`; its probe is the provider-level one the design names.
