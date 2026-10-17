@@ -984,14 +984,15 @@ def test_a_key_or_time_column_named_wrongly_is_refused_as_the_old_route_does(
 
 def _failing(provider: Any, table: str | None) -> Any:
     r"""``provider``, but failing, as a driver fails, the reading of
-    ``table``'s columns: a provider's error the core did not cause."""
+    ``table``'s columns: a provider's error the core did not cause. The
+    request names the table as a relation of one part (contract v26)."""
 
     def answer(step: dict[str, Any], keys: Any) -> Any:
         request = step['request']
         if (
             table is not None
             and request.get('part') == 'columns'
-            and request.get('tables') == [table]
+            and request.get('tables') == [{'source': [table]}]
         ):
             raise duckdb.IOException('the source went away')
         return provider(step, keys)

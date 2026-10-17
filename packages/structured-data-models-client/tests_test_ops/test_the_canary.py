@@ -333,7 +333,7 @@ def _provider_error(kind: str) -> Callable[[], Any]:
     fetch = {
         'request': {
             'request': 'scan',
-            'table': 'vault',
+            'table': {'source': ['vault']},
             'columns': [],
             'filters': [],
             'limit': None,
