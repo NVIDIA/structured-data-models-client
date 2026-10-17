@@ -983,10 +983,6 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
     'decimal.feature-inexact-38-18': [['users', 'f'], ['users', 'g']],
     'decimal.key-wide': [['users', 'user_id'], ['orders', 'user_id']],
     'decimal.sum-10-2': [['instance_table', 'TARGET'], ['orders', 'amount']],
-    'decimal.sum-past-38': [
-        ['instance_table', 'TARGET'],
-        ['orders', 'amount'],
-    ],
     'decimal.target-regression-collide': [
         ['instance_table', 'TARGET'],
         ['users', 't'],

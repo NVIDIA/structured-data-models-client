@@ -270,7 +270,6 @@ T20C_DECIMAL = (
     'decimal.compare-past-precision-gt',
     'decimal.compare-same-scale',
     'decimal.sum-10-2',
-    'decimal.sum-past-38',
     'decimal.feature-inexact-38-18',
     'decimal.key-wide',
     'decimal.target-regression-collide',
