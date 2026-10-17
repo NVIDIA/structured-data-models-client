@@ -19,7 +19,9 @@ use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderCapabilities, ProviderChoice};
+use sdm_contract::data::{
+    DataLayer, DataRequest, FetchPlan, ProviderCapabilities, ProviderChoice, seed_integer,
+};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 /// What a binding starts its runs with.
@@ -74,6 +76,13 @@ impl DataAccess {
         self.layer.opaque_vendor(&self.provider)
     }
 
+    /// Whether the run's provider compares a window's bounds with the
+    /// stored text of the window's column, as the data layer says for it
+    /// (`DataLayer::compares_stored_times`).
+    pub fn compares_stored_times(&self) -> bool {
+        self.layer.compares_stored_times(&self.provider)
+    }
+
     /// How the run's provider answers `request`. A request whose fields
     /// contradict each other is refused with `INVALID_REQUEST`, an optional
     /// request the provider did not declare with `UNSUPPORTED_REQUEST`
@@ -89,7 +98,7 @@ impl DataAccess {
             return Err(undeclared(optional.name()));
         }
         if let DataRequest::SampleEntities { seed, .. } = request
-            && integer(seed).is_some_and(|seed| seed > i128::from(self.capabilities.max_seed))
+            && seed_integer(seed).is_some_and(|seed| seed > i128::from(self.capabilities.max_seed))
         {
             return Err(past_seed_range(request.name(), self.capabilities.max_seed));
         }
@@ -117,22 +126,6 @@ pub(crate) fn undeclared(request: &str) -> CoreError {
         "the provider did not declare this request",
     )
     .with_field("request", Detail::text(request))
-}
-
-/// A seed's value, when the scalar it travels as is an integer: the
-/// narrowest exact scalar `materialize` writes, a `u64` or a decimal of
-/// scale 0, or any other integer scalar.
-fn integer(seed: &Scalar) -> Option<i128> {
-    Some(match seed {
-        Scalar::Int32(v) => i128::from(*v),
-        Scalar::Int64(v) => i128::from(*v),
-        Scalar::UInt32(v) => i128::from(*v),
-        Scalar::UInt64(v) => i128::from(*v),
-        Scalar::Decimal128 {
-            scale: 0, value, ..
-        } => *value,
-        _ => return None,
-    })
 }
 
 /// The refusal of a sample whose seed is past the largest the provider

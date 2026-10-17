@@ -187,6 +187,15 @@ impl Asker {
             .ok_or_else(|| internal("the operation asked what its provider answers and names none"))
     }
 
+    /// Whether the run's provider compares a window's bounds with the
+    /// stored text of the window's column (`DataLayer::compares_stored_times`);
+    /// `false` for an operation that names no provider.
+    pub fn compares_stored_times(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(DataAccess::compares_stored_times)
+    }
+
     /// The catalog answer `data` holds, the admitted answer to `request`,
     /// a `describe`: read by the run's data layer into the contract's
     /// dialect-neutral shape (decision E54), so the operation reads no

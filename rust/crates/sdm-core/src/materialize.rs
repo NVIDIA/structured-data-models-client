@@ -52,8 +52,8 @@
 //! P1B-3), and the requests and policies it needs of its provider before
 //! anything is fetched.
 
-use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
@@ -67,7 +67,8 @@ use arrow_schema::{DataType, TimeUnit as ArrowUnit};
 use sdm_contract::catalog::{CatalogAnswer, IndexColumns};
 use sdm_contract::data::{
     AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Filter, IndexAdvice, KeySet,
-    MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, TableColumn, TextTimes,
+    MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME, TableColumn,
+    TextTimes,
 };
 use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
@@ -546,18 +547,14 @@ fn times_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreErro
 /// DuckDB's `'-infinity'` in a timestamp of any unit: `-(2^63 - 1)`.
 const NEGATIVE_INFINITY: i64 = -i64::MAX;
 
-/// The smallest times of the time bounds in nanoseconds, as
-/// [`times_ns`], but [`NEGATIVE_INFINITY`] in a coarser unit read as
+/// A time column's values in nanoseconds, as [`times_ns`]; with
+/// `earliest`, for the smallest times of the time bounds, [`NEGATIVE_INFINITY`] in a coarser unit read as
 /// [`TIME_MIN`], `pd.Timestamp.min`: the reference reads that bound (the
 /// time bounds' cast to `TIMESTAMP` turns a `TIMESTAMP_NS`, `_S` or `_MS`
 /// `'-infinity'` into the microsecond one) as `datetime.min`, 0001-01-01,
 /// which is before every anchor a nanosecond count holds, as `TIME_MIN`
 /// is, and goes on (T1.36 fix 3). Any other time past what nanoseconds
 /// hold, a finite one or `'infinity'`, is refused as before (DT-14).
-fn earliest_ns(array: &ArrayRef, column: &str) -> Result<Vec<Option<i64>>, CoreError> {
-    times_ns_from(array, column, true)
-}
-
 fn times_ns_from(
     array: &ArrayRef,
     column: &str,
@@ -610,12 +607,150 @@ fn times_ns_from(
 /// fetch leaves open and offsets mixed by name ([`text_unread`]), and a
 /// blank value dropped and warned of (`TIME_VALUES_UNREAD`), as the
 /// reference drops it and warns.
+///
+/// It also keeps, for a provider whose source compares a window's bounds
+/// with its stored text (`DataLayer::compares_stored_times`, SQLite's),
+/// one stored value of each windowed table's time column, read once in the
+/// run before that table's first windowed read, as the reference's SQLite
+/// sampler reads one per table (`_time_spelling`), and names it on each
+/// window bound's seed column ([`SEED_STORED_TIME`]) for the data layer to
+/// spell the bound by.
 pub(crate) struct Times {
     reader: Reader,
     text: Option<TextTimes>,
+    /// Each windowed table's stored value, by the schema's name of the
+    /// table: the text read, or none where its column held no text.
+    stored: Mutex<BTreeMap<String, Option<String>>>,
 }
 
 impl Times {
+    pub(crate) fn new(reader: Reader, text: Option<TextTimes>) -> Self {
+        Times {
+            reader,
+            text,
+            stored: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    /// `request`, a windowed `neighbors` of `table`, with each window
+    /// bound's seed column naming one stored value of the window's column
+    /// ([`SEED_STORED_TIME`]), where the run's provider compares a bound
+    /// with that stored text; the value read first, once in the run, by a
+    /// `scan` of one non-null value (`_probe_time_spelling`'s statement).
+    /// Any other request, and any provider comparing times as times, is
+    /// asked as it is.
+    pub(crate) async fn windowed(
+        &self,
+        asker: &Asker,
+        table: &Table,
+        mut request: DataRequest,
+    ) -> Result<DataRequest, CoreError> {
+        if !asker.compares_stored_times() {
+            return Ok(request);
+        }
+        let DataRequest::Neighbors {
+            window: Some(window),
+            seeds,
+            ..
+        } = &mut request
+        else {
+            return Ok(request);
+        };
+        let known = self
+            .stored
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&table.name)
+            .cloned();
+        let stored = match known {
+            Some(stored) => stored,
+            None => {
+                let read = ask(
+                    asker,
+                    DataRequest::Scan {
+                        table: table.source.clone(),
+                        columns: vec![window.column.clone()],
+                        filters: vec![Filter::NotNull {
+                            column: window.column.clone(),
+                        }],
+                        limit: Some(1),
+                    },
+                )
+                .await?;
+                // The reference spells the bounds by the value only when it
+                // is text, and by its default otherwise.
+                let stored = read
+                    .batches
+                    .iter()
+                    .find(|b| b.num_rows() > 0)
+                    .and_then(|b| {
+                        let column = b.column(0);
+                        let text = column.as_string_opt::<i32>()?;
+                        (!text.is_null(0)).then(|| text.value(0).to_owned())
+                    });
+                self.stored
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .insert(table.name.clone(), stored.clone());
+                stored
+            }
+        };
+        if let Some(stored) = stored {
+            let bounds: Vec<String> = window
+                .lower
+                .iter()
+                .chain(&window.upper)
+                .map(|b| b.seed_column.clone())
+                .collect();
+            for column in &mut seeds.columns {
+                if bounds.contains(&column.name) {
+                    column
+                        .metadata
+                        .insert(SEED_STORED_TIME.to_owned(), stored.clone());
+                }
+            }
+        }
+        Ok(request)
+    }
+
+    /// A time bound of the time bounds in nanoseconds (`earliest` for the
+    /// smallest, [`times_ns_from`]): a zone-less timestamp as it is; a column
+    /// holding no time, of whatever type the source's driver gave it, as
+    /// none; text, as a source with no time type answers its stored values
+    /// (SQLite's), read by the reading the provider declares, as the
+    /// reference reads each bound (`Timestamp(value)`), a value no reading
+    /// takes refused by name ([`text_unread`]).
+    fn bounds(
+        &self,
+        array: &ArrayRef,
+        column: &str,
+        earliest: bool,
+    ) -> Result<Vec<Option<i64>>, CoreError> {
+        match array.data_type() {
+            DataType::Timestamp(_, None) => times_ns_from(array, column, earliest),
+            _ if array.null_count() == array.len() => Ok(vec![None; array.len()]),
+            DataType::Utf8 => {
+                let values: Vec<Option<&str>> = array.as_string::<i32>().iter().collect();
+                let read = match self.text {
+                    Some(TextTimes::ValueByValue) => self.reader.each(&values),
+                    Some(TextTimes::ClientRules) => return Err(not_yet("text_time_rules")),
+                    None => return Err(not_yet("text_times")),
+                }
+                .map_err(text_unread)?;
+                values
+                    .iter()
+                    .zip(read)
+                    .map(|(value, at)| match (value, at) {
+                        (_, Some(at)) => at.to_count(ArrowUnit::Nanosecond, column).map(Some),
+                        (None, None) => Ok(None),
+                        (Some(_), None) => Err(not_yet("time_type")),
+                    })
+                    .collect()
+            }
+            _ => Err(not_yet("time_type")),
+        }
+    }
+
     /// `batch`, fetched from `table`, with each column whose meaning is a
     /// timestamp read so.
     pub(crate) fn read(
@@ -1015,7 +1150,11 @@ impl Memo<'_> {
 /// it, read by a run of this materializer before, as the reference's
 /// sampler reads them once and keeps them; the others read, in one
 /// request, and kept.
-async fn time_bounds(memo: &mut Memo<'_>, tables: &[&Table]) -> Result<Bounds, CoreError> {
+async fn time_bounds(
+    memo: &mut Memo<'_>,
+    times: &Times,
+    tables: &[&Table],
+) -> Result<Bounds, CoreError> {
     let mut unknown: Vec<(&Table, String)> = Vec::new();
     for table in tables {
         let column = table
@@ -1032,7 +1171,7 @@ async fn time_bounds(memo: &mut Memo<'_>, tables: &[&Table]) -> Result<Bounds, C
         }
     }
     if !unknown.is_empty() {
-        let read = read_bounds(memo.asker, &unknown).await?;
+        let read = read_bounds(memo.asker, times, &unknown).await?;
         for ((table, column), (min, max)) in unknown.into_iter().zip(read) {
             memo.memo.bounds.push(MemoBounds {
                 table: table.name.clone(),
@@ -1067,6 +1206,7 @@ async fn time_bounds(memo: &mut Memo<'_>, tables: &[&Table]) -> Result<Bounds, C
 /// order asked, one request for them all.
 async fn read_bounds(
     asker: &Asker,
+    times: &Times,
     tables: &[(&Table, String)],
 ) -> Result<Vec<(Option<i64>, Option<i64>)>, CoreError> {
     let answer = ask(
@@ -1091,18 +1231,28 @@ async fn read_bounds(
         ));
     }
     use sdm_contract::data::results::{BOUNDS_MAX, BOUNDS_MIN, BOUNDS_POSITION};
-    let positions = named(&batch, BOUNDS_POSITION)?
-        .as_primitive_opt::<Int32Type>()
-        .ok_or_else(|| crate::run::schema_mismatch("expected", Some(BOUNDS_POSITION), "not int32"))?
-        .clone();
-    let mins = earliest_ns(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN)?;
-    let maxs = times_ns(named(&batch, BOUNDS_MAX)?, BOUNDS_MAX)?;
+    // A position of either width: DuckDB writes the literal as an `int32`,
+    // SQLite's driver reads every integer as an `int64`.
+    let positions: Vec<Option<i64>> = {
+        let column = named(&batch, BOUNDS_POSITION)?;
+        if let Some(values) = column.as_primitive_opt::<Int32Type>() {
+            values.iter().map(|v| v.map(i64::from)).collect()
+        } else if let Some(values) = column.as_primitive_opt::<Int64Type>() {
+            values.iter().collect()
+        } else {
+            return Err(crate::run::schema_mismatch(
+                "expected",
+                Some(BOUNDS_POSITION),
+                "not an integer",
+            ));
+        }
+    };
+    let mins = times.bounds(named(&batch, BOUNDS_MIN)?, BOUNDS_MIN, true)?;
+    let maxs = times.bounds(named(&batch, BOUNDS_MAX)?, BOUNDS_MAX, false)?;
     let mut out = vec![None; tables.len()];
     for row in 0..batch.num_rows() {
-        let at = positions
-            .is_valid(row)
-            .then(|| usize::try_from(positions.value(row)).ok())
-            .flatten()
+        let at = positions[row]
+            .and_then(|p| usize::try_from(p).ok())
             .filter(|at| *at < tables.len() && out[*at].is_none())
             .ok_or_else(|| {
                 crate::run::schema_mismatch(
@@ -1171,9 +1321,144 @@ async fn check_indexes(
     graph: &Graph,
     advice: Option<IndexAdvice>,
 ) -> Result<(), CoreError> {
-    let Some(IndexAdvice::SingleColumn) = advice else {
-        return Ok(());
+    match advice {
+        None => Ok(()),
+        Some(IndexAdvice::SingleColumn) => check_single_columns(asker, graph).await,
+        Some(IndexAdvice::LeadingColumn) => check_leading_columns(asker, graph).await,
+    }
+}
+
+/// The reference's warning of the indexes missing, by its two counts: the
+/// indices and the tables they are missing from; the host words it.
+fn warn_missing(asker: &Asker, indexes: usize, tables: usize) {
+    // Which of the reference's sentences, by its two counts' number
+    // (decision E59(d)).
+    let variant = match (indexes == 1, tables == 1) {
+        (true, true) => "index_table",
+        (true, false) => "index_tables",
+        (false, true) => "indices_table",
+        (false, false) => "indices_tables",
     };
+    asker.warn(CoreWarning {
+        code: MISSING_INDICES.into(),
+        message: "indices the sampler's reads would use are missing".into(),
+        fields: [
+            ("indices".to_owned(), count(indexes)),
+            ("tables".to_owned(), count(tables)),
+            ("variant".to_owned(), Detail::text(variant)),
+        ]
+        .into(),
+    });
+}
+
+/// [`IndexAdvice::LeadingColumn`], the reference's SQLite sampler's check
+/// (`SQLiteSampler.__init__`): each table's key, and each foreign key with
+/// its table's time column where it has one, that the source does not
+/// enforce as unique, in the reference's order (the tables with keys, then
+/// the links); then each such table's indexes, read one table at a time,
+/// each index's columns by its name where the list does not give them; an
+/// index whose first column is a read's first serves it. What is left is
+/// warned of, by tuple and table.
+async fn check_leading_columns(asker: &Asker, graph: &Graph) -> Result<(), CoreError> {
+    let mut wanted: Vec<(&Table, Vec<Vec<String>>)> = Vec::new();
+    for table in &graph.tables {
+        if let Some(key) = &table.primary_key
+            && let Some(column) = table.column(key)
+            && !column.unique
+        {
+            push_read(&mut wanted, table, vec![key.clone()]);
+        }
+    }
+    for edge in &graph.edges {
+        let Some(table) = graph.table(&edge.src) else {
+            continue;
+        };
+        if let Some(column) = table.column(&edge.fkey)
+            && !column.unique
+        {
+            let read = match &table.time_column {
+                Some(time) if table.column(time).is_some() => {
+                    vec![edge.fkey.clone(), time.clone()]
+                }
+                _ => vec![edge.fkey.clone()],
+            };
+            push_read(&mut wanted, table, read);
+        }
+    }
+    let mut missing: Vec<usize> = Vec::new();
+    for (table, mut reads) in wanted {
+        let answer = describe(
+            asker,
+            DataRequest::Describe {
+                tables: vec![table.source.clone()],
+                part: DescribePart::Indexes,
+            },
+        )
+        .await?;
+        let CatalogAnswer::Indexes(indexes) = answer else {
+            return Err(internal(
+                "the data layer read another part of the catalog than was asked for",
+            ));
+        };
+        for index in indexes {
+            let first = match index.columns {
+                IndexColumns::Resolved(columns) => columns.into_iter().next(),
+                IndexColumns::Unresolved => None,
+                IndexColumns::Named(name) => {
+                    // The index is its table's schema's object.
+                    let mut relation = table.source.clone();
+                    if let Some(last) = relation.source.last_mut() {
+                        *last = name;
+                    }
+                    let answer = describe(
+                        asker,
+                        DataRequest::Describe {
+                            tables: vec![relation],
+                            part: DescribePart::IndexColumns,
+                        },
+                    )
+                    .await?;
+                    let CatalogAnswer::IndexColumns(columns) = answer else {
+                        return Err(internal(
+                            "the data layer read another part of the catalog than was asked for",
+                        ));
+                    };
+                    columns.into_iter().next().flatten()
+                }
+            };
+            reads.retain(|read| Some(&read[0]) != first.as_ref());
+        }
+        if !reads.is_empty() {
+            missing.push(reads.len());
+        }
+    }
+    if !missing.is_empty() {
+        warn_missing(asker, missing.iter().sum(), missing.len());
+    }
+    Ok(())
+}
+
+/// `read`, a read of `table` wanting an index, added once, its table's
+/// reads kept in the order first wanted.
+fn push_read<'a>(
+    wanted: &mut Vec<(&'a Table, Vec<Vec<String>>)>,
+    table: &'a Table,
+    read: Vec<String>,
+) {
+    match wanted.iter_mut().find(|(t, _)| t.name == table.name) {
+        Some((_, reads)) => {
+            if !reads.contains(&read) {
+                reads.push(read);
+            }
+        }
+        None => wanted.push((table, vec![read])),
+    }
+}
+
+/// [`IndexAdvice::SingleColumn`], DuckDB's: every key and foreign key the
+/// source does not enforce as unique, less those an index over exactly
+/// that one column covers, read from the source's whole index list.
+async fn check_single_columns(asker: &Asker, graph: &Graph) -> Result<(), CoreError> {
     let mut missing: Vec<(String, Vec<String>)> = Vec::new();
     let mut add = |table: &str, column: &str| match missing.iter_mut().find(|(t, _)| t == table) {
         Some((_, columns)) => {
@@ -1244,24 +1529,7 @@ async fn check_indexes(
     }
     if !missing.is_empty() {
         let indexes: usize = missing.iter().map(|(_, c)| c.len()).sum();
-        // Which of the reference's sentences, by its two counts' number
-        // (decision E59(d)): the host words it.
-        let variant = match (indexes == 1, missing.len() == 1) {
-            (true, true) => "index_table",
-            (true, false) => "index_tables",
-            (false, true) => "indices_table",
-            (false, false) => "indices_tables",
-        };
-        asker.warn(CoreWarning {
-            code: MISSING_INDICES.into(),
-            message: "indices the sampler's reads would use are missing".into(),
-            fields: [
-                ("indices".to_owned(), count(indexes)),
-                ("tables".to_owned(), count(missing.len())),
-                ("variant".to_owned(), Detail::text(variant)),
-            ]
-            .into(),
-        });
+        warn_missing(asker, indexes, missing.len());
     }
     Ok(())
 }
@@ -1870,10 +2138,10 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
 
     // The times every fetch below returns, read as the reference's engine
     // reads them.
-    let read_times = Times {
-        reader: crate::describe::text_reader(&facts)?,
-        text: asker.capabilities()?.text_times,
-    };
+    let read_times = Times::new(
+        crate::describe::text_reader(&facts)?,
+        asker.capabilities()?.text_times,
+    );
 
     // The tables whose times bound the anchor: a temporal query's
     // aggregated table; for a static query, every table with a time column
@@ -1894,7 +2162,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     let anchor = match anchor_time {
         None if bounded.is_empty() => TIME_MIN,
         None => {
-            let read = time_bounds(&mut memo, &bounded).await?;
+            let read = time_bounds(&mut memo, &read_times, &bounded).await?;
             let max = read.max;
             bounds = Some(read);
             max
@@ -1921,7 +2189,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     let bounds = match bounds {
         Some(bounds) => Some(bounds),
         None if bounded.is_empty() => None,
-        None => Some(time_bounds(&mut memo, &bounded).await?),
+        None => Some(time_bounds(&mut memo, &read_times, &bounded).await?),
     };
     if let Some(bounds) = &bounds {
         if anchor < bounds.min {
@@ -2170,19 +2438,29 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
                     entity,
                     entity_names.clone(),
                     key_set(asker, sample::seeds(all_keys, vec![])?)?,
+                    true,
                 )?,
             )
             .await?,
         )?,
     )?;
     let positions = batches(&looked_up, examples_total)?;
-    let matches = named(&looked_up, MATCHES_COLUMN)?
-        .as_primitive_opt::<Int64Type>()
-        .ok_or_else(|| {
-            crate::run::schema_mismatch("expected", Some(MATCHES_COLUMN), "not int64")
-        })?;
+    // A key the source enforces unique is held by one row each: a dialect
+    // may leave its count out (`SEED_KEY_UNIQUE`), and any other count is
+    // read.
+    let unique = entity.column(&key).is_some_and(|c| c.unique);
+    let matches = match looked_up.column_by_name(MATCHES_COLUMN) {
+        None if unique => None,
+        _ => Some(
+            named(&looked_up, MATCHES_COLUMN)?
+                .as_primitive_opt::<Int64Type>()
+                .ok_or_else(|| {
+                    crate::run::schema_mismatch("expected", Some(MATCHES_COLUMN), "not int64")
+                })?,
+        ),
+    };
     for (row, &at) in positions.iter().enumerate() {
-        if at >= num_train && matches.value(row) > 1 {
+        if at >= num_train && matches.is_some_and(|m| m.value(row) > 1) {
             return Err(invalid(
                 "an entity to predict for is held by more than one row, so which is meant \
                  would be a guess",
@@ -2422,13 +2700,19 @@ impl Labelling<'_> {
             one_batch(
                 &ask(
                     self.asker,
-                    sample::by_time(
-                        aggregated,
-                        &edge.fkey,
-                        aggregated.ordered(&label_columns),
-                        key_set(self.asker, seeds)?,
-                        true,
-                    )?,
+                    self.times
+                        .windowed(
+                            self.asker,
+                            aggregated,
+                            sample::by_time(
+                                aggregated,
+                                &edge.fkey,
+                                aggregated.ordered(&label_columns),
+                                key_set(self.asker, seeds)?,
+                                true,
+                            )?,
+                        )
+                        .await?,
                 )
                 .await?,
             )?,

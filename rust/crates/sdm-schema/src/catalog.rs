@@ -36,20 +36,46 @@ fn named<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, CoreErr
     })
 }
 
+/// The integers of column `name`: of the type the checked shape holds for
+/// it, `int64`, or for a position `int32` too, the width DuckDB writes a
+/// literal in (SQLite's driver reads every integer as `int64`); a null, or
+/// another type, is the answer's error, never a panic.
+fn integers(batch: &RecordBatch, name: &str) -> Result<Vec<i64>, CoreError> {
+    let column = named(batch, name)?;
+    let retyped = || {
+        CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a key count's column is not of its checked type",
+        )
+        .with_field("column", Detail::text(name))
+    };
+    if column.null_count() > 0 {
+        return Err(retyped());
+    }
+    if let Some(values) = column.as_primitive_opt::<Int64Type>() {
+        return Ok(values.values().to_vec());
+    }
+    if let Some(values) = column.as_primitive_opt::<Int32Type>() {
+        return Ok(values.values().iter().map(|v| i64::from(*v)).collect());
+    }
+    Err(retyped())
+}
+
 /// A `key_counts` answer: one row per key.
 pub fn key_counts(batches: &[RecordBatch]) -> Result<Vec<KeyCount>, CoreError> {
     let mut found = Vec::new();
     for batch in batches {
-        let position = named(batch, results::KEY_POSITION)?.as_primitive::<Int32Type>();
-        let rows = named(batch, results::KEY_ROWS)?.as_primitive::<Int64Type>();
-        let distinct = named(batch, results::KEY_DISTINCT)?.as_primitive::<Int64Type>();
-        let missing = named(batch, results::KEY_MISSING)?.as_primitive::<Int64Type>();
+        let position = integers(batch, results::KEY_POSITION)?;
+        let rows = integers(batch, results::KEY_ROWS)?;
+        let distinct = integers(batch, results::KEY_DISTINCT)?;
+        let missing = integers(batch, results::KEY_MISSING)?;
         for row in 0..batch.num_rows() {
             found.push(KeyCount {
-                position: position.value(row),
-                rows: rows.value(row),
-                distinct: distinct.value(row),
-                missing: missing.value(row),
+                position: i32::try_from(position[row]).unwrap_or(i32::MAX),
+                rows: rows[row],
+                distinct: distinct[row],
+                missing: missing[row],
             });
         }
     }
