@@ -664,14 +664,13 @@ pub enum Column {
 fn decimal_target(values: &[Option<i128>], scale: i8) -> (Vec<bool>, Labels) {
     let mask: Vec<bool> = values.iter().map(Option::is_some).collect();
     let present: Vec<i128> = values.iter().flatten().copied().collect();
-    if scale == 0 {
-        if let Ok(ints) = present
+    if scale == 0
+        && let Ok(ints) = present
             .iter()
             .map(|&v| i64::try_from(v))
             .collect::<Result<Vec<_>, _>>()
-        {
-            return (mask, Labels::Int(ints));
-        }
+    {
+        return (mask, Labels::Int(ints));
     }
     let floats: Vec<f32> = present
         .iter()
