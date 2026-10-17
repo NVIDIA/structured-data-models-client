@@ -191,11 +191,12 @@ def test_the_runner_reads_the_loaded_database_through_the_capture(
     import os
 
     if database == 'postgres' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
-        if os.environ.get('SDM_REQUIRE_POSTGRES'):
-            pytest.fail(
-                'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
-            )
-        pytest.skip('SDM_POSTGRES_TEST_DSN is not set')
+        # No server named: required (a Postgres job), that fails; elsewhere
+        # there is nothing to hold, as in test_postgres_required.py.
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
+            'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+        )
+        return
     line = _old_client(database, tmp_path)
     assert line['case'] == f'base.regression@{database}'
     assert line['outcome']['result'] == 'success'

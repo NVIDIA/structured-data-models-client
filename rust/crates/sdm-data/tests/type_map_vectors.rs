@@ -8,15 +8,15 @@
 //! scale gives the vector's text, equal values of different scales give
 //! one text, and the SQLite pair and the join keys give theirs.
 
-use std::path::PathBuf;
-
 use sdm_data::canonical_decimal_text;
 use serde_json::Value;
 
+/// The vector, read at build time: the core's crates do no I/O, their tests
+/// included.
+const VECTORS: &str = include_str!("../../../../contract/type-map-vectors.json");
+
 fn vectors() -> Value {
-    let path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/type-map-vectors.json");
-    serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap()
+    serde_json::from_str(VECTORS).unwrap()
 }
 
 /// `literal`, a decimal's text, as its unscaled value at `scale`, as Arrow
