@@ -19,14 +19,17 @@
 //! the user's edits to the description the host's own `describe_source`
 //! answered, which is the schema its `materialize` samples (T1.21d).
 //! [`pre_given`] reads a case written before contract 23, for
-//! `sdm-contract-run --pre-given-specs` alone.
+//! `sdm-contract-run --pre-given-specs` alone. [`sqlite`] is its SQLite
+//! (T2.2): a case's tables loaded by the contract loader, and the dev-only
+//! `rusqlite` provider.
 
 /// The databases the pure-Rust host has a provider for (rust-host's marker
 /// for the staging rule, `contract/runners/run_python.py`'s `check_legs`;
-/// T2.1a): its DuckDB ([`duck`]) and Postgres, by replaying recorded fetch
-/// results ([`replay`], T2.3, KO2-20). T2.2's dev-only SQLite provider adds
-/// its own. `sdm-contract-run --providers` prints it.
-pub const PROVIDERS: &[&str] = &["duckdb", "postgres"];
+/// T2.1a): its DuckDB ([`duck`]), SQLite through the dev-only `rusqlite`
+/// provider ([`sqlite`], T2.2), and Postgres, by replaying recorded fetch
+/// results ([`replay`], T2.3, KO2-20). `sdm-contract-run --providers`
+/// prints it.
+pub const PROVIDERS: &[&str] = &["duckdb", "sqlite", "postgres"];
 
 pub mod bases;
 pub mod case;
@@ -38,4 +41,5 @@ pub mod host;
 pub mod observation;
 pub mod pre_given;
 pub mod replay;
+pub mod sqlite;
 pub mod values;

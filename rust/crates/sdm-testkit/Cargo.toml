@@ -29,6 +29,9 @@ serde.workspace = true
 # digits; it only adds `RawValue`, changing no other reading.
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
+# The dev-only SQLite provider of `sdm-contract-run --database sqlite`
+# (T2.2), SQLite bundled so the host reads the version it builds.
+rusqlite.workspace = true
 
 [dev-dependencies]
 # The test-only fetch, which echoes what the core admitted, for the

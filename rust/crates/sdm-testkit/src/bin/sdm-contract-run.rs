@@ -8,7 +8,14 @@
 //! sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --providers
 //! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --database sqlite --out FILE CASE_OR_DIRECTORY...
 //! ```
+//!
+//! `--database sqlite` (T2.2) runs each case that runs on SQLite over its
+//! tables loaded into a new SQLite file by the contract loader, read
+//! through the dev-only `rusqlite` provider ([`sdm_testkit::sqlite`]),
+//! every call the case makes through its `until` (T2.1d), each observation
+//! keyed `<case>@sqlite`.
 //!
 //! `--replay` runs each case that runs on Postgres there, its fetches
 //! answered from a recording of a Postgres server's answers
@@ -44,6 +51,13 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         [flag, rest @ ..] if flag == "--pre-given-specs" => (true, rest),
         _ => (false, arguments),
     };
+    let (sqlite, arguments) = match arguments {
+        [flag, database, rest @ ..] if flag == "--database" && database == "sqlite" => (true, rest),
+        [flag, database, ..] if flag == "--database" => {
+            bail!("--database {database}: this host runs DuckDB, SQLite or a Postgres replay")
+        }
+        _ => (false, arguments),
+    };
     let (recording, arguments) = match arguments {
         [flag, path, rest @ ..] if flag == "--replay" => (
             Some(replay::Recording::load(std::path::Path::new(path))?),
@@ -57,7 +71,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
         _ => bail!(
-            "usage: sdm-contract-run [--pre-given-specs] [--replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
+            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
         ),
     };
     let mut partial = out.clone().into_os_string();
@@ -85,10 +99,20 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     let bases_path = observation::repository(&here)?.join("contract/bases.yaml");
     let bases = bases::load(&bases_path)?;
     let bases_digest = case::sha256(&std::fs::read(&bases_path)?);
+    let repository = observation::repository(&here)?;
     let mut lines = String::new();
     let mut count = 0;
     for each in &loaded {
         let (observed, keyed) = match &recording {
+            None if sqlite => {
+                if !each.case.databases().contains(&case::Database::Sqlite) {
+                    continue;
+                }
+                let mut keyed = each.clone();
+                keyed.case.id = format!("{}@sqlite", each.case.id);
+                let observed = host::run_sqlite(&each.case, &bases, &repository)?;
+                (observed, keyed)
+            }
             None => (host::run(&each.case, &bases)?, each.clone()),
             Some(recording) => {
                 if !each.case.databases().contains(&case::Database::Postgres) {
@@ -101,11 +125,14 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         };
         let each = &keyed;
         count += 1;
-        let read_bases = each
-            .case
-            .core
-            .as_ref()
-            .is_some_and(|core| core.describe_source.is_some());
+        // On SQLite every case reads data, its calls made through its
+        // until (T2.1d).
+        let read_bases = sqlite
+            || each
+                .case
+                .core
+                .as_ref()
+                .is_some_and(|core| core.describe_source.is_some());
         let digest = read_bases.then_some(bases_digest.as_str());
         lines.push_str(&observation::write(&identity, each, &observed, digest).to_string());
         lines.push('\n');
