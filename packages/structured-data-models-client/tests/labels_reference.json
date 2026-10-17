@@ -1958,6 +1958,77 @@
    }
   },
   {
+   "name": "sum-decimal-midpoint",
+   "covers": "exit: base.regression's labels, compared exactly; probe: SUM over DECIMAL(38,18) at a float32 midpoint",
+   "setup": [
+    "CREATE TABLE users (user_id BIGINT PRIMARY KEY)",
+    "INSERT INTO users VALUES (1), (2), (3), (4), (5)",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users(user_id), price DOUBLE, qty BIGINT, amount DECIMAL(38,18), ts TIMESTAMP)",
+    "INSERT INTO orders VALUES (1, 1, CAST(1.0 AS DOUBLE), 1, CAST('1.000000059604644776' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (2, 2, CAST(1.0 AS DOUBLE), 1, CAST('1.000000059604644775' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (3, 3, CAST(1.0 AS DOUBLE), 1, CAST('-1.000000059604644776' AS DECIMAL(38,18)), TIMESTAMP '2024-03-03 00:00:00'), (4, 4, NULL, NULL, NULL, TIMESTAMP '2024-03-01 00:00:00')"
+   ],
+   "query": "PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id",
+   "anchor": "2024-04-01",
+   "indices": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "expected": {
+    "outcome": "labels",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "float32"
+     },
+     "entity_table_names": [
+      "users"
+     ],
+     "anchor_time_column": "__kumo_anchor_time"
+    },
+    "columns": [
+     "instance_id",
+     "__kumo_entity_ref_0",
+     "__kumo_anchor_time",
+     "TARGET"
+    ],
+    "rows": [
+     [
+      0,
+      5,
+      "2024-03-02T00:00:00.000000Z",
+      0.0
+     ],
+     [
+      1,
+      1,
+      "2024-03-02T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      2,
+      2,
+      "2024-03-02T00:00:00.000000Z",
+      1.0
+     ],
+     [
+      3,
+      3,
+      "2024-03-02T00:00:00.000000Z",
+      -1.0
+     ],
+     [
+      4,
+      4,
+      "2024-03-02T00:00:00.000000Z",
+      0.0
+     ]
+    ]
+   }
+  },
+  {
    "name": "sum-offset-window-months",
    "covers": "exit: DateOffset window ends at month ends and leap days; a window that starts after the anchor",
    "setup": [
