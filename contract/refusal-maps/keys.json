@@ -11,7 +11,8 @@
     "key.uint8",
     "key.varchar-large-buffers",
     "key.varchar",
-    "null.some-foreign-keys"
+    "null.some-foreign-keys",
+    "decimal.key-wide"
   ],
   "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. From T1.32a the core casts the entities to the key's type (sdm_engine::keys::cast) and samples decimal keys: the integer, unsigned, text and decimal keys reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-6), the decimal keys where the reference fails (P1B-33), a decimal key with a scale written as its exact text; the uint64 keys past int64 are refused as the reference refuses them, when the payload is written.",
   "gaps": [],
@@ -1001,6 +1002,149 @@
         },
         "until": "predict",
         "expect": "success"
+      }
+    },
+    {
+      "id": "decimal.key-wide",
+      "case": "decimal.key-wide",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "expect": "success",
+        "until": "predict",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000",
+            "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000"
+          ],
+          "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+          "materialize": {
+            "indices": [
+              "10000000000000000000000000",
+              "10000000000000000000000001",
+              "10000000000000000000000002",
+              "10000000000000000000000003",
+              "10000000000000000000000004",
+              "10000000000000000000000005",
+              "10000000000000000000000006",
+              "10000000000000000000000007"
+            ],
+            "indices_as": "decimal",
+            "anchor_time": "2024-03-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "until": "predict",
+        "setup": [
+          "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000",
+          "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000000"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000001"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000002"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000003"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000004"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000005"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000006"
+              },
+              {
+                "t": "d128",
+                "p": 26,
+                "s": 0,
+                "v": "10000000000000000000000007"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1709251200000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        }
       }
     }
   ]
