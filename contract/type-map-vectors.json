@@ -51,11 +51,13 @@
     "float32": {
       "duckdb": "FLOAT",
       "sqlite": "REAL",
+      "sqlite_refuses": "NaN",
       "postgres": "real"
     },
     "float64": {
       "duckdb": "DOUBLE",
       "sqlite": "REAL",
+      "sqlite_refuses": "NaN",
       "postgres": "double precision"
     },
     "decimal": {

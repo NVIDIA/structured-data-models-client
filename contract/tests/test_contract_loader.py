@@ -205,3 +205,84 @@ def test_the_runner_reads_the_loaded_database_through_the_capture(
     capture = driver['capture']
     assert capture['statements'] and not capture['incomplete']
     assert any(statement['results'] for statement in capture['statements'])
+
+
+def _sqlite_rows(tmp_path: Path, *statements: str) -> list[tuple[object, ...]]:
+    import duckdb
+
+    duck = duckdb.connect()
+    for statement in statements:
+        duck.execute(statement)
+    target = tmp_path / 'rows.sqlite'
+    databases.load(duck, 'sqlite', target)
+    connection = sqlite3.connect(target)
+    try:
+        return connection.execute('SELECT * FROM t ORDER BY 1').fetchall()
+    finally:
+        connection.close()
+
+
+def test_a_null_array_keeps_its_neighbours_values(tmp_path: Path) -> None:
+    r"""T2.1a fix 1: a NULL fixed-size or variable list before and between
+    others moves no value to another row."""
+    assert _sqlite_rows(
+        tmp_path,
+        'CREATE TABLE t AS SELECT * FROM (VALUES (0, NULL::INTEGER[2]), '
+        '(1, [10, 20]::INTEGER[2]), (2, NULL), (3, [30, 40]::INTEGER[2])) '
+        't(id, v)',
+    ) == [(0, None), (1, '[10,20]'), (2, None), (3, '[30,40]')]
+
+
+def test_an_empty_map_stays_a_map(tmp_path: Path) -> None:
+    r"""T2.1a fix 1: an empty map is the empty object, alone and nested."""
+    assert _sqlite_rows(
+        tmp_path,
+        'CREATE TABLE t AS SELECT * FROM (VALUES '
+        "(0, map([]::VARCHAR[], []::INTEGER[]), {'m': map([]::VARCHAR[], []::INTEGER[])}), "
+        "(1, map(['k'], [1]), {'m': map(['k'], [1])})) t(id, v, s)",
+    ) == [(0, '{}', '{"m":{}}'), (1, '{"k":1}', '{"m":{"k":1}}')]
+
+
+def test_a_nan_sqlite_cannot_hold_is_refused_by_name(tmp_path: Path) -> None:
+    r"""T2.1a fix 1: SQLite stores a NaN as NULL, so the loader refuses it,
+    naming the column, rather than load a null (``sqlite_refuses``)."""
+    assert databases.TYPE_MAP['float64']['sqlite_refuses'] == 'NaN'
+    with pytest.raises(databases.Unloadable, match=r't\.v: a NaN'):
+        _sqlite_rows(tmp_path, "CREATE TABLE t AS SELECT 'NaN'::DOUBLE AS v")
+
+
+def test_nested_composites_load_on_postgres() -> None:
+    r"""T2.1a fix 1: a struct in a struct, and a list of structs, load on
+    Postgres as composite types created inner first."""
+    import os
+    import uuid
+
+    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        # No server named: required (a Postgres job), that fails; elsewhere
+        # there is nothing to hold.
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES')
+        return
+    import duckdb
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+
+    duck = duckdb.connect()
+    duck.execute(
+        "CREATE TABLE t AS SELECT 1 AS id, {'a': {'b': 1}} AS v, "
+        "[{'c': 2, 'd': 'x y'}, NULL] AS w"
+    )
+    schema = f'loader_{uuid.uuid4().hex[:12]}'
+    with psycopg.connect(dsn, autocommit=True) as admin:
+        admin.execute(f'CREATE SCHEMA {schema}')
+    try:
+        scoped = make_conninfo(dsn, options=f'-c search_path={schema}')
+        databases.load(duck, 'postgres', scoped)
+        with psycopg.connect(scoped) as connection:
+            row = connection.execute(
+                'SELECT (v).a, ((v).a).b, w[1], w[2] IS NULL FROM t'
+            ).fetchone()
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(f'DROP SCHEMA {schema} CASCADE')
+    assert row == ('(1)', 1, '(2,"x y")', True)

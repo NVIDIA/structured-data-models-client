@@ -424,8 +424,11 @@ def complete(observation: dict[str, Any]) -> list[str]:
         return ['the capture was off']
     problems = [f'could not record: {what}' for what in capture['incomplete']]
     if logged is None:
-        # Off DuckDB (T2.1a) there is no query log of DuckDB's to hold the
-        # counts to: the capture's own record is the evidence.
+        # Off DuckDB (T2.1a), a line keyed <case>@sqlite or @postgres, there
+        # is no query log of DuckDB's to hold the counts to: the capture's
+        # own record is the evidence. A DuckDB line has its log, always.
+        if '@' not in str(observation.get('case', '')):
+            problems.append('a DuckDB observation without its query log')
         return problems
     if len(capture['statements']) != logged['statements']:
         problems.append(

@@ -28,6 +28,7 @@ which ``sdm-testkit``'s key binders implement too; both run the vector.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from decimal import Decimal
@@ -42,6 +43,8 @@ TARGETS = ('sqlite', 'postgres')
 #: engine lacks (``canonical``: :func:`canonical_decimal_text`; ``json``:
 #: JSON text; ``iso``: ISO 8601 text; ``digits``: the integer's decimal
 #: digits), and its absence means the engine's own type holds the value.
+#: ``<engine>_refuses`` names a value of the type the engine cannot hold at
+#: all (SQLite stores a NaN as NULL), which the loader refuses by name.
 #: ``(p,s)`` is the column's precision and scale; ``(n)`` the column's own
 #: composite type, created beside its table. A value past what the engine's
 #: type holds (a nanosecond on Postgres's microsecond times) is refused.
@@ -76,10 +79,16 @@ TYPE_MAP: dict[str, dict[str, str]] = {
         'sqlite_value': 'digits',
         'postgres': 'numeric(20,0)',
     },
-    'float32': {'duckdb': 'FLOAT', 'sqlite': 'REAL', 'postgres': 'real'},
+    'float32': {
+        'duckdb': 'FLOAT',
+        'sqlite': 'REAL',
+        'sqlite_refuses': 'NaN',
+        'postgres': 'real',
+    },
     'float64': {
         'duckdb': 'DOUBLE',
         'sqlite': 'REAL',
+        'sqlite_refuses': 'NaN',
         'postgres': 'double precision',
     },
     'decimal': {
@@ -292,26 +301,28 @@ def _cells(array: Any) -> list[Any]:
             for value in array.to_pylist()
         ]
     if name == 'list':
-        flat = _cells(array.flatten())
-        offsets = (
-            [i * kind.list_size for i in range(len(array) + 1)]
-            if pa.types.is_fixed_size_list(kind)
-            else array.offsets.to_pylist()
-        )
-        base = offsets[0]
+        # The child storage whole, each row's slice of it by the offsets,
+        # so a null row's slot (which a fixed-size list keeps, and a
+        # variable one may) never shifts its neighbours' values.
+        flat = _cells(array.values)
+        if pa.types.is_fixed_size_list(kind):
+            size = kind.list_size
+            offsets = [(array.offset + i) * size for i in range(len(array) + 1)]
+        else:
+            offsets = array.offsets.to_pylist()
         return [
-            flat[offsets[i] - base : offsets[i + 1] - base] if ok else None
+            flat[offsets[i] : offsets[i + 1]] if ok else None
             for i, ok in enumerate(valid)
         ]
     if name == 'map':
-        keys, items = _cells(array.keys), _cells(array.items)
+        entries = array.values.flatten()
+        keys, items = _cells(entries[0]), _cells(entries[1])
         offsets = array.offsets.to_pylist()
-        base = offsets[0]
         return [
-            list(
+            _Map(
                 zip(
-                    keys[offsets[i] - base : offsets[i + 1] - base],
-                    items[offsets[i] - base : offsets[i + 1] - base],
+                    keys[offsets[i] : offsets[i + 1]],
+                    items[offsets[i] : offsets[i + 1]],
                     strict=True,
                 )
             )
@@ -321,8 +332,8 @@ def _cells(array: Any) -> list[Any]:
         ]
     if name == 'struct':
         fields = [
-            (kind.field(i).name, _cells(array.field(i)))
-            for i in range(kind.num_fields)
+            (kind.field(i).name, _cells(child))
+            for i, child in enumerate(array.flatten())
         ]
         return [
             {field: values[row] for field, values in fields} if ok else None
@@ -345,20 +356,29 @@ def _cells(array: Any) -> list[Any]:
     return array.to_pylist()
 
 
+class _Map(list[tuple[Any, Any]]):
+    r"""A map cell: its entries in order, a map even when it has none."""
+
+
 def _json_value(value: Any, where: str) -> Any:
-    r"""A cell as JSON data: a decimal and a big integer as text."""
+    r"""A cell as JSON data: a decimal and a big integer as text; a float
+    JSON has no form for (NaN, an infinity) refused by name."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise Unloadable(
+            f'{where}: a float JSON has no form for, inside a nested value'
+        )
     if value is None or isinstance(value, (bool, str, float)):
         return value
     if isinstance(value, int):
         return value if -(2**53) <= value <= 2**53 else str(value)
     if isinstance(value, Decimal):
         return canonical_decimal_text(value)
+    if isinstance(value, _Map):
+        keys = [key for key, _ in value]
+        if not all(isinstance(key, str) for key in keys):
+            raise Unloadable(f'{where}: a map whose keys are not text')
+        return {key: _json_value(item, where) for key, item in value}
     if isinstance(value, list):
-        if value and isinstance(value[0], tuple) and len(value[0]) == 2:
-            keys = [key for key, _ in value]
-            if not all(isinstance(key, str) for key in keys):
-                raise Unloadable(f'{where}: a map whose keys are not text')
-            return {key: _json_value(item, where) for key, item in value}
         return [_json_value(item, where) for item in value]
     if isinstance(value, dict):
         return {key: _json_value(item, where) for key, item in value.items()}
@@ -401,6 +421,11 @@ def _sqlite_value(value: Any, name: str, where: str) -> Any:
         return str(value)
     if name == 'boolean':
         return int(value)
+    if name in ('float32', 'float64') and math.isnan(value):
+        # SQLite stores a NaN as NULL: a NaN no SQLite database can hold is
+        # refused by name, never loaded as a null (the type map's
+        # sqlite_refuses).
+        raise Unloadable(f'{where}: a NaN, which SQLite stores as NULL')
     if name in ('date', 'time', 'timestamp', 'timestamptz', 'interval'):
         return _iso(value)
     if name in ('list', 'struct', 'map', 'union'):
@@ -411,9 +436,14 @@ def _sqlite_value(value: Any, name: str, where: str) -> Any:
 # --- Postgres ----------------------------------------------------------------------
 
 
-def _postgres_type(kind: Any, composite: str) -> str:
-    r"""The Postgres type of an Arrow type; a struct's is the composite type
-    named ``composite``, created by the caller."""
+def _postgres_type(
+    kind: Any, composite: str, create: Callable[[str], Any]
+) -> str:
+    r"""The Postgres type of an Arrow type. A struct's is the composite type
+    named ``composite``, which ``create`` (a statement's runner) creates
+    after the composite types of its members, at any depth, so every type a
+    composite names exists before it; a list's element may be any type
+    but a list (Postgres arrays are not lists of lists)."""
     import pyarrow as pa
 
     name = family(kind)
@@ -421,10 +451,16 @@ def _postgres_type(kind: Any, composite: str) -> str:
         return f'numeric({kind.precision},{kind.scale})'
     if name == 'list':
         element = kind.value_type
-        if family(element) in ('list', 'struct', 'map', 'union'):
-            raise Unloadable('a list of nested values')
-        return _postgres_type(element, composite) + '[]'
+        if family(element) == 'list':
+            raise Unloadable(f'{composite}: a list of lists')
+        return _postgres_type(element, composite, create) + '[]'
     if name == 'struct':
+        members = ', '.join(
+            f'{quote(member.name)} '
+            + _postgres_type(member.type, f'{composite}.{member.name}', create)
+            for member in kind
+        )
+        create(f'CREATE TYPE {quote(composite)} AS ({members})')
         return quote(composite)
     if name == 'time' and pa.types.is_time32(kind):
         return 'time'
@@ -638,19 +674,9 @@ def _load_postgres(duck: Any, dsn: str) -> None:
                     raise Unloadable(
                         f'{where}: the type map has no {field.type}'
                     ) from None
-                composite = f'{table}.{field.name}'
-                if name == 'struct':
-                    members = ', '.join(
-                        f'{quote(member.name)} '
-                        + _postgres_type(
-                            member.type, f'{composite}.{member.name}'
-                        )
-                        for member in field.type
-                    )
-                    connection.execute(
-                        f'CREATE TYPE {quote(composite)} AS ({members})'
-                    )
-                declared = _postgres_type(field.type, composite)
+                declared = _postgres_type(
+                    field.type, f'{table}.{field.name}', connection.execute
+                )
                 columns.append(
                     f'{quote(field.name)} {declared}'
                     + (' NOT NULL' if field.name in not_null else '')

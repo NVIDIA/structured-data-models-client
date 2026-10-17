@@ -1131,6 +1131,33 @@
         "top_k"
       ],
       "value": 0
+    },
+    {
+      "why": "top_k past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 9223372036854775808
+    },
+    {
+      "why": "top_k past 2**64",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "top_k negative, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": -1
     }
   ],
   "omitted": [

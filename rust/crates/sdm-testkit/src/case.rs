@@ -425,10 +425,11 @@ pub struct Materialize {
     /// The rows a ranking is over, each read as an index is (E153).
     #[serde(default, deserialize_with = "present")]
     pub candidates: Option<Vec<Index>>,
-    /// A JSON integer, written as one; `0`, which the reference refuses, is
-    /// a case's input.
+    /// A JSON integer of any size, written as one, as the case schema's
+    /// `integer` and the Python loader take it; `0`, which the reference
+    /// refuses, is a case's input.
     #[serde(default, deserialize_with = "present")]
-    pub top_k: Option<i64>,
+    pub top_k: Option<Integer>,
 }
 
 /// One entity key: a JSON integer literal of any size, kept as its
@@ -463,6 +464,24 @@ impl<'de> Deserialize<'de> for Index {
             Err(D::Error::custom(
                 "an index is a JSON integer literal or a string",
             ))
+        }
+    }
+}
+
+/// A JSON integer literal of any size, kept as its digits: a number with a
+/// fraction or an exponent, `3.0` included, is refused, and nothing passes
+/// through a fixed width.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Integer(pub String);
+
+impl<'de> Deserialize<'de> for Integer {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Integer, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let text = raw.get().trim();
+        if is_integer_literal(text) {
+            Ok(Integer(text.to_owned()))
+        } else {
+            Err(D::Error::custom("not a JSON integer literal"))
         }
     }
 }
