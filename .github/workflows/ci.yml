@@ -1034,7 +1034,12 @@ jobs:
   # (compare.py --database), and the core's legs run there exactly when the
   # built core reports a provider for it (sdm_client._native.PROVIDERS),
   # judged against those lines: run_python.py legs holds the job to that
-  # staging rule, and fails a job whose database has no case. Only the Postgres jobs start the pinned service,
+  # staging rule, and fails a job whose database has no case. Until the
+  # core's SQLite and Postgres providers land, these jobs exist in the
+  # reference cell alone (the orchestrator's decision, T2.1a fix 4): the
+  # reference's lines are that cell's, and python-old, whose sampling on
+  # SQLite lacks the reference's seeding (main's f0f324ce), does not run
+  # off DuckDB. T2.2b and T2.3b add the other cells with the core legs. Only the Postgres jobs start the pinned service,
   # required there (SDM_REQUIRE_POSTGRES, H26).
   contract-python-ref-pandas3-sqlite:
     name: contract-python (ref-pandas3, sqlite)
@@ -1119,87 +1124,9 @@ jobs:
         run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
       - *contract-database
 
-  contract-python-dbr17-pandas2-sqlite:
-    name: contract-python (dbr17-pandas2, sqlite)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: native-wheel
-    env:
-      CELL: dbr17-pandas2
-      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
-      DATABASE: sqlite
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - *contract-wheel
-      - *contract-install
-      - *contract-database
 
-  contract-python-dbr17-pandas2-postgres:
-    name: contract-python (dbr17-pandas2, postgres)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [landing, native-wheel]
-    services:
-      postgres: *postgres-service
-    env:
-      CELL: dbr17-pandas2
-      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
-      DATABASE: postgres
-      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
-      SDM_REQUIRE_POSTGRES: '1'
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - *contract-wheel
-      - *contract-install
-      - *contract-postgres-required
-      - *contract-database
 
-  contract-python-floor-pandas2-2-sqlite:
-    name: contract-python (floor-pandas2.2, sqlite)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: native-wheel
-    env:
-      CELL: floor-pandas2.2
-      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
-      DATABASE: sqlite
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.10'
-      - *contract-wheel
-      - *contract-install
-      - *contract-database
 
-  contract-python-floor-pandas2-2-postgres:
-    name: contract-python (floor-pandas2.2, postgres)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [landing, native-wheel]
-    services:
-      postgres: *postgres-service
-    env:
-      CELL: floor-pandas2.2
-      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
-      DATABASE: postgres
-      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
-      SDM_REQUIRE_POSTGRES: '1'
-    steps:
-      - *contract-checkout
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.10'
-      - *contract-wheel
-      - *contract-install
-      - *contract-postgres-required
-      - *contract-database
 
   build:
     runs-on: ubuntu-latest

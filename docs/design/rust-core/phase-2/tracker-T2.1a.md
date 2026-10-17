@@ -22,7 +22,9 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 ## Probes
 
 - Every S1 case's tables load on SQLite and on a local postgres:17 through the loader.
-- The reference (python-ref, 6298913c's environment) ran all 52 S1 cases on SQLite and on Postgres, every capture complete; compared with `--database` against the candidate's old client, what differs is the pre-merge client against the new reference (main's `inference_config` and sampling), which T2.0c's merge removes.
+- The reference (python-ref, 6298913c's environment) ran all 52 S1 cases on SQLite and on Postgres, every capture complete.
+  Compared with `--database` against the candidate's old client, the SQLite lines differ in sampling: the reference holds main's `f0f324ce` (seeding SQLite's entity sample) and `d1590a17`, which the phase branch's old route lacks (T2.0c merged `main` at 327fda03, before them), so python-old samples SQLite unseeded; T2.0c's merge does not remove it.
+  From fix 4 python-old runs on DuckDB only, and the SQLite and Postgres jobs hold python-ref's committed lines (the orchestrator's decision).
 - With a random Postgres schema per case, every `from_source` differed between two runs (`SELECT current_schema()`); each case now gets a database of its own, its tables in `public`.
 - The census, run on the phase head after T2.0c with a clean tree: 71 sites, each with a probe written for it (its intended site), both routes' outcomes recorded, 23 sites whose probe the core refuses where the reference answers (all of E92's class).
   Which site produced an outcome is not claimed: reachability stays unmeasured until a real-data run or instrumentation needs it (the orchestrator's stop rule at fix 2, after attribution from outcomes failed review twice).
@@ -32,7 +34,8 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 
 ## Deviations and what is left
 
-- The reference lines `<case>@sqlite` and `<case>@postgres` are recorded by the recorder (test-author role) into `contract/reference/6298913c...jsonl` with this tooling; `tests/test_t21a_reference_lines.py` stays PENDING, and the SQLite and Postgres CI jobs fail, until those lines land.
+- The reference lines `<case>@sqlite` and `<case>@postgres` for all 86 cases are recorded by the recorder (test-author role) into `contract/reference/6298913c...jsonl` (391d3e04, PENDING marks removed there); fix 4's query logs and named Postgres types need them re-recorded, which the recorder does.
+- The SQLite and Postgres `contract-python` jobs exist in the reference cell only until T2.2b and T2.3b bring the core legs and the other cells; the locked set's patterns for the other cells wait for them.
 - Moved to T2.1c by the owner's lean plan, not built here: `coverage.py --gate S1` (G12, G16, G17), the L3 wiring over three databases, the `coverage-s1`, `l3` and `ci` step tools and `--ci-run`, `gate.sh` running the three databases, the common-input comparison (H24), C6 and C18.
 - `contract/tools/type_map_record.py` writes the decimal entry of `map` only; the full map is the loader's `TYPE_MAP`, which a loader test holds equal to the file.
 - The floor cell's SQLite and Postgres jobs take T2.0c's pins (pandas 2.2.2, NumPy 1.23.5).
@@ -47,3 +50,4 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 - Fix 3 (round 2, Claude): `phase_end.sh`'s locked gate run, the slice gate before the one-shot held-out run, passes `--wheel-run` with its CI run, as `final_gate.sh` does, so both hold temporary register entries; a hand run of `--locked 2a` without it, the gate's own controls among them, does not.
 - Fix 4 (round 3, Codex; the orchestrator's decisions): every SQLite and Postgres line carries a query log, the driver's own statement log (each statement the ADBC or psycopg cursor executes and each relation ADBC binds, whatever object called it, for one case), held to the capture as DuckDB's log is, so the lines validate against the checkpoint's schema, which stays as it was; a Postgres result type the server numbers (the loader's composite types) is recorded by its name, and composite names are digests of their path, collision-free and the same on every run; python-old runs on DuckDB only, and the SQLite and Postgres jobs hold python-ref's committed lines to the cases (the reference side), with python-core's legs against them once the core reports a provider.
   Probe: the reference recorded all 86 cases on SQLite and Postgres with the new logs: every line valid against the checkpoint's schema and complete; two consecutive Postgres runs compare equal; no server-assigned number or generated database name in any line.
+  The SQLite and Postgres jobs run in the reference cell only (the orchestrator's decision), and a table name holding a double quote loads (the loader reads its types from a relation over the quoted name).

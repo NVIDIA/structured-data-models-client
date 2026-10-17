@@ -437,3 +437,32 @@ def test_a_nul_inside_json_is_refused_by_name_on_postgres(value: str) -> None:
     duck.execute(f'CREATE TABLE t AS SELECT {value} AS v')
     with pytest.raises(databases.Unloadable, match=r't\.v: text holding a NUL'):
         databases.load(duck, 'postgres', dsn)
+
+
+def test_a_table_name_with_a_double_quote_loads(tmp_path: Path) -> None:
+    r"""Fix 4 (round 3's P3-1): the type check reads a quoted name as the
+    table's, so a name holding ``"`` loads."""
+    import duckdb
+
+    duck = duckdb.connect()
+    duck.execute('CREATE TABLE "my ""t"" x" AS SELECT 1 AS id')
+    target = tmp_path / 'quoted.sqlite'
+    databases.load(duck, 'sqlite', target)
+    connection = sqlite3.connect(target)
+    try:
+        assert connection.execute('SELECT id FROM "my ""t"" x"').fetchall() == [
+            (1,)
+        ]
+    finally:
+        connection.close()
+
+
+def test_composite_names_never_collide() -> None:
+    r"""Fix 4 (round 3's composite-name finding): a ``.`` in a name makes no
+    two struct paths share a composite type's name, and each fits
+    Postgres's 63 bytes."""
+    one = databases.composite_name(['t', 'v', 'a'])
+    other = databases.composite_name(['t', 'v.a'])
+    assert one != other
+    assert len(one.encode()) <= 63
+    assert one == databases.composite_name(['t', 'v', 'a'])

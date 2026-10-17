@@ -652,7 +652,9 @@ def _holds_lost(kind: Any) -> bool:
 
 
 def _lost(duck: Any, table: str) -> None:
-    relation = duck.table(quote(table))
+    # A relation over the quoted name: DuckDB's table() reads a name with
+    # a double quote in it as written, not unescaped.
+    relation = duck.sql(f'FROM {quote(table)}')
     for column, kind in zip(relation.columns, relation.types, strict=True):
         if _holds_lost(kind):
             raise Unloadable(
