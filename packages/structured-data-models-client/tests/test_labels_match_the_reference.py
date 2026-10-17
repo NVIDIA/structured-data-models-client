@@ -41,6 +41,13 @@ target) is held to that refusal having an owner the register names, the
 exit "the next refusal each probe hits has an owner", and becomes an exact
 comparison once its owner lifts it; a windowed regression over a float or
 an integer column may never be refused.
+
+Since main's eb6c68eb (the reference at 6298913c) the reference sums and
+averages a DECIMAL(38,18) column as float64, where the core keeps exact
+decimals (register P2B-1, until T2.17): on ``sum-decimal`` and
+``avg-decimal`` the core is held to the exact aggregate DuckDB computes
+over the case's own rows, read at float32, and to the reference in
+everything else.
 """
 
 from __future__ import annotations
@@ -77,6 +84,38 @@ OWNED = {
     'target_leakage': 'T1.28a',
     'target_type': 'P1B-18',
 }
+
+
+#: Register P2B-1 (until T2.17): since main's eb6c68eb the reference sums
+#: and averages a DECIMAL column as float64, where the core keeps Phase 1's
+#: exact decimals. On these cases the core's labels are held to the exact
+#: aggregate DuckDB computes over the case's own rows, read at float32,
+#: and everything else to the reference's.
+EXACT_DECIMAL = {'sum-decimal': 'SUM', 'avg-decimal': 'AVG'}
+
+
+def _exact_labels(spec: dict[str, Any], rows: list[list[Any]]) -> list[float]:
+    r"""Each context row's label as the exact decimal aggregate of its
+    entity's orders in the window after its anchor, at float32."""
+    import numpy as np
+
+    aggregate = EXACT_DECIMAL[spec['name']]
+    assert spec['query'] == (
+        f'PREDICT {aggregate}(orders.amount, 0, 30, days) FOR EACH users.user_id'
+    )
+    connection = duckdb.connect()
+    for statement in spec['setup']:
+        connection.execute(statement)
+    labels = []
+    for _, entity, anchor, _ in rows:
+        (value,) = connection.execute(
+            f'SELECT {aggregate}(amount) FROM orders WHERE user_id = ? '
+            'AND ts > CAST(? AS TIMESTAMP) '
+            'AND ts <= CAST(? AS TIMESTAMP) + INTERVAL 30 DAY',
+            [entity, anchor[:19], anchor[:19]],
+        ).fetchone()
+        labels.append(float(np.float32(value)))
+    return labels
 
 
 def _core(spec: dict[str, Any]) -> dict[str, Any]:
@@ -165,5 +204,24 @@ def test_the_core_route_s_labels_are_the_reference_s(
         ), got.get('message')
     elif got['outcome'] == 'refused':
         pytest.fail(f'refused {got["rule"]!r} where the reference labels')
+    elif spec['name'] in EXACT_DECIMAL:
+        register = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
+            encoding='utf-8'
+        )
+        assert '- id: P2B-1\n' in register
+        assert {k: got[k] for k in ('outcome', 'task', 'columns')} == {
+            k: expected[k] for k in ('outcome', 'task', 'columns')
+        }
+        assert [row[:3] for row in got['rows']] == [
+            row[:3] for row in expected['rows']
+        ]
+        exact = _exact_labels(spec, expected['rows'])
+        assert [row[3] for row in got['rows']] == exact, spec['covers']
+        # Not vacuous: the reference's float64 aggregate loses what the
+        # exact one keeps on some row (1e15 + 0.1 - 1e15), and agrees on
+        # another.
+        reference = [row[3] for row in expected['rows']]
+        assert any(r != e for r, e in zip(reference, exact, strict=True))
+        assert any(r == e for r, e in zip(reference, exact, strict=True))
     else:
         assert got == expected, spec['covers']
