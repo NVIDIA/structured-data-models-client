@@ -51,7 +51,8 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec
-from sdm_client._rust.providers import for_source
+from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers.sqlite import SqliteProvider
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -133,7 +134,7 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
-    choice, provider = for_source(source)
+    choice, provider = _provider(source)
     operation = {
         'op': 'describe_source',
         'provider': choice,
@@ -222,3 +223,12 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     # received, whether it may be null, whether the source keys it.
     schema._core_description = described
     return schema
+
+
+def _provider(source: Any) -> tuple[dict[str, Any], Any]:
+    r"""The provider choice a run over ``source`` names, and the provider
+    answering its fetches: its backend's built-in SQL dialect, DuckDB's or,
+    from T2.2, SQLite's, on its connection."""
+    backend = source.backend
+    made = SqliteProvider if backend == 'sqlite' else DuckDBProvider
+    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

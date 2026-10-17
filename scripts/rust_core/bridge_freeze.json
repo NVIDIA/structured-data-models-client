@@ -4,18 +4,21 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "6360be2a080d002c2e0db66d9876cedeae1a4a9185149cbc30bc2cb212d845cc"
+        "fingerprint": "c553683ad6794e3d3be6a9e4812a073679afc5251e31a2e0049319f70bf004e0"
+      },
+      "_provider": {
+        "fingerprint": "449ca920594919414510b1d8ff215b4ecf97b88af54b04a74421c282428dad52"
       },
       "build": {
         "fingerprint": "f7f40728015d8cab1730f9d6ae1220bd5270ef28eba9dedc93a02aa98deed954"
       },
       "from_source": {
-        "fingerprint": "785759ff540a37c31e9a988be8d7153cd15629bd2757f128b6778c94b40fcc34"
+        "fingerprint": "d6915ec041e144f68278b3b52371510fe998f06d4fc4d7c3fc2d71d03c13cae0"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "32e9c4779268d864d4e29a75936c1dba5a6244aca9fa700b0022f9f7e9d8459c"
+        "fingerprint": "009ed2ff65b582b99eba18f3eb6215c8c58c3d9fd258fba8dbb411b07fbf4b5d"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
@@ -26,6 +29,9 @@
       "_missing": {
         "fingerprint": "466127ee6c502f180f36fbe6b1e4750b86ffbce40dad1d2a16b53b2d79c117a0"
       },
+      "_provider": {
+        "fingerprint": "449ca920594919414510b1d8ff215b4ecf97b88af54b04a74421c282428dad52"
+      },
       "_text": {
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
@@ -33,7 +39,7 @@
         "fingerprint": "e8a27ee5705c5728f41e932b7996380ab3143f341fc1effd626e89057231ff44"
       },
       "gather": {
-        "fingerprint": "65f22477494358e8d54a76da70b6834985d896ce4c09dce6a46f4a934c53ae07"
+        "fingerprint": "a975cf9f85d81aa10343d8f5eb2f5cb3d4f73a27547d1de7d121f4b6d3ed498b"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
