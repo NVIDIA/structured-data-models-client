@@ -36,8 +36,8 @@ What the cases cover, each case naming its line in ``covers``:
   the decimal class target of ``decimal.class-target-38-18``).
 
 A case the core refuses by a rule ``OWNED`` names (the classification and
-static tasks' layout, a decimal feature on the wire, a static decimal
-target) is held to that refusal having an owner the register names, the
+static tasks' layout, a decimal feature on the wire) is held to that
+refusal having an owner the register names, the
 exit "the next refusal each probe hits has an owner", and becomes an exact
 comparison once its owner lifts it; a windowed regression over a float or
 an integer column may never be refused.
@@ -75,17 +75,17 @@ RECORDED = json.loads(
 )
 CORE = ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB)
 
-# The refusals the core still makes, by name, after computing the labels:
-# the classification and static tasks' layout in the payload and a decimal
-# feature on the wire are T1.28a's, a static decimal target P1B-18's
-# (register P1B-3). A case refused so is held to the refusal's owner, not
-# to the reference's labels, until the owner lifts it; then it is
-# compared exactly like the rest.
+# The refusals the core may still make, by name, after computing the
+# labels: the classification and static tasks' layout in the payload and a
+# decimal feature on the wire are T1.28a's. A case refused so is held to
+# the refusal's owner, not to the reference's labels, until the owner lifts
+# it; then it is compared exactly like the rest. A static decimal target
+# (P1B-18's refusal, ``target_type``) is no longer one: exact decimals
+# answer it (KO2-35's permanent improvement, register P2B-1).
 OWNED = {
     'classification_task': 'T1.28a',
     'wire_dtype': 'T1.28a',
     'target_leakage': 'T1.28a',
-    'target_type': 'P1B-18',
 }
 
 

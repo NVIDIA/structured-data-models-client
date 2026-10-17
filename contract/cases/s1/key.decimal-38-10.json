@@ -95,7 +95,7 @@
     "stage": "predict",
     "today": "Schema.from_source reports user_id as float64 / ID; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type 'decimal128(38, 10)[pyarrow]' for column 'ENTITY'), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers"
   },
-  "register": "P2B-1: the reference at 6298913c answers (eb6c68eb reads the decimal as its declared type); the core keeps exact decimals and refuses it by name until T2.17",
+  "register": "P2B-1 (KO2-35's permanent improvement): the reference at 6298913c answers (eb6c68eb reads the decimal as its declared type); the core answers it with exact decimals",
   "why": "A fractional, full-precision decimal key; the case where float keys would collide",
   "source": "DV131; DV133"
 }
