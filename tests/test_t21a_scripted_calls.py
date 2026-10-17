@@ -46,10 +46,6 @@ VECTORS = {
     ]
 }
 
-PENDING = pytest.mark.xfail(
-    reason="T2.1a: the scripted endpoint's numbered calls and failed call",
-    strict=True,
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -119,7 +115,6 @@ def test_the_calls_are_distinct_vectors() -> None:
     assert len({VECTORS[name]['answer'].__repr__() for name in CALLS}) == 3
 
 
-@PENDING
 def test_several_calls_are_each_answered_in_order() -> None:
     r"""Exit: an endpoint failing no call answers every call by the rule,
     in order, each one received."""
@@ -131,7 +126,6 @@ def test_several_calls_are_each_answered_in_order() -> None:
     ]
 
 
-@PENDING
 @pytest.mark.parametrize('fail_call', [0, 2, 3])
 def test_the_chosen_call_fails_and_only_it(fail_call: int) -> None:
     r"""Exit: calls are numbered from zero; the chosen one is answered 500
@@ -143,7 +137,6 @@ def test_the_chosen_call_fails_and_only_it(fail_call: int) -> None:
     assert len(received.requests) == len(CALLS)
 
 
-@PENDING
 def test_a_call_past_the_last_fails_nothing() -> None:
     r"""Boundary: a chosen call never made fails nothing."""
     with endpoint.serve(fail_call=len(CALLS)) as (url, _):
@@ -151,7 +144,6 @@ def test_a_call_past_the_last_fails_nothing() -> None:
     assert answers == _expected(None)
 
 
-@PENDING
 def test_the_rule_numbers_the_call_it_is_given() -> None:
     r"""Exit: the rule in process, as a host without HTTP calls it."""
     vector = VECTORS['regression']

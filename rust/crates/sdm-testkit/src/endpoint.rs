@@ -17,6 +17,12 @@
 //! the rule cannot read otherwise is `400` naming the reason; any other
 //! method or path is `404 not_found`.
 //!
+//! Calls are numbered from zero in the order received, and an endpoint
+//! told to fail a call answers that one `500` with `{"error":
+//! "scripted_failure", "call": <its number>}` and every other call by the
+//! rule ([`Endpoint`], [`answer_call`]; T2.1a, for T2.8c's multi-call
+//! cases).
+//!
 //! The pure-Rust host calls the rule in process ([`answer`]): it has no
 //! transport of its own to exercise, so no HTTP server or client is built
 //! into the test kit (decision E46).
@@ -37,6 +43,54 @@ pub const REASONS: [&str; 7] = [
     "bad_instance_id",
     "no_classes",
 ];
+
+/// The status of the call an endpoint is told to fail.
+pub const FAILED: u16 = 500;
+
+/// The endpoint over several calls: each request it answers is a call,
+/// numbered from zero, and the call numbered `fail_call` fails.
+#[derive(Debug, Clone, Default)]
+pub struct Endpoint {
+    fail_call: Option<u64>,
+    calls: u64,
+}
+
+impl Endpoint {
+    /// An endpoint failing the call numbered `fail_call`, or none.
+    pub fn new(fail_call: Option<u64>) -> Endpoint {
+        Endpoint {
+            fail_call,
+            calls: 0,
+        }
+    }
+
+    /// The answer to the next call, numbering it.
+    pub fn answer(&mut self, method: &str, path: &str, body: &[u8]) -> (u16, Value) {
+        let call = self.calls;
+        self.calls += 1;
+        answer_call(method, path, body, call, self.fail_call)
+    }
+
+    /// How many calls it has answered.
+    pub fn calls(&self) -> u64 {
+        self.calls
+    }
+}
+
+/// The rule for the request that is call number `call`, the call numbered
+/// `fail_call` failed.
+pub fn answer_call(
+    method: &str,
+    path: &str,
+    body: &[u8],
+    call: u64,
+    fail_call: Option<u64>,
+) -> (u16, Value) {
+    if fail_call == Some(call) {
+        return (FAILED, json!({"error": "scripted_failure", "call": call}));
+    }
+    answer(method, path, body)
+}
 
 /// The rule: the status and JSON body answering one request.
 pub fn answer(method: &str, path: &str, body: &[u8]) -> (u16, Value) {

@@ -32,6 +32,13 @@ The rule, for ``POST /v1/predictions`` with a JSON object body:
 - any other method or path is answered ``404`` with ``{"error":
   "not_found"}``.
 
+Each request a served endpoint receives is a call, numbered from zero in
+the order received (T2.1a; T2.8c's multi-call cases). An endpoint told to
+fail a call answers that one ``500`` with ``{"error": "scripted_failure",
+"call": <its number>}``, a status the client's transport does not retry,
+and every other call by the rule; told to fail none, it answers every call
+by the rule.
+
 Numbers are read as the tokens the request wrote, never through a float,
 so an id past 2**53 is answered as it was asked.
 """
@@ -48,6 +55,8 @@ from typing import Any
 
 #: The path the client posts a prediction to.
 PREDICTIONS = '/v1/predictions'
+#: The status of the call an endpoint is told to fail.
+FAILED = 500
 #: Why a request the rule cannot read is refused, as the 400 body names it.
 REASONS = (
     'not_json',
@@ -149,8 +158,18 @@ def _predictions(payload: Any) -> list[dict[str, Any]]:
     return answered
 
 
-def answer(method: str, path: str, body: bytes) -> tuple[int, dict[str, Any]]:
-    r"""The rule: the status and JSON body answering one request."""
+def answer(
+    method: str,
+    path: str,
+    body: bytes,
+    *,
+    call: int = 0,
+    fail_call: int | None = None,
+) -> tuple[int, dict[str, Any]]:
+    r"""The rule: the status and JSON body answering the request that is
+    call number ``call``, the call numbered ``fail_call`` failed."""
+    if call == fail_call:
+        return FAILED, {'error': 'scripted_failure', 'call': call}
     if method != 'POST' or path != PREDICTIONS:
         return 404, {'error': 'not_found'}
     try:
@@ -168,9 +187,18 @@ def answer(method: str, path: str, body: bytes) -> tuple[int, dict[str, Any]]:
 
 @dataclass
 class Received:
-    r"""What the endpoint was sent, in order: method, path and body bytes."""
+    r"""What the endpoint was sent, in order: method, path and body bytes;
+    a request's position is its call's number."""
 
     requests: list[tuple[str, str, bytes]] = field(default_factory=list)
+    fail_call: int | None = None
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def take(self, method: str, path: str, body: bytes) -> int:
+        r"""Records a request; its call's number."""
+        with self.lock:
+            self.requests.append((method, path, body))
+            return len(self.requests) - 1
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -183,8 +211,14 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length') or 0)
         body = self.rfile.read(length) if length else b''
         received: Received = self.server.received  # type: ignore[attr-defined]
-        received.requests.append((self.command, self.path, body))
-        status, reply = answer(self.command, self.path, body)
+        call = received.take(self.command, self.path, body)
+        status, reply = answer(
+            self.command,
+            self.path,
+            body,
+            call=call,
+            fail_call=received.fail_call,
+        )
         out = json.dumps(reply).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
@@ -199,11 +233,11 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def serve() -> Iterator[tuple[str, Received]]:
+def serve(fail_call: int | None = None) -> Iterator[tuple[str, Received]]:
     r"""The endpoint on a free localhost port: its base URL, and what it
-    receives."""
+    receives; the call numbered ``fail_call`` is failed."""
     server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
-    received = Received()
+    received = Received(fail_call=fail_call)
     server.received = received  # type: ignore[attr-defined]
     thread = threading.Thread(
         target=lambda: server.serve_forever(poll_interval=0.01), daemon=True
