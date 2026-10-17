@@ -52,10 +52,9 @@ Exactly one vector got the outcome: `decimal128-18-0.exponent.huge.decimal`; wit
 - `contract/type-set-vectors.json` is recorded under `TZ=America/Los_Angeles` (the orchestrator's decision), since on this machine's UTC zone DuckDB hands a `TIMESTAMPTZ` over as `timestamp[us, tz=Etc/UTC]`, a form no type-set row has, and `test_t133_type_set.py`'s `test_every_form_a_session_setting_gives_has_a_row` failed.
   `contract/time-inference-vectors.json` stays recorded in this machine's zone: its four `timestamptz` vectors' DuckDB minimum reads in UTC, and its tests pass.
 - `key-inference`'s `nulls-1-decimal.200` and `sampled-null-key`'s `mixed-null-decimal` were the decimal refusals that `test_t132e_key_inference.py` and `test_t132e_sampled_null_keys.py` rest on (`test_the_vectors_are_not_vacuous`, `test_option_b_s_vectors_are_the_reference_s_refusals`, `test_the_review_s_reproduction_is_a_success_with_a_request`); those tests fail on the new recordings.
-- `rust/crates/sdm-pql/tests/dates.json` stays the macOS recording at `b413e9ad`.
-  Recorded here it is the other side of the `%Y` padding (`pads_year` false) and loses the 690 `plain` rows and 144 format guesses that only a padded year gives, which two `dates.rs` tests are built on.
+- `rust/crates/sdm-pql/tests/dates.json` is recorded on this Linux machine at `6298913c` (`78acad69`), since the owner made it the reference machine (the orchestrator's decision of 2026-10-16): `pads_year` false, 8,814 `plain` rows where macOS generated 690 more padded-year literals.
   The reference's date reading does not move with `main`: the recording at `6298913c` equals the recordings with each of the three commits reverted.
-  A macOS run at `6298913c` would bring its source line to the new reference.
+  `dates.rs` holds the padded side over `padded-years.tsv` and by reading every `format_guess` row again as where `%Y` pads.
 - `t128b`'s `--cell` recordings ran the reference's code from `git archive 6298913c` on Python 3.10 with pandas 2.2.2, pyarrow 14.0.1, NumPy 1.26.4 (`main`'s pandas floor, as the brief takes it) and on Python 3.11 with pandas 3.0.6; they gave the same `dtypes_pandas2` and `by_python` entries as before.
 - `tests/golden/t132g-*/python-ref.jsonl` are not re-recorded (ratchet fixtures, not held to `reference-env.txt`).
 
@@ -858,4 +857,4 @@ Each of the three pickles gains `Schema`'s `_conversion_notes` state and nothing
 ### PQL recordings
 
 `rust/crates/sdm-core/tests/pql/{corpus,custom-profiles,journey,quirks}.json` and `rust/crates/sdm-pql/tests/validator-options.json` change in their source line only (identity only).
-`rust/crates/sdm-pql/tests/dates.json` is kept as recorded on macOS at `b413e9ad` (see the findings above).
+`rust/crates/sdm-pql/tests/dates.json` is recorded on Linux at `6298913c` (see the findings above): `pads_year` false; `packed` and `local_year` unchanged; 690 `plain` rows and 144 `format_guess` formats that only a padded year gives are gone (identity only: the platform's `strftime`).
