@@ -475,9 +475,15 @@ def test_the_new_recording_is_exactly_the_sha_s_jsonl(
     assert RULE in rules(found), found
 
 
-#: A JSON-lines file the reference consistency tests read, citing the
-#: reference on every line (``identity.reference.commit.sha``).
+#: The t132g golden, a JSON-lines file citing the reference on every line
+#: (``identity.reference.commit.sha``); frozen from T2.0f (it keeps the
+#: SHA it was recorded at), so the later-line test builds its own copy.
 GOLDEN = 'tests/golden/t132g-fixture-cases/python-ref.jsonl'
+#: The later-line test's JSON-lines citing file: the golden's lines under
+#: a path the test adds to the citation table, with the field every line
+#: holds.
+LINES = 'contract/t20e-json-lines.jsonl'
+LINES_FIELD = ('identity', 'reference', 'commit', 'sha')
 
 
 @pytest.mark.parametrize(
@@ -525,31 +531,40 @@ def test_a_vector_file_that_is_no_longer_json_is_refused(
     ],
 )
 def test_a_later_line_of_a_json_lines_file_is_checked(
-    repo: Path, field: str, left: str
+    repo: Path, field: str, left: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     r"""Exit 1 (review round 2): a JSON-lines citing file is judged line by
     line, after an approved re-record that moved its first line. Refused,
     naming the file: line 2's ``identity.reference.commit.sha`` (the field
     every line holds) still naming the old SHA or naming another; and a
     citation only line 2 holds (``recorded.reference``, added at the
-    checkpoint) still naming the old SHA."""
+    checkpoint) still naming the old SHA.
+
+    The file is the test's own (T2.0f, once the t132g goldens were
+    frozen): :data:`GOLDEN`'s lines at :data:`LINES`, landed at the
+    checkpoint and added to the ratchet's citation table with the field
+    every line holds, as a JSON-lines file of the table is."""
     old = old_sha(repo)
     value = old if left == 'the old SHA' else OTHER
     only_later = field.startswith('recorded.reference')
+    monkeypatch.setitem(ratchet.CITATIONS, LINES, LINES_FIELD)
 
-    def add_later_field(r: Path) -> None:
-        path = r / GOLDEN
-        lines = [json.loads(x) for x in path.read_text().splitlines()]
-        lines[1]['recorded'] = {'reference': old}
-        path.write_text(''.join(json.dumps(x) + '\n' for x in lines))
+    def add_lines(r: Path) -> None:
+        lines = [json.loads(x) for x in (r / GOLDEN).read_text().splitlines()]
+        assert len(lines) > 1
+        assert all(
+            x['identity']['reference']['commit']['sha'] == old for x in lines
+        )
+        if only_later:
+            lines[1]['recorded'] = {'reference': old}
+        (r / LINES).write_text(''.join(json.dumps(x) + '\n' for x in lines))
 
-    if only_later:
-        land(repo, 'T2.0b', add_later_field)
+    land(repo, 'T2.0b', add_lines)
     checkpoint = approved_checkpoint(repo)
     twin_passes(repo, checkpoint)
 
     def later(r: Path) -> None:
-        path = r / GOLDEN
+        path = r / LINES
         lines = [json.loads(x) for x in path.read_text().splitlines()]
         assert len(lines) > 1
         assert lines[0]['identity']['reference']['commit']['sha'] == NEW
@@ -562,7 +577,7 @@ def test_a_later_line_of_a_json_lines_file_is_checked(
 
     commit(repo, f'T2.0c: line 2 left at {left}', then(rerecord(NEW), later))
     found = run(repo, checkpoint).problems
-    assert any(GOLDEN in p for p in found), found
+    assert any(LINES in p for p in found), found
 
 
 def test_a_citing_file_with_dots_and_brackets_in_its_keys_passes(
