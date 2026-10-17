@@ -649,15 +649,16 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
 pub const NULL_KEYS_LEFT_OUT: &str = "NULL_KEYS_LEFT_OUT";
 
 /// Which rows of a keyed table's rows reached to keep, where they hold a
-/// null key of text or of a decimal type beside a key that is not null:
-/// the reference sorts every keyed table's keys reached (`np.unique` in
-/// `_sample_subgraph`), which fails comparing a null with a text value
-/// (an unnamed error its client reports as `INVALID_REQUEST`) or with a
-/// decimal (`INTERNAL_ERROR`), so no request of it exists to match; the
+/// null text key beside a key that is not null: the reference sorts every
+/// keyed table's keys reached (`np.unique` in `_sample_subgraph`), which
+/// fails comparing a null with a text value (an unnamed error its client
+/// reports as `INVALID_REQUEST`), so no request of it exists to match; the
 /// core leaves the rows with a null key out and says so (P1B-40, approved
 /// by the owner). `None` where nothing is left out: keys reached that are
 /// all null sort, as one null alone does (measured on the reference at
-/// b413e9ad), and a null integer or float key sorts.
+/// b413e9ad), and a null integer, float or decimal key sorts (a decimal
+/// since `main`'s eb6c68eb, which reads it as an integer or a float: the
+/// reference keeps such a row as it keeps its integer twin's, T2.0c).
 fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<bool>>, CoreError> {
     let column = named(frame, key)?;
     let unsortable = matches!(
@@ -665,8 +666,6 @@ fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<
         arrow_schema::DataType::Utf8
             | arrow_schema::DataType::LargeUtf8
             | arrow_schema::DataType::Utf8View
-            | arrow_schema::DataType::Decimal128(_, _)
-            | arrow_schema::DataType::Decimal256(_, _)
     );
     let nulls = column.null_count();
     if !unsortable || nulls == 0 || nulls == column.len() {
@@ -756,11 +755,12 @@ mod null_key_tests {
         let decimal = arrow_array::Decimal128Array::from(vec![Some(1), None])
             .with_precision_and_scale(18, 0)
             .unwrap();
+        // A decimal key with a null sorts since eb6c68eb, as an integer
+        // key with a null does, and is read.
         assert_eq!(
             null_keys_beside_values(&frame(Arc::new(decimal)), "k").unwrap(),
-            Some(vec![true, false])
+            None
         );
-        // An integer key with a null sorts, and is read.
         let ints = frame(Arc::new(Int64Array::from(vec![Some(1), None])));
         assert_eq!(null_keys_beside_values(&ints, "k").unwrap(), None);
     }
