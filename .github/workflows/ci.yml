@@ -363,7 +363,19 @@ jobs:
           key: duckdb-extensions-v1.5.6-icu-json-${{ runner.os }}-${{ runner.arch }}
       # The test kit's clippy, here on the DuckDB build this job makes (H3).
       - run: cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings
+      # Python, for the contract loader (contract/runners/databases.py),
+      # which loads a case's tables into SQLite for sdm-contract-run
+      # --database sqlite in the tests below (T2.2), and for the steps after
+      # them: DuckDB at the reference's version and pyarrow at the
+      # reference cell's, as the contract jobs pin them, with what the
+      # runner reads the bases with.
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install duckdb==1.5.6 pyarrow==25.0.1 pyyaml jsonschema
       - run: cargo test --workspace --locked
+        env:
+          SDM_PYTHON: python
       # The pure-Rust host over the contract cases, its observations compared
       # with the cases' expectations and reference observations (T1.10;
       # T1.18 moves this to the checkpoint's comparator), from T1.11e under
@@ -377,9 +389,6 @@ jobs:
       - run: |
           cargo tree -e normal -p sdm-testkit --locked > ../testkit-tree.txt
           ! grep -w pyo3 ../testkit-tree.txt
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.12'
       # On a phase branch and its lanes, and on the epic branch (T2.0), the
       # gate step below runs this comparison with the checkpoint's
       # comparator, each baselined case's outcome against its effective
