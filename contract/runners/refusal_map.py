@@ -410,7 +410,8 @@ def agree(pin: Any, observed: dict[str, dict[str, str]]) -> list[str]:
 
 def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
     r"""The probe's edits to the schema, in order: the case format's two,
-    and a probe's own ``set_primary_key`` and ``set_relationships``."""
+    ``set_stype`` (as ``run_python.py`` applies it, T2.0c), and a probe's
+    own ``set_primary_key`` and ``set_relationships``."""
     from sdm_client import Relationship
 
     for edit in edits:
@@ -421,6 +422,8 @@ def _edit(schema: Any, edits: list[dict[str, Any]]) -> None:
             del schema[edit['table']][edit['column']]
         elif op == 'set_primary_key':
             schema[edit['table']].primary_key = edit['column']
+        elif op == 'set_stype':
+            schema[edit['table']][edit['column']].stype = edit['stype']
         elif op == 'set_relationships':
             schema.relationships = [
                 Relationship(**link) for link in edit['relationships']
