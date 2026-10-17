@@ -751,13 +751,13 @@
     },
     {
       "site": "rule:target_type",
-      "why": "a decimal static target",
+      "why": "a sum of a UBIGINT column whose values pass int64 (a decimal static target, the first probe, is answered since T2.0c)",
       "input": {
         "base": "shop",
         "setup": [
-          "ALTER TABLE users ALTER age TYPE DECIMAL(10,2)"
+          "CREATE OR REPLACE TABLE orders AS SELECT *, (9223372036854775808 + order_id)::UBIGINT AS big FROM orders"
         ],
-        "pql": "PREDICT users.age FOR EACH users.user_id",
+        "pql": "PREDICT SUM(orders.big, 0, 30, days) FOR EACH users.user_id",
         "materialize": {
           "indices": [
             0,
