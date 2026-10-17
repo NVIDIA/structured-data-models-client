@@ -44,3 +44,4 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
   The S0 cases run on SQLite and Postgres too, and the recorder records all of them (orchestrator's decision).
 - rust-host's marker (`sdm-contract-run --providers`) is read by no CI step yet: rust-host runs no SQLite or Postgres pass before T2.2b and T2.3b, and the `ci` step that reads it is T2.1c's.
 - Fix 2 (round 2, Codex): the census records each probe against its intended site and claims no reach (stop rule); the loader reads lost types from DuckDB's type tree, so a field named `BIT` is a name, and refuses a NUL inside a map's or union's text on Postgres before COPY.
+- Fix 3 (round 2, Claude): `phase_end.sh`'s locked gate run, the slice gate before the one-shot held-out run, passes `--wheel-run` with its CI run, as `final_gate.sh` does, so both hold temporary register entries; a hand run of `--locked 2a` without it, the gate's own controls among them, does not.

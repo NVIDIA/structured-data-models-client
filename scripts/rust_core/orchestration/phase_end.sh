@@ -71,7 +71,9 @@
 # rerun after a fix resumes at the failed step and never repeats a one-shot):
 #   0 preflight  local reads, git fetch, gh read-only probes
 #   1 build      the local client wheel -> every cell; CI's native wheel
-#   2 evidence   gate.sh --locked HALF --out OBS in the reference cell,
+#   2 evidence   gate.sh --locked HALF --wheel-run RUN --out OBS in the
+#                reference cell (--wheel-run makes it the slice gate's run,
+#                which holds temporary register entries, T2.1a fix 3),
 #                python-core and python-old in the other cells, cargo tree,
 #                tokei; then evidence.py into a scratch dir WITHOUT the
 #                held-out bundle, so a refused input shows before the one shot
@@ -397,7 +399,7 @@ if [ "$UNTIL" -ge 2 ] && begin 2 evidence; then
   run "the evidence worktree is at SHA" -- at_sha "$EVW"
   run "gate --locked $HALF in ${CELL_NAMES[0]:-the reference cell}, observations kept (the gate's temp dirs under \$WORK/tmp)" -- \
     bash -c "set -o pipefail; cd '$EVW' && TMPDIR='$GTMP' PYTHON='$CELL_REF_PY' scripts/rust_core/gate.sh --base '$BASE' \
-      --run python-core,python-old,rust-host --locked '$HALF' --out '$OBS' 2>&1 | tee '$OBS/gate-$HALF.log'"
+      --run python-core,python-old,rust-host --locked '$HALF' --wheel-run '$RUN' --out '$OBS' 2>&1 | tee '$OBS/gate-$HALF.log'"
   run "the gate's evidence file says $HALF passed for SHA" -- python3 -I -c '
 import json, sys; j = json.load(open(sys.argv[1])); h = j["halves"][sys.argv[3]]
 assert j["sha"] == sys.argv[2], j["sha"]; assert h["passed"] is True, h["checks"]

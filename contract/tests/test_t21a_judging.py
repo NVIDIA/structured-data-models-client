@@ -136,3 +136,22 @@ def test_an_exclusion_that_leaves_no_database_out_is_refused(
             assert 'not a case' in str(failure)
             loaded = False
         assert loaded is taken, named
+
+
+def test_the_phase_end_gate_run_holds_temporary_entries() -> None:
+    r"""Fix 3 (round 2's P2-1): phase_end.sh's locked gate run, the slice
+    gate before the one-shot held-out run, passes ``--wheel-run`` with its
+    CI run, so gate.sh's own block hands the ratchet ``--locked`` there, as
+    for final_gate.sh's runs; without it, the run would not hold them."""
+    import re
+
+    for script in ('phase_end.sh', 'final_gate.sh'):
+        text = (ROOT / 'scripts/rust_core/orchestration' / script).read_text()
+        calls = re.findall(
+            r'scripts/rust_core/gate\.sh(?:[^\n]*\\\n)*[^\n]*', text
+        )
+        locked = [call for call in calls if '--locked' in call]
+        assert locked, script
+        for call in locked:
+            assert re.search(r'--wheel-run \S+', call), (script, call)
+    assert _temporary_flag('2a', '39041748123') == '--locked'

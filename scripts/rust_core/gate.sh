@@ -721,7 +721,7 @@ with=()
 for file in "${given[@]+"${given[@]}"}"; do with+=(--observations "$file"); done
 # The temporary-approval rule (T2.1a fix 1): the slice gate's locked run
 # (a half of Phase 2 or later, run on the candidate's CI wheels, which
-# --wheel-run names, as final_gate.sh runs it) fails while an approved
+# --wheel-run names, as final_gate.sh and phase_end.sh run it) fails while an approved
 # entry cites a temporary decision row (ratchet.py --locked); Phase 1's
 # halves and a locked run before the slice gate are judged as before,
 # since those entries stand until their packages land.
