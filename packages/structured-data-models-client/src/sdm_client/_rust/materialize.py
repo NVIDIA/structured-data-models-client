@@ -58,7 +58,8 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
-from sdm_client._rust.providers import for_source
+from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers.sqlite import SqliteProvider
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -252,7 +253,7 @@ def gather(
     schema = materializer.schema
     anchor = options.get('anchor_time')
     described, held = description(schema)
-    choice, provider = for_source(schema.source)
+    choice, provider = _provider(schema.source)
     operation = {
         'op': 'materialize',
         'provider': choice,
@@ -323,3 +324,12 @@ def gather(
             for step in state['forecast']
         ]
     return (payload,), kept
+
+
+def _provider(source: Any) -> tuple[dict[str, Any], Any]:
+    r"""The provider choice a run over ``source`` names, and the provider
+    answering its fetches: its backend's built-in SQL dialect, DuckDB's or,
+    from T2.2, SQLite's, on its connection."""
+    backend = source.backend
+    made = SqliteProvider if backend == 'sqlite' else DuckDBProvider
+    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

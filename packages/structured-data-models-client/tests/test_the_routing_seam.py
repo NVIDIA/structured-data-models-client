@@ -93,13 +93,18 @@ def test_every_core_path_of_the_manifest_is_routed_and_every_default_is_old() ->
     # S0 and, from T1.11b, a DuckDB source's Schema.from_source with no
     # tables named (with tables named from T1.24), from T1.11c, materialize
     # with indices over a DuckDB source's schema, and from T1.11d, predict
-    # of a request materialized over one, have core routes.
+    # of a request materialized over one, have core routes; from T2.2 the
+    # same calls over a SQLite source.
     assert _routing.CORE_ROUTED == set(
         _routing.S0
         + _routing.FROM_SOURCE_DUCKDB
         + _routing.FROM_SOURCE_DUCKDB_TABLES
         + _routing.MATERIALIZE_DUCKDB
         + _routing.PREDICT_DUCKDB
+        + _routing.FROM_SOURCE_SQLITE
+        + _routing.FROM_SOURCE_SQLITE_TABLES
+        + _routing.MATERIALIZE_SQLITE
+        + _routing.PREDICT_SQLITE
     )
     assert set(_routing.CORE_ROUTED) <= set(core)
     assert _routing.route(_routing.S0) == 'old'
@@ -163,10 +168,11 @@ def test_the_route_is_read_at_every_call(
         (f'{CORE},nope', 'nope'),
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
-        # A core path with no core route in this build.
+        # A core path with no core route in this build (SQLite's has one
+        # from T2.2).
         (
-            'client.predict/regression/sqlite',
-            'client.predict/regression/sqlite',
+            'client.predict/regression/postgres',
+            'client.predict/regression/postgres',
         ),
     ],
 )
