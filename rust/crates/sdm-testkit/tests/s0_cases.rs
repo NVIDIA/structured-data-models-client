@@ -201,9 +201,14 @@ fn scratch(name: &str) -> PathBuf {
 
 /// Loads `case` written to a file: the loader's error, if any.
 fn load_error(name: &str, case: &serde_json::Value) -> Option<String> {
+    load_text_error(name, &serde_json::to_string(case).unwrap())
+}
+
+/// [`load_error`] of a case given as its file's text.
+fn load_text_error(name: &str, case: &str) -> Option<String> {
     let directory = scratch(name);
     let path = directory.join("case.json");
-    std::fs::write(&path, serde_json::to_vec(case).unwrap()).unwrap();
+    std::fs::write(&path, case).unwrap();
     let error = case::load(&[path]).err().map(|error| error.to_string());
     std::fs::remove_dir_all(&directory).unwrap();
     error
@@ -257,7 +262,41 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
     )
     .unwrap();
     assert_eq!(load_error("adventureworks", &case), None);
+    // Each change's value is set as the file writes it: a placeholder goes
+    // in, and the value's own text replaces it, since a JSON value read
+    // into `serde_json::Value` loses an integer past 2**64 (T2.1a's
+    // candidates).
+    #[derive(serde::Deserialize)]
+    struct Value<'a> {
+        #[serde(borrow)]
+        value: &'a serde_json::value::RawValue,
+    }
+    let text = std::fs::read_to_string(cases_dir().join("../tests/malformed-cases.json")).unwrap();
+    #[derive(serde::Deserialize)]
+    struct Lists<'a> {
+        #[serde(borrow)]
+        refused: Vec<Value<'a>>,
+        #[serde(borrow)]
+        accepted: Vec<Value<'a>>,
+    }
+    let raw: Lists = serde_json::from_str(&text).unwrap();
+    let raw_value = |change: &serde_json::Value| {
+        let lists = [&listed["refused"], &listed["accepted"]];
+        let raws = [&raw.refused, &raw.accepted];
+        for (list, raws) in lists.into_iter().zip(raws) {
+            if let Some(at) = list
+                .as_array()
+                .unwrap()
+                .iter()
+                .position(|item| std::ptr::eq(item, change))
+            {
+                return raws[at].value.get().to_owned();
+            }
+        }
+        panic!("{} is not a listed change", change["why"]);
+    };
     let changed = |change: &serde_json::Value| {
+        const PLACEHOLDER: &str = "\u{1}t21a-the-value\u{1}";
         let mut changed = case.clone();
         let path = change["path"].as_array().unwrap();
         let mut at = &mut changed;
@@ -267,14 +306,17 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
                 _ => &mut at[key.as_u64().unwrap() as usize],
             };
         }
-        *at = change["value"].clone();
-        changed
+        *at = serde_json::Value::String(PLACEHOLDER.to_owned());
+        let placeholder = serde_json::to_string(PLACEHOLDER).unwrap();
+        let text = serde_json::to_string(&changed).unwrap();
+        assert_eq!(text.matches(&placeholder).count(), 1);
+        text.replace(&placeholder, &raw_value(change))
     };
     let refused = listed["refused"].as_array().unwrap();
     assert!(refused.len() >= 54);
     for change in refused {
         assert!(
-            load_error("malformed", &changed(change)).is_some(),
+            load_text_error("malformed", &changed(change)).is_some(),
             "{}",
             change["why"]
         );
@@ -296,11 +338,60 @@ fn the_malformed_edits_and_relationships_the_python_loader_refuses_are_refused()
     }
     for change in listed["accepted"].as_array().unwrap() {
         assert_eq!(
-            load_error("accepted", &changed(change)),
+            load_text_error("accepted", &changed(change)),
             None,
             "{}",
             change["why"]
         );
+    }
+}
+
+/// `databases` and `exclusion` come together (`dependentRequired`), which a
+/// one-path change of `malformed-cases.json` cannot set; the Python
+/// loader's twin is `tests/test_t21a_case_format.py` (T2.1a).
+#[test]
+fn databases_come_only_with_their_exclusion() {
+    let with = |pairs: &[(&str, serde_json::Value)]| {
+        let mut case = accepted();
+        for (key, value) in pairs {
+            case[*key] = value.clone();
+        }
+        case
+    };
+    let narrowed = serde_json::json!(["duckdb", "sqlite"]);
+    let row = serde_json::json!("KO2-19");
+    let both = with(&[("databases", narrowed.clone()), ("exclusion", row.clone())]);
+    assert_eq!(load_error("both", &both), None);
+    let directory = scratch("narrowed");
+    let path = directory.join("case.json");
+    std::fs::write(&path, serde_json::to_vec(&both).unwrap()).unwrap();
+    let [loaded] = <[_; 1]>::try_from(case::load(&[path]).unwrap()).unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+    assert_eq!(
+        loaded.case.databases(),
+        [case::Database::Duckdb, case::Database::Sqlite]
+    );
+    assert_eq!(
+        case::load(&[cases_dir()]).unwrap()[0].case.databases(),
+        case::Database::ALL
+    );
+    for alone in [
+        with(&[("databases", narrowed.clone())]),
+        with(&[("exclusion", row.clone())]),
+    ] {
+        assert!(load_error("alone", &alone).is_some());
+    }
+    for (databases, exclusion) in [
+        (serde_json::json!([]), row.clone()),
+        (serde_json::json!(["duckdb", "duckdb"]), row.clone()),
+        (serde_json::json!(["duckdb", "oracle"]), row.clone()),
+        (serde_json::json!(["DuckDB"]), row.clone()),
+        (serde_json::json!("duckdb"), row.clone()),
+        (narrowed.clone(), serde_json::json!("the owner said so")),
+        (narrowed.clone(), serde_json::json!("KO2-")),
+    ] {
+        let case = with(&[("databases", databases), ("exclusion", exclusion)]);
+        assert!(load_error("refused", &case).is_some(), "{case}");
     }
 }
 

@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -814,6 +814,107 @@
           }
         ]
       }
+    },
+    {
+      "why": "candidates that are not a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": 7
+    },
+    {
+      "why": "candidates as one text, not a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": "7"
+    },
+    {
+      "why": "a candidate written with a fraction",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        1,
+        1.0
+      ]
+    },
+    {
+      "why": "a candidate that is a boolean",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        true
+      ]
+    },
+    {
+      "why": "a candidate that is null",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        null
+      ]
+    },
+    {
+      "why": "a candidate that is a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "why": "top_k as text",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": "3"
+    },
+    {
+      "why": "top_k written with a fraction",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 3.0
+    },
+    {
+      "why": "top_k as a boolean",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": true
+    },
+    {
+      "why": "top_k null",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": null
     }
   ],
   "accepted": [
@@ -987,6 +1088,49 @@
         "anchor_time": null,
         "seed": null
       }
+    },
+    {
+      "why": "candidates of integers, one past 2**64 read without loss",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        1,
+        2,
+        123456789012345678901234567890
+      ]
+    },
+    {
+      "why": "candidates of text keys",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "why": "top_k of 3",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 3
+    },
+    {
+      "why": "top_k of 0, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 0
     }
   ],
   "omitted": [

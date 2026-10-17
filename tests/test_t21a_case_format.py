@@ -42,10 +42,6 @@ ROOT = Path(__file__).resolve().parents[1]
 MALFORMED = ROOT / 'contract/tests/malformed-cases.json'
 DECISIONS = ROOT / 'docs/design/rust-core/phase-2/decisions.md'
 
-PENDING = pytest.mark.xfail(
-    reason="T2.1a: the case format's database axis, candidates and top_k",
-    strict=True,
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -231,7 +227,6 @@ def test_a_malformed_new_field_is_refused(
     assert isinstance(found, str) and 'not a case' in found, change['why']
 
 
-@PENDING
 @pytest.mark.parametrize('change', ACCEPTED, ids=[c['why'] for c in ACCEPTED])
 def test_a_well_formed_new_field_is_taken(
     change: dict[str, Any], tmp_path: Path
@@ -241,7 +236,6 @@ def test_a_well_formed_new_field_is_taken(
     assert not isinstance(found, str), found
 
 
-@PENDING
 def test_databases_with_their_exclusion_are_taken(tmp_path: Path) -> None:
     r"""Exit: a case may run on fewer databases, under an exclusion."""
     found = _loads({**_base(), **EXCLUDED}, tmp_path)
@@ -250,7 +244,6 @@ def test_databases_with_their_exclusion_are_taken(tmp_path: Path) -> None:
     assert RUNNER.case_databases(case) == ('duckdb', 'sqlite')
 
 
-@PENDING
 def test_a_case_without_databases_runs_on_all_three(tmp_path: Path) -> None:
     r"""Exit: every case runs on DuckDB, SQLite and Postgres unless its file
     says otherwise."""
@@ -260,7 +253,6 @@ def test_a_case_without_databases_runs_on_all_three(tmp_path: Path) -> None:
     assert RUNNER.case_databases(case) == DATABASES
 
 
-@PENDING
 @pytest.mark.parametrize('key', ['databases', 'exclusion'])
 def test_databases_and_exclusion_come_together(
     key: str, tmp_path: Path
@@ -276,7 +268,6 @@ def test_databases_and_exclusion_come_together(
     assert not isinstance(_loads({**_base(), **EXCLUDED}, tmp_path), str)
 
 
-@PENDING
 def test_the_vectors_are_in_the_shared_file() -> None:
     r"""Exit: the vectors are in ``malformed-cases.json``, which both loaders
     run (``sdm-testkit``'s ``tests/s0_cases.rs`` and

@@ -90,6 +90,11 @@ EARLIER_PINS = {
     ('3.10', '2.2.0', '14.0.1', '1.26.4'): 'floor-pandas2.2',
 }
 
+#: The databases every case runs on unless its file says otherwise (design
+#: choice 2, KO2-19), in this order. DuckDB's observations keep the bare
+#: case ID; the others are keyed ``<case>@<database>``.
+DATABASES = ('duckdb', 'sqlite', 'postgres')
+
 #: The runtime cells (design, "Runtime cells"): Python, pandas, pyarrow and
 #: NumPy versions. An environment with exactly one's versions is that cell.
 CELLS = {
@@ -137,16 +142,28 @@ def _invalid(validate: Any, document: Any) -> str | None:
 
 
 def _indices(given: dict[str, Any]) -> str | None:
-    r"""An entity key is a JSON integer literal of any size, or a string.
+    r"""An entity key is a JSON integer literal of any size, or a string,
+    in ``indices`` and ``candidates`` alike; ``top_k`` is an integer.
 
     JSON Schema counts ``1.0`` as an integer; ``json`` reads it as a float,
     and a bool is no index either, so the type read is checked too, as
     sdm-testkit's loader refuses any number with a fraction or exponent.
     """
-    for position, value in enumerate(given['materialize']['indices']):
-        if type(value) not in (int, str):
-            return f'input/materialize/indices/{position} is not an integer'
+    spec = given['materialize']
+    for key in ('indices', 'candidates'):
+        for position, value in enumerate(spec.get(key, ())):
+            if type(value) not in (int, str):
+                return f'input/materialize/{key}/{position} is not an integer'
+    if 'top_k' in spec and type(spec['top_k']) is not int:
+        return 'input/materialize/top_k is not an integer'
     return None
+
+
+def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
+    r"""The databases a loaded case runs on, in :data:`DATABASES` order:
+    all three unless its ``databases`` (with its exclusion) narrows them."""
+    named = case.get('databases', DATABASES)
+    return tuple(database for database in DATABASES if database in named)
 
 
 def digest(data: bytes) -> str:
@@ -1838,6 +1855,10 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         arguments['anchor_time'] = pd.Timestamp(spec['anchor_time'])
     if 'inference_config' in spec:
         arguments['inference_config'] = copy.deepcopy(spec['inference_config'])
+    if 'candidates' in spec:
+        arguments['candidates'] = list(spec['candidates'])
+    if 'top_k' in spec:
+        arguments['top_k'] = spec['top_k']
     return arguments
 
 

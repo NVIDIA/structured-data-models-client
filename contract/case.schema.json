@@ -6,6 +6,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "id", "status", "slice", "paths", "routes", "cells", "input", "until", "expect", "why", "source"],
+  "dependentRequired": {"databases": ["exclusion"], "exclusion": ["databases"]},
   "properties": {
     "format": {"const": "sdm-case/1"},
     "id": {"$ref": "#/$defs/id"},
@@ -14,6 +15,18 @@
       "enum": ["acceptance", "diagnostic"]
     },
     "slice": {"enum": ["S0", "S1", "S2", "S3"]},
+    "databases": {
+      "description": "The databases the case runs on, when not all three (design choice 2, KO2-19): absent, it runs on DuckDB, SQLite and Postgres. Only beside exclusion, the owner's approval for leaving the others out.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["duckdb", "sqlite", "postgres"]}
+    },
+    "exclusion": {
+      "description": "The decision row (KO<phase>-<n>) whose owner approval lets databases leave a database out; only beside databases.",
+      "type": "string",
+      "pattern": "^KO[0-9]+-[0-9]+$"
+    },
     "paths": {
       "description": "The scope-python.yaml paths this case covers.",
       "$ref": "#/$defs/path_ids"
@@ -241,7 +254,16 @@
         "indices": {"type": "array", "items": {"type": ["integer", "string"]}},
         "indices_as": {"const": "decimal"},
         "anchor_time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"},
-        "inference_config": {"type": "object", "minProperties": 1}
+        "inference_config": {"type": "object", "minProperties": 1},
+        "candidates": {
+          "description": "The rows a ranking is over (E153), each an entity key read as indices are: a JSON integer literal of any size or a string.",
+          "type": "array",
+          "items": {"type": ["integer", "string"]}
+        },
+        "top_k": {
+          "description": "How many of the candidates a ranking or forecast answers, a JSON integer written as one; a value the reference refuses (0) is the case's input.",
+          "type": "integer"
+        }
       }
     },
     "expect": {

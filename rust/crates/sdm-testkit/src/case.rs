@@ -34,6 +34,12 @@ pub struct Case {
     pub id: String,
     pub status: Status,
     pub slice: String,
+    /// The databases the case runs on when not all three (design choice
+    /// 2, KO2-19); only beside `exclusion`, the owner's decision row.
+    #[serde(default, deserialize_with = "some_databases")]
+    pub databases: Option<Vec<Database>>,
+    #[serde(default, deserialize_with = "some_text")]
+    pub exclusion: Option<String>,
     pub paths: Vec<String>,
     pub routes: Vec<String>,
     #[serde(default, deserialize_with = "present")]
@@ -50,6 +56,43 @@ pub struct Case {
     pub why: String,
     #[serde(deserialize_with = "text")]
     pub source: String,
+}
+
+/// A database the corpus runs on, in the order every case runs on them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Database {
+    Duckdb,
+    Sqlite,
+    Postgres,
+}
+
+impl Database {
+    /// Every database, in order: a case without `databases` runs on each.
+    pub const ALL: [Database; 3] = [Database::Duckdb, Database::Sqlite, Database::Postgres];
+
+    /// The name the case format and the observations' keys use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Database::Duckdb => "duckdb",
+            Database::Sqlite => "sqlite",
+            Database::Postgres => "postgres",
+        }
+    }
+}
+
+impl Case {
+    /// The databases the case runs on, in [`Database::ALL`]'s order.
+    pub fn databases(&self) -> Vec<Database> {
+        Database::ALL
+            .into_iter()
+            .filter(|database| {
+                self.databases
+                    .as_ref()
+                    .is_none_or(|named| named.contains(database))
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -262,6 +305,29 @@ fn some_text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String
     text(deserializer).map(Some)
 }
 
+/// `databases`, when given: at least one, none twice (`minItems`,
+/// `uniqueItems`).
+fn some_databases<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<Database>>, D::Error> {
+    let databases = Vec::<Database>::deserialize(deserializer)?;
+    let distinct: BTreeSet<Database> = databases.iter().copied().collect();
+    if databases.is_empty() || distinct.len() != databases.len() {
+        return Err(D::Error::custom(
+            "databases is empty or names a database twice",
+        ));
+    }
+    Ok(Some(databases))
+}
+
+/// Whether `text` names a decision row, `KO<phase>-<n>`.
+fn is_decision_row(text: &str) -> bool {
+    let numbers = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    text.strip_prefix("KO")
+        .and_then(|rest| rest.split_once('-'))
+        .is_some_and(|(phase, row)| numbers(phase) && numbers(row))
+}
+
 /// `input.setup`, when given: at least one statement, none empty, as the
 /// schema's `statements` says (`minItems`, `minLength`).
 fn some_statements<'de, D: Deserializer<'de>>(
@@ -356,6 +422,13 @@ pub struct Materialize {
     /// The inference options passed, kept as written, free-form (T1.21b).
     #[serde(default, deserialize_with = "some_options")]
     pub inference_config: Option<serde_json::Map<String, Value>>,
+    /// The rows a ranking is over, each read as an index is (E153).
+    #[serde(default, deserialize_with = "present")]
+    pub candidates: Option<Vec<Index>>,
+    /// A JSON integer, written as one; `0`, which the reference refuses, is
+    /// a case's input.
+    #[serde(default, deserialize_with = "present")]
+    pub top_k: Option<i64>,
 }
 
 /// One entity key: a JSON integer literal of any size, kept as its
@@ -582,6 +655,18 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
         })?;
         if case.format != FORMAT {
             bail!("{name}: not {FORMAT}");
+        }
+        // `dependentRequired`: a case leaves a database out only under the
+        // owner's exclusion, and an exclusion only leaves one out.
+        if case.databases.is_some() != case.exclusion.is_some() {
+            bail!("{name}: not a case: databases and exclusion come together");
+        }
+        if case
+            .exclusion
+            .as_deref()
+            .is_some_and(|row| !is_decision_row(row))
+        {
+            bail!("{name}: not a case: exclusion is not a decision row");
         }
         if !ids.insert(case.id.clone()) {
             bail!("{name}: case id {} repeats", case.id);
