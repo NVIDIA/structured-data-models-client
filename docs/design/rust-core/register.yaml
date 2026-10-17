@@ -6420,3 +6420,48 @@ entries:
     orchestrator: a refusal of input the reference accepts, outside E92's
     37 rules (KO2-28), found by the refusal census on Postgres (probe
     rule:seed_size, a seed of 10**38); the core's seed is 64-bit.
+
+- id: P2C-7
+  title: On Postgres four S0 boundary queries are refused at materialize by the core's not-yet target rules, until T2.10
+  kind: change
+  old_behavior: >-
+    The reference materializes s0.boundary.deepest, s0.boundary.digits-4300,
+    s0.boundary.escapes and s0.boundary.start-past-64kb on Postgres: each
+    query's target has a filter (deepest, digits-4300, start-past-64kb) or
+    is a condition (escapes).
+  new_behavior: >-
+    Off DuckDB every call a case makes runs on the core (T2.1d), so these
+    queries, which the core validates and accepts, reach its materialize,
+    which refuses them UNSUPPORTED_REQUEST at materialize under its
+    not-yet rules (E92's class): rule target_filter for deepest,
+    digits-4300 and start-past-64kb, rule condition for escapes. T2.10
+    (PQL targets: condition, target_filter) lifts both and retires this
+    entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source of
+    a query whose target has a filter or is a condition.
+  cases:
+  - s0.boundary.deepest
+  - s0.boundary.digits-4300
+  - s0.boundary.escapes
+  - s0.boundary.start-past-64kb
+  refs: [E92, T2.10]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
+  notes: >-
+    Approved under KO2-56's standing approval of a temporary entry naming
+    the package that retires it, relayed by the orchestrator; the
+    reviewers check this entry fits it. Temporary: it lapses when T2.10
+    lands, and the final gate fails while it remains. The rules were read
+    from the core's refusals (details rule), the same on DuckDB with the
+    materialize route forced; T2.2 registers the same four on SQLite.
+  case_outcomes:
+  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
