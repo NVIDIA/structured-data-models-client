@@ -706,11 +706,13 @@ def _approved_as_the_schema_allows(
 def test_a_reviewer_s_approval_holds_a_map_entry_only_where_the_reference_refuses() -> (
     None
 ):
-    # On the decimal map's own evidence: P1B-18 approved by a reviewer holds
-    # its entry, the reference refusing the case its probe hits; the same
-    # approval fails when the reference's answer is a success, when no
-    # probe hits the entry, and when someone else approved it.
-    document = _family_maps()['decimal']
+    # On the keys map's own evidence (the decimal map, which this test read
+    # until T2.0c, lists no refusal since exact decimals): its entry
+    # approved by a reviewer holds, the reference refusing the case its
+    # probe hits (key.uint64-above-int64-max); the same approval fails when
+    # the reference's answer is a success, when no probe hits the entry,
+    # and when someone else approved it.
+    document = _family_maps()['keys']
     [entry] = document['entries']
     reference = _reference_outcomes()
     approved = {'status': 'approved', 'approved_by': 'reviewer'}
@@ -742,12 +744,12 @@ def test_a_reviewer_s_approval_holds_a_map_entry_only_where_the_reference_refuse
             reference,
         )
     # Codex's round 2 repro: rust-host alone made to hit the entry on a
-    # case the reference answers with success (decimal.feature-38-0-wide)
-    # fails, whatever the other cases the entry is hit on.
-    assert reference['decimal.feature-38-0-wide']['result'] == 'success'
+    # case the reference answers with success (key.uint8) fails, whatever
+    # the other cases the entry is hit on.
+    assert reference['key.uint8']['result'] == 'success'
     rust_only = copy.deepcopy(document)
     for probe in rust_only['probes']:
-        if probe['id'] == 'decimal.feature-38-0-wide':
+        if probe['id'] == 'key.uint8':
             assert probe['python-core']['expect'] != entry['id']
             probe['rust-host']['expect'] = entry['id']
     assert not _approved_as_the_schema_allows(
@@ -1258,20 +1260,21 @@ def test_the_writer_s_script_refuses_an_owner_no_map_may_name(
     # T1.28b, is refused, the map left as it was and the run's map a draft.
     import subprocess
 
-    # From T1.28b the baseline family lists no refusal, so the decimal
-    # family's entry is changed.
-    document = _family_maps()['decimal']
+    # From T1.28b the baseline family lists no refusal, and from T2.0c's
+    # exact decimals the decimal family neither, so the keys family's entry
+    # is changed.
+    document = _family_maps()['keys']
     assert document['entries']
     changed = copy.deepcopy(document)
     changed['entries'][0]['owner'] = 'T1.28'
     assert refusal_map.shape(changed) == (
         'entries/0/owner is not a task a map may name'
     )
-    target = tmp_path / 'decimal.json'
+    target = tmp_path / 'keys.json'
     target.write_text(json.dumps(changed, indent=2) + '\n')
     before = target.read_text()
     evidence = tmp_path / 'observed.json'
-    evidence.write_text(json.dumps({'decimal.json': _rust_run(document)}))
+    evidence.write_text(json.dumps({'keys.json': _rust_run(document)}))
     run = subprocess.run(
         [
             sys.executable,
@@ -1289,7 +1292,7 @@ def test_the_writer_s_script_refuses_an_owner_no_map_may_name(
     assert run.returncode != 0, run.stdout + run.stderr
     assert 'owner is not a task a map may name' in run.stdout
     assert target.read_text() == before
-    assert (tmp_path / 'decimal.json.draft').exists()
+    assert (tmp_path / 'keys.json.draft').exists()
     # A gap's owner too.
     gapped = copy.deepcopy(document)
     gapped['gaps'] = [{'input': 'x', 'contract': 'y', 'owner': 'T1.28'}]
@@ -1311,9 +1314,10 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     # Codex P2-2 (fix round 1): every probe succeeding on both hosts, the
     # writer drops every entry; the map it writes loads, holds both runs
     # and is written again unchanged, its probes and coverage kept.
-    # The decimal family, whose one entry is lifted (from T1.28b the
-    # baseline family lists none).
-    document = _family_maps()['decimal']
+    # The keys family, whose one entry is lifted here (from T1.28b the
+    # baseline family lists none, and from T2.0c's exact decimals the
+    # decimal family neither).
+    document = _family_maps()['keys']
     lifted = {
         runner: {
             probe['id']: refusal_map.success(probe[runner]['until'])
@@ -1334,9 +1338,9 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     written, report = refusal_map.write(
         document, _of(document), observe, lifted['rust-host']
     )
-    assert report == ['materialize/target_type: no probe hits it; dropped']
+    assert report == ['materialize/int64_range: no probe hits it; dropped']
     assert written['entries'] == [] and written['probes']
-    path = tmp_path / 'decimal.json'
+    path = tmp_path / 'keys.json'
     path.write_text(json.dumps(written))
     loaded = refusal_map.load(path)
     for runner in refusal_map.RUNNERS:
@@ -1349,17 +1353,15 @@ def test_a_family_all_of_whose_refusals_are_lifted_round_trips(
     # Still fail-closed: a refusal on the lifted map is one it does not
     # list, and a case left without its probe fails the binding.
     refused = copy.deepcopy(lifted['python-core'])
-    refused['decimal.target-38-18'] = {
+    refused['key.uint8'] = {
         'stage': 'materialize',
         'error': 'UnsupportedRequestError',
         'code': 'UNSUPPORTED_REQUEST',
         'operation': 'materialize',
-        'rule': 'static_target',
+        'rule': 'int64_range',
     }
     assert any(
-        failure.startswith(
-            'decimal.target-38-18: a refusal the map does not list'
-        )
+        failure.startswith('key.uint8: a refusal the map does not list')
         for failure in refusal_map.check(loaded, 'python-core', refused)
     )
     loaded['probes'] = loaded['probes'][1:]
