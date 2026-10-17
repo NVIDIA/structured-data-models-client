@@ -30,11 +30,16 @@
 //! expression named as the plan's relation ([`SEEDS`]; `P1 d:131`). The
 //! provider writes the key set's rows as a JSON array of rows, each row an
 //! array of its cells' texts in the key set's column order (null for a
-//! null), which Postgres's own input functions read: a key column in the
-//! joined table's declared type, through `jsonb_populate_record` over the
-//! table's row type, so a key joins in its own type whatever Arrow carried
-//! it (design choice 5, lesson 19; the reference casts to the type it read
-//! from the catalog); the batch as `bigint`; a seed time as `timestamp`.
+//! null), which Postgres's own input functions read ([`seed_cte`]): a
+//! number key as the Postgres type of its Arrow type, so the join compares
+//! the two keys as Postgres compares numbers of two types, exactly (an
+//! integer and a `numeric` meet when their values are equal, whatever
+//! their scales, and two `numeric` values float64 would merge stay
+//! apart; design choice 5, lesson 19, KO2-35); a text key in the joined
+//! column's own declared type, through `jsonb_populate_record` over the
+//! table's row type, so a `uuid`, an enum or a `varchar` key is compared
+//! as itself (the reference casts to the type it read from the catalog);
+//! the batch as `bigint`; a seed time as `timestamp`.
 
 use std::collections::BTreeSet;
 
@@ -102,7 +107,10 @@ fn from(request: &DataRequest, field: &str, relation: &Relation) -> Result<Strin
 /// name (`to_regclass` over the quoted parts), or null where the source
 /// holds no relation of that name.
 fn regclass(request: &DataRequest, field: &str, relation: &Relation) -> Result<String, CoreError> {
-    Ok(format!("to_regclass({})", text(&from(request, field, relation)?)))
+    Ok(format!(
+        "to_regclass({})",
+        text(&from(request, field, relation)?)
+    ))
 }
 
 /// What a Postgres source answers through this layer.
@@ -560,7 +568,7 @@ pub(crate) fn seed_value(seed: i128) -> f64 {
     let value = u64::from_be_bytes(digest);
     #[allow(
         clippy::cast_precision_loss,
-        reason = "Python's int-to-float conversion, rounded to the nearest double, as the reference computes it"
+        reason = "an integer to the nearest double, as the reference computes it"
     )]
     let (value, most) = (value as f64, u64::MAX as f64);
     2.0 * value / most - 1.0
@@ -620,11 +628,13 @@ fn seed_cte(
     for (position, column) in seeds.columns.iter().enumerate() {
         let cell = format!("r.value->>{position}");
         let read = if let Some(at) = seed_keys.iter().position(|k| *k == column.name) {
-            built.push(format!(
-                "{}, r.value->{position}",
-                text(&key[at]),
-            ));
-            format!("k.{}", identifier(&key[at]))
+            match key_type(&column.column_type) {
+                Some(kind) => format!("({cell})::{kind}"),
+                None => {
+                    built.push(format!("{}, r.value->{position}", text(&key[at])));
+                    format!("k.{}", identifier(&key[at]))
+                }
+            }
         } else if column.name == SEED_BATCH {
             format!("({cell})::bigint")
         } else {
@@ -643,19 +653,51 @@ fn seed_cte(
         };
         selects.push(format!("{read} AS {}", identifier(&column.name)));
     }
-    if built.len() != key.len() {
+    let carried = seeds
+        .columns
+        .iter()
+        .filter(|c| seed_keys.contains(&c.name))
+        .count();
+    if carried != key.len() {
         return Err(sdm_contract::data::refused(
             request,
             "seeds",
             "the seeds do not carry every key column",
         ));
     }
+    let typed = if built.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "\n  CROSS JOIN LATERAL jsonb_populate_record(NULL::{row_type}, jsonb_build_object({})) AS k",
+            built.join(", ")
+        )
+    };
     Ok(format!(
-        "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN LATERAL jsonb_populate_record(NULL::{row_type}, jsonb_build_object({built})) AS k\n)\n",
+        "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) AS r(value){typed}\n)\n",
         name = identifier(name),
         selects = selects.join(", "),
-        built = built.join(", "),
     ))
+}
+
+/// The Postgres type a seed key of `column_type` is read as, for a number,
+/// a boolean, a date, a time or bytes: the type of its own values, which
+/// Postgres compares with the joined key's by value; `None` for text and
+/// any other, read in the joined column's declared type ([`seed_cte`]).
+fn key_type(column_type: &sdm_contract::ColumnType) -> Option<&'static str> {
+    use sdm_contract::ColumnType as T;
+    Some(match column_type {
+        T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 => "bigint",
+        T::Uint64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
+        T::Float32 => "real",
+        T::Float64 => "double precision",
+        T::Bool => "boolean",
+        T::Date32 => "date",
+        T::Timestamp { zone: None, .. } => "timestamp",
+        T::Timestamp { zone: Some(_), .. } => "timestamptz",
+        T::Binary => "bytea",
+        _ => return None,
+    })
 }
 
 /// The condition joining the seeds to `table`'s `key`, each key column to
@@ -671,7 +713,10 @@ fn seed_join(key: &[String]) -> String {
 /// The table's columns asked for, each read from its alias and renamed to a
 /// position of its own (`c0`, `c1`, ...), so no source column's name meets
 /// a helper's inside the statement; the outer select names them back.
-fn positioned(request: &DataRequest, columns: &[String]) -> Result<Vec<(String, String)>, CoreError> {
+fn positioned(
+    request: &DataRequest,
+    columns: &[String],
+) -> Result<Vec<(String, String)>, CoreError> {
     if columns.is_empty() {
         return Err(sdm_contract::data::refused(
             request,
@@ -846,7 +891,10 @@ mod tests {
         // `_postgres_seed(42)` and `_postgres_seed(0)` as the reference's
         // Python computes them.
         assert_eq!(seed_value(42), -0.314_812_071_551_568_76);
-        assert_eq!(float_text(-0.314_812_071_551_568_76), "-0.31481207155156876");
+        assert_eq!(
+            float_text(-0.314_812_071_551_568_76),
+            "-0.31481207155156876"
+        );
         assert_eq!(float_text(1.0), "1.0");
     }
 
@@ -859,9 +907,6 @@ mod tests {
     #[test]
     fn a_table_named_as_the_seeds_is_stepped_past() {
         assert_eq!(seeds_for(&Relation::named("t")), SEEDS);
-        assert_eq!(
-            seeds_for(&Relation::named(SEEDS)),
-            format!("{SEEDS}_")
-        );
+        assert_eq!(seeds_for(&Relation::named(SEEDS)), format!("{SEEDS}_"));
     }
 }

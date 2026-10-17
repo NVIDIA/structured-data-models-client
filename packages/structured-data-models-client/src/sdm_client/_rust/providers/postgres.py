@@ -44,7 +44,7 @@ from collections.abc import Mapping
 from contextlib import nullcontext
 from typing import Any
 
-#: Rows per batch read from the driver; a larger result comes as several.
+#: Rows per Arrow batch; a larger result comes as several.
 BATCH_ROWS = 100_000
 
 #: The Arrow type of each Postgres type read as the driver gives it, by the
@@ -56,7 +56,9 @@ _SCALARS = {
     'int4': 'int32',
     'int8': 'int64',
     'oid': 'int64',
-    'float4': 'float32',
+    # Read as the reference reads it, a double of the value the server
+    # writes (its shortest text), never the float32 it holds.
+    'float4': 'float64',
     'float8': 'float64',
     'bytea': 'binary',
     'date': 'date32',
@@ -98,7 +100,9 @@ class PlanNotRun(Exception):
 class PostgresProvider:
     r"""Answers fetch steps on ``connection``, a psycopg connection."""
 
-    def __init__(self, connection: Any, *, batch_rows: int = BATCH_ROWS) -> None:
+    def __init__(
+        self, connection: Any, *, batch_rows: int = BATCH_ROWS
+    ) -> None:
         self._connection = connection
         self._batch_rows = batch_rows
 
@@ -131,7 +135,7 @@ class PostgresProvider:
         connection = self._connection
         with _own_transaction(connection), connection.cursor() as cursor:
             _read_as_the_server_writes(cursor)
-            for statement, text in zip(statements, bound):
+            for statement, text in zip(statements, bound, strict=True):
                 if text is None:
                     cursor.execute(statement['text'])
                 else:
@@ -234,22 +238,25 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
 
     description = cursor.description
     if description is None:
-        raise PlanNotRun("a plan whose last statement returns no rows")
+        raise PlanNotRun('a plan whose last statement returns no rows')
     types = [_arrow_type(column, connection) for column in description]
     schema = pa.schema(
-        [pa.field(column.name, kind) for column, kind in zip(description, types)]
+        [
+            pa.field(column.name, kind)
+            for column, kind in zip(description, types, strict=True)
+        ]
     )
+    # One read of every row, as the reference reads a result
+    # (``fetchall``), built into batches of at most ``batch_rows``.
+    rows = cursor.fetchall()
     batches = []
-    while True:
-        rows = cursor.fetchmany(batch_rows)
-        if not rows:
-            break
-        columns = list(zip(*rows))
+    for start in range(0, len(rows), batch_rows):
+        columns = list(zip(*rows[start : start + batch_rows], strict=True))
         batches.append(
             pa.record_batch(
                 [
                     _array(values, kind)
-                    for values, kind in zip(columns, types)
+                    for values, kind in zip(columns, types, strict=True)
                 ],
                 schema=schema,
             )
@@ -348,7 +355,7 @@ def key_set_json(table: Any) -> str:
         else:
             texts = pc.cast(column, pa.string()).to_pylist()
         columns.append(texts)
-    rows = [list(row) for row in zip(*columns)] if columns else []
+    rows = [list(row) for row in zip(*columns, strict=True)] if columns else []
     return json.dumps(rows, separators=(',', ':'), ensure_ascii=False)
 
 
