@@ -31,8 +31,8 @@ use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlPa
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, EditSchema, ForecastStep, Materialize, Operation, OperationResult, Predict,
-    ProfileSpec, QuerySchema, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
-    ValidateQuery,
+    ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestState, SamplerState, Seed,
+    SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -43,7 +43,8 @@ use serde_json::{Value, json};
 
 use crate::bases::Bases;
 use crate::case::{
-    Case, Database, DescribeSourceInput, MaterializeInput, PredictInput, ValidateQueryInput,
+    Case, CoreInputs, Database, DescribeSourceInput, Index, MaterializeInput, PredictInput, Until,
+    ValidateQueryInput,
 };
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
@@ -63,6 +64,10 @@ pub struct Observed {
     /// `materialize`'s request state, when it gave one: kept apart from
     /// the answer, which a later `predict` replaces.
     pub materialized: Option<Value>,
+    /// `validate_query`'s acceptance where the call went on past it (off
+    /// DuckDB, T2.1d): kept apart from the answer, which a later
+    /// `materialize` replaces, as python-core records both.
+    pub accepted: Option<bool>,
     pub answer: Answer,
     /// The core's warnings, in the order given, each its code and fields
     /// as the `warnings` control message carries them (T1.23): what the
@@ -226,11 +231,180 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         fetches: vec![],
         described: None,
         materialized: None,
+        accepted: None,
         answer,
         warnings: vec![],
         driver: None,
         edits: vec![],
     })
+}
+
+/// The query schema of `description`, as the core reads a description for
+/// a query (`sdm-core`'s materialize) and the Python host builds one from a
+/// schema it described: each table's columns with their data and semantic
+/// types, its key where it has one column, its time column, and each link
+/// its columns in order.
+fn query_schema(description: &SourceDescription) -> QuerySchema {
+    QuerySchema {
+        tables: description
+            .tables
+            .iter()
+            .map(|t| QueryTable {
+                name: t.name.clone(),
+                columns: t
+                    .columns
+                    .iter()
+                    .map(|c| QueryColumn {
+                        name: c.name.clone(),
+                        dtype: c.dtype,
+                        stype: c.stype,
+                    })
+                    .collect(),
+                primary_key: match t.primary_key.as_slice() {
+                    [one] => Some(one.clone()),
+                    _ => None,
+                },
+                time_column: t.time_column.clone(),
+                end_time_column: None,
+            })
+            .collect(),
+        links: description
+            .links
+            .iter()
+            .map(|link| {
+                let mut group = link.clone();
+                group.sort();
+                group
+            })
+            .collect(),
+    }
+}
+
+/// The days since 1970-01-01 of `date`, written `YYYY-MM-DD` (Howard
+/// Hinnant's `days_from_civil`); `None` for any other text or a day the
+/// month does not hold.
+fn days_of(date: &str) -> Option<i64> {
+    let parts: Vec<&str> = date.split('-').collect();
+    let [year, month, day] = parts.as_slice() else {
+        return None;
+    };
+    let digits = |text: &str, width: usize| {
+        (text.len() == width && text.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| text.parse::<i64>().ok())
+            .flatten()
+    };
+    let (year, month, day) = (digits(year, 4)?, digits(month, 2)?, digits(day, 2)?);
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let length = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    if !(1..=length).contains(&day) {
+        return None;
+    }
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146_097 + doe - 719_468)
+}
+
+/// The model every case's `predict` names (`core.predict.model`).
+const MODEL: &str = "kumo-relational";
+
+/// `case` with every call it makes through its `until` named in its core
+/// operations, on `dialect`'s SQL provider, as python-core makes them off
+/// DuckDB (T2.1d, `run_python.routes_on`), where a case routes on the core
+/// only the calls DuckDB lets it make (S0's validation, a source DuckDB
+/// refuses at `from_source`): each operation the case names, its provider
+/// on `dialect`; `describe_source` of every table with no key or time
+/// column given, keys checked, where the case names none; `materialize`
+/// with the case's entities and anchor time, the default seed, where the
+/// case names none and goes past `from_source`; and `predict` with the
+/// model every case names, where it goes to `predict`. Each derived as the
+/// recorders write a case's core inputs: an entity an `i64` where it holds
+/// one and its digits otherwise, a text one as text, a date anchor its
+/// midnight in nanoseconds. A call the case's input passes more than that
+/// to (tables named, decimal entities, options) is refused, as one this
+/// derivation does not write.
+pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
+    let mut case = case.clone();
+    let provider = json!({"provider": "sql", "dialect": dialect});
+    let rewrite = |given: &mut Value| {
+        if given == &json!({"provider": "sql", "dialect": "duckdb"}) {
+            *given = provider.clone();
+        }
+    };
+    let mut core = case.core.take().unwrap_or(CoreInputs {
+        validate_query: None,
+        describe_source: None,
+        materialize: None,
+        predict: None,
+    });
+    if let Some(spec) = core.describe_source.as_mut() {
+        rewrite(&mut spec.provider);
+    }
+    if let Some(spec) = core.materialize.as_mut() {
+        rewrite(&mut spec.provider);
+    }
+    let not_derived = |what: &str| anyhow!("{}: {what}, which no derivation writes", case.id);
+    if core.describe_source.is_none() {
+        if case.input.from_source.is_some() {
+            return Err(not_derived("from_source's arguments"));
+        }
+        core.describe_source = Some(DescribeSourceInput {
+            provider: provider.clone(),
+            source: json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
+            check_keys: true,
+        });
+    }
+    let given = &case.input.materialize;
+    if case.until != Until::FromSource && core.materialize.is_none() {
+        if given.indices_as.is_some()
+            || given.inference_config.is_some()
+            || given.candidates.is_some()
+            || given.top_k.is_some()
+        {
+            return Err(not_derived("materialize's options"));
+        }
+        let indices = given
+            .indices
+            .iter()
+            .map(|index| match index {
+                Index::Integer(digits) if digits.parse::<i64>().is_ok() => {
+                    json!({"t": "i64", "v": digits})
+                }
+                Index::Integer(digits) | Index::Text(digits) => json!({"t": "utf8", "v": digits}),
+            })
+            .collect();
+        let anchor_time = match &given.anchor_time {
+            None => Value::Null,
+            Some(date) => {
+                let days =
+                    days_of(date).ok_or_else(|| not_derived("an anchor time other than a date"))?;
+                let nanos = i128::from(days) * 86_400 * 1_000_000_000;
+                json!({"t": "ts", "v": nanos.to_string(), "unit": "ns", "zone": null})
+            }
+        };
+        core.materialize = Some(MaterializeInput {
+            provider: provider.clone(),
+            indices,
+            anchor_time,
+            seed: None,
+        });
+    }
+    if case.until == Until::Predict && core.predict.is_none() {
+        core.predict = Some(PredictInput {
+            model: MODEL.to_owned(),
+        });
+    }
+    case.core = Some(core);
+    Ok(case)
 }
 
 /// S0's `validate_query` with the case's query, schema and profile: what
@@ -317,6 +491,9 @@ impl Source<'_> {
 /// the statements the recording names, each with this host's read of the
 /// answer replayed.
 pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
+    // Every call the case makes through its until, as python-core makes
+    // them off DuckDB, whose fetches the recording holds (T2.1d).
+    let case = &through_until(case, Database::Postgres.name())?;
     let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
         return run_edited(case, &Bases::default(), &[]);
     };
@@ -517,6 +694,11 @@ fn describe_on(
         )
     })?;
     let provider = source.provider(provider);
+    // Off DuckDB a case runs every call through its `until` (T2.1d).
+    let off_duckdb = !matches!(
+        &provider,
+        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+    );
     let spec_given: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
         anyhow!(
             "{}: core.describe_source.source is not a SourceSpec",
@@ -548,6 +730,7 @@ fn describe_on(
         fetches: Vec::new(),
         described: None,
         materialized: None,
+        accepted: None,
         answer: Answer::Validated(false),
         warnings: Vec::new(),
         driver: None,
@@ -591,7 +774,31 @@ fn describe_on(
             }
         }
     }
+    // Off DuckDB a case runs every call through its `until` (T2.1d,
+    // [`through_until`]): a query the case validates is validated on the
+    // schema this host described, as the Python host builds its query
+    // schema from the source's, then materialized when accepted.
+    if off_duckdb
+        && let Some(validating) = case.core.as_ref().and_then(|c| c.validate_query.as_ref())
+    {
+        let described = ValidateQueryInput {
+            profile: validating.profile.clone(),
+            schema: serde_json::to_value(query_schema(&schema))?,
+        };
+        let (input, answer) = validate(case, &described)?;
+        observed.operations.push("validate_query".into());
+        observed.inputs.push(input);
+        let accepted = matches!(answer, Answer::Validated(true));
+        observed.answer = answer;
+        if !accepted {
+            return Ok(observed);
+        }
+        observed.accepted = Some(true);
+    }
     let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
+        if off_duckdb {
+            return Ok(observed);
+        }
         // A query the client refuses before the core's materialize: the
         // client validates it first, on S0's route by the core's
         // validate_query (design, "Routing seam"), as the reference refuses
@@ -1166,6 +1373,7 @@ pub fn materialize_repeatedly_holding(
             fetches: Vec::new(),
             described: None,
             materialized: None,
+            accepted: None,
             answer: Answer::Validated(false),
             warnings: Vec::new(),
             driver: None,
