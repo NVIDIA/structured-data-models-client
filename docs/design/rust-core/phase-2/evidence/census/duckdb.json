@@ -1,7 +1,7 @@
 {
   "commit": {
     "clean": true,
-    "sha": "b9b9e7d0c1fef2f67b33fb7fc5060e344b7e8914"
+    "sha": "828ccaf610aaffab728a04b5f7c9e016abfb8f66"
   },
   "database": "duckdb",
   "departs": [
@@ -34,7 +34,6 @@
   "probes": [
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -57,12 +56,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:aggregation"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -90,12 +87,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:anchor_entity"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -123,12 +118,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:assuming"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -156,12 +149,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:column_type"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -183,12 +174,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:composite_key"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -210,12 +199,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:condition"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -238,12 +225,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:condition_value"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -271,12 +256,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:context_anchor_time"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -304,12 +287,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:empty_table"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -331,12 +312,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:entity_filter"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -358,12 +337,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:entity_ids"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -386,12 +363,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:entity_key"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -413,12 +388,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:evaluate"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -440,12 +413,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:exclude_cols_dict"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -467,12 +438,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:explain"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -494,12 +463,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:float_nan"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -521,12 +488,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:float_signed_zero"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -549,12 +514,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:inference_config_text"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -565,12 +528,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:instance_id_type"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -581,12 +542,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rule:key_name_order"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -608,12 +567,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:key_tie"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -642,12 +599,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rule:key_type"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -669,12 +624,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:lag_timesteps"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -696,12 +649,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:logical_target"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -723,12 +674,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:max_pq_iterations"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -759,12 +708,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:model"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -775,12 +722,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:null_order"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -802,12 +747,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:num_hops"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -829,12 +772,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:num_neighbors"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -857,12 +798,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:open_window"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -884,12 +823,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:parent_table"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -917,12 +854,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:prediction_statistic"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -933,12 +868,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:prediction_type"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -961,12 +894,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:problem_type"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -977,12 +908,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:response_field"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1004,12 +933,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:return_embeddings"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1038,12 +965,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:seed_size"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1066,12 +991,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:static_target"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1093,12 +1016,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:target_filter"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1121,12 +1042,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:target_stype"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1148,12 +1067,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:target_transform_null"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1181,12 +1098,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:target_type"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "PROVIDER_ERROR",
@@ -1214,12 +1129,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:text_time"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "PROVIDER_ERROR",
@@ -1247,12 +1160,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rule:text_time_order"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1263,12 +1174,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:text_time_rules"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1296,12 +1205,10 @@
           "stage": "from_source"
         }
       },
-      "reached": true,
       "site": "rule:text_time_zones"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1312,12 +1219,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:text_times"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1328,12 +1233,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rule:time_type"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1355,12 +1258,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:top_k"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1382,12 +1283,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:unseeded"
     },
     {
       "departs": true,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1409,12 +1308,10 @@
           "stage": "materialize"
         }
       },
-      "reached": true,
       "site": "rule:use_prediction_time"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1442,12 +1339,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rule:wire_dtype"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1475,12 +1370,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1508,12 +1401,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::unsupported_type#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1524,12 +1415,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-host/src/admission.rs::admitted_type::admission::unsupported#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1557,12 +1446,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-host/src/admission.rs::admitted_field::admission::unsupported#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_TYPE",
@@ -1590,12 +1477,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1626,12 +1511,10 @@
           "stage": "predict"
         }
       },
-      "reached": true,
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1642,12 +1525,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1658,12 +1539,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1691,12 +1570,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1725,12 +1602,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1763,12 +1638,10 @@
           "stage": "predict"
         }
       },
-      "reached": true,
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
@@ -1801,12 +1674,10 @@
           "stage": "predict"
         }
       },
-      "reached": true,
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1817,12 +1688,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4"
     },
     {
       "departs": false,
-      "identified": true,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1833,12 +1702,10 @@
           "stage": "predict"
         }
       },
-      "reached": false,
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1861,12 +1728,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1889,12 +1754,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "code": "INVALID_REQUEST",
@@ -1921,12 +1784,10 @@
           "stage": "materialize"
         }
       },
-      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1937,12 +1798,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1"
     },
     {
       "departs": false,
-      "identified": false,
       "outcomes": {
         "python-core": {
           "result": "success",
@@ -1953,11 +1812,10 @@
           "stage": "from_source"
         }
       },
-      "reached": false,
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2"
     }
   ],
-  "reached": 33,
+  "reachability": "unmeasured: a probe names the site it was written for, and an outcome does not show which site produced it",
   "real_data": "not run: the public calls over the real datasets run at each lane's first landing (design, choice 10)",
   "reference": {
     "clean": true,
