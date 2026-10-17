@@ -1,6 +1,6 @@
 # T2.3: Postgres
 
-Lane c, on `t2.1d` (T2.1d, the judging-path changes T2.3 needs, on T2.1b's head on lane d, 60b07bbe); both are rebased when T2.1b lands.
+Lane c, on `t2.1d-combined` (6f73d0f2: T2.1d, the judging-path changes T2.3 needs, with T2.2's and the owner's rows, on T2.1b's head on lane d); T2.1d lands first, by landing commits over the same trees.
 T2.3 edits no judging file: the runner's recording, rust-host's replay, the comparator's Postgres row types, an interval's canonical cell and `more_exact`'s database keys are T2.1d's (the orchestrator's decision).
 The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests`), run against this work from a scratch copy and kept out of this branch until the orchestrator combines the two.
 
@@ -16,7 +16,7 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
   A number key is read as its own Postgres type and joined by value, so equal keys of any scale or integer type join and keys float64 would merge stay apart; a text key, and a seed time, are read in the joined column's declared type (`jsonb_populate_record` over the table's row type), so a `uuid` key compares as itself and a text time as the reference's text.
   Neighbors with a limit per seed read each seed's rows by `JOIN LATERAL`, as the reference does; the projected columns are renamed to positions inside the statement, so no source column meets a helper's name.
 - **The psycopg provider** (`sdm_client._rust.providers.postgres`): runs the plan's statements on one cursor in a transaction of its own (a savepoint inside the caller's), binds the key set through psycopg's `%s` (its `$1` the only one, every `%` doubled), reads the result once (`fetchall`) and builds Arrow with pyarrow, no pandas, each column typed by its Postgres type's name in the driver's registry.
-  `real` is read as the double of the server's text, as the reference reads it; `json` and `jsonb` as the server's text; `interval` as months, days and nanoseconds (pyarrow's `MonthDayNano`); `timestamptz` as the instant in UTC whatever the session's zone; `numeric(p,s)` as `decimal128` (`decimal256` past 38 digits), unconstrained `numeric` as text.
+  `real` is read as the double of the server's text, as the reference reads it; `json` and `jsonb` as the reference writes them (compact JSON, a JSON null a null); `interval` as months, days and nanoseconds (pyarrow's `MonthDayNano`); `timestamptz` as the instant in UTC whatever the session's zone; `numeric(p,s)` as `decimal128` (`decimal256` past 38 digits), unconstrained `numeric` as text.
   A seed time is written as pandas' `isoformat` writes it, the text the reference binds.
 - **The core routes**: `_routing` gains the Postgres paths of `Schema.from_source`, `materialize` and `predict`, by backend (`FROM_SOURCE`, `MATERIALIZE`, `PREDICT`, `on_the_core`); the bridges name the provider and dialect of the source's backend.
   Each change to frozen bridge code is declared a refactor in `bridge_changes.json`; the routing seam's pinned `CORE_ROUTED` test names the Postgres paths.
@@ -37,7 +37,11 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
 - P2C-1 (owner-pending): a one-part name a temporary or `pg_catalog` relation shadows is refused by name where the reference reads its schema's table; a plan would have to name `current_schema()`'s schema, which the core does not know when it plans.
 - P2C-5: a text time value Postgres cannot read as a timestamp fails the bounds as the provider's error; `time.text-one-bad-value`, where the reference refuses by name too, is E66's named refusal; the census's `rule:text_time` probe, where the reference answers, needs the bounds as text, which the contract's `time_bounds` answer does not carry (owner-pending under KO2-28).
 - P2C-6 (owner-pending): a seed past 2**64 - 1, which `max_seed`'s type cannot declare.
-- KO2-20 as built replays the Postgres server's answers to the core's own statements, not the reference's (whose statements differ and whose capture keeps digests only); the orchestrator agrees and tells the owner.
+- KO2-20 as built replays the Postgres server's answers to the core's own statements, not the reference's (whose statements differ and whose capture keeps digests only): KO2-60.
+- The owner's rows: P2C-1 KO2-63, P2C-2 KO2-58, P2C-5 KO2-64, P2C-6 KO2-59, each approved by the owner; P2C-3 (KO2-35) and P2C-4 (E66) stay proposed for their approvers.
+  KO2-63's wording says the reference reads the shadowing relation; it reads its own schema's table (it qualifies every read), which P2C-1 records.
+- Off DuckDB every call a case makes now runs on the core (T2.1d): four S0 cases (`s0.boundary.deepest`, `digits-4300`, `escapes`, `start-past-64kb`) are refused at materialize by the core's not-yet rules (E92's class) where the reference answers, on SQLite as on Postgres; and `s0.boundary.deepest`'s materialize query differs between the hosts, python-core sending the query's normalized text (`to_string()`) and rust-host the case's own, which `validate_query`'s answer does not carry. Both are T2.1d's to settle.
+- rust-host's query schema off DuckDB wrote each type as described (`date`, `int64`), where the Python host writes the language's spelling (`time`, `int`), so every case validating a query on Postgres differed between the hosts: fixed on `t2.1d-fix` (c484e1c6, one focused test), for the orchestrator to fold into T2.1d.
 - H24's common-input comparison and its control moved to T2.1c (orchestrator); the first wave's Postgres legs (T2.17, T2.18, T2.8c, T2.19) are those packages'.
 - `sdm-testkit`'s `t136_forecast` once failed its old two-second limit under a load of about 25; the base's T2.1b test now bounds it by its own run.
 - Register IDs are lane C's (P2C-1 to P2C-6), under a lane C banner.
