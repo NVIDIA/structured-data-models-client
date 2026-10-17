@@ -388,6 +388,9 @@ def test_the_vectors_are_not_vacuous() -> None:
     assert sorted(
         i for i, a in answers.items() if a['outcome']['result'] == 'refusal'
     ) == [
+        # The reference reads the DECIMAL(38, 2) primary key's 10**17 + i
+        # as float64, merging the users (T2.0c's key-type pair matrix).
+        'key.pair-merging.d38-2.d38-0',
         'overflow.d19-0.sum-past',
         'overflow.d38-0.sum-past',
         'time.epoch-declared',
@@ -486,6 +489,66 @@ def test_the_vectors_are_not_vacuous() -> None:
             'predict',
         }
         assert vector['statements']['from_source'] > 0, vector['id']
+
+
+# --- the key-type pair matrix (T2.0c) --------------------------------------------
+
+#: Primary and foreign keys of different decimal types holding equal values
+#: (``key.pair.*``: 1.00 against 1.0000, both ways, scale 0 against 2), and
+#: values float64 would merge (``key.pair-merging.*``: 10**17 + 0 to 7).
+PAIRS = [v['id'] for v in RECORDED['vectors'] if v['id'].startswith('key.pair')]
+#: The same shop with integral keys of one type: the join every pair must
+#: give.
+SAME_TYPE = 'key.both.d9-0'
+
+
+def _tables(answer: dict[str, Any]) -> list[Any]:
+    return [payload['tables'] for payload in answer['payload'] or []]
+
+
+def test_the_pair_matrix_is_there_both_ways() -> None:
+    assert sorted(PAIRS) == [
+        'key.pair-merging.d38-0.d38-2',
+        'key.pair-merging.d38-2.d38-0',
+        'key.pair.d10-2.d12-4',
+        'key.pair.d12-4.d10-2',
+        'key.pair.d18-0.d20-2',
+        'key.pair.d20-2.d18-0',
+    ]
+    for vector_id in PAIRS:
+        primary, foreign = (
+            BY_ID[vector_id]['setup'][0],
+            BY_ID[vector_id]['setup'][1],
+        )
+        assert 'users ALTER user_id TYPE DECIMAL' in primary
+        assert 'orders ALTER user_id TYPE DECIMAL' in foreign
+        assert primary.split('TYPE ')[1][:14] != foreign.split('TYPE ')[1][:14]
+    # The reference joins the equal-valued pairs as one type does, and is
+    # wrong on the merging ones (float64): a refusal one way, another join
+    # the other.
+    same = _tables(BY_ID[SAME_TYPE]['reference'])
+    for vector_id in PAIRS:
+        reference = BY_ID[vector_id]['reference']
+        if vector_id.startswith('key.pair.'):
+            assert _tables(reference) == same, vector_id
+        else:
+            assert _tables(reference) != same, vector_id
+
+
+@pytest.mark.parametrize('vector_id', [pytest.param(i, id=i) for i in PAIRS])
+def test_a_decimal_key_pair_joins_exactly_on_the_core(
+    vector_id: str, core_runs: dict[str, Any]
+) -> None:
+    r"""Exact decimals (T2.0c): every pair joins as keys of one type do, the
+    same rows in every table of every request, and each predicted entity
+    comes back once, the merging ones distinct."""
+    observation = core_runs[vector_id]
+    got = R.project(observation, BY_ID[vector_id])
+    assert got['outcome']['result'] == 'success', got['outcome']
+    assert _tables(got) == _tables(BY_ID[SAME_TYPE]['reference'])
+    assert observation['public']['result']['rows'] == len(
+        BY_ID[vector_id]['core_indices']
+    )
 
 
 # --- T1.32d's null.decimal-18-2 -------------------------------------------------
