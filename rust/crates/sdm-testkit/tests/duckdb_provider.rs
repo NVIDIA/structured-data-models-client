@@ -1336,8 +1336,10 @@ fn the_source_says_which_relations_it_holds_under_a_name() {
         ("elsewhere_view", 0),
         ("attached", 0),
     ] {
-        let run =
-            start(&serde_json::json!({"request": "describe", "tables": [name], "part": "tables"}));
+        // The name asked as a relation of one part (contract v26).
+        let run = start(&serde_json::json!(
+            {"request": "describe", "tables": [{"source": [name]}], "part": "tables"}
+        ));
         let data = admitted(&run, |step| duck::answer(&connection, step).unwrap());
         let rows: usize = data.batches.iter().map(RecordBatch::num_rows).sum();
         assert_eq!(rows, held, "{name}");
