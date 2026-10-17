@@ -1,0 +1,92 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.compare-same-scale",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "client.predict/binary/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "decimal",
+  "cells": [
+    "decimal128/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, (1.4 + (user_id % 3) * 0.1)::DECIMAL(38, 1) AS d FROM users"
+    ],
+    "pql": "PREDICT users.d >= 1.5 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c: task binary_classification; context labels by entity: {\"number\": \"3\"}: false, {\"number\": \"4\"}: true, {\"number\": \"5\"}: true, {\"number\": \"6\"}: false, {\"number\": \"7\"}: true"
+  },
+  "why": "A constant at the column's own scale: 1.4 is not at or past 1.5, 1.5 and 1.6 are",
+  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+}
