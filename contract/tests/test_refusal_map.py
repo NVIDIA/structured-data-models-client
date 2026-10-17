@@ -631,8 +631,9 @@ def _of(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def test_one_family_map_per_seam_holds_every_inventory_case() -> None:
     # Each of the inventory's seams has its map, whose cases are the
-    # committed cases of that seam, the inventory's 40 among them, and
-    # AdventureWorks has its own.
+    # committed cases of that seam, each case in one map; the inventory's 40
+    # are among them (with T2.0c's exact-decimal cases beside them, no
+    # fixed count), and AdventureWorks has its own.
     maps = _family_maps()
     assert set(maps) == set(refusal_map.FAMILIES)
     inventory = {entry['id'] for entry in run_python.load_inventory()['cases']}
@@ -646,7 +647,9 @@ def test_one_family_map_per_seam_holds_every_inventory_case() -> None:
         }
         assert set(document['cases']) == seam, name
         held += document['cases']
-    assert sorted(held) == sorted(inventory) and len(held) == 40
+    assert len(held) == len(set(held)), 'a case in two maps'
+    assert len(inventory) == 40
+    assert inventory <= set(held), sorted(inventory - set(held))
 
 
 def _cited(entry: dict[str, Any]) -> list[str]:
