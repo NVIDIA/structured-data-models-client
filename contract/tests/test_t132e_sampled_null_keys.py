@@ -51,17 +51,19 @@ observed and projected by the same code.
   it declares, since a single null in the walk is the reference's clean
   case (np.unique sorts it) and P1B-13 changes nothing there.
 - P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling reaches
-  a key mixing nulls with real text or decimal values (``mixed-null-text``,
-  refused INVALID_REQUEST by the reference; ``mixed-null-decimal``,
-  INTERNAL_ERROR at b413e9ad, and since main's eb6c68eb a success whose
-  request carries the null-key row), the core leaves the null-key rows out and succeeds:
+  a key mixing nulls with real text values (``mixed-null-text``, refused
+  INVALID_REQUEST by the reference), the core leaves the null-key rows out
+  and succeeds:
   :func:`test_option_b_leaves_the_null_key_rows_out_with_one_warning`
   holds its request to the twin's (the same tables with the null row not
   reached, recorded from the reference) with no null-key row, and its
   warnings to the twin's and one more naming the table and the count. The
   per-vector test then passes only under the approved entry's binding
-  refs (``refusal INVALID_REQUEST -> success``, ``refusal INTERNAL_ERROR
-  -> success``).
+  ref (``refusal INVALID_REQUEST -> success``). A null DECIMAL key mixed
+  with values (``mixed-null-decimal``: INTERNAL_ERROR at b413e9ad, and
+  since main's eb6c68eb a success whose request carries the null-key row)
+  is kept from T2.0c's exact decimals, as the reference keeps it, with no
+  extra warning (:func:`test_a_null_decimal_key_is_kept_with_no_extra_warning`).
 - The case format holds neither ``num_context_samples`` nor
   ``random_seed``, so these vectors are not cases and ``rust-host`` does
   not run them; the core's answer is held through the Python host.
@@ -399,16 +401,19 @@ def test_an_approved_success_to_success_ref_excuses_a_request_alone(
 
 
 #: P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling
-#: reaches a table whose key mixes nulls with real text or decimal values
-#: (the reference refuses, INVALID_REQUEST, or fails, INTERNAL_ERROR),
-#: the core leaves the null-key rows out of the walk and succeeds, with one
-#: warning per table saying how many rows it left out. Each such vector,
-#: its twin (the same tables with the null row not reached, which the
-#: reference answers), and the rows left out.
+#: reaches a table whose key mixes nulls with real text values (the
+#: reference refuses, INVALID_REQUEST), the core leaves the null-key rows
+#: out of the walk and succeeds, with one warning per table saying how many
+#: rows it left out. Each such vector, its twin (the same tables with the
+#: null row not reached, which the reference answers), and the rows left
+#: out. Option (b) stays for text keys only (T2.0c's exact decimals).
 OPTION_B = {
     'mixed-null-text': ('null-text-not-sampled', 1),
-    'mixed-null-decimal': ('null-decimal-not-sampled', 1),
 }
+#: A null DECIMAL key sampled beside values: at 6298913c (main's eb6c68eb)
+#: the reference keeps it, sending the null-key row, and so does the core
+#: with exact decimals (T2.0c), with no option (b) warning.
+DECIMAL_KEPT = ('mixed-null-decimal',)
 
 
 def _amounts(request: Any, table: str) -> list[float]:
@@ -479,37 +484,58 @@ def test_option_b_leaves_the_null_key_rows_out_with_one_warning(
     )
 
 
-#: Option (b)'s vectors the reference still refuses at 6298913c.
-OPTION_B_REFUSED = frozenset({'mixed-null-text'})
-#: Option (b)'s vectors the reference answers since main's eb6c68eb: a
-#: success at predict whose request carries the null-key row, which
-#: option (b) leaves out, so the core's request is no longer the
-#: reference's.
-OPTION_B_ANSWERED = frozenset({'mixed-null-decimal'})
+@pytest.mark.parametrize(
+    'vector_id', [pytest.param(i, id=i) for i in DECIMAL_KEPT]
+)
+def test_a_null_decimal_key_is_kept_with_no_extra_warning(
+    vector_id: str, core_answers: dict[str, Any]
+) -> None:
+    r"""The core keeps a null DECIMAL key sampled beside values as the
+    reference does: success at predict, the reference's keys and request
+    (the null-key row, amount 0, sent beside rows 1 and 2), and exactly the
+    reference's warnings and messages naming the table, no option (b) one."""
+    vector = BY_ID[vector_id]
+    reference = vector['reference']
+    got = copy.deepcopy(core_answers[vector_id])
+    operations = got.pop('operations')
+    messages = got.pop('messages')
+    assert 'materialize' in operations, operations
+    assert got['outcome'] == reference['outcome'], got['outcome']
+    assert got['keys'] == reference['keys']
+    assert sorted(_amounts(got['request'], 'payments')) == [0.0, 1.0, 2.0]
+    assert got['request'] == reference['request']
+    assert Counter(got['warnings']) == Counter(reference['warnings'])
+    naming = [m for m in messages if 'payments' in m]
+    before = [m for m in vector['reference_messages'] if 'payments' in m]
+    assert len(naming) == len(before), messages
 
 
 def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
-    # The divergence is from a refusal, or, where the reference now
-    # answers, from a request holding the null-key row; each twin is a
-    # success the reference sends a request for, with the null row's key
-    # elsewhere.
-    assert OPTION_B_REFUSED | OPTION_B_ANSWERED == set(OPTION_B)
-    assert not OPTION_B_REFUSED & OPTION_B_ANSWERED
+    # The divergence is from a refusal; each twin is a success the
+    # reference sends a request for, with the null row's key elsewhere.
     for vector_id, (twin_id, _) in OPTION_B.items():
-        reference = BY_ID[vector_id]['reference']
-        outcome = reference['outcome']
-        if vector_id in OPTION_B_REFUSED:
-            assert outcome['result'] == 'refusal'
-            assert outcome['stage'] == 'materialize'
-            assert outcome['code'] == 'INVALID_REQUEST'
-        else:
-            assert outcome['result'] == 'success'
-            assert outcome['stage'] == 'predict'
-            amounts = sorted(_amounts(reference['request'], 'payments'))
-            assert amounts == [0.0, 1.0, 2.0]
+        outcome = BY_ID[vector_id]['reference']['outcome']
+        assert outcome['result'] == 'refusal'
+        assert outcome['stage'] == 'materialize'
+        assert outcome['code'] == 'INVALID_REQUEST'
         twin = BY_ID[twin_id]['reference']
         assert twin['outcome']['result'] == 'success'
         assert sorted(_amounts(twin['request'], 'payments')) == [1.0, 2.0]
+    # The decimal one the reference answers, the null-key row sent.
+    for vector_id in DECIMAL_KEPT:
+        reference = BY_ID[vector_id]['reference']
+        assert (
+            reference['outcome']['result'],
+            reference['outcome']['stage'],
+        ) == (
+            'success',
+            'predict',
+        )
+        assert sorted(_amounts(reference['request'], 'payments')) == [
+            0.0,
+            1.0,
+            2.0,
+        ]
     for vector in RECORDED['vectors']:
         assert len(vector['reference_messages']) == len(
             vector['reference']['warnings']

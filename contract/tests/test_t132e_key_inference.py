@@ -50,12 +50,14 @@ are observed and projected by the same code; ``sdm-testkit``'s
   with INVALID_REQUEST at ``materialize``: a named code, so not marked.
 
 P1B-40, option (b) (owner, 2026-10-13, relayed):
-``nulls-1-decimal.200`` (INTERNAL_ERROR in the reference at b413e9ad, a
-success at 6298913c) and
-``nulls-1-text.200`` (INVALID_REQUEST: the same mixed text key reached by
+``nulls-1-text.200`` (INVALID_REQUEST: a mixed text key reached by
 sampling) must materialize on the core, describing the tables as the
 reference did, with the twin's warnings (``nulls-1.200``) and exactly one
 more (:func:`test_option_b_materializes_with_one_more_warning`).
+From T2.0c (exact decimals) a null DECIMAL key beside values
+(``nulls-1-decimal.200``) is kept as the reference and its integer twin
+keep it, with no extra warning
+(:func:`test_a_null_decimal_key_is_kept_as_its_integer_twin_s`).
 
 Gating (``contract/tests/t132e_gate.py``): ``t132e-pending.json``'s
 ``pending["key-python-core"]`` and the exit's ``py:`` ids in
@@ -261,14 +263,20 @@ def test_a_key_holding_nulls_refuses_no_table(
 
 
 #: P1B-40, option (b) (owner, 2026-10-13, relayed): sampling reaches a
-#: table whose key mixes a null with real text or decimal values, which
-#: the reference refuses (INVALID_REQUEST) or fails on (INTERNAL_ERROR);
-#: the core leaves the null-key rows out and succeeds, with one warning
-#: per table. Each vector and its twin, the same layout with an integer
-#: key, which the reference answers.
+#: table whose key mixes a null with real text values, which the reference
+#: refuses (INVALID_REQUEST); the core leaves the null-key rows out and
+#: succeeds, with one warning per table. Each vector and its twin, the same
+#: layout with an integer key, which the reference answers. Option (b)
+#: stays for text keys only (T2.0c's exact decimals).
 OPTION_B = {
-    'nulls-1-decimal.200': 'nulls-1.200',
     'nulls-1-text.200': 'nulls-1.200',
+}
+#: A null DECIMAL key beside values: at 6298913c (main's eb6c68eb) the
+#: reference keeps it exactly as its integer twin does, the null-key row's
+#: warning included and no other, and so does the core with exact decimals
+#: (T2.0c), with no option (b) warning.
+DECIMAL_KEPT = {
+    'nulls-1-decimal.200': 'nulls-1.200',
 }
 
 
@@ -305,28 +313,40 @@ def test_option_b_materializes_with_one_more_warning(
     )
 
 
-#: Option (b)'s vectors the reference still refuses at 6298913c.
-OPTION_B_REFUSED = frozenset({'nulls-1-text.200'})
-#: Option (b)'s vectors the reference answers since main's eb6c68eb (it
-#: reads the decimal key as an integer): it materializes them exactly as
-#: their integer twin, the null-key row's warning included, so the core's
-#: option (b) answer (the twin's warnings and one more) is no longer the
-#: reference's.
-OPTION_B_ANSWERED = frozenset({'nulls-1-decimal.200'})
+@pytest.mark.parametrize(
+    'vector_id', [pytest.param(i, id=i) for i in DECIMAL_KEPT]
+)
+def test_a_null_decimal_key_is_kept_as_its_integer_twin_s(
+    vector_id: str, core_runs: dict[str, Any]
+) -> None:
+    r"""The core keeps a null DECIMAL key beside values as the reference
+    and the integer twin do: success at ``materialize``, the reference's
+    description, and exactly the twin's warnings, no option (b) warning."""
+    vector = BY_ID[vector_id]
+    twin = BY_ID[DECIMAL_KEPT[vector_id]]['reference']
+    observation = core_runs[vector_id]
+    assert observation['core'] is not None, 'the core was not reached'
+    got = R.project(observation)
+    assert got['outcome'] == twin['outcome'], got['outcome']
+    assert got['schema'] == vector['reference']['schema']
+    assert Counter(got['warnings']) == Counter(twin['warnings']), got[
+        'warnings'
+    ]
 
 
 def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
-    assert OPTION_B_REFUSED | OPTION_B_ANSWERED == set(OPTION_B)
-    assert not OPTION_B_REFUSED & OPTION_B_ANSWERED
-    for vector_id, twin_id in OPTION_B.items():
+    for vector_id in OPTION_B:
         outcome = BY_ID[vector_id]['reference']['outcome']
+        assert outcome['result'] == 'refusal'
+        assert outcome['stage'] == 'materialize'
+        assert outcome['code'] == 'INVALID_REQUEST'
+        assert BY_ID[vector_id]['key']['kind'] == 'text'
+    # The decimal one the reference answers exactly as its integer twin.
+    for vector_id, twin_id in DECIMAL_KEPT.items():
+        assert BY_ID[vector_id]['reference'] == BY_ID[twin_id]['reference']
+        assert BY_ID[vector_id]['key']['kind'] == 'decimal'
+    for vector_id, twin_id in {**OPTION_B, **DECIMAL_KEPT}.items():
         twin = BY_ID[twin_id]
-        if vector_id in OPTION_B_REFUSED:
-            assert outcome['result'] == 'refusal'
-            assert outcome['stage'] == 'materialize'
-            assert outcome['code'] == 'INVALID_REQUEST'
-        else:
-            assert BY_ID[vector_id]['reference'] == twin['reference']
         assert twin['reference']['outcome']['result'] == 'success'
         assert twin['key'] == {
             **BY_ID[vector_id]['key'],
