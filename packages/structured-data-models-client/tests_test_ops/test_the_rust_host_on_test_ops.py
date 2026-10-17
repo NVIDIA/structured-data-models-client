@@ -178,7 +178,7 @@ def test_a_provider_error_raises_with_no_driver_exception_chained() -> None:
     fetch = {
         'request': {
             'request': 'scan',
-            'table': 't',
+            'table': {'source': ['t']},
             'columns': [],
             'filters': [],
             'limit': None,

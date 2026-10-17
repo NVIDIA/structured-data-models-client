@@ -6,9 +6,10 @@
 Forced onto the core (``SDM_CORE_ROUTES``, with the schema's route), the
 call's gathering runs on the core's ``materialize``: the request it builds
 for ``base.regression`` is the one the old route builds in the same
-process, payload for payload; a seed of ``2**70`` crosses from Python into
-the core as that exact integer, which DuckDB's data layer refuses by name
-(register entry RS-7); an option or a schema the core does not take yet is
+process, payload for payload; the largest seed a provider can declare,
+``2**64 - 1``, crosses from Python into the core as that exact integer, and
+DuckDB's data layer refuses one past its own range by name (register entry
+RS-7); an option or a schema the core does not take yet is
 refused by name; nothing of the relational engine is imported on the
 route, which a test-only import hook in a process of its own shows. The
 reference comparison of the payload is ``contract/tests``'s.
@@ -305,9 +306,10 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
     )
     core, schema = _named()
     assert schema._core_description is not None
+    # Each source a relation of one part, its name whole (contract v26).
     assert {
         t['name']: t['source'] for t in schema._core_description['tables']
-    } == NAMED
+    } == {name: {'source': [source]} for name, source in NAMED.items()}
     payload = core._payloads[0]
     assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
     assert core.entity_table == 'buyers'
@@ -336,16 +338,20 @@ def test_a_schema_not_described_on_the_core_has_no_core_route(
         )
 
 
-def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
-    seed = 2**70
-    assert codec.seed(seed) == '0x400000000000000000'
-    # A host provider, so the seed reaches the sample request unrefused,
-    # and the request carries it back: the core read it exactly.
+def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
+    # The largest seed any provider can declare (contract v26: every
+    # provider declares its `max_seed`, a u64), past int64 and float64's
+    # exact integers, so a seed read through either would change.
+    seed = 2**64 - 1
+    assert codec.seed(seed) == '0xffffffffffffffff'
+    assert float(seed) != seed and seed > 2**63 - 1
+    # A host provider declaring it, so the seed reaches the sample request
+    # unrefused, and the request carries it back: the core read it exactly.
     description = {
         'tables': [
             {
                 'name': 'users',
-                'source': 'users',
+                'source': {'source': ['users']},
                 'columns': [
                     {
                         'name': 'user_id',
@@ -362,7 +368,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
             },
             {
                 'name': 'orders',
-                'source': 'orders',
+                'source': {'source': ['orders']},
                 'columns': [
                     {
                         'name': 'order_id',
@@ -446,7 +452,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
                 ],
                 'max_keys_per_request': None,
                 'sampling': 'seeded_stable',
-                'max_seed': None,
+                'max_seed': seed,
                 # Declared, so the sampler is not refused before it fetches
                 # (T1.26b).
                 'null_order': 'last',
