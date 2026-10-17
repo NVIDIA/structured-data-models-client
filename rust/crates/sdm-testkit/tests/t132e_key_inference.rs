@@ -576,16 +576,17 @@ fn rust_host_refuses_no_table_for_a_null_in_its_key() {
 }
 
 /// P1B-40, option (b) (owner, 2026-10-13, relayed): where sampling reaches
-/// a table whose key mixes a null with real text or decimal values, which
-/// the reference refused or failed on at b413e9ad, the core leaves the
-/// null-key rows out and succeeds, with one warning per table. At 6298913c
-/// (main's eb6c68eb) the reference answers the decimal one exactly as its
-/// integer twin (register P2B-5); it still refuses the text one. Each vector and its twin
-/// (the same layout with an integer key, which the reference answers).
-const OPTION_B: [(&str, &str); 2] = [
-    ("nulls-1-decimal.200", "nulls-1.200"),
-    ("nulls-1-text.200", "nulls-1.200"),
-];
+/// a table whose key mixes a null with real text values, which the
+/// reference refuses, the core leaves the null-key rows out and succeeds,
+/// with one warning per table. Option (b) stays for text keys only
+/// (T2.0c's exact decimals). Each vector and its twin (the same layout with
+/// an integer key, which the reference answers).
+const OPTION_B: [(&str, &str); 1] = [("nulls-1-text.200", "nulls-1.200")];
+
+/// A null DECIMAL key beside values, and its integer twin: at 6298913c
+/// (main's eb6c68eb) the reference keeps it exactly as the twin, and so
+/// does the core with exact decimals (T2.0c), with no option (b) warning.
+const DECIMAL_KEPT: (&str, &str) = ("nulls-1-decimal.200", "nulls-1.200");
 
 /// Each vector of [`OPTION_B`] succeeds at `materialize`, describes the
 /// tables as the reference did before it refused, and gives exactly one
@@ -611,19 +612,12 @@ fn rust_host_leaves_null_key_rows_out_with_one_warning() {
     for (id, twin_id) in OPTION_B {
         let vector = find(id);
         let reference = &vector["reference"]["outcome"];
-        if id == "nulls-1-decimal.200" {
-            assert_eq!(
-                vector["reference"],
-                find(twin_id)["reference"],
-                "{id}: the reference answers as its twin"
-            );
-        } else {
-            assert_eq!(
-                reference["result"], "refusal",
-                "{id}: the reference refuses"
-            );
-            assert_eq!(reference["code"], "INVALID_REQUEST", "{id}");
-        }
+        assert_eq!(
+            reference["result"], "refusal",
+            "{id}: the reference refuses"
+        );
+        assert_eq!(reference["code"], "INVALID_REQUEST", "{id}");
+        assert_eq!(vector["key"]["kind"], "text", "{id}");
         let observed = |vector: &Value| host::run(&the_case(&all, vector), &bases);
         let (got, baseline) = match (observed(&vector), observed(&find(twin_id))) {
             (Ok(got), Ok(baseline)) => (got, baseline),
@@ -666,6 +660,52 @@ fn rust_host_leaves_null_key_rows_out_with_one_warning() {
          pending[\"exits\"]: {passing_but_pending:?}"
     );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The core keeps [`DECIMAL_KEPT`]'s null decimal key as the reference and
+/// the twin do: success at `materialize`, the reference's description, and
+/// exactly the twin's warning codes, none more.
+#[test]
+fn rust_host_keeps_a_null_decimal_key_as_its_integer_twin() {
+    let all = vectors();
+    let bases = bases();
+    let find = |id: &str| -> Value {
+        all["vectors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"] == id)
+            .unwrap_or_else(|| panic!("{id} is a vector"))
+            .clone()
+    };
+    let (id, twin_id) = DECIMAL_KEPT;
+    let vector = find(id);
+    assert_eq!(vector["key"]["kind"], "decimal", "{id}");
+    assert_eq!(
+        vector["reference"],
+        find(twin_id)["reference"],
+        "{id}: the reference answers as its twin"
+    );
+    let got = host::run(&the_case(&all, &vector), &bases).unwrap();
+    let baseline = host::run(&the_case(&all, &find(twin_id)), &bases).unwrap();
+    let projected = project(&got);
+    assert_eq!(projected["outcome"], "success", "{id}: {projected}");
+    assert_eq!(projected["stage"], "materialize", "{id}: {projected}");
+    assert_eq!(
+        projected["schema"],
+        wanted(&vector["reference"])["schema"],
+        "{id}: described otherwise than the reference"
+    );
+    let codes = |warnings: &[Value]| -> Vec<String> {
+        let mut codes: Vec<String> = warnings.iter().map(|w| w["code"].to_string()).collect();
+        codes.sort();
+        codes
+    };
+    assert_eq!(
+        codes(&got.warnings),
+        codes(&baseline.warnings),
+        "{id}: warnings beyond the twin's"
+    );
 }
 
 #[test]
