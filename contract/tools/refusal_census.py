@@ -366,7 +366,7 @@ def _outcome(
     arguments = runner._materialize_arguments(given['materialize'])
     arguments.update(options or {})
     from_source = runner._from_source_arguments(given.get('from_source', {}))
-    connection, cleanup = runner._open(case, bases, database)
+    connection, cleanup, _ = runner._open(case, bases, database)
     stage = 'from_source'
     try:
         with serve() as (url, _), warnings.catch_warnings():

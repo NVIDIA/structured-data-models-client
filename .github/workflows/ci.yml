@@ -1029,12 +1029,12 @@ jobs:
   # The corpus on SQLite and Postgres (design choice 2, "CI"; T2.1a): each
   # cell once per database, `contract-python (<cell>, <database>)`. The
   # contract loader (contract/runners/databases.py) loads each case's DuckDB
-  # tables into the database; the old client runs every case there, judged
-  # against the committed reference lines `<case>@<database>`
+  # tables into the database; the reference side is the committed
+  # python-ref lines `<case>@<database>`, held to the cases
   # (compare.py --database), and the core's legs run there exactly when the
-  # built core reports a provider for it (sdm_client._native.PROVIDERS):
-  # run_python.py legs holds the job to that staging rule, and fails a job
-  # that runs no case. Only the Postgres jobs start the pinned service,
+  # built core reports a provider for it (sdm_client._native.PROVIDERS),
+  # judged against those lines: run_python.py legs holds the job to that
+  # staging rule, and fails a job whose database has no case. Only the Postgres jobs start the pinned service,
   # required there (SDM_REQUIRE_POSTGRES, H26).
   contract-python-ref-pandas3-sqlite:
     name: contract-python (ref-pandas3, sqlite)
@@ -1052,28 +1052,36 @@ jobs:
           python-version: '3.12'
       - *contract-wheel
       - *contract-install
+      # The reference side is python-ref's committed lines on the database
+      # (the orchestrator's decision, T2.1a fix 4): held to the cases by
+      # the comparator, and counted by the staging rule, so a job whose
+      # database has no lines fails. python-old, the old route Phase 5
+      # deletes, runs on DuckDB only. python-core runs on the database once
+      # the built core reports a provider for it, judged against those
+      # lines.
       - &contract-database
         name: the reference side, and the core legs the core has a provider for
         run: |
           set -o pipefail
           out=database-observations
           mkdir -p "$out"
-          python -I contract/runners/run_python.py --mode python-old --database "$DATABASE" \
-            --out "$out/python-old.jsonl" contract/cases || exit 1
+          reference=$(ls contract/reference/*.jsonl)
           python -I -c 'import json, sdm_client._native as n; print(json.dumps({"python-core": list(n.PROVIDERS)}))' \
             > "$out/providers.json" || exit 1
-          observed=("$out/python-old.jsonl")
+          observed=()
           if python -I -c 'import json, os, sys; sys.exit(os.environ["DATABASE"] not in json.load(open(sys.argv[1]))["python-core"])' "$out/providers.json"; then
             python -I contract/runners/run_python.py --mode python-core --database "$DATABASE" \
               --out "$out/python-core.jsonl" contract/cases || exit 1
             observed+=("$out/python-core.jsonl")
+          else
+            echo "the core reports no $DATABASE provider: the reference side only"
           fi
           status=0
           python -I contract/runners/run_python.py legs --database "$DATABASE" \
-            --providers "$out/providers.json" "${observed[@]}" || status=1
+            --providers "$out/providers.json" "$reference" "${observed[@]+"${observed[@]}"}" || status=1
           python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
-            --reference contract/reference/*.jsonl "${observed[@]}" || status=1
-          python - "${observed[@]}" <<'EOF' || status=1
+            --reference "$reference" "${observed[@]+"${observed[@]}"}" || status=1
+          python - "${observed[@]+"${observed[@]}"}" <<'EOF' || status=1
           import json, os, sys
           cell = os.environ['CELL']
           for path in sys.argv[1:]:
@@ -1081,7 +1089,7 @@ jobs:
               seen = {json.loads(line)['identity']['cell'] for line in lines}
               if seen != {cell}:
                   sys.exit(f'{path}: observed in {sorted(map(str, seen))}, not {cell}')
-          print(f'every observation in {cell}')
+          print(f'every core observation in {cell}')
           EOF
           exit $status
 

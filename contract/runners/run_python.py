@@ -190,7 +190,8 @@ def check_legs(
     keyed as :func:`case_key` keys it. The problems, each naming what
     fails: no case observed on ``database``; a leg reporting a provider for
     it with no observation there; a leg without a case the reference side
-    (``python-old``) observed there, named by its key. A leg reporting no
+    observed there (``python-ref``'s committed lines, or on DuckDB
+    ``python-old``'s), named by its key. A leg reporting no
     provider for ``database`` is not required there."""
     on = [
         line
@@ -208,7 +209,9 @@ def check_legs(
     for line in on:
         runner = (line.get('identity') or {}).get('runner')
         observed.setdefault(str(runner), set()).add(line['case'])
-    reference = observed.get('python-old', set())
+    reference = observed.get('python-ref', set()) | observed.get(
+        'python-old', set()
+    )
     problems = []
     for leg in sorted(providers):
         if database not in tuple(providers[leg]):
@@ -1614,20 +1617,29 @@ def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
     return _values(table.schema.names, types, _texts(rows), odd)
 
 
-def _description(driver: Any) -> tuple[list[str], list[str]] | None:
+def _description(
+    driver: Any, names: Mapping[int, str] | None = None
+) -> tuple[list[str], list[str]] | None:
     r"""The columns of the result a driver holds, as its ``description``
     names them and their types (DuckDB's names; off DuckDB the driver's
     own: ADBC's Arrow type, psycopg's display of the Postgres type), or
-    None when it gives none."""
+    None when it gives none. A type the driver knows only by the number
+    the server gave it (a composite type the loader created) is named by
+    ``names``, never by that number, which differs from run to run."""
     try:
         described = driver.description
     except Exception:  # noqa: BLE001 - the capture's own reading
         return None
     if not described:
         return None
-    return [str(c[0]) for c in described], [
-        str(getattr(c, 'type_display', None) or c[1]) for c in described
-    ]
+    types = []
+    for column in described:
+        code = column[1]
+        named = (names or {}).get(code) if isinstance(code, int) else None
+        types.append(
+            str(named or getattr(column, 'type_display', None) or code)
+        )
+    return [str(c[0]) for c in described], types
 
 
 class DriverLog:
@@ -1647,6 +1659,9 @@ class DriverLog:
         self.handles = 0
         #: The public call the runner is making, set by it before each.
         self.stage: str | None = None
+        #: The names of the types the server numbers per run (Postgres's
+        #: composite types), by number, for the results' type names.
+        self.type_names: dict[int, str] = {}
 
     def handle(self) -> int:
         number = self.handles
@@ -1750,7 +1765,7 @@ class _Captured:
             return answer
         # The result's columns and DuckDB's types for them, read from the
         # driver's description, which runs nothing.
-        described = _description(self._driver)
+        described = _description(self._driver, self._log.type_names)
         names, types = described if described else ([], None)
         if method in _ROWS or method in _ROW:
             if method in _ROWS:
@@ -1969,6 +1984,74 @@ def query_log(connection: Any) -> list[str]:
     return [row[0] for row in rows]
 
 
+class StatementLog:
+    r"""The query log of a SQLite or Postgres run (T2.1a fix 4), DuckDB's
+    own log's twin: every statement the driver itself executes, by its
+    cursor's ``execute`` and ``executemany`` (ADBC's and psycopg's), in
+    order, with ``''`` for a relation bound by name (ADBC's
+    ``adbc_ingest``), whatever object called it, the capture's proxy or
+    not. It wraps the driver's own cursor class for one case, restored
+    after; test-only, as the capture is. :func:`_logged_texts` holds the
+    capture's statements to it, as to DuckDB's."""
+
+    #: The driver's cursor class and the methods logged, per database.
+    TARGETS = {
+        'sqlite': ('adbc_driver_manager.dbapi', 'Cursor'),
+        'postgres': ('psycopg', 'Cursor'),
+    }
+
+    def __init__(self, database: str) -> None:
+        self.database = database
+        self.texts: list[str] = []
+        self._saved: list[tuple[Any, str, Any]] = []
+
+    def __enter__(self) -> StatementLog:
+        import importlib
+
+        module, name = self.TARGETS[self.database]
+        cls = getattr(importlib.import_module(module), name)
+        log = self.texts
+
+        def text(query: Any) -> str:
+            # A statement composed by the driver's own SQL builder logs its
+            # kind; the capture records no text for it either.
+            return (
+                query if isinstance(query, str) else f'<{type(query).__name__}>'
+            )
+
+        def wrap(method: str, binding: bool) -> None:
+            original = getattr(cls, method, None)
+            if original is None:
+                return
+
+            def logged(self: Any, *arguments: Any, **keywords: Any) -> Any:
+                if binding:
+                    log.append('')
+                else:
+                    query = keywords.get(
+                        'query',
+                        keywords.get(
+                            'operation', arguments[0] if arguments else None
+                        ),
+                    )
+                    log.append(text(query))
+                return original(self, *arguments, **keywords)
+
+            self._saved.append((cls, method, original))
+            setattr(cls, method, logged)
+
+        wrap('execute', False)
+        wrap('executemany', False)
+        if self.database == 'sqlite':
+            wrap('adbc_ingest', True)
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        while self._saved:
+            cls, method, original = self._saved.pop()
+            setattr(cls, method, original)
+
+
 # --- one case --------------------------------------------------------------------
 
 
@@ -1991,7 +2074,7 @@ def _connection(case: dict[str, Any], bases: dict[str, list[str]]) -> Any:
 
 def _open(
     case: dict[str, Any], bases: dict[str, list[str]], database: str
-) -> tuple[Any, Any]:
+) -> tuple[Any, Any, dict[int, str]]:
     r"""The case's data on ``database``, and what removes it after: on
     DuckDB the in-memory connection its base and setup build; elsewhere
     that connection's tables loaded by the contract loader
@@ -1999,10 +2082,14 @@ def _open(
     database on ``SDM_POSTGRES_TEST_DSN``'s server, and a driver connection
     to it opened
     as a user opens one (``adbc_driver_sqlite.dbapi.connect``,
-    ``psycopg.connect``). Setup is everything before it reaches the source."""
+    ``psycopg.connect``). Setup is everything before it reaches the source.
+    The third item names each type the server numbered (Postgres's
+    composite types and their arrays), read on a connection of the loader's
+    own, outside the capture."""
     duck = _connection(case, bases)
+    types: dict[int, str] = {}
     if database == 'duckdb':
-        return duck, duck.close
+        return duck, duck.close, types
     loader = _sibling('databases')
     undo: list[Any] = []
 
@@ -2046,6 +2133,15 @@ def _open(
             undo.append(drop)
             scoped = make_conninfo(dsn, dbname=name)
             loader.load(duck, 'postgres', scoped)
+            with psycopg.connect(scoped) as side:
+                types = {
+                    int(oid): str(typname)
+                    for oid, typname in side.execute(
+                        'SELECT t.oid, t.typname FROM pg_type t '
+                        'JOIN pg_namespace n ON n.oid = t.typnamespace '
+                        "WHERE n.nspname = 'public'"
+                    ).fetchall()
+                }
             connection = psycopg.connect(scoped)
         undo.append(connection.close)
     except RunnerFailure:
@@ -2061,7 +2157,7 @@ def _open(
         ) from None
     finally:
         duck.close()
-    return connection, cleanup
+    return connection, cleanup, types
 
 
 def _source(database: str, connection: Any) -> Any:
@@ -2291,12 +2387,18 @@ def _call(
         raise RunnerFailure(
             f'{case["id"]}: its materialize arguments could not be built'
         ) from None
-    connection, cleanup = _open(case, bases, database)
+    connection, cleanup, types = _open(case, bases, database)
     # Setup is everything run before the connection reaches the source; the
-    # query log (DuckDB's own) and the capture start after it.
+    # query log (DuckDB's own, or the driver's statement log off DuckDB)
+    # and the capture start after it.
+    statements = None
     if database == 'duckdb':
         enable_query_log(connection)
+    else:
+        statements = StatementLog(database).__enter__()
     log = DriverLog() if driver_capture else None
+    if log is not None:
+        log.type_names = types
     given_to_source = (
         capture(connection, log, database) if log is not None else connection
     )
@@ -2344,26 +2446,27 @@ def _call(
             outcome = _outcome('refusal', stage, error)
         finally:
             try:
-                logged = query_log(connection) if database == 'duckdb' else None
+                if statements is not None:
+                    statements.__exit__(None, None, None)
+                    logged = statements.texts
+                else:
+                    logged = query_log(connection)
             finally:
                 cleanup()
         public['payloads'] = [
             {'method': method, 'path': path, **_payload(body)}
             for method, path, body in received.requests
         ]
-    query_logged = None
-    if logged is not None:
-        compared, differing = _logged_texts(log, logged)
-        query_logged = {
+    compared, differing = _logged_texts(log, logged)
+    driver = {
+        'capture': log.record() if log is not None else None,
+        # DuckDB's own query log, or off DuckDB the driver's statement log.
+        'query_log': {
             'statements': sum(1 for text in logged if text),
             'bindings': sum(1 for text in logged if not text),
             'compared': compared,
             'differing': differing,
-        }
-    driver = {
-        'capture': log.record() if log is not None else None,
-        # DuckDB's own log; another database has none the run reads.
-        'query_log': query_logged,
+        },
     }
     return (
         outcome,
@@ -2443,6 +2546,15 @@ def run(
     Postgres only when the core reports a provider for it
     (``sdm_client._native.PROVIDERS``), as it does for DuckDB from the
     start."""
+    if mode == 'python-old' and database != 'duckdb':
+        # The orchestrator's decision (T2.1a fix 4): off DuckDB the
+        # reference side is python-ref's committed lines until the core's
+        # providers land; the old route, deleted in Phase 5, is not run
+        # there.
+        raise RunnerFailure(
+            f'python-old runs on DuckDB only; the {database} reference side '
+            'is python-ref, its lines committed'
+        )
     cases = [pair for pair in cases if database in case_databases(pair[0])]
     if not cases:
         raise RunnerFailure(f'no case runs on {database}')

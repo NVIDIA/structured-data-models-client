@@ -45,18 +45,18 @@ def _reference_line(case: str) -> dict[str, object]:
     raise AssertionError(case)
 
 
-def test_a_duckdb_line_without_its_query_log_is_not_complete() -> None:
-    r"""Seeded: a null query log passes off DuckDB only; on a DuckDB line
-    it fails, where its control, the log as recorded, passes."""
-    line = _reference_line('base.regression')
-    assert capture_check.complete(line) == []
-    nulled = copy.deepcopy(line)
-    nulled['driver']['query_log'] = None  # type: ignore[index]
-    assert capture_check.complete(nulled) == [
-        'a DuckDB observation without its query log'
-    ]
-    nulled['case'] = 'base.regression@sqlite'
-    assert capture_check.complete(nulled) == []
+def test_a_line_without_its_query_log_is_not_complete() -> None:
+    r"""Seeded: a null query log fails the capture's completeness on every
+    database's line (fix 4: SQLite and Postgres lines carry the driver's
+    statement log); its control, the log as recorded, passes."""
+    for key in ('base.regression', 'base.regression@sqlite'):
+        line = {**_reference_line('base.regression'), 'case': key}
+        assert capture_check.complete(line) == [], key
+        nulled = copy.deepcopy(line)
+        nulled['driver']['query_log'] = None  # type: ignore[index]
+        assert capture_check.complete(nulled) == [
+            'an observation without its query log'
+        ], key
 
 
 def test_a_probe_s_record_names_its_intended_site_and_claims_no_reach() -> None:

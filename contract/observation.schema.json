@@ -111,8 +111,8 @@
           }
         },
         "query_log": {
-          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped. Null on SQLite and Postgres (T2.1a), which keep no such log the run reads.",
-          "type": ["object", "null"],
+          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped. On SQLite and Postgres (T2.1a), the driver's own statement log: every statement its cursors executed, and every relation bound by name (ADBC's adbc_ingest), counted alike.",
+          "type": "object",
           "additionalProperties": false,
           "required": ["statements", "bindings", "compared", "differing"],
           "properties": {

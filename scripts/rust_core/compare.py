@@ -7,8 +7,10 @@ r"""Compares runners' observations of the contract cases.
 
     scripts/rust_core/compare.py --cases DIR [--reference FILE]
         [--policy FILE] [--bases FILE] [--expect FILE] [--register FILE]
-        [--database DATABASE] OBSERVATIONS...
+        [--database DATABASE] [OBSERVATIONS...]
 
+With no OBSERVATIONS, ``--reference`` is held to the cases alone (a
+SQLite or Postgres job before the core's providers land, T2.1a fix 4).
 Each OBSERVATIONS file is one runner's output (run_python.py or
 sdm-contract-run) on one database, ``--database`` (``duckdb`` by default;
 T2.1a): the cases that run there (their ``databases``) are compared, each
@@ -1943,8 +1945,13 @@ def main(argv: list[str] | None = None) -> int:
         "more_exact fields (default: this tree's)",
     )
     parser.add_argument('--database', default='duckdb')
-    parser.add_argument('observations', type=Path, nargs='+')
+    parser.add_argument('observations', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
+    if not arguments.observations and arguments.reference is None:
+        # Something is compared: a runner's observations, or with none (a
+        # SQLite or Postgres job before the core's providers, T2.1a fix 4)
+        # the committed reference itself, held to the cases.
+        parser.error('give observations, or --reference alone')
     report = compare(
         arguments.cases,
         arguments.reference,

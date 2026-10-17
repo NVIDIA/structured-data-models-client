@@ -46,7 +46,8 @@ TARGETS = ('sqlite', 'postgres')
 #: ``<engine>_refuses`` names a value of the type the engine cannot hold at
 #: all (SQLite stores a NaN as NULL), which the loader refuses by name.
 #: ``(p,s)`` is the column's precision and scale; ``(n)`` the column's own
-#: composite type, created beside its table. A value past what the engine's
+#: composite type, created beside its table and named by
+#: :func:`composite_name`. A value past what the engine's
 #: type holds (a nanosecond on Postgres's microsecond times) is refused.
 TYPE_MAP: dict[str, dict[str, str]] = {
     'boolean': {
@@ -436,14 +437,26 @@ def _sqlite_value(value: Any, name: str, where: str) -> Any:
 # --- Postgres ----------------------------------------------------------------------
 
 
+def composite_name(path: list[str]) -> str:
+    r"""The name of the composite type of a struct at ``path`` (its table,
+    column and members' names): a digest of the path written as JSON, so
+    no two paths share one, whatever their names hold (a ``.`` included),
+    it fits Postgres's 63 bytes, and every run gives the same."""
+    import hashlib
+
+    encoded = json.dumps(path, ensure_ascii=True, separators=(',', ':'))
+    return 'sdm_' + hashlib.sha256(encoded.encode()).hexdigest()[:32]
+
+
 def _postgres_type(
-    kind: Any, composite: str, create: Callable[[str], Any]
+    kind: Any, path: list[str], create: Callable[[str], Any]
 ) -> str:
-    r"""The Postgres type of an Arrow type. A struct's is the composite type
-    named ``composite``, which ``create`` (a statement's runner) creates
-    after the composite types of its members, at any depth, so every type a
-    composite names exists before it; a list's element may be any type
-    but a list (Postgres arrays are not lists of lists)."""
+    r"""The Postgres type of an Arrow type at ``path`` (its table, column
+    and members' names). A struct's is a composite type
+    (:func:`composite_name`), which ``create`` (a statement's runner)
+    creates after the composite types of its members, at any depth, so
+    every type a composite names exists before it; a list's element may be
+    any type but a list (Postgres arrays are not lists of lists)."""
     import pyarrow as pa
 
     name = family(kind)
@@ -452,14 +465,15 @@ def _postgres_type(
     if name == 'list':
         element = kind.value_type
         if family(element) == 'list':
-            raise Unloadable(f'{composite}: a list of lists')
-        return _postgres_type(element, composite, create) + '[]'
+            raise Unloadable(f'{".".join(path)}: a list of lists')
+        return _postgres_type(element, path, create) + '[]'
     if name == 'struct':
         members = ', '.join(
             f'{quote(member.name)} '
-            + _postgres_type(member.type, f'{composite}.{member.name}', create)
+            + _postgres_type(member.type, [*path, member.name], create)
             for member in kind
         )
+        composite = composite_name(path)
         create(f'CREATE TYPE {quote(composite)} AS ({members})')
         return quote(composite)
     if name == 'time' and pa.types.is_time32(kind):
@@ -746,7 +760,7 @@ def _load_postgres(duck: Any, dsn: str) -> None:
                         f'{where}: the type map has no {field.type}'
                     ) from None
                 declared = _postgres_type(
-                    field.type, f'{table}.{field.name}', connection.execute
+                    field.type, [table, field.name], connection.execute
                 )
                 columns.append(
                     f'{quote(field.name)} {declared}'

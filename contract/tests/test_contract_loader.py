@@ -151,11 +151,11 @@ def test_a_nanosecond_postgres_cannot_hold_is_refused_by_name() -> None:
     )
 
 
-def _old_client(database: str, tmp_path: Path) -> dict[str, object]:
-    import os
+def test_python_old_runs_on_duckdb_only(tmp_path: Path) -> None:
+    r"""Fix 4 (the orchestrator's decision): off DuckDB the reference side is
+    python-ref's committed lines, and the old route is refused by name."""
     import subprocess
 
-    out = tmp_path / f'{database}.jsonl'
     done = subprocess.run(
         [
             sys.executable,
@@ -164,48 +164,88 @@ def _old_client(database: str, tmp_path: Path) -> dict[str, object]:
             '--mode',
             'python-old',
             '--database',
-            database,
+            'sqlite',
             '--out',
-            str(out),
+            str(tmp_path / 'old.jsonl'),
             str(ROOT / 'contract/cases/s1/base.regression.json'),
         ],
         cwd=ROOT,
-        env=dict(os.environ),
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=600,
     )
-    assert done.returncode == 0, done.stderr
-    [line] = [json.loads(text) for text in out.read_text().splitlines()]
-    return line
+    assert done.returncode == 1, done.stdout
+    assert 'python-old runs on DuckDB only' in done.stderr
+    assert not (tmp_path / 'old.jsonl').exists()
+
+
+def _server_or_nothing(database: str) -> bool:
+    import os
+
+    if database != 'postgres' or os.environ.get('SDM_POSTGRES_TEST_DSN'):
+        return True
+    # No server named: required (a Postgres job), that fails; elsewhere
+    # there is nothing to hold.
+    assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
+        'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+    )
+    return False
+
+
+def _called(database: str, case_id: str) -> dict[str, object]:
+    path = next((ROOT / 'contract/cases').rglob(f'{case_id}.json'))
+    case = json.loads(path.read_text())
+    outcome, _, driver, _, _ = runner._call(
+        case, runner.load_bases(), True, database
+    )
+    return {'outcome': outcome, 'driver': driver}
 
 
 @pytest.mark.parametrize('database', ['sqlite', 'postgres'])
-def test_the_runner_reads_the_loaded_database_through_the_capture(
-    database: str, tmp_path: Path
-) -> None:
-    r"""``run_python.py --database``: the old client over the loaded
-    database, its observation keyed ``<case>@<database>``, every statement
-    and result captured through the driver's own connection, and no DuckDB
-    query log."""
-    import os
-
-    if database == 'postgres' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
-        # No server named: required (a Postgres job), that fails; elsewhere
-        # there is nothing to hold, as in test_postgres_required.py.
-        assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
-            'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
-        )
+def test_the_statement_log_holds_the_capture_complete(database: str) -> None:
+    r"""Fix 4: off DuckDB the query log is the driver's own statement log,
+    and the capture of a run over the loaded database is complete against
+    it: every statement counted and its text the one the capture recorded."""
+    if not _server_or_nothing(database):
         return
-    line = _old_client(database, tmp_path)
-    assert line['case'] == f'base.regression@{database}'
-    assert line['outcome']['result'] == 'success'
-    driver = line['driver']
-    assert isinstance(driver, dict) and driver['query_log'] is None
-    capture = driver['capture']
-    assert capture['statements'] and not capture['incomplete']
-    assert any(statement['results'] for statement in capture['statements'])
+    found = _called(database, 'base.regression')
+    driver = found['driver']
+    assert isinstance(driver, dict)
+    logged, capture = driver['query_log'], driver['capture']
+    assert logged['statements'] == len(capture['statements']) > 0
+    assert logged['bindings'] == len(capture['bindings'])
+    assert logged['compared'] > 0 and logged['differing'] == []
+    check = _module_capture_check()
+    assert check.complete({'case': 'x@' + database, **found}) == []
+
+
+def _module_capture_check() -> ModuleType:
+    return _module('capture_check')
+
+
+def test_postgres_result_types_are_named_never_numbered() -> None:
+    r"""Fix 4: a composite type the loader creates is recorded by its name,
+    never by the number the server gives it, so two runs over databases of
+    their own record the same types."""
+    if not _server_or_nothing('postgres'):
+        return
+
+    def types(found: dict[str, object]) -> list[list[str]]:
+        driver = found['driver']
+        assert isinstance(driver, dict)
+        return [
+            result['values']['types']
+            for statement in driver['capture']['statements']
+            for result in statement['results']
+            if result['values']['types'] is not None
+        ]
+
+    first, second = (_called('postgres', 'nested.struct') for _ in range(2))
+    assert types(first) == types(second)
+    named = [kind for kinds in types(first) for kind in kinds]
+    assert any(kind.startswith('sdm_') for kind in named), named
+    assert not any(kind.isdigit() for kind in named), named
 
 
 def _sqlite_rows(tmp_path: Path, *statements: str) -> list[tuple[object, ...]]:
