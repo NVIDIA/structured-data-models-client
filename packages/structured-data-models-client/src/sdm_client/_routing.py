@@ -327,16 +327,35 @@ FROM_SOURCE_SQLITE_TABLES = _on(FROM_SOURCE_DUCKDB_TABLES, 'sqlite')
 MATERIALIZE_SQLITE = _on(MATERIALIZE_DUCKDB, 'sqlite')
 PREDICT_SQLITE = _on(PREDICT_DUCKDB, 'sqlite')
 
+#: The same calls over a Postgres source (T2.3), routed as DuckDB's are.
+FROM_SOURCE_POSTGRES = _on(FROM_SOURCE_DUCKDB, 'postgres')
+FROM_SOURCE_POSTGRES_TABLES = _on(FROM_SOURCE_DUCKDB_TABLES, 'postgres')
+MATERIALIZE_POSTGRES = _on(MATERIALIZE_DUCKDB, 'postgres')
+PREDICT_POSTGRES = _on(PREDICT_DUCKDB, 'postgres')
+
 #: The backends whose sources the core reads, and each call's paths over
 #: each: ``Schema.from_source`` with no tables named and with tables
 #: named, ``PredictiveQuery.materialize`` and ``SDMClient.predict``.
-FROM_SOURCE = {'duckdb': FROM_SOURCE_DUCKDB, 'sqlite': FROM_SOURCE_SQLITE}
+FROM_SOURCE = {
+    'duckdb': FROM_SOURCE_DUCKDB,
+    'sqlite': FROM_SOURCE_SQLITE,
+    'postgres': FROM_SOURCE_POSTGRES,
+}
 FROM_SOURCE_TABLES = {
     'duckdb': FROM_SOURCE_DUCKDB_TABLES,
     'sqlite': FROM_SOURCE_SQLITE_TABLES,
+    'postgres': FROM_SOURCE_POSTGRES_TABLES,
 }
-MATERIALIZE = {'duckdb': MATERIALIZE_DUCKDB, 'sqlite': MATERIALIZE_SQLITE}
-PREDICT = {'duckdb': PREDICT_DUCKDB, 'sqlite': PREDICT_SQLITE}
+MATERIALIZE = {
+    'duckdb': MATERIALIZE_DUCKDB,
+    'sqlite': MATERIALIZE_SQLITE,
+    'postgres': MATERIALIZE_POSTGRES,
+}
+PREDICT = {
+    'duckdb': PREDICT_DUCKDB,
+    'sqlite': PREDICT_SQLITE,
+    'postgres': PREDICT_POSTGRES,
+}
 
 #: The paths this build can run on the core.
 CORE_ROUTED = frozenset(
@@ -349,6 +368,10 @@ CORE_ROUTED = frozenset(
     + FROM_SOURCE_SQLITE_TABLES
     + MATERIALIZE_SQLITE
     + PREDICT_SQLITE
+    + FROM_SOURCE_POSTGRES
+    + FROM_SOURCE_POSTGRES_TABLES
+    + MATERIALIZE_POSTGRES
+    + PREDICT_POSTGRES
 )
 
 

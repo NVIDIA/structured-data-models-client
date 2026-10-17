@@ -283,7 +283,7 @@ class RelationalMaterializer:
         windowed = (
             getattr(query.target_ast, 'date_offset_range', None) is not None
         )
-        # Over a DuckDB or SQLite source on the core route (T1.11c, T2.2),
+        # Over a DuckDB, SQLite or Postgres source on the core route (T1.11c, T2.2, T2.3),
         # the core gathers and lays out the request, the rules around the
         # gathering the core's (T1.28a); the old route holds its own.
         from sdm_client import _routing
