@@ -6466,6 +6466,33 @@ entries:
     decision E52 keeps the spelling across a materializer's runs, so a
     second materialize reads none, as the reference; the ID is kept.
 
+- id: P2B-14
+  title: On Postgres a seed past 2**64 - 1 is refused by name, where the reference hashes any integer
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler maps any integer seed into setseed's
+    range by hashing its decimal text (_postgres_seed), so a seed of 10**38
+    samples as any other.
+  new_behavior: >-
+    The Postgres dialect declares the largest seed a provider may declare,
+    max_seed 2**64 - 1 (ProviderCapabilities::max_seed is a u64, with no
+    "any seed" value, design choice 1), and the core refuses a larger seed
+    INVALID_REQUEST naming the seed and max_seed before the sample is
+    planned; every seed up to it maps as the reference maps it.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source
+    with a random_seed past 2**64 - 1.
+  cases: [T2.3]
+  refs: [RS-6, RS-7, KO2-28]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner, owner-pending: a refusal of input the reference
+    accepts, outside E92's 37 rules (KO2-28), found by the refusal census
+    on Postgres (probe rule:seed_size, a seed of 10**38). Lifting it takes
+    a contract change to max_seed's type, not T2.3's to make alone.
+
 - id: P2B-15
   title: On Postgres a table named alone is found on the search path, as a FROM finds it
   kind: change
@@ -6636,14 +6663,17 @@ entries:
     PredictiveQuery.materialize on the core route over a Postgres source
     whose time column is text.
   cases: [time.text-us-date, time.text-one-bad-value]
-  refs: [DT-12, DT-7]
+  refs: [DT-12, DT-7, 'contract/refusal-census.json rule:text_time']
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
     Approver: owner, owner-pending: a payload that differs (the reference's
     wrong rows) and a refusal under another code. Matching the reference
-    would compare times as text. Measured at T2.3 on Postgres 17,
+    would compare times as text. The refusal census's rule:text_time
+    probe ('March 3rd 2023' in a text time column) departs on Postgres for
+    the same reason: the core's CAST fails in the source where the
+    reference answers. Measured at T2.3 on Postgres 17,
     python-core and rust-host alike; the reference also gives an
     SDMWarning on time.text-us-date that the core does not.
   case_outcomes:
