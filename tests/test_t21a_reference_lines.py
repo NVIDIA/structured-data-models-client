@@ -6,7 +6,8 @@ r"""T2.1a's acceptance tests for the reference recorded on SQLite and
 Postgres (the independent test author's).
 
 The design (choices 2 and 3): the recorder records the reference for every
-S1 case on each database, one reference line per case and database, keyed
+case, S0 and S1 (the owner's call: every case on all three databases), on
+each database, one reference line per case and database, keyed
 ``<case>@sqlite`` and ``<case>@postgres`` (DuckDB's lines keep the bare
 ID); the reference capture extends to the reference's SQLite and Postgres
 drivers, so its statements and results there are recorded like DuckDB's.
@@ -22,9 +23,6 @@ The runner test (:func:`test_the_old_client_on_sqlite_meets_the_reference_line`)
 runs ``run_python.py --mode python-old --database sqlite`` on one case and
 holds its outcome to the committed ``@sqlite`` line: the reference side
 that a SQLite job runs when the core reports no SQLite provider.
-
-Gating: :data:`PENDING`, a strict xfail; the implementer deletes its one
-definition. Unmarked tests are controls that pass today.
 """
 
 from __future__ import annotations
@@ -42,11 +40,6 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 #: A plain S1 case every database loads (int keys, a timestamp, a float).
 SMOKE = 'base.regression'
 
-PENDING = pytest.mark.xfail(
-    reason='T2.1a: the reference recorded on SQLite and Postgres',
-    strict=True,
-)
-
 
 def _reference() -> dict[str, dict[str, Any]]:
     [path] = sorted((ROOT / 'contract/reference').glob('*.jsonl'))
@@ -56,10 +49,11 @@ def _reference() -> dict[str, dict[str, Any]]:
     }
 
 
-def _s1_cases() -> list[dict[str, Any]]:
+def _cases() -> list[dict[str, Any]]:
+    r"""Every case, S0 and S1."""
     return [
         json.loads(path.read_text())
-        for path in sorted((ROOT / 'contract/cases/s1').glob('*.json'))
+        for path in sorted((ROOT / 'contract/cases').rglob('*.json'))
     ]
 
 
@@ -70,7 +64,7 @@ def _key(case: str, database: str) -> str:
 def _wanted() -> list[str]:
     return [
         _key(case['id'], database)
-        for case in _s1_cases()
+        for case in _cases()
         for database in case.get('databases', DATABASES)
     ]
 
@@ -81,26 +75,24 @@ def _statements(line: dict[str, Any]) -> list[Any]:
     return found
 
 
-def test_every_s1_case_has_its_duckdb_line() -> None:
-    r"""Control: the 52 S1 cases each have their bare DuckDB line, the
-    capture of most holding statements."""
+def test_every_case_has_its_duckdb_line() -> None:
+    r"""Control: the 86 cases (24 S0, 62 S1) each have their bare DuckDB
+    line, the capture of most holding statements."""
     reference = _reference()
-    cases = _s1_cases()
-    assert len(cases) >= 52
+    cases = _cases()
+    assert len(cases) >= 86
     assert [c['id'] for c in cases if c['id'] not in reference] == []
     assert sum(bool(_statements(reference[c['id']])) for c in cases) > 40
 
 
-@PENDING
-def test_every_s1_case_has_a_line_on_each_database() -> None:
-    r"""Exit: the reference recorded for every S1 case on all three
+def test_every_case_has_a_line_on_each_database() -> None:
+    r"""Exit: the reference recorded for every case on all three
     databases, one line per case and database."""
     reference = _reference()
     missing = [key for key in _wanted() if key not in reference]
     assert missing == []
 
 
-@PENDING
 @pytest.mark.parametrize('database', ['sqlite', 'postgres'])
 def test_the_capture_records_the_reference_s_statements_there(
     database: str,
@@ -110,7 +102,7 @@ def test_the_capture_records_the_reference_s_statements_there(
     the reference's identity."""
     reference = _reference()
     short = []
-    for case in _s1_cases():
+    for case in _cases():
         if database not in case.get('databases', DATABASES):
             continue
         bare, there = (
@@ -124,7 +116,6 @@ def test_the_capture_records_the_reference_s_statements_there(
     assert short == []
 
 
-@PENDING
 def test_the_old_client_on_sqlite_meets_the_reference_line(
     tmp_path: Path,
 ) -> None:

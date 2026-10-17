@@ -979,7 +979,10 @@ def _not_synthesizable() -> dict[str, str]:
 
 def _synthesizable(tmp_path: Path) -> tuple[Path, Path]:
     r"""The cases and the reference observations, as their files are,
-    but those :func:`_not_synthesizable` names."""
+    but those :func:`_not_synthesizable` names, and the reference's DuckDB
+    lines only (the bare case IDs): the syntheses are compared in a DuckDB
+    run, and a ``<case>@sqlite`` or ``<case>@postgres`` line is its
+    database's run's."""
     left_out = _not_synthesizable()
     root = Path(tempfile.mkdtemp(prefix='synthesizable-', dir=tmp_path))
     cases = root / 'cases'
@@ -994,7 +997,8 @@ def _synthesizable(tmp_path: Path) -> tuple[Path, Path]:
         ''.join(
             line + '\n'
             for line in reference.read_text(encoding='utf-8').splitlines()
-            if json.loads(line)['case'] not in left_out
+            if '@' not in (case := json.loads(line)['case'])
+            and case not in left_out
         ),
         encoding='utf-8',
     )

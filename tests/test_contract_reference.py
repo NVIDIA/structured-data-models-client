@@ -5,7 +5,9 @@
 """The committed reference observations and their environment (T1.13).
 
 ``contract/reference/<commit>.jsonl`` holds one ``python-ref`` observation of
-every case in ``contract/cases``, recorded through ``run_python.py`` in
+every case in ``contract/cases`` (and, from T2.1a, at most one more on each
+other database the case lists, keyed ``<case>@sqlite`` or
+``<case>@postgres``), recorded through ``run_python.py`` in
 ``python-ref`` mode from a clean tree, the reference guard passing before the
 first case and after the last; ``contract/reference-env.txt`` records the
 environment they were recorded in. Every line validates against the
@@ -191,9 +193,19 @@ def _identity(
     ]
     case = _at(observation, 'case')
     found = _at(identity, 'inputs', 'case')
-    if not isinstance(case, str) or found != digests.get(case):
+    if not isinstance(case, str) or found != digests.get(_bare(case)):
         problems.append('identity.inputs.case: not the case file as it is')
     return problems
+
+
+#: The databases a reference line may name past DuckDB, keyed
+#: ``<case>@<database>`` (T2.1a); DuckDB's lines keep the bare case ID.
+DATABASES = ('sqlite', 'postgres')
+
+
+def _bare(key: str) -> str:
+    r"""The case a line's key names, its ``@<database>`` dropped."""
+    return key.partition('@')[0]
 
 
 def reference_problems(
@@ -248,6 +260,18 @@ def reference_problems(
         count = seen.pop(case['id'], 0)
         if count != 1:
             problems.append(f'{case["id"]}: {count} reference observations')
+        # A line on another database is optional here (which cases have
+        # one is T2.1a's), but at most one, on a database the case lists.
+        for database in DATABASES:
+            count = seen.pop(f'{case["id"]}@{database}', 0)
+            if count > 1:
+                problems.append(
+                    f'{case["id"]}@{database}: {count} reference observations'
+                )
+            elif count and database not in case.get('databases', DATABASES):
+                problems.append(
+                    f'{case["id"]}@{database}: not a database the case lists'
+                )
     problems.extend(f'{case}: not a case' for case in sorted(seen))
     return problems
 
@@ -478,7 +502,14 @@ LINE_FAULTS: dict[str, tuple[Callable[[list[dict[str, Any]]], None], str]] = {
         'identity.inputs.bases',
     ),
     'no identity': (_set('identity', _MISSING), 'identity.runner'),
-    'a line missing': (lambda lines: lines.pop(), '0 reference observations'),
+    # The first line, DuckDB's: a line on another database is optional.
+    'a line missing': (lambda lines: lines.pop(0), '0 reference observations'),
+    'a database line twice': (
+        lambda lines: lines.append(
+            copy.deepcopy(next(x for x in lines if '@' in x['case']))
+        ),
+        '@sqlite: 2 reference observations',
+    ),
     'a line twice': (
         lambda lines: lines.append(copy.deepcopy(lines[0])),
         '2 reference observations',
