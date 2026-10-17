@@ -15,9 +15,9 @@
 //! its static target `tier` with the rest, and its entity sample, which
 //! reads `tier` beside the key for the labels.
 //!
-//! T2.0c's exact-decimal cases add seven more, as `sdm-testkit` recorded
+//! T2.0c's exact-decimal cases add nine more, as `sdm-testkit` recorded
 //! them: the previews of the tables their decimal columns (`d`, `f` and
-//! `g`, `amount`) widen, the entity samples of their static targets,
+//! `g`, `t`, `amount`) widen, the entity samples of their static targets,
 //! and `decimal.sum-10-2`'s and `decimal.feature-inexact-38-18`'s
 //! neighbour and lookup reads over `amount`, `f` and `g`.
 
@@ -94,6 +94,19 @@ JOIN "orders" t
   ON t."user_id" = s."key"
  AND CAST(t."ts" AS TIMESTAMP) <= s."end"
  AND CAST(t."ts" AS TIMESTAMP) > s."start""#,
+    ),
+    // decimal.target-regression-collide (T2.0c)
+    (
+        r#"{"columns": ["user_id", "age", "country", "t"], "limit": 1000, "request": "preview", "table": "users"}"#,
+        r#"SELECT "user_id", "age", "country", "t" FROM "users" LIMIT 1000"#,
+    ),
+    // decimal.target-regression-collide (T2.0c)
+    (
+        r#"{"columns": ["user_id", "t"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
+        r#"SELECT "user_id", "t"
+FROM (SELECT * FROM "users"
+WHERE "user_id" IS NOT NULL)
+USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
     ),
 ];
 
