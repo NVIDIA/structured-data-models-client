@@ -1207,7 +1207,16 @@ fn predict(
             // client asks when its caller names none (T1.28b).
             outputs: vec![],
             default_outputs: true,
-            inference_asked: vec![],
+            // The inference options the case's caller set, which alone the
+            // call sends (the reference's 26ecdd28, T2.0c), as the Python
+            // host hands over the keys of the request's asked config.
+            inference_asked: case
+                .input
+                .materialize
+                .inference_config
+                .iter()
+                .flat_map(|options| options.keys().cloned())
+                .collect(),
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
