@@ -5834,6 +5834,11 @@ entries:
   - eb6c68eb
   - P1B-18
   - P1B-53
+  - 'contract/decimal-vectors.json#key.pair.d10-2.d12-4 success -> success'
+  - 'contract/decimal-vectors.json#key.pair.d12-4.d10-2 success -> success'
+  - 'contract/decimal-vectors.json#key.pair.d20-2.d18-0 success -> success'
+  - 'contract/decimal-vectors.json#key.pair-merging.d38-0.d38-2 success -> success'
+  - 'contract/decimal-vectors.json#key.pair-merging.d38-2.d38-0 refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.huge.decimal unfinished -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-18-0.text.decimal-point refusal INVALID_REQUEST -> success'
   - 'contract/key-cast-vectors.json#decimal128-18-0.text.exponent refusal INVALID_REQUEST -> success'
