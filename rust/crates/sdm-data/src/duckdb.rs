@@ -758,11 +758,16 @@ fn held(relations: &[Relation]) -> String {
     selects.join("\nUNION ALL\n")
 }
 
+/// SQL `text` with each of its ASCII letters lowered, as DuckDB folds an
+/// identifier to look it up in its catalog (ASCII letters only, so
+/// `"Äpfel"` is not `äpfel`): two names are the same name to DuckDB when
+/// their folds are equal, quoted or not.
+fn fold(text: &str) -> String {
+    format!("translate({text}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')")
+}
+
 /// [`held`] for relations of one part, by their names.
 fn held_names(names: &[&str]) -> String {
-    let fold = |text: &str| {
-        format!("translate({text}, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz')")
-    };
     let asked = names
         .iter()
         .map(|name| fold(&self::text(name)))
@@ -827,23 +832,35 @@ fn columns(table: &Relation) -> String {
 /// current database has no schema `x`, of the default schema `main` of the
 /// database `x` (where both exist DuckDB refuses the name as ambiguous,
 /// and the read of its columns fails first).
+///
+/// A relation of several parts names its database, schema and table as
+/// DuckDB resolves them, each compared by [`fold`], as DuckDB compares
+/// identifiers, so `["S", "u"]` is the table `["s", "u"]` is, as
+/// `"S"."u"` reads it. One part keeps the text comparison of its table's
+/// name that the reference makes (`DuckDBTable`'s constraints, 6298913c),
+/// so a one-part request renders as it did.
 fn in_catalog(relation: &Relation, table: &str, prefix: &str, indent: &str) -> String {
     let (database, schema) = (
-        format!("{prefix}database_name"),
-        format!("{prefix}schema_name"),
+        fold(&format!("{prefix}database_name")),
+        fold(&format!("{prefix}schema_name")),
     );
+    let named = |part: &str| text(&part.to_ascii_lowercase());
     match relation.source.as_slice() {
         [database_part, schema_part, name] => format!(
-            "{table} = {}\n{indent}AND {database} = {} AND {schema} = {}",
-            text(name),
-            text(database_part),
-            text(schema_part)
+            "{} = {}\n{indent}AND {database} = {} AND {schema} = {}",
+            fold(table),
+            named(name),
+            named(database_part),
+            named(schema_part)
         ),
         [qualifier, name] => {
-            let qualifier = text(qualifier);
+            let qualifier = named(qualifier);
+            let schemas = fold("schema_name");
             format!(
-                "{table} = {}\n{indent}AND (({database} = current_database() AND {schema} = {qualifier})\n{indent}  OR ({database} = {qualifier} AND {schema} = 'main'\n{indent}      AND NOT EXISTS (SELECT 1 FROM duckdb_schemas() WHERE database_name = current_database() AND schema_name = {qualifier})))",
-                text(name)
+                "{} = {}\n{indent}AND (({database} = {} AND {schema} = {qualifier})\n{indent}  OR ({database} = {qualifier} AND {schema} = 'main'\n{indent}      AND NOT EXISTS (SELECT 1 FROM duckdb_schemas() WHERE database_name = current_database() AND {schemas} = {qualifier})))",
+                fold(table),
+                named(name),
+                fold("current_database()"),
             )
         }
         parts => format!(
