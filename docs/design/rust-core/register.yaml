@@ -6295,6 +6295,9 @@ entries:
     Approver: owner (not a crash replaced, so outside KO2-11's reviewer
     classes): the core answers where the reference refuses, its reading the
     owner's E68 list. Measured at T2.2.
+  case_outcomes:
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
 
 - id: P2B-14
   title: On SQLite, a column declared INTERVAL holding text is text, where the reference takes it as an integer by its declared name
