@@ -6092,3 +6092,38 @@ entries:
     942752e8 at 6298913c; not measured further at T2.0c, whose port does not
     touch the comparison. The test that shows it holds the two routes alike
     and fails until T2.17, or until its test author holds it to this entry.
+
+- id: P2B-7
+  title: python-old answers the four decimal cases as the reference at 6298913c, by main's eb6c68eb
+  kind: change
+  old_behavior: >-
+    The old route, the epic's Python client over the reference's engine,
+    failed key.decimal-18-0, key.decimal-38-10, key.hugeint and
+    decimal.class-target-38-18 with INTERNAL_ERROR at materialize, as the
+    reference at b413e9ad did (an unsupported decimal128 data type for the
+    entity or target column), and its baselines held that crash.
+  new_behavior: >-
+    With main's eb6c68eb merged (T2.0c), the old route's engine reads a
+    DuckDB DECIMAL as its declared type, int64 at scale 0 and float64
+    otherwise, and answers each case at predict, exactly as the reference
+    at 6298913c does; its baselines move from the crash to the reference's
+    success.
+  affected_inputs: >-
+    PredictiveQuery.materialize and SDMClient.predict on the default
+    (old) route over a DuckDB source with a DECIMAL or HUGEINT key or a
+    DECIMAL class target.
+  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, decimal.class-target-38-18]
+  refs: [eb6c68eb]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. The old route now matches the reference where it
+    crashed before (the old client's crash replaced by the reference's
+    answer), not a refusal of anything; the outcomes are the ratchet's own
+    proposals from the gate at T2.0c's candidate.
+  case_outcomes:
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+  - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+  - {case: key.decimal-38-10, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+  - {case: key.hugeint, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
