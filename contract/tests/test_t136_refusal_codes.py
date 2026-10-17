@@ -31,13 +31,13 @@ by name rather than silently changing what the core is held to.
   main's eb6c68eb (the reference at 6298913c) the reference reads the
   decimal as float64 and materializes it, each label the finite value
   compared with the infinity; held now: that answer, measured, and the
-  core's refusal as before, INVALID_REQUEST at materialize by no rule
-  (register P2B-1, until T2.17). Controls, alike on both routes before and
+  core's, the same payload (T2.0c's exact decimals: a constant past the
+  column's digits orders by its sign). Controls, alike on both routes before and
   after: a float sum compared with ``1e999`` or ``-1e999`` and a static
   integer compared with ``1e999`` materialize the same payload; a finite
   constant a DECIMAL does not hold (``1e308``) was INVALID_REQUEST on
   both, and since eb6c68eb the reference answers it, every label false,
-  where the core refuses it (P2B-1); ``nan``,
+  and the core alike (T2.0c); ``nan``,
   ``inf``, ``-inf`` and ``'nan'`` are refused by the PQL parser; an integer
   past int64 or past i128 is refused by the PQL validator with the same
   message on both routes. The parser takes no constant that is NaN, so no
@@ -281,9 +281,9 @@ def test_an_infinite_constant_against_a_decimal_is_answered_by_the_reference(
     r"""Since main's eb6c68eb (the reference at 6298913c) the reference reads
     the decimal as float64 and materializes the condition: every label is
     the finite value compared with the infinity, as Python compares them.
-    The core keeps Phase 1's exact decimals and refuses it, INVALID_REQUEST
-    at materialize by no rule: register P2B-1's refusal of a decimal input
-    the reference answers, until T2.17."""
+    With exact decimals (T2.0c, KO2-35 and KO2-50) the core answers it too:
+    a constant past the column's digits orders by its sign, so its payload,
+    the labels included, is the reference's."""
     reference, core = _routes(
         monkeypatch,
         *_decimal(precision, scale),
@@ -299,12 +299,7 @@ def test_an_infinite_constant_against_a_decimal_is_answered_by_the_reference(
     ]
     assert labels, reference
     assert labels == [COMPARE[op](0.0, infinity)] * len(labels), labels
-    assert core['stage'] == 'materialize', core
-    assert (core['class'], core['code']) == (
-        'StructuredDataError',
-        'INVALID_REQUEST',
-    ), core
-    assert 'rule' not in core['details'], core
+    _succeeded_alike(reference, core)
 
 
 @pytest.mark.parametrize(
@@ -345,9 +340,9 @@ def test_a_finite_constant_past_the_decimal_is_answered_by_the_reference(
     r"""1e308 is finite and past DECIMAL(38, 0). b413e9ad refused it
     INVALID_REQUEST, as the core does; since main's eb6c68eb (6298913c) the
     reference reads the decimal as float64 and materializes it, every label
-    false (no value of the column is past 1e308). The core still refuses it,
-    INVALID_REQUEST at materialize by no rule: register P2B-1's refusal of a
-    decimal input the reference answers, until T2.17."""
+    false (no value of the column is past 1e308). With exact decimals
+    (T2.0c, KO2-50) the core answers it too, the constant past the column's
+    digits ordering by its sign: the reference's payload."""
     reference, core = _routes(
         monkeypatch,
         *_decimal(38, 0),
@@ -359,12 +354,7 @@ def test_a_finite_constant_past_the_decimal_is_answered_by_the_reference(
         row[context['columns'].index('TARGET')] for row in context['rows']
     ]
     assert labels and set(labels) == {False}, labels
-    assert core['stage'] == 'materialize', core
-    assert (core['class'], core['code']) == (
-        'StructuredDataError',
-        'INVALID_REQUEST',
-    ), core
-    assert 'rule' not in core['details'], core
+    _succeeded_alike(reference, core)
 
 
 #: Past int64, under i128; past i128.
