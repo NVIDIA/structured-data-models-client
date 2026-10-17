@@ -306,9 +306,30 @@ jobs:
     # with none, rust/Cargo.toml): a panic and its backtrace still name each
     # file and line, and the test binaries take far less of the runner's
     # disk. The test profile inherits dev's; stated for both all the same.
+    # The pinned PostgreSQL service, required (H26; T2.1a): sdm-testkit's
+    # tests/postgres_required.rs fails, never stands down, when it is not
+    # there; the core's Postgres passes come with T2.3b.
+    services:
+      postgres: &postgres-service
+        # POSTGRES_IMAGE, by way of the landing job, pulled from ghcr.io
+        # as this workflow, which needs packages: read.
+        image: ${{ needs.landing.outputs.postgres-image }}
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_DB: sdm_test
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
     env:
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
     steps:
       # Every branch, for the gate's checkpoint (the merge base with the
       # phase branch) and its worktree.
@@ -655,21 +676,7 @@ jobs:
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
     services:
-      postgres: &postgres-service
-        # POSTGRES_IMAGE, by way of the landing job, pulled from ghcr.io
-        # as this workflow, which needs packages: read.
-        image: ${{ needs.landing.outputs.postgres-image }}
-        credentials:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          POSTGRES_DB: sdm_test
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready --health-interval 5s
-          --health-timeout 5s --health-retries 10
+      postgres: *postgres-service
     env:
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
@@ -815,7 +822,7 @@ jobs:
   # cell, sharing its steps: replay_jobs.py substitutes no matrix value but
   # the Python version.
   contract-python-ref-pandas3:
-    name: contract-python (ref-pandas3)
+    name: contract-python (ref-pandas3, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: native-wheel
@@ -837,9 +844,10 @@ jobs:
           name: native-wheel
           path: native
       # The cell's pins as constraints, so nothing installed after moves
-      # them; DuckDB at the reference's version; the engine, which a case's
-      # materialize needs, built from source with the runner image's
-      # compilers and CMake.
+      # them; DuckDB at the reference's version; the SQLite and Postgres
+      # drivers (ADBC's SQLite, psycopg), one step for every database's job
+      # (T2.1a); the engine, which a case's materialize needs, built from
+      # source with the runner image's compilers and CMake.
       - &contract-install
         name: Install the cell
         run: |
@@ -847,7 +855,7 @@ jobs:
           pip install --upgrade pip
           pip install -c "$RUNNER_TEMP/cell.txt" $CELL_PINS duckdb==1.5.6 pyyaml jsonschema pytest pytest-xdist pytest-timeout \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
-            './packages/structured-data-models-connectors[duckdb]' \
+            './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
             ./packages/structured-data-models-relational-engine "$(ls native/*.whl)[test]"
       # In parallel, each test file on one worker so its module fixtures are
       # built once; the results match a serial run's, test by test. The
@@ -934,7 +942,7 @@ jobs:
   # branches, their lanes and the epic branch, as the gate does. contract/tests/test_cross_host.py runs
   # this step's text.
   cross-host:
-    name: cross-host (python-core, rust-host)
+    name: cross-host (duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # Its own !cancelled() would run it on a landing commit, whose jobs
@@ -985,7 +993,7 @@ jobs:
             cross-host/python-core.jsonl cross-host/rust-host.jsonl
 
   contract-python-dbr17-pandas2:
-    name: contract-python (dbr17-pandas2)
+    name: contract-python (dbr17-pandas2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: native-wheel
@@ -1002,7 +1010,7 @@ jobs:
       - *contract-gate
 
   contract-python-floor-pandas2-2:
-    name: contract-python (floor-pandas2.2)
+    name: contract-python (floor-pandas2.2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: native-wheel
@@ -1017,6 +1025,173 @@ jobs:
       - *contract-wheel
       - *contract-install
       - *contract-gate
+
+  # The corpus on SQLite and Postgres (design choice 2, "CI"; T2.1a): each
+  # cell once per database, `contract-python (<cell>, <database>)`. The
+  # contract loader (contract/runners/databases.py) loads each case's DuckDB
+  # tables into the database; the old client runs every case there, judged
+  # against the committed reference lines `<case>@<database>`
+  # (compare.py --database), and the core's legs run there exactly when the
+  # built core reports a provider for it (sdm_client._native.PROVIDERS):
+  # run_python.py legs holds the job to that staging rule, and fails a job
+  # that runs no case. Only the Postgres jobs start the pinned service,
+  # required there (SDM_REQUIRE_POSTGRES, H26).
+  contract-python-ref-pandas3-sqlite:
+    name: contract-python (ref-pandas3, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: native-wheel
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - &contract-database
+        name: the reference side, and the core legs the core has a provider for
+        run: |
+          set -o pipefail
+          out=database-observations
+          mkdir -p "$out"
+          python -I contract/runners/run_python.py --mode python-old --database "$DATABASE" \
+            --out "$out/python-old.jsonl" contract/cases || exit 1
+          python -I -c 'import json, sdm_client._native as n; print(json.dumps({"python-core": list(n.PROVIDERS)}))' \
+            > "$out/providers.json" || exit 1
+          observed=("$out/python-old.jsonl")
+          if python -I -c 'import json, os, sys; sys.exit(os.environ["DATABASE"] not in json.load(open(sys.argv[1]))["python-core"])' "$out/providers.json"; then
+            python -I contract/runners/run_python.py --mode python-core --database "$DATABASE" \
+              --out "$out/python-core.jsonl" contract/cases || exit 1
+            observed+=("$out/python-core.jsonl")
+          fi
+          status=0
+          python -I contract/runners/run_python.py legs --database "$DATABASE" \
+            --providers "$out/providers.json" "${observed[@]}" || status=1
+          python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
+            --reference contract/reference/*.jsonl "${observed[@]}" || status=1
+          python - "${observed[@]}" <<'EOF' || status=1
+          import json, os, sys
+          cell = os.environ['CELL']
+          for path in sys.argv[1:]:
+              lines = open(path, encoding='utf-8').read().splitlines()
+              seen = {json.loads(line)['identity']['cell'] for line in lines}
+              if seen != {cell}:
+                  sys.exit(f'{path}: observed in {sorted(map(str, seen))}, not {cell}')
+          print(f'every observation in {cell}')
+          EOF
+          exit $status
+
+  contract-python-ref-pandas3-postgres:
+    name: contract-python (ref-pandas3, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [landing, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      # Fails, never stands down, when the service is not there (H26).
+      - &contract-postgres-required
+        name: The Postgres service, and the contract loader on it
+        run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
+      - *contract-database
+
+  contract-python-dbr17-pandas2-sqlite:
+    name: contract-python (dbr17-pandas2, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: native-wheel
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-database
+
+  contract-python-dbr17-pandas2-postgres:
+    name: contract-python (dbr17-pandas2, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [landing, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-postgres-required
+      - *contract-database
+
+  contract-python-floor-pandas2-2-sqlite:
+    name: contract-python (floor-pandas2.2, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: native-wheel
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - *contract-wheel
+      - *contract-install
+      - *contract-database
+
+  contract-python-floor-pandas2-2-postgres:
+    name: contract-python (floor-pandas2.2, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [landing, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+      - *contract-wheel
+      - *contract-install
+      - *contract-postgres-required
+      - *contract-database
 
   build:
     runs-on: ubuntu-latest

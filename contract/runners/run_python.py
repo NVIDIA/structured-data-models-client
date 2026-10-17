@@ -10,6 +10,11 @@ Run with ``python -I``, from the interpreter of the environment under test:
     python -I contract/runners/run_python.py --mode MODE [--reference DIR]
         [--database DATABASE] [--no-capture] [--inventory ID]... --out FILE
         [CASE_OR_DIRECTORY...]
+    python -I contract/runners/run_python.py legs --database DATABASE
+        --providers FILE OBSERVATIONS...
+
+``legs`` holds a database job's observations to the staging rule
+(:func:`check_legs`), each core leg's providers given as JSON in FILE.
 
 - ``python-ref``: the reference, the oracle. ``--reference`` names the
   reference checkout, whose environment must be the interpreter's. Its guard
@@ -2551,7 +2556,42 @@ def run(
     return observations
 
 
+def legs_main(argv: list[str]) -> int:
+    r"""``run_python.py legs --database D --providers FILE OBSERVATIONS...``:
+    :func:`check_legs` over the observations files, ``FILE`` the JSON
+    object of each core leg's providers; exit 1 naming each problem."""
+    parser = argparse.ArgumentParser(prog='run_python.py legs')
+    parser.add_argument('--database', choices=DATABASES, required=True)
+    parser.add_argument('--providers', type=Path, required=True)
+    parser.add_argument('observations', type=Path, nargs='*')
+    arguments = parser.parse_args(argv)
+    try:
+        providers = json.loads(arguments.providers.read_text(encoding='utf-8'))
+        if not isinstance(providers, dict) or not all(
+            isinstance(listed, list)
+            and all(isinstance(name, str) for name in listed)
+            for listed in providers.values()
+        ):
+            raise ValueError('not an object of lists of names')
+        lines = [
+            json.loads(text)
+            for path in arguments.observations
+            for text in path.read_text(encoding='utf-8').splitlines()
+        ]
+    except (OSError, ValueError, RecursionError) as error:
+        print(f'legs: unreadable: {type(error).__name__}: {error}')
+        return 1
+    problems = check_legs(arguments.database, providers, lines)
+    for problem in problems:
+        print(f'FAILS legs: {problem}')
+    print(f'legs: {"FAIL" if problems else "ok"} on {arguments.database}')
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    given = sys.argv[1:] if argv is None else argv
+    if given[:1] == ['legs']:
+        return legs_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--mode', choices=MODES, required=True)
     parser.add_argument('--reference', type=Path)
