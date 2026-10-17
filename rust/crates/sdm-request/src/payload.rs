@@ -305,39 +305,21 @@ fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
     })
 }
 
-/// A decimal's unscaled `value` at `scale` as the float64 the reference
-/// sends (`_cell_json_value`'s float branch over `_json_value`): a whole
-/// value only where float64 holds it exactly, a fraction only within the
-/// JSON-safe range, rounded to the nearest double; anything else refused
-/// as the caller's error ("cannot be sent as float64"). Every scale up to
-/// 38 is taken: the JSON-safe bound at a scale whose product with it is
-/// past `u128` bounds no `DECIMAL(38)` value (T1.32b: such a bound
-/// wrapped, refusing `DECIMAL(38, 38)` cells in a release build and
-/// panicking in a debug one).
+/// A decimal's unscaled `value` at `scale` as a float64 cell: the nearest
+/// double to its exact value, rounded once, whatever its digits (T2.0c:
+/// the reference since `main`'s eb6c68eb sends every decimal feature as a
+/// float64, where it refused one a double does not hold exactly; its cast
+/// can be one unit in the last place off, where this is the nearest).
 fn decimal_float(value: i128, scale: i8, column: &str) -> Result<Value, CoreError> {
-    let lost = || {
+    let float: f64 = format!("{value}e{}", -i32::from(scale))
+        .parse()
+        .map_err(|_| internal("a decimal's text is not a number"))?;
+    Value::float(float).ok_or_else(|| {
         invalid(
-            "a decimal cannot be sent as float64 without losing precision",
+            "a value is not finite, and a request holds finite numbers or nulls",
             column,
         )
-    };
-    let unit = 10_i128.pow(u32::from(scale.unsigned_abs()));
-    if value % unit == 0 {
-        let whole = value / unit;
-        let float = whole as f64;
-        // Whole and under 10**38, so the double converts back exactly when
-        // it is the same integer.
-        if float as i128 != whole {
-            return Err(lost());
-        }
-        return Value::float(float).ok_or_else(lost);
-    }
-    let safe = (JSON_SAFE as u128).checked_mul(unit.unsigned_abs());
-    if safe.is_some_and(|safe| value.unsigned_abs() > safe) {
-        return Err(lost());
-    }
-    let float: f64 = format!("{value}e-{scale}").parse().map_err(|_| lost())?;
-    Value::float(float).ok_or_else(lost)
+    })
 }
 
 /// `ns` nanoseconds since the epoch as the reference writes a time:
@@ -1114,19 +1096,39 @@ mod tests {
     }
 
     #[test]
-    fn a_decimal_is_sent_as_float64_only_where_it_holds_it() {
+    fn a_decimal_is_sent_as_its_nearest_double() {
         let number = |t: &str| Value::Number(t.to_owned());
         // 1.5 at scale 2, a whole 5, and the nearest double to 0.1.
         assert_eq!(decimal_float(150, 2, "c").unwrap(), number("1.5"));
         assert_eq!(decimal_float(500, 2, "c").unwrap(), number("5.0"));
         assert_eq!(decimal_float(1, 1, "c").unwrap(), number("0.1"));
-        // 2**53 + 1, whole, is not a double; 2**53 is.
+        // 0.70, where pyarrow's cast gives 0.7000000000000001, and an
+        // 18-digit fraction, where it gives 0.12345678901234569.
+        assert_eq!(decimal_float(70, 2, "c").unwrap(), number("0.7"));
+        assert_eq!(
+            decimal_float(123_456_789_012_345_678, 18, "c").unwrap(),
+            number("0.12345678901234568")
+        );
+        // What a double does not hold exactly is sent rounded, not refused
+        // (T2.0c): 2**53 + 1 whole, and 2**53 - 1 + 0.5.
         let unit = 10_i128.pow(18);
-        assert!(decimal_float(((1_i128 << 53) + 1) * unit, 18, "c").is_err());
-        assert!(decimal_float((1_i128 << 53) * unit, 18, "c").is_ok());
-        // A fraction past the JSON-safe range is refused, within it taken:
-        // 2**53 - 1 + 0.5 is past it, 2**53 - 2 + 0.5 within.
-        assert!(decimal_float(9_007_199_254_740_991 * 10 + 5, 1, "c").is_err());
-        assert!(decimal_float(9_007_199_254_740_990 * 10 + 5, 1, "c").is_ok());
+        assert_eq!(
+            decimal_float(((1_i128 << 53) + 1) * unit, 18, "c").unwrap(),
+            Value::float(9_007_199_254_740_992.0).unwrap()
+        );
+        assert_eq!(
+            decimal_float(9_007_199_254_740_991 * 10 + 5, 1, "c").unwrap(),
+            Value::float(9_007_199_254_740_992.0).unwrap()
+        );
+        // The widest DECIMAL(38, 0) and DECIMAL(38, 38).
+        let largest = 10_i128.pow(38) - 1;
+        assert_eq!(
+            decimal_float(largest, 0, "c").unwrap(),
+            Value::float(1e38).unwrap()
+        );
+        assert_eq!(
+            decimal_float(largest, 38, "c").unwrap(),
+            Value::float(1.0).unwrap()
+        );
     }
 }
