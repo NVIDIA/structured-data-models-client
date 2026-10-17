@@ -11,25 +11,25 @@
   "zone": "SET GLOBAL TimeZone='America/New_York'",
   "session_zone": "SET TimeZone='America/New_York'",
   "several": {
-    "request": {"request": "preview", "table": "many", "columns": ["n", "name"], "limit": 5000},
+    "request": {"request": "preview", "table": {"source": ["many"]}, "columns": ["n", "name"], "limit": 5000},
     "batch_rows": 2048,
     "rows": 5000
   },
   "empty": {
-    "request": {"request": "preview", "table": "nothing", "columns": ["n", "name"], "limit": 1000},
+    "request": {"request": "preview", "table": {"source": ["nothing"]}, "columns": ["n", "name"], "limit": 1000},
     "fields": [["n", "int64"], ["name", "utf8"]]
   },
   "time_bounds": {
-    "request": {"request": "time_bounds", "columns": [{"table": "stamps", "column": "ts"}]},
+    "request": {"request": "time_bounds", "columns": [{"table": {"source": ["stamps"]}, "column": "ts"}]},
     "rows": [[0, 1705271400000000, 1719820800000000]],
     "wall_clock": ["2024-01-14T22:30:00", "2024-07-01T08:00:00"]
   },
   "keys": {
     "cases": [
-      {"column": "u", "type": {"type": "uint64"}, "values": ["9223372036854775809", "18446744073709551615", "9223372036854775808"], "labels": ["c", "a", "b"], "request": {"request": "lookup", "table": "keyed", "key": "u", "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "uint64"}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}},
-      {"column": "d38", "type": {"type": "decimal128", "precision": 38, "scale": 0}, "values": ["10000000000000000000000000000000000002", "10000000000000000000000000000000000003", "10000000000000000000000000000000000001"], "labels": ["b", "c", "a"], "request": {"request": "lookup", "table": "keyed", "key": "d38", "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "decimal128", "precision": 38, "scale": 0}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}},
-      {"column": "d18", "type": {"type": "decimal128", "precision": 38, "scale": 18}, "values": ["0.100000000000000003", "0.100000000000000001", "0.100000000000000002"], "labels": ["c", "a", "b"], "request": {"request": "lookup", "table": "keyed", "key": "d18", "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "decimal128", "precision": 38, "scale": 18}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}}
+      {"column": "u", "type": {"type": "uint64"}, "values": ["9223372036854775809", "18446744073709551615", "9223372036854775808"], "labels": ["c", "a", "b"], "request": {"request": "lookup", "table": {"source": ["keyed"]}, "key": ["u"], "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "uint64"}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}},
+      {"column": "d38", "type": {"type": "decimal128", "precision": 38, "scale": 0}, "values": ["10000000000000000000000000000000000002", "10000000000000000000000000000000000003", "10000000000000000000000000000000000001"], "labels": ["b", "c", "a"], "request": {"request": "lookup", "table": {"source": ["keyed"]}, "key": ["d38"], "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "decimal128", "precision": 38, "scale": 0}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}},
+      {"column": "d18", "type": {"type": "decimal128", "precision": 38, "scale": 18}, "values": ["0.100000000000000003", "0.100000000000000001", "0.100000000000000002"], "labels": ["c", "a", "b"], "request": {"request": "lookup", "table": {"source": ["keyed"]}, "key": ["d18"], "columns": ["label"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "decimal128", "precision": 38, "scale": 18}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}}
     ]
   },
-  "large": {"request": {"request": "lookup", "table": "many", "key": "n", "columns": ["name"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "int64"}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}, "rows": 20000, "modulo": 5000}
+  "large": {"request": {"request": "lookup", "table": {"source": ["many"]}, "key": ["n"], "columns": ["name"], "seeds": {"attachment": 0, "columns": [{"name": "key", "type": {"type": "int64"}, "nullable": false}, {"name": "batch", "type": {"type": "int64"}, "nullable": false}]}}, "rows": 20000, "modulo": 5000}
 }
