@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Test-only (the `test-ops` feature): a JSON value checked against a
+//! Test-only (the `schema-check` feature, which `test-ops` brings): a JSON value checked against a
 //! definition of the contract's own schema ([`crate::schema_json`]), so a
 //! producer's tests can hold what it writes to the definition the lock
 //! holds (T1.22: the request state's payload, whose definition `sdm-wire`'s
@@ -13,12 +13,14 @@
 //! `object`, `array`, `string`, `boolean` or `integer`, `properties`,
 //! `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `minimum`,
 //! the schemas `true` and `false`, and the annotations `description`,
-//! `title`, `format` and any `x-` keyword, which it does not read) and
-//! fails on any other keyword in a subschema the value reaches. It does
-//! not walk the whole definition: a keyword under a property the value
-//! does not carry, under a type the value is not, or in an `anyOf` option
-//! not tried or not holding is never seen. A definition that comes to need
-//! another keyword needs it added here, with a test (T1.28w).
+//! `title`, `format` and any `x-` keyword, which it does not read). It
+//! walks the whole definition before it reads the value, and fails on any
+//! other keyword anywhere in it: under a property the value does not
+//! carry, under a type the value is not, or in an `anyOf` option not tried
+//! or not holding as much as on the value's own path (M3, T2.1b), so no
+//! value passes a definition holding a rule this check would not read. A
+//! definition that comes to need another keyword needs it added here, with
+//! a test (T1.28w).
 
 use serde_json::Value;
 
@@ -30,7 +32,59 @@ pub fn check(name: &str, value: &Value) -> Result<(), String> {
     let definition = root["$defs"]
         .get(name)
         .ok_or_else(|| format!("the schema defines no {name}"))?;
+    readable(definition, "$")?;
     node(definition, value, "$")
+}
+
+/// Fails on the first keyword of `schema`, or of any subschema in it, that
+/// [`node`] does not read, whatever value it would be given (M3): the
+/// whole definition, walked through every subschema keyword it reads.
+fn readable(schema: &Value, at: &str) -> Result<(), String> {
+    let map = match schema {
+        Value::Bool(_) => return Ok(()),
+        Value::Object(map) => map,
+        _ => return Err(format!("{at}: a schema this check does not read")),
+    };
+    for (keyword, rule) in map {
+        if ANNOTATIONS.contains(&keyword.as_str()) || keyword.starts_with("x-") {
+            continue;
+        }
+        match keyword.as_str() {
+            "type" => {
+                let kind = rule
+                    .as_str()
+                    .ok_or_else(|| format!("{at}: a type this check does not read: {rule}"))?;
+                type_holds(kind, &Value::Null)?;
+            }
+            "enum" | "required" if rule.is_array() => {}
+            "minimum" if rule.is_number() => {}
+            "properties" => {
+                let properties = rule
+                    .as_object()
+                    .ok_or_else(|| format!("{at}: properties is not a map"))?;
+                for (key, sub) in properties {
+                    readable(sub, &format!("{at}.{key}"))?;
+                }
+            }
+            "additionalProperties" => readable(rule, &format!("{at}.*"))?,
+            "items" => readable(rule, &format!("{at}[]"))?,
+            "anyOf" => {
+                let options = rule
+                    .as_array()
+                    .ok_or_else(|| format!("{at}: anyOf is not a list"))?;
+                for (n, option) in options.iter().enumerate() {
+                    readable(option, &format!("{at}|{n}"))?;
+                }
+            }
+            "enum" | "required" | "minimum" => {
+                return Err(format!(
+                    "{at}: {keyword} is not of the form this check reads"
+                ));
+            }
+            other => return Err(format!("{at}: a keyword this check does not read: {other}")),
+        }
+    }
+    Ok(())
 }
 
 const ANNOTATIONS: [&str; 3] = ["description", "title", "format"];
@@ -144,7 +198,38 @@ fn node(schema: &Value, value: &Value, at: &str) -> Result<(), String> {
 mod tests {
     use serde_json::json;
 
-    use super::node;
+    use super::{node, readable};
+
+    #[test]
+    fn a_keyword_it_does_not_read_fails_wherever_it_is_in_the_definition() {
+        // M3: each where the value never reaches it, a value that holds.
+        let value = json!({"n": 1});
+        for schema in [
+            // Under a property the value does not carry.
+            json!({"type": "object", "properties": {"n": {"type": "integer"}, "m": {"pattern": "a"}}}),
+            // Under items, the value no list.
+            json!({"type": "object", "properties": {"n": {"type": "integer"}}, "additionalProperties": {"items": {"const": 1}}}),
+            // In an anyOf option not tried, the first holding.
+            json!({"anyOf": [{"type": "object"}, {"oneOf": [true]}]}),
+            // A type the value is not, of a kind the check does not read.
+            json!({"anyOf": [{"type": "object"}, {"type": "number"}]}),
+        ] {
+            let err = readable(&schema, "$").expect_err("an unread keyword passed");
+            assert!(err.contains("does not read"), "{schema}: {err}");
+        }
+        // The same definitions without it read.
+        let schema = json!({"type": "object", "properties": {"n": {"type": "integer", "minimum": 0}, "m": {"enum": ["a"]}}, "required": ["n"], "additionalProperties": false});
+        assert_eq!(readable(&schema, "$"), Ok(()));
+        assert_eq!(node(&schema, &value, "$"), Ok(()));
+    }
+
+    #[test]
+    fn the_contract_s_state_payload_is_read_whole() {
+        // The whole definition reads: a value that is not an object fails
+        // on its type, not on a keyword.
+        let err = super::check("StatePayload", &json!(null)).unwrap_err();
+        assert!(err.contains("not of type"), "{err}");
+    }
 
     #[test]
     fn a_keyword_or_type_the_payload_does_not_use_fails_closed() {
