@@ -6466,34 +6466,9 @@ entries:
     decision E52 keeps the spelling across a materializer's runs, so a
     second materialize reads none, as the reference; the ID is kept.
 
-- id: P2B-14
-  title: On Postgres a seed past 2**64 - 1 is refused by name, where the reference hashes any integer
-  kind: change
-  old_behavior: >-
-    The reference's Postgres sampler maps any integer seed into setseed's
-    range by hashing its decimal text (_postgres_seed), so a seed of 10**38
-    samples as any other.
-  new_behavior: >-
-    The Postgres dialect declares the largest seed a provider may declare,
-    max_seed 2**64 - 1 (ProviderCapabilities::max_seed is a u64, with no
-    "any seed" value, design choice 1), and the core refuses a larger seed
-    INVALID_REQUEST naming the seed and max_seed before the sample is
-    planned; every seed up to it maps as the reference maps it.
-  affected_inputs: >-
-    PredictiveQuery.materialize on the core route over a Postgres source
-    with a random_seed past 2**64 - 1.
-  cases: [T2.3]
-  refs: [RS-6, RS-7, KO2-28]
-  status: proposed
-  approved_by: null
-  decision_ref: null
-  notes: >-
-    Approver: owner, owner-pending: a refusal of input the reference
-    accepts, outside E92's 37 rules (KO2-28), found by the refusal census
-    on Postgres (probe rule:seed_size, a seed of 10**38). Lifting it takes
-    a contract change to max_seed's type, not T2.3's to make alone.
+# --- lane C entries (P2C-1..19) ---
 
-- id: P2B-15
+- id: P2C-1
   title: On Postgres a table named alone is found on the search path, as a FROM finds it
   kind: change
   old_behavior: >-
@@ -6519,13 +6494,14 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: reviewer; an answer where the reference refuses, not a
-    refusal. Probed at T2.3 on Postgres 17 with search_path = public,
+    Approver: owner: an answer where the reference refuses, not a
+    refusal, and no owner row covers it (P1B-5's E88 approves a quoted
+    name read, not a name's resolution). Probed at T2.3 on Postgres 17 with search_path = public,
     other: a table only in other is read on the core and refused on the
     old route; a view in public is read on both; a name nowhere is refused
     INVALID_REQUEST on both.
 
-- id: P2B-16
+- id: P2C-2
   title: On Postgres the core runs fewer statements than the reference, without its unused reads
   kind: change
   old_behavior: >-
@@ -6560,7 +6536,7 @@ entries:
     asking). Measured on all 86 cases on Postgres 17: 102 sql.count
     differences, none in a statement's answer to its own request.
 
-- id: P2B-17
+- id: P2C-3
   title: Exact decimals on Postgres, where the reference reads numeric as a float or overflows
   kind: change
   old_behavior: >-
@@ -6605,8 +6581,8 @@ entries:
     P2B-1's more_exact fields for key.decimal-38-10 (the result's id dtype
     and digest, the key's cells and dtypes in the payload), but the
     register's schema takes no database key in more_exact's case
-    (contract/register.schema.json's pattern), so the fields are not
-    listed here: a judging change for the orchestrator.
+    (contract/register.schema.json's pattern), so the fields are added
+    here once the orchestrator's fix for database keys lands, before T2.3.
   case_outcomes:
   - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
   - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
@@ -6615,7 +6591,7 @@ entries:
   - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
   - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
 
-- id: P2B-18
+- id: P2C-4
   title: On Postgres an empty fact table and an interval column are refused by name, as on DuckDB
   kind: change
   old_behavior: >-
@@ -6629,13 +6605,14 @@ entries:
     Schema.from_source on the core route over a Postgres source with an
     empty table or an interval column.
   cases: [empty.fact-table, time.feature-interval]
-  refs: [P1B-11, P1B-8, E66]
+  refs: [P1B-11, P1B-8]
   status: proposed
   approved_by: null
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
-    Approver: reviewer (E66(b)'s class: where the reference gives an
-    unnamed error, a named refusal is approved). Measured at T2.3 on
+    Approver: reviewer, under E66(b)'s class, as P1B-11 and P1B-8 on
+    DuckDB: where the reference gives an unnamed error, a named refusal is
+    approved. Measured at T2.3 on
     Postgres 17, python-core and rust-host alike.
   case_outcomes:
   - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-11)'}
@@ -6643,7 +6620,7 @@ entries:
   - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-8)'}
   - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
 
-- id: P2B-19
+- id: P2C-5
   title: On Postgres a time column stored as text is windowed by its times, not its text
   kind: change
   old_behavior: >-
@@ -6669,7 +6646,9 @@ entries:
   decision_ref: null
   notes: >-
     Approver: owner, owner-pending: a payload that differs (the reference's
-    wrong rows) and a refusal under another code. Matching the reference
+    wrong rows) and a refusal under another code where the reference
+    answers or names its own refusal, which E66(b), DT-12's row on DuckDB,
+    does not cover. Matching the reference
     would compare times as text. The refusal census's rule:text_time
     probe ('March 3rd 2023' in a text time column) departs on Postgres for
     the same reason: the core's CAST fails in the source where the
@@ -6679,3 +6658,30 @@ entries:
   case_outcomes:
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'T2.3: the source CASTs the text, as on DuckDB (DT-12)'}
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'T2.3: the source CASTs the text, as on DuckDB (DT-12)'}
+
+- id: P2C-6
+  title: On Postgres a seed past 2**64 - 1 is refused by name, where the reference hashes any integer
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler maps any integer seed into setseed's
+    range by hashing its decimal text (_postgres_seed), so a seed of 10**38
+    samples as any other.
+  new_behavior: >-
+    The Postgres dialect declares the largest seed a provider may declare,
+    max_seed 2**64 - 1 (ProviderCapabilities::max_seed is a u64, with no
+    "any seed" value, design choice 1), and the core refuses a larger seed
+    INVALID_REQUEST naming the seed and max_seed before the sample is
+    planned; every seed up to it maps as the reference maps it.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source
+    with a random_seed past 2**64 - 1.
+  cases: [T2.3]
+  refs: [RS-6, RS-7, KO2-28]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner, owner-pending: a refusal of input the reference
+    accepts, outside E92's 37 rules (KO2-28), found by the refusal census
+    on Postgres (probe rule:seed_size, a seed of 10**38). Lifting it takes
+    a contract change to max_seed's type, not T2.3's to make alone.
