@@ -270,7 +270,7 @@ fn the_case(vector: &Value) -> Case {
     let named_tables: Vec<Value> = tables
         .into_iter()
         .flatten()
-        .map(|(name, source)| json!({"name": name, "source": source}))
+        .map(|(name, source)| json!({"name": name, "source": {"source": [source]}}))
         .collect();
     let mut given = serde_json::Map::new();
     if let Some(tables) = tables {

@@ -73,6 +73,13 @@ impl ArrowData {
 #[derive(Debug, Clone)]
 pub enum FetchResult {
     Data(ArrowData),
+    /// One page of the answer, more following: the run asks again with the
+    /// provider's `continuation` (design choice 1, paging) and gives the
+    /// body the pages as one answer, so a body never sees a page.
+    Page {
+        data: ArrowData,
+        continuation: String,
+    },
     Error(ProviderError),
 }
 
@@ -124,8 +131,9 @@ struct Shared {
     /// The last ids given; ids start at 1 in each run.
     next_reply: u32,
     next_attachment: u32,
-    /// Set when the body asked for more ids than a `u32` holds; the run
-    /// then finishes with `INTERNAL_ERROR` at its next step.
+    /// Set when the body asked for more ids than a `u32` holds, or a
+    /// provider's pages of one answer did not match; the run then finishes
+    /// with that error at its next step.
     exhausted: Option<CoreError>,
     /// Asked by the body since the last step.
     fetches: Vec<FetchStep>,
@@ -301,8 +309,42 @@ pub struct Ask {
 
 enum AskState {
     New(Asked),
-    Asked(ReplyId),
+    /// Asked under the id; a fetch keeps its request and plan, to ask for
+    /// the next page, and the pages read so far.
+    Asked {
+        id: ReplyId,
+        fetch: Option<Box<(DataRequest, FetchPlan)>>,
+        pages: Option<ArrowData>,
+    },
     Answered,
+}
+
+/// The run's next reply id, or `None` once they are used up, which ends the
+/// run with `INTERNAL_ERROR` at its next step.
+fn next_reply(shared: &mut Shared) -> Option<ReplyId> {
+    let Some(next) = shared.next_reply.checked_add(1) else {
+        exhausted(shared, "reply");
+        return None;
+    };
+    shared.next_reply = next;
+    Some(ReplyId(next))
+}
+
+/// `page` added to the pages read before it, which it must match in
+/// schema: a provider's pages are one answer (design choice 1, paging).
+fn add_page(pages: Option<ArrowData>, page: ArrowData) -> Result<ArrowData, CoreError> {
+    let Some(mut pages) = pages else {
+        return Ok(page);
+    };
+    if pages.schema != page.schema || pages.received != page.received {
+        return Err(schema_mismatch(
+            "pages",
+            None,
+            "a page of the answer has another schema than the pages before it",
+        ));
+    }
+    pages.batches.extend(page.batches);
+    Ok(pages)
 }
 
 impl Future for Ask {
@@ -315,16 +357,20 @@ impl Future for Ask {
             AskState::New(asked) => {
                 // Out of ids, the request is never asked; the run finishes
                 // with the error at its next step.
-                let Some(next) = shared.next_reply.checked_add(1) else {
-                    exhausted(&mut shared, "reply");
+                let Some(id) = next_reply(&mut shared) else {
                     return Poll::Pending;
                 };
-                shared.next_reply = next;
-                let id = ReplyId(next);
+                let mut fetch = None;
                 match asked {
                     Asked::Fetch(asked) => {
-                        let (request, plan) = *asked;
-                        shared.fetches.push(FetchStep { id, request, plan })
+                        let (request, plan) = (*asked).clone();
+                        shared.fetches.push(FetchStep {
+                            id,
+                            request,
+                            plan,
+                            continuation: None,
+                        });
+                        fetch = Some(asked);
                     }
                     Asked::Call {
                         endpoint,
@@ -342,15 +388,62 @@ impl Future for Ask {
                         });
                     }
                 }
-                this.state = AskState::Asked(id);
+                this.state = AskState::Asked {
+                    id,
+                    fetch,
+                    pages: None,
+                };
                 Poll::Pending
             }
-            AskState::Asked(id) => match shared.replies.remove(&id) {
-                Some(reply) => Poll::Ready(reply),
+            AskState::Asked { id, fetch, pages } => match shared.replies.remove(&id) {
                 None => {
-                    this.state = AskState::Asked(id);
+                    this.state = AskState::Asked { id, fetch, pages };
                     Poll::Pending
                 }
+                // A page: kept, and the next one asked for with the
+                // provider's continuation, under a new id.
+                Some(Reply::Fetch(FetchResult::Page { data, continuation })) => {
+                    let pages = match add_page(pages, data) {
+                        Ok(pages) => pages,
+                        Err(err) => {
+                            shared.exhausted.get_or_insert(err);
+                            return Poll::Pending;
+                        }
+                    };
+                    let Some(asked) = fetch else {
+                        shared
+                            .exhausted
+                            .get_or_insert_with(|| internal("a page answered no fetch"));
+                        return Poll::Pending;
+                    };
+                    let Some(next) = next_reply(&mut shared) else {
+                        return Poll::Pending;
+                    };
+                    let (request, plan) = (*asked).clone();
+                    shared.fetches.push(FetchStep {
+                        id: next,
+                        request,
+                        plan,
+                        continuation: Some(continuation),
+                    });
+                    this.state = AskState::Asked {
+                        id: next,
+                        fetch: Some(asked),
+                        pages: Some(pages),
+                    };
+                    Poll::Pending
+                }
+                // The last page: the pages read as one answer.
+                Some(Reply::Fetch(FetchResult::Data(data))) if pages.is_some() => {
+                    match add_page(pages, data) {
+                        Ok(whole) => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
+                        Err(err) => {
+                            shared.exhausted.get_or_insert(err);
+                            Poll::Pending
+                        }
+                    }
+                }
+                Some(reply) => Poll::Ready(reply),
             },
             AskState::Answered => panic!("a request's reply was awaited after it was taken"),
         }

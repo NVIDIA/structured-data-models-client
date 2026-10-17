@@ -36,11 +36,12 @@ fn host() -> ProviderChoice {
         capabilities: ProviderCapabilities {
             optional: Default::default(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::SeededStable,
+            fallback: None,
         },
     }
 }

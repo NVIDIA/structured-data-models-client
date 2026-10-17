@@ -777,11 +777,12 @@ fn through_host_run(data: ArrowData) -> ArrowData {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::new(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback: None,
         },
     };
     let access = sdm_host::default_root().data_access(&host).unwrap();
@@ -813,6 +814,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
         id: requests[0].id,
         outcome: FetchOutcome::Data {
             data: AttachmentId(1),
+            continuation: None,
         },
     });
     run.reply(

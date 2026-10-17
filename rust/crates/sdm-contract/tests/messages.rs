@@ -34,11 +34,12 @@ fn provider_choices_round_trip() {
             capabilities: ProviderCapabilities {
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
                 max_keys_per_request: Some(10_000),
-                max_seed: None,
+                max_seed: u64::MAX,
                 text_times: None,
                 null_order: Some(NullOrder::First),
                 index_advice: Some(IndexAdvice::SingleColumn),
                 sampling: Determinism::SeededStable,
+                fallback: None,
             },
         },
     ] {
@@ -58,7 +59,7 @@ fn provider_choices_round_trip() {
 fn the_sampling_policies_are_spelled_and_default_to_none() {
     let declared: ProviderChoice = serde_json::from_str(
         r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
-            "sampling":"seeded_stable","max_seed":null,"text_times":null,
+            "sampling":"seeded_stable","max_seed":2147483647,"text_times":null,
             "null_order":"first","index_advice":"single_column"}}"#,
     )
     .unwrap();
@@ -69,7 +70,7 @@ fn the_sampling_policies_are_spelled_and_default_to_none() {
     assert_eq!(capabilities.index_advice, Some(IndexAdvice::SingleColumn));
     let silent: ProviderChoice = serde_json::from_str(
         r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
-            "sampling":"seeded_stable","max_seed":null}}"#,
+            "sampling":"seeded_stable","max_seed":2147483647}}"#,
     )
     .unwrap();
     let ProviderChoice::Host { capabilities } = silent else {
@@ -84,7 +85,18 @@ fn the_sampling_policies_are_spelled_and_default_to_none() {
         r#""index_advice":true"#,
     ] {
         let text = format!(
-            r#"{{"provider":"host","capabilities":{{"optional":[],"max_keys_per_request":null,"sampling":"seeded_stable","max_seed":null,{wrong}}}}}"#
+            r#"{{"provider":"host","capabilities":{{"optional":[],"max_keys_per_request":null,"sampling":"seeded_stable","max_seed":2147483647,{wrong}}}}}"#
+        );
+        assert!(
+            serde_json::from_str::<ProviderChoice>(&text).is_err(),
+            "{text}"
+        );
+    }
+    // Every provider declares its largest seed (contract v26, design
+    // choice 1): no "any seed" default, so null or left out is refused.
+    for seed in [r#","max_seed":null"#, ""] {
+        let text = format!(
+            r#"{{"provider":"host","capabilities":{{"optional":[],"max_keys_per_request":null,"sampling":"seeded_stable"{seed}}}}}"#
         );
         assert!(
             serde_json::from_str::<ProviderChoice>(&text).is_err(),

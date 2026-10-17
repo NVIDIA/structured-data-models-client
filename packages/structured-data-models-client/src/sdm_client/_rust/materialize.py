@@ -124,7 +124,7 @@ def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
         tables.append(
             {
                 'name': name,
-                'source': getattr(table, 'source_name', name),
+                'source': codec.relation(getattr(table, 'source_name', name)),
                 'columns': [
                     {
                         'name': column_name,

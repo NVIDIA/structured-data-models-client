@@ -7,10 +7,10 @@
         "fingerprint": "8da5bc5cebeeccb2a0f1e76ce921a9e4b86d1cf97912dba0b75c1eab9430ef39"
       },
       "build": {
-        "fingerprint": "11fa0297f63b6f8a068b46d118d50505516bf6a21e7115d3a212b30ce99bf660"
+        "fingerprint": "f7f40728015d8cab1730f9d6ae1220bd5270ef28eba9dedc93a02aa98deed954"
       },
       "from_source": {
-        "fingerprint": "89e120a24cabe1953861c382d04f8ba1c1d5c01ef06b48d590de254fb3acbe61"
+        "fingerprint": "20cd6f992e63b130e136dc9cb45fff9802d44ad90385a55cc7ba0c4464fdc45e"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
@@ -30,7 +30,7 @@
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
       },
       "description": {
-        "fingerprint": "46970a104391a3525c759f021bd8dc29df124cca4f834dca9c191ac386f06281"
+        "fingerprint": "e8a27ee5705c5728f41e932b7996380ab3143f341fc1effd626e89057231ff44"
       },
       "gather": {
         "fingerprint": "61135bdf38e7cf23d6555bc12d18483c446c3654bc1b59718b74cefa27c003b8"

@@ -70,6 +70,9 @@ const IDENTIFIERS: &[&str] = &[
     "key",
     // A column of a `neighbors` request's seed key set (decision H15).
     "seed_column",
+    // A relation's name parts, each quoted alone (design choice 12,
+    // contract v26): the source a request reads, never text interpreted.
+    "source",
 ];
 
 /// Definitions that are reviewed typed values, not request structure: their

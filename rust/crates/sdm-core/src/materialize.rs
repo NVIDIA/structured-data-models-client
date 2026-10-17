@@ -1226,7 +1226,14 @@ async fn check_indexes(
         let [column] = columns.as_slice() else {
             continue;
         };
-        for table in graph.tables.iter().filter(|t| t.source == index.table) {
+        // A relation of several parts names its table by them, which an
+        // index's one name does not say: it is covered by none (design
+        // choice 12; Phase 2's hosts give one part).
+        for table in graph
+            .tables
+            .iter()
+            .filter(|t| t.source.single() == Some(index.table.as_str()))
+        {
             if let Some(at) = missing.iter().position(|(t, _)| *t == table.name) {
                 missing[at].1.retain(|c| c != column);
                 if missing[at].1.is_empty() {
@@ -1540,6 +1547,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                         payload,
                         query,
                         forecast: None,
+                        batches: None,
                     },
                 }))
             }
@@ -1614,6 +1622,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             payload: first.payload,
             query: first.query,
             forecast: Some(attached),
+            batches: None,
         },
     }))
 }
@@ -1804,20 +1813,18 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
         return Err(invalid("an entity to predict for is missing", "indices"));
     }
     // A seed past what its scalar carries (10**38 or more) is past every
-    // largest seed a provider can declare (a `u64`): where the provider
-    // declares one, RS-7's refusal, as for any seed past it (T1.36 fix 9);
-    // where it declares none, `seed_size` as before.
+    // largest seed a provider can declare (a `u64`), which every provider
+    // declares from contract v26 (design choice 1): RS-7's refusal, as for
+    // any seed past it (T1.36 fix 9).
     let seed_value = match seed_scalar(&seed) {
         Ok(value) => value,
-        Err(err) => match asker.capabilities()?.max_seed {
-            Some(max) if !seed.is_negative() => {
-                return Err(crate::compose::past_seed_range(
-                    OptionalRequest::SampleEntities.name(),
-                    max,
-                ));
-            }
-            _ => return Err(err),
-        },
+        Err(_) if !seed.is_negative() => {
+            return Err(crate::compose::past_seed_range(
+                OptionalRequest::SampleEntities.name(),
+                asker.capabilities()?.max_seed,
+            ));
+        }
+        Err(err) => return Err(err),
     };
     let asked = asked(&validated)?;
     options::statistic_for(asked.task, statistic.as_ref())?;

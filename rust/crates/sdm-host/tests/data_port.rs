@@ -274,6 +274,7 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(9),
+                continuation: None,
             },
         }))
         .unwrap(),

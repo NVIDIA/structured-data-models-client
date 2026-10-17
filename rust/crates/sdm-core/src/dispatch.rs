@@ -118,6 +118,17 @@ pub fn start(
                     Detail::Scalar(Scalar::UInt32(request.state.version)),
                 ));
             }
+            // A request asked in several model calls (contract v26's
+            // `batches`, `main`'s multi-call predict) is T2.8c's: refused by
+            // name until then, never predicted as its first call alone.
+            if request.state.batches.is_some() {
+                return Err(CoreError::new(
+                    ErrorKind::Unsupported,
+                    ErrorCode::UnsupportedRequest,
+                    "a request asked in several model calls is not predicted by this core yet",
+                )
+                .with_field("field", Detail::text("state.batches")));
+            }
             let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
             else {
                 return Err(internal("the payload is not the bytes named"));

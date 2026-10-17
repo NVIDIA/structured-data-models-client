@@ -27,37 +27,37 @@ const PINS: &[(&str, &str)] = &[
         r#"SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND database_name = current_database() AND schema_name = current_schema()"#,
     ),
     (
-        r#"{"part": "columns", "request": "describe", "tables": ["orders"]}"#,
+        r#"{"part": "columns", "request": "describe", "tables": [{"source": ["orders"]}]}"#,
         r#"PRAGMA table_info("orders")"#,
     ),
     (
-        r#"{"part": "keys", "request": "describe", "tables": ["orders"]}"#,
+        r#"{"part": "keys", "request": "describe", "tables": [{"source": ["orders"]}]}"#,
         r#"SELECT constraint_type, constraint_column_names
 FROM duckdb_constraints()
 WHERE table_name = 'orders'
   AND database_name = current_database() AND schema_name = current_schema()"#,
     ),
     (
-        r#"{"columns": ["order_id", "user_id", "price", "ts"], "limit": 1000, "request": "preview", "table": "orders"}"#,
+        r#"{"columns": ["order_id", "user_id", "price", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["orders"]}}"#,
         r#"SELECT "order_id", "user_id", "price", "ts" FROM "orders" LIMIT 1000"#,
     ),
     (
-        r#"{"part": "columns", "request": "describe", "tables": ["users"]}"#,
+        r#"{"part": "columns", "request": "describe", "tables": [{"source": ["users"]}]}"#,
         r#"PRAGMA table_info("users")"#,
     ),
     (
-        r#"{"part": "keys", "request": "describe", "tables": ["users"]}"#,
+        r#"{"part": "keys", "request": "describe", "tables": [{"source": ["users"]}]}"#,
         r#"SELECT constraint_type, constraint_column_names
 FROM duckdb_constraints()
 WHERE table_name = 'users'
   AND database_name = current_database() AND schema_name = current_schema()"#,
     ),
     (
-        r#"{"columns": ["user_id", "age", "country"], "limit": 1000, "request": "preview", "table": "users"}"#,
+        r#"{"columns": ["user_id", "age", "country"], "limit": 1000, "request": "preview", "table": {"source": ["users"]}}"#,
         r#"SELECT "user_id", "age", "country" FROM "users" LIMIT 1000"#,
     ),
     (
-        r#"{"part": "foreign_keys", "request": "describe", "tables": ["orders"]}"#,
+        r#"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["orders"]}]}"#,
         r#"SELECT constraint_index, referenced_table,
        constraint_column_names, referenced_column_names
 FROM duckdb_constraints()
@@ -66,7 +66,7 @@ WHERE table_name = 'orders'
   AND constraint_type = 'FOREIGN KEY'"#,
     ),
     (
-        r#"{"part": "foreign_keys", "request": "describe", "tables": ["users"]}"#,
+        r#"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["users"]}]}"#,
         r#"SELECT constraint_index, referenced_table,
        constraint_column_names, referenced_column_names
 FROM duckdb_constraints()
@@ -75,7 +75,7 @@ WHERE table_name = 'users'
   AND constraint_type = 'FOREIGN KEY'"#,
     ),
     (
-        r#"{"keys": [{"columns": ["order_id"], "table": "orders"}, {"columns": ["user_id"], "table": "users"}], "request": "key_counts"}"#,
+        r#"{"keys": [{"columns": ["order_id"], "table": {"source": ["orders"]}}, {"columns": ["user_id"], "table": {"source": ["users"]}}], "request": "key_counts"}"#,
         r#"SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT "order_id") AS d, COUNT(CASE WHEN "order_id" IS NULL THEN 1 END) AS z
 FROM "orders"
 UNION ALL
@@ -87,7 +87,7 @@ FROM "users""#,
         r#"SELECT table_name, expressions FROM duckdb_indexes()"#,
     ),
     (
-        r#"{"columns": [{"column": "ts", "table": "orders"}], "request": "time_bounds"}"#,
+        r#"{"columns": [{"column": "ts", "table": {"source": ["orders"]}}], "request": "time_bounds"}"#,
         r#"SELECT
   0 as table_index,
   MIN(CAST("ts" AS TIMESTAMP)) as min_date,
@@ -95,14 +95,14 @@ FROM "users""#,
 FROM "orders""#,
     ),
     (
-        r#"{"columns": ["user_id"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
+        r#"{"columns": ["user_id"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["users"]}}"#,
         r#"SELECT "user_id"
 FROM (SELECT * FROM "users"
 WHERE "user_id" IS NOT NULL)
 USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
     ),
     (
-        r#"{"columns": ["price", "ts"], "key": "user_id", "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"precision": 18, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
+        r#"{"columns": ["price", "ts"], "key": ["user_id"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"precision": 18, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
@@ -111,7 +111,7 @@ JOIN "orders" t
  AND CAST(t."ts" AS TIMESTAMP) > s."start""#,
     ),
     (
-        r#"{"columns": ["user_id", "age", "country"], "key": "user_id", "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"precision": 18, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": "users"}"#,
+        r#"{"columns": ["user_id", "age", "country"], "key": ["user_id"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"precision": 18, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country"
 FROM "__sdm_seeds__" s
 JOIN "users" t
@@ -121,7 +121,7 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1"#,
     ),
     (
-        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": "user_id", "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"precision": 18, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
+        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": ["user_id"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"precision": 18, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."order_id", t."user_id", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
@@ -134,21 +134,21 @@ QUALIFY ROW_NUMBER() OVER (
 ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC NULLS LAST"#,
     ),
     (
-        r#"{"columns": ["oid", "buyer", "price", "ts"], "limit": 1000, "request": "preview", "table": "orders"}"#,
+        r#"{"columns": ["oid", "buyer", "price", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["orders"]}}"#,
         r#"SELECT "oid", "buyer", "price", "ts" FROM "orders" LIMIT 1000"#,
     ),
     (
-        r#"{"columns": ["uid", "age", "country"], "limit": 1000, "request": "preview", "table": "users"}"#,
+        r#"{"columns": ["uid", "age", "country"], "limit": 1000, "request": "preview", "table": {"source": ["users"]}}"#,
         r#"SELECT "uid", "age", "country" FROM "users" LIMIT 1000"#,
     ),
     (
-        r#"{"columns": ["uid"], "filters": [], "key": ["uid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
+        r#"{"columns": ["uid"], "filters": [], "key": ["uid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["users"]}}"#,
         r#"SELECT "uid"
 FROM (SELECT * FROM "users")
 USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
     ),
     (
-        r#"{"columns": ["price", "ts"], "key": "buyer", "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int32"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
+        r#"{"columns": ["price", "ts"], "key": ["buyer"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int32"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
@@ -157,7 +157,7 @@ JOIN "orders" t
  AND CAST(t."ts" AS TIMESTAMP) > s."start""#,
     ),
     (
-        r#"{"columns": ["uid", "age", "country"], "key": "uid", "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int32"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": "users"}"#,
+        r#"{"columns": ["uid", "age", "country"], "key": ["uid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int32"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."uid", t."age", t."country"
 FROM "__sdm_seeds__" s
 JOIN "users" t
@@ -167,7 +167,7 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1"#,
     ),
     (
-        r#"{"columns": ["oid", "buyer", "price", "ts"], "key": "buyer", "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int32"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
+        r#"{"columns": ["oid", "buyer", "price", "ts"], "key": ["buyer"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int32"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."oid", t."buyer", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
@@ -180,7 +180,7 @@ QUALIFY ROW_NUMBER() OVER (
 ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."oid" ASC NULLS LAST"#,
     ),
     (
-        r#"{"columns": ["price", "ts"], "key": "user_id", "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"metadata": {"sdm:key_declared_type": "HUGEINT"}, "name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
+        r#"{"columns": ["price", "ts"], "key": ["user_id"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"metadata": {"sdm:key_declared_type": "HUGEINT"}, "name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
@@ -189,7 +189,7 @@ JOIN "orders" t
  AND CAST(t."ts" AS TIMESTAMP) > s."start""#,
     ),
     (
-        r#"{"columns": ["user_id", "age", "country"], "key": "user_id", "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_declared_type": "HUGEINT"}, "name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": "users"}"#,
+        r#"{"columns": ["user_id", "age", "country"], "key": ["user_id"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_declared_type": "HUGEINT"}, "name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country"
 FROM "__sdm_seeds__" s
 JOIN "users" t
@@ -199,7 +199,7 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1"#,
     ),
     (
-        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": "user_id", "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"metadata": {"sdm:key_declared_type": "HUGEINT"}, "name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
+        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": ["user_id"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"metadata": {"sdm:key_declared_type": "HUGEINT"}, "name": "key", "nullable": true, "type": {"precision": 38, "scale": 0, "type": "decimal128"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."order_id", t."user_id", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t

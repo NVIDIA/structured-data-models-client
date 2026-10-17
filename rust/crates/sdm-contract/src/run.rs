@@ -70,6 +70,11 @@ pub struct FetchStep {
     pub id: ReplyId,
     pub request: DataRequest,
     pub plan: FetchPlan,
+    /// The continuation the provider's last page of this request gave
+    /// ([`FetchOutcome::Data::continuation`]), asking for the rows after
+    /// it; left out on a request's first fetch (design choice 1, paging).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub continuation: Option<String>,
 }
 
 /// Which model endpoint a call goes to.
@@ -102,9 +107,16 @@ pub struct FetchReply {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "outcome", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FetchOutcome {
-    /// The rows, as an Arrow attachment.
+    /// The rows, as an Arrow attachment. With a `continuation`, they are
+    /// one page of the answer, and more follow: the core asks again for
+    /// the same request with that continuation, opaque to it, until a page
+    /// comes without one (design choice 1, paging), and reads the pages as
+    /// one answer; nothing is truncated silently. Every page holds the
+    /// same schema.
     Data {
         data: AttachmentId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        continuation: Option<String>,
     },
     Error {
         error: ProviderError,

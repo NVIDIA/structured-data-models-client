@@ -14,7 +14,7 @@ import json
 from typing import Any
 
 #: The contract version these messages are written for.
-CONTRACT = 25
+CONTRACT = 26
 
 FACTS: dict[str, Any] = {
     'now': {'t': 'ts', 'unit': 'us', 'zone': 'UTC', 'v': '1767225600000000'},
@@ -76,7 +76,7 @@ def fetch(
     request: dict[str, Any] = {
         'request': {
             'request': 'scan',
-            'table': 't',
+            'table': {'source': ['t']},
             'columns': [],
             'filters': [],
             'limit': None,

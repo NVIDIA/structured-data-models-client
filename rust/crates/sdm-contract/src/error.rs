@@ -293,6 +293,23 @@ pub struct CoreError {
     /// other error.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub drop_held: Vec<HeldState>,
+    /// What a request asked in several model calls had been answered when
+    /// a later call failed (design choice 1, `main`'s answered parts,
+    /// T2.8c): the error keeps what was paid for, so the rest can be asked
+    /// again. Absent for any other error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answered: Option<AnsweredParts>,
+}
+
+/// The answers a failed request had received ([`CoreError::answered`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnsweredParts {
+    /// An Arrow attachment of the answers received, laid out as
+    /// `Predicted.result`, travelling with the error.
+    pub result: crate::data::AttachmentId,
+    /// The rows those answers score (`main`'s `rows_answered`).
+    pub rows: u64,
 }
 
 impl CoreError {
@@ -312,6 +329,7 @@ impl CoreError {
             cause: None,
             retryable: false,
             drop_held: Vec::new(),
+            answered: None,
         }
     }
 

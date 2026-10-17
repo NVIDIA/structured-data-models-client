@@ -72,11 +72,6 @@ GOLDEN = ROOT / 'tests/golden/t21b-statements.json'
 #: v25's entry as merged into rust-core: never rewritten.
 V25_HASH = '0c478d9bd05d6125d5daf85d3af2bd0de2c5dd17d1e8f444af9ce5e63068de90'
 
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason='PENDING: T2.1b, contract v26; the implementer removes this marker',
-)
-
 #: The schema tables whose source name becomes a relation (choice 12:
 #: ``sdm-contract/src/ops.rs:380-415,533-534``).
 SOURCE_TABLES = ('NamedTable', 'DescribedTable', 'HeldTable')
@@ -180,7 +175,6 @@ def test_v25_stays_locked_as_merged() -> None:
     assert _schema(V25)['$id'] == 'sdm-contract/25'
 
 
-@PENDING
 def test_the_lock_holds_v26_as_its_working_entry() -> None:
     # Schema lock: v26 is the newest entry, locked to its own file.
     lock = _lock_module()
@@ -193,7 +187,6 @@ def test_the_lock_holds_v26_as_its_working_entry() -> None:
     assert lock.main(['--no-base']) == 0
 
 
-@PENDING
 def test_the_core_speaks_v26_and_refuses_a_v25_host_by_name() -> None:
     # The binding on the bump: the native module is v26, and a start written
     # for v25 is refused by name, never read (decision H25).
@@ -229,7 +222,6 @@ def test_the_core_speaks_v26_and_refuses_a_v25_host_by_name() -> None:
     assert error.details['contract'] == 25
 
 
-@PENDING
 def test_a_relation_is_a_list_of_name_parts_and_nothing_more() -> None:
     # Choice 12 and KO2-46: `Relation { source: Vec<String> }`, plain data.
     relation = _strip(_schema(V26)['$defs']['Relation'])
@@ -242,7 +234,6 @@ def test_a_relation_is_a_list_of_name_parts_and_nothing_more() -> None:
     assert source['items'] == {'type': 'string'}
 
 
-@PENDING
 def test_every_table_source_is_a_relation() -> None:
     # Choice 12: the relation replaces each data request's `table` string
     # and each schema table's `source` string, the field names kept.
@@ -273,7 +264,6 @@ def test_every_table_source_is_a_relation() -> None:
         assert 'source' in definition['required'], name
 
 
-@PENDING
 def test_neighbors_and_lookup_take_a_key_of_several_columns() -> None:
     # Choice 1: multi-column keys in `Neighbors` and `Lookup`, replacing the
     # single `key: String`, spelled as `repeated_key`'s key already is.
@@ -287,7 +277,6 @@ def test_neighbors_and_lookup_take_a_key_of_several_columns() -> None:
         assert 'key' in v26[kind]['required'], kind
 
 
-@PENDING
 def test_every_provider_declares_its_largest_seed() -> None:
     # Choice 1: `max_seed` required of every provider, with no "any seed"
     # default (`P1 d:142`): neither left out nor null.
@@ -300,7 +289,6 @@ def test_every_provider_declares_its_largest_seed() -> None:
     assert 'anyOf' not in declared and 'oneOf' not in declared
 
 
-@PENDING
 def test_the_request_state_version_is_raised() -> None:
     # Choice 1: the `RequestState` version raised for the new state.
     def version(path: Path) -> int:
@@ -313,7 +301,6 @@ def test_the_request_state_version_is_raised() -> None:
     assert version(V26) > version(V25)
 
 
-@PENDING
 def test_no_v25_definition_or_field_is_dropped() -> None:
     # The bump reshapes the fields the design names and adds the rest:
     # every v25 definition and field name is still in v26 (hosts in Python
@@ -352,7 +339,6 @@ def test_the_vectors_cover_every_table_source_and_are_valid_v25_where_marked() -
     assert len(names) == len(set(names))
 
 
-@PENDING
 def test_the_python_loader_reads_and_refuses_the_v26_vectors() -> None:
     # Both loaders: the Python side, against the committed v26 schema.
     document, v26 = _vectors(), _schema(V26)
@@ -463,7 +449,6 @@ def _describe(connection: Any, parts: list[str]) -> Any:
     return json.loads(finished.take(finished.result['description']))
 
 
-@PENDING
 def test_a_relation_duckdb_cannot_read_is_refused_by_name() -> None:
     # Choice 12: a relation with no part, or more parts than DuckDB takes,
     # is refused by name (rule `relation`); the same run over a one-part

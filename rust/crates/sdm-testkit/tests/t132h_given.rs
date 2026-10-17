@@ -263,6 +263,7 @@ fn drive(
                         Ok(fetched) => (
                             FetchOutcome::Data {
                                 data: AttachmentId(1),
+                                continuation: None,
                             },
                             BTreeMap::from([(
                                 AttachmentId(1),
