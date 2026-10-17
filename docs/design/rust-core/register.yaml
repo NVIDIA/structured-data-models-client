@@ -6206,19 +6206,19 @@ entries:
     pg_catalog relation also has.
   cases: [T2.3]
   refs: [KO2-39, KO2-28]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-63}
   notes: >-
-    Approver: owner, owner-pending: a refusal of input the reference
-    accepts, which no owner row covers. Matching it needs a plan to name
-    current_schema()'s schema, which the core does not know when it plans:
-    no catalog answer carries it and the contract has no field for it, and
-    Postgres reads an unqualified name by the search path. Probed at T2.3
-    on Postgres 17 (search_path = public, other): a view in public is read
-    on both routes; a table only in other and a name nowhere are refused
-    INVALID_REQUEST on both; a public table shadowed by a temporary table
-    of its name is read on the old route and refused INVALID_REQUEST on the
+    Approved by the owner on 2026-10-17 as KO2-63, relayed by the
+    orchestrator; the full fix needs a schema field in a later contract. A
+    plan would have to name current_schema()'s schema, which the core does
+    not know when it plans, and Postgres reads an unqualified name by the
+    search path. Probed at T2.3 on Postgres 17 (search_path = public,
+    other): a view in public is read on both routes; a table only in other
+    and a name nowhere are refused INVALID_REQUEST on both; a public table
+    shadowed by a temporary table of its name is read on the old route,
+    which qualifies it ("public"."t"), and refused INVALID_REQUEST on the
     core.
 
 - id: P2C-2
@@ -6245,16 +6245,14 @@ entries:
   refs:
   - KO2-20
   - 'contract/postgres-key-vectors.json#* success -> success'
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-58}
   notes: >-
-    Approver: owner, owner-pending. The core could match the counts only
-    by making both reads, which answer nothing it uses, or by teaching the
-    comparator that Postgres's per-call counts may differ; T2.3 asks the
-    owner which (the orchestrator's rule: no gate or compare change without
-    asking). Measured on all 86 cases on Postgres 17: 102 sql.count
-    differences, none in a statement's answer to its own request.
+    Approved by the owner on 2026-10-17 as KO2-58, relayed by the
+    orchestrator: a permanent registered difference, every answer equal.
+    Measured on all 86 cases on Postgres 17: the per-call counts differ
+    and no statement's answer to its own request does.
 
 - id: P2C-3
   title: Exact decimals on Postgres, where the reference reads numeric as a float or overflows
@@ -6380,18 +6378,18 @@ entries:
     as a timestamp.
   cases: [time.text-one-bad-value]
   refs: [DT-12, DT-7, 'contract/refusal-census.json rule:text_time']
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-64}
   notes: >-
-    Approver: owner. time.text-one-bad-value, where the reference refuses
-    by name too, is the named refusal E66 keeps (the orchestrator, as
-    DT-12 on DuckDB). The refusal census's rule:text_time probe ('March
-    3rd 2023'), where the reference answers, departs: matching it needs the
-    bounds as text, read by the core's own text reader, which the contract's
-    time_bounds answer (timestamps) does not carry; owner-pending under
-    KO2-28. Measured at T2.3 on Postgres 17, python-core and rust-host
-    alike.
+    Approved by the owner on 2026-10-17 as KO2-64, relayed by the
+    orchestrator. time.text-one-bad-value, where the reference refuses by
+    name too, is a named refusal for a named refusal (as DT-12 on DuckDB,
+    E66); the refusal census's rule:text_time probe ('March 3rd 2023'),
+    where the reference answers, is refused by name. Matching it needs the
+    bounds as text, read by the core's own text reader, which the
+    contract's time_bounds answer (timestamps) does not carry. Measured at
+    T2.3 on Postgres 17, python-core and rust-host alike.
   case_outcomes:
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'T2.3: the source reads the bounds, a named refusal where the reference names its own (E66)'}
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'T2.3: the source reads the bounds, a named refusal where the reference names its own (E66)'}
@@ -6414,11 +6412,11 @@ entries:
     with a random_seed past 2**64 - 1.
   cases: [T2.3]
   refs: [RS-6, RS-7, KO2-28]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-59}
   notes: >-
-    Approver: owner, owner-pending: a refusal of input the reference
-    accepts, outside E92's 37 rules (KO2-28), found by the refusal census
-    on Postgres (probe rule:seed_size, a seed of 10**38). Lifting it takes
-    a contract change to max_seed's type, not T2.3's to make alone.
+    Approved by the owner on 2026-10-17 as KO2-59, relayed by the
+    orchestrator: a refusal of input the reference accepts, outside E92's
+    37 rules (KO2-28), found by the refusal census on Postgres (probe
+    rule:seed_size, a seed of 10**38); the core's seed is 64-bit.
