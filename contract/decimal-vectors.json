@@ -2124,11 +2124,6 @@
         "dtype": "timestamp[us]",
         "name": "ts",
         "stype": "timestamp"
-       },
-       {
-        "dtype": "float64",
-        "name": "amount",
-        "stype": "numerical"
        }
       ],
       "duplicate_keys": 0,
@@ -2152,6 +2147,11 @@
         "dtype": "string",
         "name": "country",
         "stype": "categorical"
+       },
+       {
+        "dtype": "float64",
+        "name": "t",
+        "stype": "categorical"
        }
       ],
       "duplicate_keys": 0,
@@ -2162,24 +2162,25 @@
     ]
    },
    "warnings": [
-    "UserWarning"
+    "UserWarning",
+    "SDMWarning"
    ],
    "payload": [
     {
      "method": "POST",
      "path": "/v1/predictions",
-     "digest": "c64d707ee9a5c270ffd2bb5cab9b3bbb81acd60a033ff20ee8a3a3d0ae801fc4",
+     "digest": "061e4e75868b2afc8bc7ff4fb1d5fbd0bc68dcfe1f936c338b59d8a6e0d17020",
      "tables": {
       "context.instance_table": {
-       "rows": 112,
+       "rows": 6,
        "nulls": 0
       },
       "context.related_tables.orders": {
-       "rows": 408,
+       "rows": 60,
        "nulls": 0
       },
       "context.related_tables.users": {
-       "rows": 112,
+       "rows": 6,
        "nulls": 0
       },
       "predict.instance_table": {
@@ -2187,7 +2188,7 @@
        "nulls": 0
       },
       "predict.related_tables.orders": {
-       "rows": 16,
+       "rows": 20,
        "nulls": 0
       },
       "predict.related_tables.users": {
@@ -2224,39 +2225,23 @@
         "dtype": "float32",
         "stype": "numerical",
         "cells": {
-         "{\"number\":\"0.0\"}": 52,
-         "{\"number\":\"1234567.0\"}": 60
+         "{\"number\":\"1234567.0\"}": 5,
+         "{\"number\":\"1234567.125\"}": 1
         }
        },
        "predict": null
       }
      ]
     },
-    "orders.amount": {
+    "users.t": {
      "described": {
       "dtype": "float64",
-      "stype": "numerical"
+      "stype": "categorical"
      },
      "request": [
       {
-       "context": {
-        "dtype": "float64",
-        "stype": "numerical",
-        "cells": {
-         "{\"number\":\"1234567.0\"}": 140,
-         "{\"number\":\"1234567.01\"}": 136,
-         "{\"number\":\"1234567.02\"}": 132
-        }
-       },
-       "predict": {
-        "dtype": "float64",
-        "stype": "numerical",
-        "cells": {
-         "{\"number\":\"1234567.0\"}": 6,
-         "{\"number\":\"1234567.01\"}": 5,
-         "{\"number\":\"1234567.02\"}": 5
-        }
-       }
+       "context": null,
+       "predict": null
       }
      ]
     }
