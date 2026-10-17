@@ -261,6 +261,22 @@ def admitted_inventory_cases() -> set[str]:
     }
 
 
+#: T2.0c's S1 cases for exact decimals (KO2-50), none in the inventory.
+T20C_DECIMAL = (
+    'decimal.compare-finer-gt',
+    'decimal.compare-finer-eq',
+    'decimal.compare-finer-negative',
+    'decimal.compare-past-precision',
+    'decimal.compare-past-precision-gt',
+    'decimal.compare-same-scale',
+    'decimal.sum-10-2',
+    'decimal.sum-past-38',
+    'decimal.feature-inexact-38-18',
+    'decimal.key-wide',
+    'decimal.class-target-collide',
+)
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -280,11 +296,18 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     }
     # T1.33 (T1.32f's real-data part) adds the notebook's churn and Color
     # questions over the AdventureWorks base, no inventory case either.
+    # T2.0c adds the exact-decimal cases (KO2-50), no inventory case either;
+    # each is an acceptance case carrying its call as far as the reference
+    # goes.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
         'base.adventureworks.color',
+        *T20C_DECIMAL,
     }
+    for case_id in T20C_DECIMAL:
+        assert committed[case_id]['status'] == 'acceptance', case_id
+        assert _held_to_its_input(committed[case_id]) == [], case_id
     # From T1.29 the inventory's three baseline cases are acceptance cases
     # with their routes and paths, keeping its input and expectation; from
     # T1.32 so is each case whose family's admission exit has cleared, and
