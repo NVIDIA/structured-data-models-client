@@ -98,7 +98,9 @@ pub fn write(
     let (result, code) = observed.answer.outcome();
     let (accepted, predicted, error) = match &observed.answer {
         Answer::Validated(accepted) => (Some(*accepted), Value::Null, Value::Null),
-        Answer::Described(_) | Answer::Materialized(_) => (None, Value::Null, Value::Null),
+        Answer::Described(_) | Answer::Materialized(_) => {
+            (observed.accepted, Value::Null, Value::Null)
+        }
         Answer::Predicted(answer) => {
             // The answer's `calls` are this host's in-process record of
             // every call; `core.predicted` holds python-core's shape, its
@@ -107,11 +109,13 @@ pub fn write(
             if let Value::Object(members) = &mut predicted {
                 members.remove("calls");
             }
-            (None, predicted, Value::Null)
+            (observed.accepted, predicted, Value::Null)
         }
-        Answer::Error { kind, code, .. } => {
-            (None, Value::Null, json!({"kind": kind, "code": code}))
-        }
+        Answer::Error { kind, code, .. } => (
+            observed.accepted,
+            Value::Null,
+            json!({"kind": kind, "code": code}),
+        ),
     };
     let materialized = observed.materialized.clone().unwrap_or(Value::Null);
     let described = observed.described.clone().unwrap_or(Value::Null);
