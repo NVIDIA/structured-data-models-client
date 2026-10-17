@@ -395,6 +395,20 @@ fn databases_come_only_with_their_exclusion() {
     }
 }
 
+/// rust-host's marker for the staging rule (T2.1a): `--providers` prints
+/// the test kit's provider list as JSON, DuckDB among them.
+#[test]
+fn the_host_reports_its_providers_as_plain_data() {
+    let run = std::process::Command::new(env!("CARGO_BIN_EXE_sdm-contract-run"))
+        .arg("--providers")
+        .output()
+        .unwrap();
+    assert!(run.status.success());
+    let listed: Vec<String> = serde_json::from_slice(&run.stdout).unwrap();
+    assert_eq!(listed, sdm_testkit::PROVIDERS);
+    assert!(listed.iter().any(|name| name == "duckdb"));
+}
+
 #[test]
 fn a_failed_run_leaves_no_output_an_earlier_run_wrote() {
     let directory = scratch("stale");

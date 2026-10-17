@@ -159,6 +159,64 @@ def _indices(given: dict[str, Any]) -> str | None:
     return None
 
 
+def case_key(case_id: str, database: str) -> str:
+    r"""An observation's key on ``database``: DuckDB's the bare case ID,
+    another's ``<case>@<database>``."""
+    return case_id if database == 'duckdb' else f'{case_id}@{database}'
+
+
+def check_legs(
+    database: str,
+    providers: Mapping[str, Iterable[str]],
+    observations: Iterable[Mapping[str, Any]],
+) -> list[str]:
+    r"""The staging rule (design choice 2, "CI"; T2.1a), one definition for
+    ``gate.sh`` and CI: a database job runs cases, and each core leg runs
+    on ``database`` exactly when it reports a provider for it.
+
+    ``providers`` maps each core leg (``python-core``, ``rust-host``) to
+    the databases it reports (``sdm_client._native.PROVIDERS``,
+    ``sdm-contract-run --providers``); ``observations`` are the job's, each
+    keyed as :func:`case_key` keys it. The problems, each naming what
+    fails: no case observed on ``database``; a leg reporting a provider for
+    it with no observation there; a leg without a case the reference side
+    (``python-old``) observed there, named by its key. A leg reporting no
+    provider for ``database`` is not required there."""
+    on = [
+        line
+        for line in observations
+        if isinstance(line.get('case'), str)
+        and (
+            '@' not in line['case']
+            if database == 'duckdb'
+            else line['case'].endswith(f'@{database}')
+        )
+    ]
+    if not on:
+        return [f'{database}: the job observed no case on {database}']
+    observed: dict[str, set[str]] = {}
+    for line in on:
+        runner = (line.get('identity') or {}).get('runner')
+        observed.setdefault(str(runner), set()).add(line['case'])
+    reference = observed.get('python-old', set())
+    problems = []
+    for leg in sorted(providers):
+        if database not in tuple(providers[leg]):
+            continue
+        made = observed.get(leg, set())
+        if not made:
+            problems.append(
+                f'{database}: {leg} reports a {database} provider and made '
+                f'no observation on {database} (missing)'
+            )
+            continue
+        problems.extend(
+            f'{database}: {leg} reports a {database} provider and skipped {key}'
+            for key in sorted(reference - made)
+        )
+    return problems
+
+
 def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
     r"""The databases a loaded case runs on, in :data:`DATABASES` order:
     all three unless its ``databases`` (with its exclusion) narrows them."""

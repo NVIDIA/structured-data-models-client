@@ -40,10 +40,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-PENDING = pytest.mark.xfail(
-    reason='T2.1a: the staging rule (run_python.check_legs) and the marker',
-    strict=True,
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -120,7 +116,6 @@ def test_the_seeded_observations_are_valid() -> None:
             assert RUNNER._invalid(validate, line) is None
 
 
-@PENDING
 def test_no_provider_runs_the_reference_side_only_and_still_runs_cases() -> (
     None
 ):
@@ -134,7 +129,6 @@ def test_no_provider_runs_the_reference_side_only_and_still_runs_cases() -> (
     )
 
 
-@PENDING
 def test_a_database_job_that_runs_no_case_fails() -> None:
     r"""Seeded: a job on its database with no case observed fails, naming
     the database, provider or not."""
@@ -143,7 +137,6 @@ def test_a_database_job_that_runs_no_case_fails() -> None:
         assert problems and _named(problems, 'sqlite'), problems
 
 
-@PENDING
 def test_a_provider_present_runs_the_core_legs() -> None:
     r"""Control: a provider for SQLite on both legs, and both legs observed
     on every case there, passes."""
@@ -155,7 +148,6 @@ def test_a_provider_present_runs_the_core_legs() -> None:
     assert RUNNER.check_legs('sqlite', SQLITE_BOTH, observations) == []
 
 
-@PENDING
 @pytest.mark.parametrize('leg', ['python-core', 'rust-host'])
 def test_a_provider_present_with_its_leg_missing_fails_by_name(
     leg: str,
@@ -172,7 +164,6 @@ def test_a_provider_present_with_its_leg_missing_fails_by_name(
     assert not _named(problems, other), problems
 
 
-@PENDING
 def test_a_provider_present_with_a_case_skipped_fails_by_name() -> None:
     r"""Seeded: python-core observed one of the two cases on SQLite; the
     skipped one is named by its key."""
@@ -186,7 +177,6 @@ def test_a_provider_present_with_a_case_skipped_fails_by_name() -> None:
     assert _named(problems, 'python-core', skipped), problems
 
 
-@PENDING
 def test_observations_on_another_database_do_not_stand_in() -> None:
     r"""Seeded: python-core's DuckDB observations (bare keys) do not count
     as its SQLite leg."""
@@ -199,7 +189,6 @@ def test_observations_on_another_database_do_not_stand_in() -> None:
     assert _named(problems, 'python-core', 'sqlite'), problems
 
 
-@PENDING
 def test_duckdb_keeps_bare_keys_and_needs_both_legs() -> None:
     r"""Control and seed on DuckDB, where every core leg reports a provider
     today: both legs observed passes; rust-host missing fails."""
@@ -212,7 +201,6 @@ def test_duckdb_keeps_bare_keys_and_needs_both_legs() -> None:
     assert _named(problems, 'rust-host', 'duckdb'), problems
 
 
-@PENDING
 def test_the_built_core_reports_its_providers_as_plain_data() -> None:
     r"""Exit: python-core's marker is a private list of database names in
     the native module, DuckDB among them; never public API."""

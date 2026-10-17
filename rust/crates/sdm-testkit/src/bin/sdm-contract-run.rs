@@ -6,7 +6,12 @@
 //!
 //! ```text
 //! sdm-contract-run [--pre-given-specs] --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --providers
 //! ```
+//!
+//! `--providers` prints the databases this host has a provider for
+//! ([`sdm_testkit::PROVIDERS`]) as a JSON list, the staging rule's marker
+//! for rust-host (T2.1a).
 //!
 //! Runs every case through `HostRun`, building a case's data from
 //! `contract/bases.yaml` when its operation reads data, and writes one
@@ -84,6 +89,10 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
 
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments == ["--providers"] {
+        println!("{}", serde_json::json!(sdm_testkit::PROVIDERS));
+        return ExitCode::SUCCESS;
+    }
     match run(&arguments) {
         Ok((_, count)) => {
             println!("rust-host: {count} cases recorded");

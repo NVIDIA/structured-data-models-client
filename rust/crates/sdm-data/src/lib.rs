@@ -56,6 +56,15 @@ const KNOWN: &[&str] = &[
     "snowflake",
 ];
 
+/// The databases this build's data layer provides for, by the names the
+/// case format and the contract runners use (T2.1a): the dialects it
+/// renders. The private, plain-data marker of the staging rule
+/// (`contract/runners/run_python.py`'s `check_legs`): the Python host's
+/// native module reports it as `PROVIDERS`, and a database's core legs run
+/// exactly when it is listed. A dialect's package adds its name with its
+/// rendering.
+pub const PROVIDERS: &[&str] = &[duckdb::NAME];
+
 /// A dialect this build renders.
 enum Rendered {
     Duckdb,
