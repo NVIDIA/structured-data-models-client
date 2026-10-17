@@ -1399,6 +1399,30 @@ def large_buffers(
     return found
 
 
+#: The Arrow types ADBC's SQLite driver reads a column as (it infers each
+#: from the values: integers, floats, text, bytes, an empty or all-null
+#: column as integers); its cursor's description names each by its Arrow
+#: name, so a SQLite row read's types are those names, each its own Arrow
+#: name. Any other is not one, and is never taken as equal to one.
+SQLITE_ARROW = {name: name for name in ('int64', 'double', 'string', 'binary')}
+
+
+def row_arrow_name(
+    database: str, row_type: str, large: bool = False
+) -> str | None:
+    r"""The Arrow type a row read's recorded type stands for, by the
+    database's driver: DuckDB's name of its type (:func:`arrow_name`) on
+    DuckDB, ADBC's Arrow name on SQLite (:data:`SQLITE_ARROW`); None where
+    the driver's vocabulary does not say, which never compares equal (a
+    database whose driver has no vocabulary here yet, Postgres, has
+    none)."""
+    if database == 'duckdb':
+        return arrow_name(row_type, large)
+    if database == 'sqlite':
+        return SQLITE_ARROW.get(row_type)
+    return None
+
+
 def arrow_name(duckdb_type: str, large: bool = False) -> str | None:
     r"""The Arrow type DuckDB reads a column of ``duckdb_type`` as, or
     None when :data:`DUCKDB_ARROW` does not say; with ``large``
@@ -1453,10 +1477,12 @@ def _results(
     ordered: bool,
     who: tuple[str, str],
     large: bool = False,
+    database: str = 'duckdb',
 ) -> None:
     r"""One statement's results against another's: ``sql.result``. ``who``
     names the two runners, whose evidence :func:`_evidence` requires;
-    ``large``, :func:`large_buffers` of the case."""
+    ``large``, :func:`large_buffers` of the case; ``database``, whose
+    driver's vocabulary a row read's types are in (:func:`row_arrow_name`)."""
     if (mine['error'] is None) != (theirs['error'] is None):
         report.fail(f'{where}: one statement failed', 'sql.result')
         return
@@ -1492,7 +1518,7 @@ def _results(
             and va['types'] != vb['types']
         ):
             report.fail(f'{at}: DuckDB types differ', 'sql.result')
-        _arrow_types(report, at, a, b, large)
+        _arrow_types(report, at, a, b, large, database)
         if a['rows'] != b['rows']:
             report.fail(
                 f'{at}: {a["rows"]} rows, against {b["rows"]}', 'sql.result'
@@ -1512,12 +1538,14 @@ def _arrow_types(
     a: dict[str, Any],
     b: dict[str, Any],
     large: bool = False,
+    database: str = 'duckdb',
 ) -> None:
     r"""The two reads' Arrow types: both schemas where both read Arrow;
     where one read rows (the reference's catalog, by ``fetchall``) and the
-    other Arrow (a core runner), the row read's DuckDB types as Arrow names
-    (:func:`arrow_name`) against the Arrow read's schema, a type with no
-    Arrow name failing."""
+    other Arrow (a core runner), the row read's types as Arrow names in its
+    database's driver's vocabulary (:func:`row_arrow_name`: DuckDB's type
+    names, ADBC SQLite's Arrow names) against the Arrow read's schema, a
+    type with no Arrow name failing."""
     sa, sb = a.get('schema'), b.get('schema')
     if sa is not None and sb is not None:
         if sa != sb:
@@ -1534,10 +1562,10 @@ def _arrow_types(
     if types is None:
         report.fail(f'{at}: neither read records its types', 'sql.result')
         return
-    named = [arrow_name(kind, large) for kind in types]
+    named = [row_arrow_name(database, kind, large) for kind in types]
     if None in named:
         report.fail(
-            f'{at}: DuckDB types with no Arrow name: '
+            f'{at}: {database} types with no Arrow name: '
             f'{sorted({k for k, n in zip(types, named, strict=True) if n is None})}',
             'sql.result',
         )
@@ -1568,6 +1596,7 @@ def _sql(
     ordered: dict[str, list[int]],
     stop: str | None = None,
     large: bool = False,
+    database: str = 'duckdb',
 ) -> None:
     r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
     with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported;
@@ -1616,6 +1645,7 @@ def _sql(
                 position in ordered.get(stage, []),
                 (who, 'python-ref'),
                 large,
+                database,
             )
     mine_bound = _by_stage(observation, 'bindings') or {}
     theirs_bound = _by_stage(reference, 'bindings') or {}
@@ -1650,10 +1680,11 @@ def _sql_core(
     rust: dict[str, Any],
     ordered: dict[str, list[int]],
     large: bool = False,
+    database: str = 'duckdb',
 ) -> None:
     r"""The two core runners' statement results, public call by public
     call: ``sql.count`` and ``sql.result``; ``large``, :func:`large_buffers`
-    of the case."""
+    of the case; ``database``, the run's."""
     stages = _stages(case, 'rust-host')
     if not stages:
         return
@@ -1683,6 +1714,7 @@ def _sql_core(
                 position in ordered.get(stage, []),
                 ('python-core', 'rust-host'),
                 large,
+                database,
             )
 
 
@@ -1916,7 +1948,17 @@ def compare(
                     )
                 elif who in PYTHON:
                     _host_fields(report, case, who, observation, ref, stop=stop)
-                _sql(report, case, who, observation, ref, ordered, stop, large)
+                _sql(
+                    report,
+                    case,
+                    who,
+                    observation,
+                    ref,
+                    ordered,
+                    stop,
+                    large,
+                    database,
+                )
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']
                 if mine != theirs:
@@ -1943,7 +1985,7 @@ def compare(
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(report, case, python, rust)
-            _sql_core(report, case, python, rust, ordered, large)
+            _sql_core(report, case, python, rust, ordered, large, database)
         if not gating:
             report.demote(before, keep=('reach',) if reach else ())
     return report
