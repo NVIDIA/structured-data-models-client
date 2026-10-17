@@ -1,6 +1,6 @@
 {
   "format": "sdm-refusal-census/1",
-  "about": "The refusal census's probes (contract/tools/refusal_census.py; Phase 2 design, choice 10; T2.1a): one per refusal site the tool generates from the code, each a case's input on the base and the call it runs to, with materialize's keyword arguments the case format does not carry (options), the model predict asks (model) and, at a rule-less site, the detail fields that site's error sets (marks). `why` says what the probe tries and, where the site is not reached from the public calls this way, why; the run's evidence records whether each probe reached its site on python-core.",
+  "about": "The refusal census's probes (contract/tools/refusal_census.py; Phase 2 design, choice 10; T2.1a): one per refusal site the tool generates from the code, each written for that site (its intended site): a case's input on the base and the call it runs to, with materialize's keyword arguments the case format does not carry (options) and the model predict asks (model). `why` says what the probe tries and, where the probe's author knows the public calls do not get to the site this way, why. The run records each probe's outcomes on both routes; which site produced an outcome is not claimed (reachability unmeasured).",
   "probes": [
     {
       "site": "rule:aggregation",
@@ -980,11 +980,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "from_source",
-      "marks": [
-        "arrow_type",
-        "column"
-      ]
+      "until": "from_source"
     },
     {
       "site": "rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::unsupported_type#1",
@@ -1003,11 +999,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "from_source",
-      "marks": [
-        "arrow_type",
-        "column"
-      ]
+      "until": "from_source"
     },
     {
       "site": "rust/crates/sdm-host/src/admission.rs::admitted_type::admission::unsupported#1",
@@ -1026,11 +1018,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "from_source",
-      "marks": [
-        "arrow_type",
-        "column"
-      ]
+      "until": "from_source"
     },
     {
       "site": "rust/crates/sdm-host/src/admission.rs::admitted_field::admission::unsupported#1",
@@ -1049,11 +1037,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "from_source",
-      "marks": [
-        "arrow_type",
-        "column"
-      ]
+      "until": "from_source"
     },
     {
       "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1",
@@ -1072,11 +1056,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "from_source",
-      "marks": [
-        "arrow_type",
-        "column"
-      ]
+      "until": "from_source"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1",
@@ -1093,11 +1073,7 @@
         }
       },
       "until": "predict",
-      "model": "KumoTabular",
-      "marks": [
-        "model",
-        "unsupported"
-      ]
+      "model": "KumoTabular"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2",
@@ -1113,12 +1089,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "model",
-        "supported",
-        "task"
-      ]
+      "until": "predict"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3",
@@ -1134,12 +1105,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "model",
-        "supported_outputs",
-        "unsupported_outputs"
-      ]
+      "until": "predict"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4",
@@ -1161,12 +1127,7 @@
       "until": "predict",
       "options": {
         "num_context_samples": 15000
-      },
-      "marks": [
-        "context_rows",
-        "context_rows_max",
-        "model"
-      ]
+      }
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1",
@@ -1182,11 +1143,7 @@
           "anchor_time": "2023-01-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "context_rows",
-        "model"
-      ]
+      "until": "predict"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2",
@@ -1205,12 +1162,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "classes",
-        "limit",
-        "model"
-      ]
+      "until": "predict"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3",
@@ -1226,12 +1178,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "classes_in_context",
-        "model",
-        "target"
-      ]
+      "until": "predict"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4",
@@ -1247,11 +1194,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "model",
-        "scored"
-      ]
+      "until": "predict"
     },
     {
       "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5",
@@ -1267,11 +1210,7 @@
           "anchor_time": "2024-03-01"
         }
       },
-      "until": "predict",
-      "marks": [
-        "context_rows_fast",
-        "model"
-      ]
+      "until": "predict"
     },
     {
       "site": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment#1",

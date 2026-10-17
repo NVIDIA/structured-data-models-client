@@ -361,3 +361,39 @@ def test_every_s1_case_loads_on_postgres(path: Path) -> None:
     finally:
         with psycopg.connect(dsn, autocommit=True) as admin:
             admin.execute(f'DROP SCHEMA {schema} CASCADE')
+
+
+def test_a_field_named_as_a_lost_type_is_a_name(tmp_path: Path) -> None:
+    r"""Fix 2: struct fields named ``BIT`` and ``TIME WITH TIME ZONE`` are
+    names, read from DuckDB's type tree, and their integers load."""
+    assert _sqlite_rows(
+        tmp_path,
+        "CREATE TABLE t AS SELECT 1 AS id, {'BIT': 42, "
+        "'TIME WITH TIME ZONE': 7} AS v",
+    ) == [(1, '{"BIT":42,"TIME WITH TIME ZONE":7}')]
+
+
+@pytest.mark.parametrize(
+    'value',
+    [
+        "map(['k'], [chr(0)])",
+        "map([chr(0)], ['v'])",
+        'union_value(s := chr(0))',
+    ],
+    ids=['map value', 'map key', 'union'],
+)
+def test_a_nul_inside_json_is_refused_by_name_on_postgres(value: str) -> None:
+    r"""Fix 2: a NUL in a map's or union's text, which jsonb cannot hold, is
+    refused naming the column before COPY sees it."""
+    import os
+
+    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES')
+        return
+    import duckdb
+
+    duck = duckdb.connect()
+    duck.execute(f'CREATE TABLE t AS SELECT {value} AS v')
+    with pytest.raises(databases.Unloadable, match=r't\.v: text holding a NUL'):
+        databases.load(duck, 'postgres', dsn)

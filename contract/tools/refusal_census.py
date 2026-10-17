@@ -40,13 +40,13 @@ runs there, never as zero hits): python-core in this interpreter, every
 core route forced (``SDM_CORE_ROUTES``), and the reference with
 ``--reference-python``, whose ``sdm_client`` must be ``--reference``'s.
 Each outcome is the public call's: the stage, the exception's class,
-``StructuredDataError.code`` and its ``details``' ``rule``, or success. A
-probe *reaches* its site when python-core's refusal is the site's and no
-other's: its rule, or at a rule-less site its code with detail fields no
-other rule-less site's refusal carries (:func:`identifiable`; a site a
-refusal cannot tell from another is never counted as reached), and
-*departs* when python-core
-refuses where the reference answers. The real-data part (the public calls
+``StructuredDataError.code`` and its ``details``' ``rule``, or success.
+Each probe's record names the site it was written for (``site``, the
+intended site); the census claims nothing about which site produced an
+outcome, since an outcome alone cannot prove it: reachability stays
+unmeasured (``reachability``) until a real-data run or instrumentation
+needs it (the orchestrator's decision at T2.1a fix 2). A probe *departs*
+when python-core refuses where the reference answers. The real-data part (the public calls
 over the phase's real datasets, each hit keyed by rule or by site and code
 with its count of real sources) runs at each lane's first landing; until
 it has, ``hits`` is empty and ``real_data`` says so.
@@ -281,7 +281,6 @@ def probes(root: Path) -> list[dict[str, Any]]:
             or not isinstance(probe.get('options', {}), dict)
             or probe.get('model', 'KumoRelational')
             not in ('KumoRelational', 'KumoTabular')
-            or not isinstance(probe.get('marks', []), list)
             or not set(probe.get('databases', DATABASES)) <= set(DATABASES)
         ):
             raise CensusError(f'{PROBES}: probe {at} is not a probe')
@@ -429,56 +428,18 @@ def route(cases: Path, out: Path, database: str, core: bool) -> None:
     out.write_text(json.dumps(lines), encoding='utf-8')
 
 
-def identifiable(
-    found: list[dict[str, Any]], listed: list[dict[str, Any]]
-) -> set[str]:
-    r"""The sites a refusal identifies: each named rule (its error names
-    it), and a rule-less site whose code and detail fields (its probe's
-    ``marks``, at least one) no other rule-less site shares. A rule-less
-    site another shares them with, or one whose error carries no field of
-    its own (the Python host's), is not identified by any outcome, so no
-    probe reaches it: two sites one refusal could come from are never
-    counted as reached (T2.1a fix 1)."""
-    marks = {
-        probe['site']: frozenset(probe.get('marks', [])) for probe in listed
+def record(
+    probe: dict[str, Any], mine: dict[str, Any], ref: dict[str, Any]
+) -> dict[str, Any]:
+    r"""One probe's evidence: the site it was written for, both routes'
+    outcomes, and whether python-core refuses where the reference answers;
+    never a claim that the outcome came from that site."""
+    return {
+        'site': probe['site'],
+        'outcomes': {'python-core': mine, 'reference': ref},
+        'departs': mine.get('result') != 'success'
+        and ref.get('result') == 'success',
     }
-    signatures: dict[tuple[Any, frozenset[str]], list[str]] = {}
-    for site in found:
-        if site['rule'] is None:
-            key = (site['code'], marks.get(site['id'], frozenset()))
-            signatures.setdefault(key, []).append(site['id'])
-    return {site['id'] for site in found if site['rule'] is not None} | {
-        ids[0]
-        for (_, keys), ids in signatures.items()
-        if keys and len(ids) == 1
-    }
-
-
-def _reaches(
-    site: dict[str, Any],
-    outcome: dict[str, Any],
-    marks: list[str],
-    identified: bool = True,
-) -> bool:
-    r"""Whether python-core's refusal is the site's: its rule; at a
-    rule-less site that refusals identify (:func:`identifiable`) its code,
-    with the detail fields that site sets (``marks``), and at a site of the
-    Python host none of the core's (``kind``, which every core error
-    carries)."""
-    if outcome.get('result') != 'refusal':
-        return False
-    if site['rule'] is not None:
-        return outcome.get('rule') == site['rule']
-    if not identified:
-        return False
-    keys = set(outcome.get('detail_keys') or ())
-    if site['where'].startswith(str(HOST.parents[2])) and 'kind' in keys:
-        return False
-    return (
-        site['code'] is not None
-        and outcome.get('code') == site['code']
-        and set(marks) <= keys
-    )
 
 
 def run(
@@ -544,26 +505,10 @@ def run(
             )
         core = json.loads(core_out.read_text(encoding='utf-8'))
         theirs = json.loads(reference_out.read_text(encoding='utf-8'))
-    results = []
-    known = identifiable(list(found.values()), listed)
-    for probe, mine, ref in zip(chosen, core, theirs, strict=True):
-        site = found.get(probe['site'])
-        results.append(
-            {
-                'site': probe['site'],
-                'outcomes': {'python-core': mine, 'reference': ref},
-                'identified': probe['site'] in known,
-                'reached': site is not None
-                and _reaches(
-                    site,
-                    mine,
-                    probe.get('marks', []),
-                    probe['site'] in known,
-                ),
-                'departs': mine.get('result') != 'success'
-                and ref.get('result') == 'success',
-            }
-        )
+    results = [
+        record(probe, mine, ref)
+        for probe, mine, ref in zip(chosen, core, theirs, strict=True)
+    ]
     return {
         'format': 'sdm-refusal-census-run/1',
         'database': database,
@@ -571,7 +516,8 @@ def run(
         'reference': runner._git(reference),
         'sites': len(found),
         'probes': results,
-        'reached': sum(1 for r in results if r['reached']),
+        'reachability': 'unmeasured: a probe names the site it was written '
+        'for, and an outcome does not show which site produced it',
         'departs': sorted({r['site'] for r in results if r['departs']}),
         'hits': [],
         'real_data': 'not run: the public calls over the real datasets run at '
@@ -629,7 +575,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(
             f'census: {len(evidence["probes"])} probes on {arguments.database}, '
-            f'{evidence["reached"]} reaching their site, '
             f'{len(evidence["departs"])} sites where the core departs'
         )
         return 0

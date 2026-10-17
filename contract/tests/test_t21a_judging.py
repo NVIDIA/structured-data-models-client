@@ -2,9 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""T2.1a's own tests of its judging rules (fix 1): a DuckDB line's capture
-is held to DuckDB's query log, and the refusal census counts a rule-less
-site reached only when the refusal could have come from it alone."""
+r"""T2.1a's own tests of its judging rules: a DuckDB line's capture is held
+to DuckDB's query log, the refusal census records each probe against its
+intended site and claims no reach, the slice gate alone holds temporary
+entries, and an exclusion leaves a database out."""
 
 from __future__ import annotations
 
@@ -58,53 +59,21 @@ def test_a_duckdb_line_without_its_query_log_is_not_complete() -> None:
     assert capture_check.complete(nulled) == []
 
 
-def test_a_refusal_two_sites_share_reaches_neither() -> None:
-    r"""Seeded: two rule-less sites whose errors carry the same code and
-    fields are not identified, so a refusal with that code and those
-    fields reaches neither; a site whose fields are its own is reached,
-    and a named rule by its rule."""
-    sites = [
-        {'id': 'a', 'rule': None, 'code': 'UNSUPPORTED_TYPE', 'where': 'r:1'},
-        {'id': 'b', 'rule': None, 'code': 'UNSUPPORTED_TYPE', 'where': 'r:2'},
-        {
-            'id': 'c',
-            'rule': None,
-            'code': 'UNSUPPORTED_REQUEST',
-            'where': 'r:3',
-        },
-        {
-            'id': 'rule:x',
-            'rule': 'x',
-            'code': 'UNSUPPORTED_REQUEST',
-            'where': 'r:4',
-        },
-    ]
-    probes = [
-        {'site': 'a', 'marks': ['column']},
-        {'site': 'b', 'marks': ['column']},
-        {'site': 'c', 'marks': ['classes']},
-        {'site': 'rule:x'},
-    ]
-    known = census.identifiable(sites, probes)
-    assert known == {'c', 'rule:x'}
-    refused = {
-        'result': 'refusal',
-        'code': 'UNSUPPORTED_TYPE',
-        'detail_keys': ['column', 'kind'],
+def test_a_probe_s_record_names_its_intended_site_and_claims_no_reach() -> None:
+    r"""Fix 2 (the orchestrator's stop rule): a probe's evidence is the
+    site it was written for, both routes' outcomes and whether the core
+    departs; nothing says the outcome came from that site, so a refusal
+    another site could give is no evidence of reaching this one."""
+    refused = {'result': 'refusal', 'code': 'UNSUPPORTED_TYPE'}
+    answered = {'result': 'success', 'stage': 'from_source'}
+    found = census.record({'site': 'a'}, refused, answered)
+    assert found == {
+        'site': 'a',
+        'outcomes': {'python-core': refused, 'reference': answered},
+        'departs': True,
     }
-    for site in sites[:2]:
-        assert not census._reaches(
-            site, refused, ['column'], site['id'] in known
-        )
-    classes = {
-        'result': 'refusal',
-        'code': 'UNSUPPORTED_REQUEST',
-        'detail_keys': ['classes', 'kind'],
-    }
-    assert census._reaches(sites[2], classes, ['classes'], True)
-    assert census._reaches(
-        sites[3], {'result': 'refusal', 'rule': 'x'}, [], True
-    )
+    assert not census.record({'site': 'a'}, refused, refused)['departs']
+    assert not hasattr(census, '_reaches')
 
 
 def _temporary_flag(locked: str, wheel_run: str) -> str:

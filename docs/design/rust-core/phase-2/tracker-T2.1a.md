@@ -24,10 +24,10 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 - Every S1 case's tables load on SQLite and on a local postgres:17 through the loader.
 - The reference (python-ref, 6298913c's environment) ran all 52 S1 cases on SQLite and on Postgres, every capture complete; compared with `--database` against the candidate's old client, what differs is the pre-merge client against the new reference (main's `inference_config` and sampling), which T2.0c's merge removes.
 - With a random Postgres schema per case, every `from_source` differed between two runs (`SELECT current_schema()`); each case now gets a database of its own, its tables in `public`.
-- The census, run on the phase head after T2.0c with a clean tree: 71 sites, 33 probes reaching their site on python-core, 23 sites where the core refuses what the reference answers (all of E92's class).
-  From fix 1 a rule-less site counts as reached only when its refusal's code and detail fields are its alone; the two `unsupported_type` sites, the admission sites and the Python host's sites are not told apart by any outcome, so none counts.
+- The census, run on the phase head after T2.0c with a clean tree: 71 sites, each with a probe written for it (its intended site), both routes' outcomes recorded, 23 sites whose probe the core refuses where the reference answers (all of E92's class).
+  Which site produced an outcome is not claimed: reachability stays unmeasured until a real-data run or instrumentation needs it (the orchestrator's stop rule at fix 2, after attribution from outcomes failed review twice).
   T2.0c's exact decimals lifted the decimal static target the `target_type` probe first used; its probe now sums a UBIGINT column past int64.
-  Not reached, each said in its probe: sites the query validator shields on both routes, answers the scripted endpoint never gives, provider declarations DuckDB's provider makes, and host checks a case input cannot reach.
+  Where the probe's author knows the public calls do not get to the site that way, its `why` says so: the query validator shields it on both routes, the scripted endpoint never gives the answer, DuckDB's provider makes the declaration, or a case input cannot carry the host's input.
   Two probes show the core answering `PROVIDER_ERROR` where the reference fails with `INTERNAL_ERROR` (a text time column with a value outside the formats, and one with day and month order open).
 
 ## Deviations and what is left
@@ -43,3 +43,4 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
   The temporary-approval rule holds the slice gate's locked run only (a Phase 2 half or later with `--wheel-run`, as `final_gate.sh` runs it; orchestrator's decision), so Phase 1's halves and the gate's own controls run as before.
   The S0 cases run on SQLite and Postgres too, and the recorder records all of them (orchestrator's decision).
 - rust-host's marker (`sdm-contract-run --providers`) is read by no CI step yet: rust-host runs no SQLite or Postgres pass before T2.2b and T2.3b, and the `ci` step that reads it is T2.1c's.
+- Fix 2 (round 2, Codex): the census records each probe against its intended site and claims no reach (stop rule); the loader reads lost types from DuckDB's type tree, so a field named `BIT` is a name, and refuses a NUL inside a map's or union's text on Postgres before COPY.

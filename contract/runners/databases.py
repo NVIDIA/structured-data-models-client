@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from decimal import Decimal
@@ -494,6 +493,12 @@ def _postgres_text(value: Any, name: str, where: str) -> str | None:
             raise Unloadable(f'{where}: an interval past microseconds')
         return f'{months} mons {days} days {nanos // 1000} microseconds'
     if name in ('map', 'union'):
+        # jsonb holds no NUL, which JSON's text would carry escaped: the
+        # value's own text, its keys included, is what is checked.
+        if _holds_nul(value):
+            raise Unloadable(
+                f'{where}: text holding a NUL, which Postgres refuses'
+            )
         return _json(value, where)
     if name == 'binary':
         return '\\x' + bytes(value).hex()
@@ -614,16 +619,28 @@ def _read(duck: Any, table: str) -> Any:
 #: DuckDB types whose Arrow form loses what they hold (a time's offset, a
 #: bit string read as DuckDB's own bytes), refused by name rather than
 #: loaded as something else.
-LOST_IN_ARROW = ('TIME WITH TIME ZONE', 'BIT')
+LOST_IN_ARROW = ('time with time zone', 'bit')
+
+
+def _holds_lost(kind: Any) -> bool:
+    r"""Whether a DuckDB type is, or holds at any depth, one of
+    :data:`LOST_IN_ARROW`, read from DuckDB's own type tree: a struct's
+    field names are names, never types."""
+    if kind.id in LOST_IN_ARROW:
+        return True
+    if kind.id in ('struct', 'list', 'array', 'map', 'union'):
+        return any(
+            _holds_lost(child)
+            for _, child in kind.children
+            if hasattr(child, 'id')
+        )
+    return False
 
 
 def _lost(duck: Any, table: str) -> None:
-    for column, kind in duck.execute(
-        'SELECT column_name, data_type FROM duckdb_columns() '
-        "WHERE schema_name = 'main' AND table_name = ?",
-        [table],
-    ).fetchall():
-        if re.search(rf'\b({"|".join(LOST_IN_ARROW)})\b', kind):
+    relation = duck.table(quote(table))
+    for column, kind in zip(relation.columns, relation.types, strict=True):
+        if _holds_lost(kind):
             raise Unloadable(
                 f'{table}.{column}: {kind}, which Arrow does not carry whole'
             )
@@ -649,6 +666,18 @@ def _rows(
             ) from None
         columns.append(values)
     return zip(*columns, strict=True) if columns else iter(())
+
+
+def _holds_nul(value: Any) -> bool:
+    r"""Whether a cell's text, at any depth, a map's keys and a struct's
+    names included, holds a NUL."""
+    if isinstance(value, str):
+        return '\x00' in value
+    if isinstance(value, dict):
+        return any(_holds_nul(k) or _holds_nul(v) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_holds_nul(item) for item in value)
+    return False
 
 
 def _no_nul(text: Any, where: str) -> Any:
