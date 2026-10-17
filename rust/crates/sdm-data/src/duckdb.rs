@@ -49,10 +49,11 @@ use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
     Filter, IndexAdvice, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
     Relation, SEED_BATCH, SEED_KEY_TYPE, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes,
-    TieBreak, TieTerm, Window, field, seed_key_columns,
+    TieBreak, TieTerm, Window, field, seed_integer, seed_key_columns,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
+use crate::quote::{identifier, identifiers, text};
 use crate::read::{self, ColumnNames, ForeignKeyNames};
 
 /// The dialect's name on the wire.
@@ -460,20 +461,6 @@ fn not_taken(request: &DataRequest, field: &str, message: &str) -> CoreError {
     .with_field("field", Detail::text(field))
 }
 
-/// A seed's integer value, if the scalar is an integer.
-fn integer(seed: &Scalar) -> Option<i128> {
-    Some(match seed {
-        Scalar::Int32(v) => i128::from(*v),
-        Scalar::Int64(v) => i128::from(*v),
-        Scalar::UInt32(v) => i128::from(*v),
-        Scalar::UInt64(v) => i128::from(*v),
-        Scalar::Decimal128 {
-            scale: 0, value, ..
-        } => *value,
-        _ => return None,
-    })
-}
-
 /// The reference's reservoir sample of an entity table (`_random_sample_sql`
 /// on DuckDB), `table` its rendered relation: the columns asked for, from the rows that meet each not-null
 /// filter, `n` rows under the seed. The key names the columns the entities
@@ -504,7 +491,7 @@ fn sample_entities(
             "a sample's key is not among the columns it projects",
         ));
     }
-    let seed = match integer(seed) {
+    let seed = match seed_integer(seed) {
         Some(seed) if (0..=i128::from(MAX_SEED)).contains(&seed) => seed,
         Some(seed) if seed >= 0 => {
             return Err(CoreError::new(
@@ -963,24 +950,6 @@ fn repeated_key(table: &str, key: &[String]) -> String {
     format!(
         "SELECT {quoted}\nFROM {table}\nWHERE {present}\nGROUP BY {quoted}\nHAVING COUNT(*) > 1\nLIMIT 1"
     )
-}
-
-/// `name` as an identifier: in double quotes, each one in it doubled.
-fn identifier(name: &str) -> String {
-    format!("\"{}\"", name.replace('"', "\"\""))
-}
-
-fn identifiers(names: &[String]) -> String {
-    names
-        .iter()
-        .map(|n| identifier(n))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// `name` as text: in single quotes, each one in it doubled.
-fn text(name: &str) -> String {
-    format!("'{}'", name.replace('\'', "''"))
 }
 
 /// The vendor DuckDB names in the metadata of its opaque Arrow extension

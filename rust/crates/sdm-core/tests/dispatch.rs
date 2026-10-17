@@ -356,16 +356,16 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     assert!(matches!(expect, ExpectedSchema::Schema { .. }));
     assert_ne!(expect, tables.expected());
 
-    let sqlite = ProviderChoice::Sql {
-        dialect: Dialect::new("sqlite"),
+    let postgres = ProviderChoice::Sql {
+        dialect: Dialect::new("postgres"),
     };
-    let err = root.data_access(&sqlite).err().unwrap();
+    let err = root.data_access(&postgres).err().unwrap();
     assert_eq!(
         (err.kind, err.code),
         (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
-    assert_eq!(named(&err, "dialect"), "sqlite");
-    assert!(run_of(&root, describe(sqlite)).is_err());
+    assert_eq!(named(&err, "dialect"), "postgres");
+    assert!(run_of(&root, describe(postgres)).is_err());
     // A name the data layer does not know is refused the same way, and
     // not repeated: the contract names no dialect, so it lets any through.
     let unknown = ProviderChoice::Sql {

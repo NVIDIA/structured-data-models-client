@@ -152,6 +152,8 @@ pub(crate) fn columns(
                     declared_type: text(declared_type, row).unwrap_or_default(),
                     not_null: flag(not_null, row),
                     primary_key: flag(primary_key, row),
+                    unique: false,
+                    dtype: None,
                 });
             }
         }
@@ -175,6 +177,7 @@ pub(crate) fn keys(
             found.push(CatalogKey {
                 kind: text(kinds, row).map_or(KeyKind::Other, |k| kind_of(&k)),
                 columns: names(lists, row),
+                index: None,
             });
         }
     }

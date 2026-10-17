@@ -315,6 +315,7 @@ impl Walk<'_> {
                                 dst_table,
                                 columns.clone(),
                                 key_set(self.asker, sample::seeds(seeds, vec![])?)?,
+                                false,
                             )?,
                         )
                         .await?,
@@ -414,7 +415,21 @@ impl Walk<'_> {
                 self.nulls,
             )?);
         }
-        let answers = ask_all_vec(self.asker, requests).await?;
+        // A source comparing a window's bounds with its stored text reads
+        // one stored value of a table before its first windowed read, as
+        // the reference does table by table (`Times::windowed`): each read
+        // is then asked after its own, in order.
+        let answers = if self.asker.compares_stored_times() {
+            let mut answers = Vec::with_capacity(requests.len());
+            for ((src, _), request) in referring.iter().zip(requests) {
+                let src_table = table_named(self.graph, src)?;
+                let request = self.times.windowed(self.asker, src_table, request).await?;
+                answers.push(ask(self.asker, request).await?);
+            }
+            answers
+        } else {
+            ask_all_vec(self.asker, requests).await?
+        };
         for ((src, fkey), answer) in referring.iter().zip(answers) {
             let src_table = table_named(self.graph, src)?;
             let answer = self
