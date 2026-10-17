@@ -6047,12 +6047,13 @@ entries:
   - 'contract/key-cast-vectors.json#decimal128-18-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#decimal128-38-37.wide.inexact success -> refusal INVALID_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: null
   notes: >-
-    Approver: owner. A refusal of inputs the reference accepts, so the
-    owner's: KO2-35 asks the core to answer everything main answers and to
-    never merge distinct keys, and these entities would be answered only by
-    being taken for another key. The alternative is to round them onto a
-    key as the reference does. Found by the key-cast vectors at T2.0c.
+    Approved by the owner on 2026-10-17 ("keep refusing"), relayed by the
+    orchestrator: owner 2026-10-17, P2B-8; its decisions row lands with the
+    next owner-row docs landing, which this entry then cites. A refusal of
+    inputs the reference accepts, kept since these entities would be
+    answered only by being taken for a key the caller did not name. Found
+    by the key-cast vectors at T2.0c.
