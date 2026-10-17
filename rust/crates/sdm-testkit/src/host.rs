@@ -30,8 +30,8 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, EditSchema, ForecastStep, Materialize, Operation, OperationResult, Predict,
-    ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestState, SamplerState, Seed,
+    DescribeSource, Dtype, EditSchema, ForecastStep, Materialize, Operation, OperationResult,
+    Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestState, SamplerState, Seed,
     SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
@@ -256,7 +256,7 @@ fn query_schema(description: &SourceDescription) -> QuerySchema {
                     .iter()
                     .map(|c| QueryColumn {
                         name: c.name.clone(),
-                        dtype: c.dtype,
+                        dtype: query_dtype(c.dtype),
                         stype: c.stype,
                     })
                     .collect(),
@@ -277,6 +277,20 @@ fn query_schema(description: &SourceDescription) -> QuerySchema {
                 group
             })
             .collect(),
+    }
+}
+
+/// A described column's data type as the Python host writes it in a query
+/// schema: through the wire's name of it, which the language spells
+/// differently for a few (`sdm_client.schema`'s `_WIRE_TO_PQL_DTYPE`):
+/// every integer `int`, every float `float`, a date or a time `time`; any
+/// other as described.
+fn query_dtype(dtype: Dtype) -> Dtype {
+    match dtype {
+        Dtype::Int | Dtype::Int64 | Dtype::Byte | Dtype::Int16 | Dtype::Int32 => Dtype::Int,
+        Dtype::Float | Dtype::Float64 | Dtype::Float32 => Dtype::Float,
+        Dtype::Date | Dtype::Time => Dtype::Time,
+        other => other,
     }
 }
 
@@ -1633,4 +1647,29 @@ fn predict(
         },
     };
     Ok(())
+}
+
+#[cfg(test)]
+mod query_dtype_tests {
+    use super::*;
+
+    /// As the Python host writes a query schema's data types: the S0 cases'
+    /// pinned schemas (`int`, `float`, `time`, `string`) from the
+    /// description's (`int64`, `float64`, `date`, `string`).
+    #[test]
+    fn a_query_schema_names_a_type_as_the_python_host_does() {
+        for (described, written) in [
+            (Dtype::Int64, Dtype::Int),
+            (Dtype::Int32, Dtype::Int),
+            (Dtype::Byte, Dtype::Int),
+            (Dtype::Float32, Dtype::Float),
+            (Dtype::Float64, Dtype::Float),
+            (Dtype::Date, Dtype::Time),
+            (Dtype::Time, Dtype::Time),
+            (Dtype::String, Dtype::String),
+            (Dtype::Bool, Dtype::Bool),
+        ] {
+            assert_eq!(query_dtype(described), written, "{described:?}");
+        }
+    }
 }
