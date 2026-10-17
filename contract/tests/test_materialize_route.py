@@ -118,7 +118,7 @@ def test_base_regression_reaches_the_reference_s_payload_on_the_core(
     ]
     assert core['core']['error'] is None
     materialized = core['core']['materialized']
-    assert materialized['version'] == 1
+    assert materialized['version'] == 2
     assert materialized['query'] == json.loads(CASE.read_text())['input']['pql']
     # Not vacuous: one request, of the payload's 112 examples and 2 to
     # predict, reached the endpoint, and the reference's carried a request
