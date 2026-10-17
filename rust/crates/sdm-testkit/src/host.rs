@@ -45,7 +45,42 @@ use crate::bases::Bases;
 use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput, ValidateQueryInput};
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
+use crate::sqlite::Sqlite;
 use crate::{duck, endpoint};
+
+/// What answers a run's fetches: the DuckDB provider on a connection, or
+/// the SQLite one (T2.2), each recording what it ran in the log.
+pub trait Provider {
+    /// The answer to `step`, its key sets bound from `keys`.
+    fn answer(
+        &self,
+        step: &sdm_contract::run::FetchStep,
+        keys: &BTreeMap<AttachmentId, duck::Fetched>,
+        log: &mut DriverLog,
+    ) -> std::result::Result<duck::Fetched, sdm_contract::data::ProviderError>;
+}
+
+impl Provider for duckdb::Connection {
+    fn answer(
+        &self,
+        step: &sdm_contract::run::FetchStep,
+        keys: &BTreeMap<AttachmentId, duck::Fetched>,
+        log: &mut DriverLog,
+    ) -> std::result::Result<duck::Fetched, sdm_contract::data::ProviderError> {
+        duck::answer_logged(self, step, keys, log)
+    }
+}
+
+impl Provider for Sqlite {
+    fn answer(
+        &self,
+        step: &sdm_contract::run::FetchStep,
+        keys: &BTreeMap<AttachmentId, duck::Fetched>,
+        log: &mut DriverLog,
+    ) -> std::result::Result<duck::Fetched, sdm_contract::data::ProviderError> {
+        self.answer_logged(step, keys, log)
+    }
+}
 
 /// What the host saw of one case: the operations it started with their
 /// inputs, each fetch the core asked for (its request and plan, in order),
@@ -230,6 +265,79 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
     })
 }
 
+/// `case`'s core operation, as [`run`] runs it, over its data loaded into
+/// a new SQLite file by the contract loader ([`crate::sqlite::load`], run
+/// from `repository`) and read through the dev-only `rusqlite` provider
+/// (T2.2): the case's DuckDB dialect is SQLite's, as python-core starts the
+/// core over a SQLite source, and the record of what ran is the
+/// provider's own log of its statements and bindings.
+pub fn run_sqlite(case: &Case, bases: &Bases, repository: &std::path::Path) -> Result<Observed> {
+    let mut case = case.clone();
+    let sqlite = |provider: &mut Value| {
+        if provider == &json!({"provider": "sql", "dialect": "duckdb"}) {
+            *provider = json!({"provider": "sql", "dialect": "sqlite"});
+        }
+    };
+    if let Some(core) = case.core.as_mut() {
+        if let Some(spec) = core.describe_source.as_mut() {
+            sqlite(&mut spec.provider);
+        }
+        if let Some(spec) = core.materialize.as_mut() {
+            sqlite(&mut spec.provider);
+        }
+    }
+    let Some(spec) = case
+        .core
+        .as_ref()
+        .and_then(|core| core.describe_source.clone())
+    else {
+        // An operation that reads no data reads no database.
+        return run(&case, bases);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    if bases.get(&case.input.base).is_none() {
+        bail!("{}: unknown base", case.id);
+    }
+    let directory = std::env::temp_dir().join(format!(
+        "sdm-case-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default()
+    ));
+    std::fs::create_dir_all(&directory)?;
+    let loaded = (|| -> Result<Observed> {
+        // What the loader reads of the case: its base and setup.
+        let input = directory.join("case.json");
+        std::fs::write(
+            &input,
+            serde_json::to_vec(&json!({
+                "id": case.id,
+                "input": {
+                    "base": case.input.base,
+                    "setup": case.input.setup.clone().unwrap_or_default(),
+                },
+            }))?,
+        )?;
+        let file = directory.join("case.sqlite");
+        crate::sqlite::load(repository, &input, &file)?;
+        let source = Sqlite::open(&file)?;
+        let mut log = DriverLog::default();
+        let mut observed = describe_on(&case, &spec, &source, &mut log, &edits)?;
+        observed.driver = Some(log.record(&source.logged()));
+        Ok(observed)
+    })();
+    std::fs::remove_dir_all(&directory).ok();
+    loaded
+}
+
 /// S0's `validate_query` with the case's query, schema and profile: what
 /// this host sent, as it recorded it, and the core's answer.
 fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
@@ -323,7 +431,7 @@ fn take_warnings(handle: &HostRun, into: &mut Vec<Value>) -> Result<()> {
 fn drive(
     case: &Case,
     handle: &HostRun,
-    connection: &duckdb::Connection,
+    connection: &dyn Provider,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<OperationResult, Answer>> {
@@ -362,23 +470,19 @@ fn drive(
                             }
                         }
                     }
-                    let (outcome, attachments) =
-                        match duck::answer_logged(connection, step, &keys, log) {
-                            Ok(fetched) => (
-                                FetchOutcome::Data {
-                                    data: AttachmentId(1),
-                                    continuation: None,
-                                },
-                                BTreeMap::from([(
-                                    AttachmentId(1),
-                                    Attachment::Arrow(ArrowData::new(
-                                        fetched.schema,
-                                        fetched.batches,
-                                    )),
-                                )]),
-                            ),
-                            Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
-                        };
+                    let (outcome, attachments) = match connection.answer(step, &keys, log) {
+                        Ok(fetched) => (
+                            FetchOutcome::Data {
+                                data: AttachmentId(1),
+                                continuation: None,
+                            },
+                            BTreeMap::from([(
+                                AttachmentId(1),
+                                Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
+                            )]),
+                        ),
+                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
+                    };
                     let reply = encode(&ControlMessage::FetchReply(FetchReply {
                         id: step.id,
                         outcome,
@@ -424,7 +528,7 @@ fn describe(
 fn describe_on(
     case: &Case,
     spec: &DescribeSourceInput,
-    connection: &duckdb::Connection,
+    connection: &dyn Provider,
     log: &mut DriverLog,
     edits: &[SchemaEdit],
 ) -> Result<Observed> {
@@ -544,7 +648,7 @@ fn edit_schema(
     case: &Case,
     schema: &SourceDescription,
     edit: &SchemaEdit,
-    connection: &duckdb::Connection,
+    connection: &dyn Provider,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<SourceDescription, Answer>> {
@@ -766,7 +870,7 @@ fn materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    connection: &duckdb::Connection,
+    connection: &dyn Provider,
     observed: &mut Observed,
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
@@ -836,7 +940,7 @@ fn start_materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    connection: &duckdb::Connection,
+    connection: &dyn Provider,
     observed: &mut Observed,
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
