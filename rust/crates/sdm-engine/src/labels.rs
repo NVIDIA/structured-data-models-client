@@ -16,10 +16,9 @@
 //!   PK-2), of an integer in int64, of a decimal exactly at any size
 //!   (T2.0c); `COUNT` the rows; `AVG` a float's
 //!   Kahan sum at float32 over the count, an integer's at float64, a
-//!   decimal's exact sum over the count at the column's scale, rounded half
-//!   away from zero; `MIN` and `MAX` exactly; then each read at float32, a
-//!   decimal by Arrow's conversion to float64 first, as pandas' `astype`
-//!   takes it.
+//!   decimal's exact sum over the count, at any size; `MIN` and `MAX`
+//!   exactly; then each read at float32, a decimal's exact value rounded
+//!   once to the nearest float32 (T2.0c).
 //!   An example with no row is 0 for `SUM` and `COUNT` and has no label
 //!   for the others.
 //! - A condition ([`compare`], `execute_rel_op`) compares the values its
@@ -109,7 +108,7 @@ pub struct Aggregated {
 /// decimal takes this, then narrows it.
 pub fn decimal_to_f64(value: i128, scale: i8) -> f64 {
     fn no_split(magnitude: u128, scale: i32) -> f64 {
-        let high = (magnitude >> 64) as u64 as i64;
+        let high = (magnitude >> 64) as u64;
         let low = magnitude as u64;
         let mut x = (high as f64) * 18_446_744_073_709_551_616.0;
         x += low as f64;
@@ -147,13 +146,6 @@ impl ExactSum {
             let high = sum.high + if value < 0 { -1 } else { 0 } + i128::from(carry);
             Self { high, low }
         })
-    }
-
-    /// The sum as an `i128`, where it is one.
-    fn narrow(self) -> Option<i128> {
-        let value = self.low as i128;
-        let fits = (self.high == 0 && value >= 0) || (self.high == -1 && value < 0);
-        fits.then_some(value)
     }
 
     /// Whether the sum is negative, and its magnitude as four 64-bit limbs,
@@ -213,43 +205,62 @@ fn digits(mut limbs: [u64; 4]) -> String {
     }
 }
 
-/// A decimal past `i128` at `scale`, rounded once to the nearest double.
-fn wide_to_f64(negative: bool, limbs: [u64; 4], scale: i8) -> f64 {
+/// `sign * limbs / (divisor * 10**scale)`, exactly, rounded once to the
+/// nearest float32 (ties to even): the quotient's digits, then enough of
+/// its fraction's for any float32, then a last nonzero digit where any of
+/// it is left, so the one rounding Rust's parse makes sees the exact value
+/// on the right side of every midpoint.
+fn exact_to_f32(negative: bool, limbs: [u64; 4], divisor: u64, scale: i8) -> f32 {
+    let divisor = divisor.max(1);
+    let (quotient, mut remainder) = divided(limbs, divisor);
+    let mut fraction = String::new();
+    // The divisor is under 2**64, so the fraction's first nonzero digit is
+    // within its first 20, and 40 more are past what a float32 resolves.
+    for _ in 0..60 {
+        if remainder == 0 {
+            break;
+        }
+        let next = u128::from(remainder) * 10;
+        fraction.push(char::from(b'0' + (next / u128::from(divisor)) as u8));
+        remainder = (next % u128::from(divisor)) as u64;
+    }
+    if remainder != 0 {
+        fraction.push('1');
+    }
+    if fraction.is_empty() {
+        fraction.push('0');
+    }
     let sign = if negative { "-" } else { "" };
-    format!("{sign}{}e{}", digits(limbs), -i32::from(scale))
-        .parse()
-        .unwrap_or(f64::NAN)
+    format!(
+        "{sign}{}.{fraction}e{}",
+        digits(quotient),
+        -i32::from(scale)
+    )
+    .parse()
+    .unwrap_or(f32::NAN)
 }
 
-/// The exact sum of decimals of `scale`, read at float32: within `i128`
-/// as [`decimal_to_f64`] reads a decimal, past it rounded once to the
-/// nearest double. A sum past the column's declared digits is a sum like
+/// A decimal of unscaled `value` at `scale`, rounded once to the nearest
+/// float32.
+fn decimal_to_f32(value: i128, scale: i8) -> f32 {
+    let (negative, limbs) = ExactSum::of(std::iter::once(value)).magnitude();
+    exact_to_f32(negative, limbs, 1, scale)
+}
+
+/// The exact sum of decimals of `scale`, at any size, rounded once to the
+/// nearest float32. A sum past the column's declared digits is a sum like
 /// any other (T2.0c).
 fn decimal_sum(values: impl Iterator<Item = i128>, scale: i8) -> f32 {
-    let sum = ExactSum::of(values);
-    match sum.narrow() {
-        Some(sum) => decimal_to_f64(sum, scale) as f32,
-        None => {
-            let (negative, limbs) = sum.magnitude();
-            wide_to_f64(negative, limbs, scale) as f32
-        }
-    }
+    let (negative, limbs) = ExactSum::of(values).magnitude();
+    exact_to_f32(negative, limbs, 1, scale)
 }
 
-/// The mean of `n` decimals, at their scale, as Arrow's grouped mean of a
-/// `Decimal128` gives it: the quotient, moved one away from zero, by the
-/// total's sign, where the remainder is at least half the count; the
-/// total is exact whatever its size, so the mean is.
-fn decimal_mean(values: impl Iterator<Item = i128>, n: usize) -> i128 {
+/// The exact mean of `n` decimals of `scale`, their exact sum over the
+/// count, at any size, rounded once to the nearest float32: never first at
+/// the column's scale (T2.0c, round 1).
+fn decimal_mean(values: impl Iterator<Item = i128>, n: usize, scale: i8) -> f32 {
     let (negative, limbs) = ExactSum::of(values).magnitude();
-    let (quotient, remainder) = divided(limbs, n as u64);
-    let mut magnitude = (u128::from(quotient[2]) << 64) | u128::from(quotient[3]);
-    if u128::from(remainder) * 2 >= n as u128 {
-        magnitude += 1;
-    }
-    // A mean is within its values' range, so within `i128`.
-    let magnitude = magnitude as i128;
-    if negative { -magnitude } else { magnitude }
+    exact_to_f32(negative, limbs, n as u64, scale)
 }
 
 /// `aggregation` of `values` for each of `examples` examples: the rows of
@@ -321,10 +332,7 @@ pub fn aggregate(
                 // A decimal's mean, at its scale, whatever the total.
                 Values::Decimal {
                     values: v, scale, ..
-                } => decimal_to_f64(
-                    decimal_mean(rows.iter().map(|&r| v[r].unwrap_or(0)), rows.len()),
-                    *scale,
-                ) as f32,
+                } => decimal_mean(rows.iter().map(|&r| v[r].unwrap_or(0)), rows.len(), *scale),
             },
             Aggregation::Min | Aggregation::Max => {
                 let max = aggregation == Aggregation::Max;
@@ -354,7 +362,7 @@ pub fn aggregate(
                     } => {
                         let picked = rows.iter().filter_map(|&r| v[r]);
                         let best = if max { picked.max() } else { picked.min() };
-                        decimal_to_f64(best.unwrap_or(0), *scale) as f32
+                        decimal_to_f32(best.unwrap_or(0), *scale)
                     }
                 }
             }
@@ -1081,29 +1089,108 @@ mod tests {
     }
 
     #[test]
-    fn a_decimal_mean_is_rounded_half_away_from_zero_at_its_scale() {
-        // The reference's grouped means (pyarrow 25, measured), then read at
-        // float32 as pandas' astype reads them.
+    fn a_decimal_mean_is_exact_and_rounded_once() {
+        // Round 1 (Codex P1): the mean is the exact sum over the count, never
+        // first rounded to the column's scale: 1 and 2 at scale 0 average
+        // 1.5, not 2.
         for (terms, scale, wanted) in [
-            (vec![1, 2], 0, 2.0_f32),
-            (vec![-1, -2], 0, -2.0),
-            (vec![1, 2, 2], 0, 2.0),
-            (vec![1, 1, 2], 0, 1.0),
-            (vec![1, 2], 2, decimal_to_f64(2, 2) as f32),
-            (vec![10, 20, 20], 2, decimal_to_f64(17, 2) as f32),
-            (vec![-10, -20, -20], 2, decimal_to_f64(-17, 2) as f32),
+            (vec![1, 2], 0, 1.5_f32),
+            (vec![-1, -2], 0, -1.5),
+            (vec![1, 2, 1, 2], 0, 1.5),
+            (vec![1, 2, 2], 0, 5.0 / 3.0),
+            (vec![1, 1, 2], 0, 4.0 / 3.0),
+            (vec![-1, -1, -2], 0, -4.0 / 3.0),
+            (vec![1, 2], 2, 0.015),
+            (vec![10, 20, 20], 2, 50.0 / 300.0),
+            (vec![-10, -20, -20], 2, -50.0 / 300.0),
         ] {
             assert_eq!(
-                decimal_aggregate(Aggregation::Avg, &terms, 4, scale).unwrap(),
+                decimal_aggregate(Aggregation::Avg, &terms, 10, scale).unwrap(),
                 wanted,
-                "{terms:?}"
+                "{terms:?} at {scale}"
             );
         }
-        // A total past DECIMAL(38) is averaged: (10**38 - 1 + 1) / 2.
+        // A total past DECIMAL(38) and past i128 is averaged exactly.
         let nines = 99_999_999_999_999_999_999_999_999_999_999_999_999_i128;
         assert_eq!(
             decimal_aggregate(Aggregation::Avg, &[nines, 1], 38, 0).unwrap(),
-            decimal_to_f64(50_000_000_000_000_000_000_000_000_000_000_000_000, 0) as f32
+            5e37
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[nines, nines, nines], 38, 0).unwrap(),
+            1e38
+        );
+    }
+
+    #[test]
+    fn a_decimal_sum_never_wraps_nor_flips_its_sign() {
+        // Round 1 (Codex P1): two values of -2**126 sum to i128::MIN, whose
+        // magnitude is 2**127, which read as an i64 high half flipped sign.
+        let half = -85_070_591_730_234_615_865_843_651_857_942_052_864_i128;
+        assert_eq!(half * 2, i128::MIN);
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half], 38, 0).unwrap(),
+            -1.701_411_8e38
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[-half, -half], 38, 0).unwrap(),
+            1.701_411_8e38
+        );
+        // And its neighbours: past i128 on both sides, and back within it.
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half, half], 38, 0).unwrap(),
+            -2.552_117_8e38
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half, -1], 38, 0).unwrap(),
+            -1.701_411_8e38
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half, -half], 38, 0).unwrap(),
+            -8.507_059e37
+        );
+        assert_eq!(decimal_to_f64(i128::MIN, 0), -1.701_411_834_604_692_3e38);
+        assert_eq!(
+            decimal_aggregate(Aggregation::Min, &[i128::MIN + 1, 0], 38, 0).unwrap(),
+            -1.701_411_8e38
+        );
+    }
+
+    #[test]
+    fn a_decimal_aggregate_is_rounded_once_to_float32() {
+        // Round 1 (Codex P1): 1 + 2**-24 is a float32 midpoint; a hair above
+        // it rounds up, a hair below rounds down, where rounding first to
+        // float64 lands on the midpoint and then to even, 1.0.
+        let above = 1_000_000_059_604_644_775_390_625_000_001_i128;
+        let below = 1_000_000_059_604_644_775_390_624_999_999_i128;
+        let exact = 1_000_000_059_604_644_775_390_625_000_000_i128;
+        let up = 1.0_f32 + f32::EPSILON;
+        for aggregation in [Aggregation::Sum, Aggregation::Avg, Aggregation::Max] {
+            assert_eq!(
+                decimal_aggregate(aggregation, &[above], 38, 30).unwrap(),
+                up,
+                "{aggregation:?}"
+            );
+            assert_eq!(
+                decimal_aggregate(aggregation, &[below], 38, 30).unwrap(),
+                1.0,
+                "{aggregation:?}"
+            );
+            // On the midpoint itself, to even.
+            assert_eq!(
+                decimal_aggregate(aggregation, &[exact], 38, 30).unwrap(),
+                1.0,
+                "{aggregation:?}"
+            );
+        }
+        // Split over two rows, as a sum of two values and as their mean.
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[above - 1, 1], 38, 30).unwrap(),
+            up
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[above * 2 - 1, 1], 38, 30).unwrap(),
+            up
         );
     }
 
