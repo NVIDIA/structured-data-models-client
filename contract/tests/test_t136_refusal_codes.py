@@ -35,7 +35,9 @@ by name rather than silently changing what the core is held to.
   (register P2B-1, until T2.17). Controls, alike on both routes before and
   after: a float sum compared with ``1e999`` or ``-1e999`` and a static
   integer compared with ``1e999`` materialize the same payload; a finite
-  constant a DECIMAL does not hold (``1e308``) is INVALID_REQUEST; ``nan``,
+  constant a DECIMAL does not hold (``1e308``) was INVALID_REQUEST on
+  both, and since eb6c68eb the reference answers it, every label false,
+  where the core refuses it (P2B-1); ``nan``,
   ``inf``, ``-inf`` and ``'nan'`` are refused by the PQL parser; an integer
   past int64 or past i128 is refused by the PQL validator with the same
   message on both routes. The parser takes no constant that is NaN, so no
@@ -322,19 +324,47 @@ def test_an_infinite_constant_elsewhere_materializes_alike(
 
 
 @pytest.mark.parametrize(
-    'constant', ['1e308', 'nan', 'NaN', 'inf', '-inf', "'nan'", '1e999 - 1e999']
+    'constant', ['nan', 'NaN', 'inf', '-inf', "'nan'", '1e999 - 1e999']
 )
 def test_a_constant_no_decimal_reads_is_refused_alike(
     monkeypatch: pytest.MonkeyPatch, constant: str
 ) -> None:
-    # 1e308 is finite and past DECIMAL(38, 0); the others the PQL parser
-    # or validator refuses, so no NaN reaches the decimal's reading.
+    # The PQL parser or validator refuses each, so no NaN reaches the
+    # decimal's reading.
     reference, core = _routes(
         monkeypatch,
         *_decimal(38, 0),
         query=f'PREDICT users.d > {constant} FOR EACH users.user_id',
     )
     _refused_alike(reference, core, 'INVALID_REQUEST')
+
+
+def test_a_finite_constant_past_the_decimal_is_answered_by_the_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""1e308 is finite and past DECIMAL(38, 0). b413e9ad refused it
+    INVALID_REQUEST, as the core does; since main's eb6c68eb (6298913c) the
+    reference reads the decimal as float64 and materializes it, every label
+    false (no value of the column is past 1e308). The core still refuses it,
+    INVALID_REQUEST at materialize by no rule: register P2B-1's refusal of a
+    decimal input the reference answers, until T2.17."""
+    reference, core = _routes(
+        monkeypatch,
+        *_decimal(38, 0),
+        query='PREDICT users.d > 1e308 FOR EACH users.user_id',
+    )
+    assert reference['stage'] == 'done', reference
+    context = reference['payload']['context']['instance_table']
+    labels = [
+        row[context['columns'].index('TARGET')] for row in context['rows']
+    ]
+    assert labels and set(labels) == {False}, labels
+    assert core['stage'] == 'materialize', core
+    assert (core['class'], core['code']) == (
+        'StructuredDataError',
+        'INVALID_REQUEST',
+    ), core
+    assert 'rule' not in core['details'], core
 
 
 #: Past int64, under i128; past i128.
