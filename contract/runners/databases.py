@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from decimal import Decimal
@@ -610,12 +611,51 @@ def _read(duck: Any, table: str) -> Any:
     return fetch()
 
 
-def _rows(data: Any, convert: list[Callable[[Any], Any]]) -> Iterator[tuple]:
-    columns = [
-        [cell(value) for value in _cells(data.column(i).combine_chunks())]
-        for i, cell in enumerate(convert)
-    ]
+#: DuckDB types whose Arrow form loses what they hold (a time's offset, a
+#: bit string read as DuckDB's own bytes), refused by name rather than
+#: loaded as something else.
+LOST_IN_ARROW = ('TIME WITH TIME ZONE', 'BIT')
+
+
+def _lost(duck: Any, table: str) -> None:
+    for column, kind in duck.execute(
+        'SELECT column_name, data_type FROM duckdb_columns() '
+        "WHERE schema_name = 'main' AND table_name = ?",
+        [table],
+    ).fetchall():
+        if re.search(rf'\b({"|".join(LOST_IN_ARROW)})\b', kind):
+            raise Unloadable(
+                f'{table}.{column}: {kind}, which Arrow does not carry whole'
+            )
+
+
+def _rows(
+    data: Any, convert: list[Callable[[Any], Any]], table: str
+) -> Iterator[tuple]:
+    r"""The rows of ``data``, each column converted; a value no conversion
+    takes (a time past what Python's dates hold, text Postgres cannot hold)
+    is refused by name."""
+    columns = []
+    for i, cell in enumerate(convert):
+        where = f'{table}.{data.schema.field(i).name}'
+        try:
+            values = [cell(v) for v in _cells(data.column(i).combine_chunks())]
+        except Unloadable:
+            raise
+        except (OverflowError, ValueError) as error:
+            raise Unloadable(
+                f'{where}: a value the target cannot take '
+                f'({type(error).__name__})'
+            ) from None
+        columns.append(values)
     return zip(*columns, strict=True) if columns else iter(())
+
+
+def _no_nul(text: Any, where: str) -> Any:
+    r"""Postgres holds no NUL in text, nor in jsonb."""
+    if isinstance(text, str) and '\x00' in text:
+        raise Unloadable(f'{where}: text holding a NUL, which Postgres refuses')
+    return text
 
 
 def _load_sqlite(duck: Any, target: Path) -> None:
@@ -626,6 +666,7 @@ def _load_sqlite(duck: Any, target: Path) -> None:
         raise FileExistsError(f'{target.name}: the SQLite target exists')
     with closing(sqlite3.connect(target)) as connection:
         for table in _tables(duck):
+            _lost(duck, table)
             data = _read(duck, table)
             not_null, clauses = _constraints(duck, table)
             columns, convert = [], []
@@ -653,7 +694,7 @@ def _load_sqlite(duck: Any, target: Path) -> None:
             marks = ', '.join('?' for _ in columns)
             connection.executemany(
                 f'INSERT INTO {quote(table)} VALUES ({marks})',
-                _rows(data, convert),
+                _rows(data, convert, table),
             )
         connection.commit()
 
@@ -663,6 +704,7 @@ def _load_postgres(duck: Any, dsn: str) -> None:
 
     with psycopg.connect(dsn, connect_timeout=30) as connection:
         for table in _tables(duck):
+            _lost(duck, table)
             data = _read(duck, table)
             not_null, clauses = _constraints(duck, table)
             columns, convert = [], []
@@ -683,14 +725,14 @@ def _load_postgres(duck: Any, dsn: str) -> None:
                 )
                 if name in ('list', 'struct'):
                     convert.append(
-                        lambda value, k=field.type, w=where: _nested(
-                            value, k, w
+                        lambda value, k=field.type, w=where: _no_nul(
+                            _nested(value, k, w), w
                         )
                     )
                 else:
                     convert.append(
-                        lambda value, n=name, w=where: _postgres_text(
-                            value, n, w
+                        lambda value, n=name, w=where: _no_nul(
+                            _postgres_text(value, n, w), w
                         )
                     )
             connection.execute(
@@ -701,7 +743,7 @@ def _load_postgres(duck: Any, dsn: str) -> None:
             with connection.cursor().copy(
                 f'COPY {quote(table)} FROM STDIN'
             ) as copy:
-                for row in _rows(data, convert):
+                for row in _rows(data, convert, table):
                     copy.write_row(row)
 
 

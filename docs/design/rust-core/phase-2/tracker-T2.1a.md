@@ -39,4 +39,7 @@ The acceptance tests are the test author's (`T2.1a tests:` commits, 7290ef3d to 
 
 ## Fix rounds
 
-- Fix 1 (round 1, Codex): a DuckDB line needs its query log; the loader keeps a NULL list's neighbours, an empty map, nested Postgres composites, and refuses a NaN SQLite would store as NULL; the census's reach needs a refusal only its site gives; the Rust loader takes `top_k` of any size.
+- Fix 1 (round 1, both reviewers): a DuckDB line needs its query log; the loader keeps a NULL list's neighbours, an empty map, a list of dates, nested Postgres composites, and refuses by name a NaN SQLite would store as NULL, a type Arrow does not carry whole (TIMETZ, BIT), a time past what it writes and text with a NUL on Postgres; the census's reach needs a refusal only its site gives; the Rust loader takes `top_k` of any size; an exclusion must leave a database out; `PROVIDERS` is in the native stub.
+  The temporary-approval rule holds the slice gate's locked run only (a Phase 2 half or later with `--wheel-run`, as `final_gate.sh` runs it; orchestrator's decision), so Phase 1's halves and the gate's own controls run as before.
+  The S0 cases run on SQLite and Postgres too, and the recorder records all of them (orchestrator's decision).
+- rust-host's marker (`sdm-contract-run --providers`) is read by no CI step yet: rust-host runs no SQLite or Postgres pass before T2.2b and T2.3b, and the `ci` step that reads it is T2.1c's.

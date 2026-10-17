@@ -51,8 +51,9 @@
 #                 changed cases, the register, the policy's and
 #                 availability's relaxations, KNOWN_DIFFERING, and with
 #                 observations the baselines and availability; with
-#                 --locked, also no approved entry citing a temporary
-#                 decision row (register.py's TEMPORARY, T2.1a);
+#                 the slice gate's locked run (a Phase 2 half or later,
+#                 with --wheel-run), also no approved entry citing a
+#                 temporary decision row (register.py's TEMPORARY, T2.1a);
 #   compare       the checkpoint's compare.py on the observations, against
 #                 the candidate's cases, bases and reference, which the
 #                 ratchet lets differ from the checkpoint's only as approved,
@@ -718,6 +719,16 @@ fi
 
 with=()
 for file in "${given[@]+"${given[@]}"}"; do with+=(--observations "$file"); done
+# The temporary-approval rule (T2.1a fix 1): the slice gate's locked run
+# (a half of Phase 2 or later, run on the candidate's CI wheels, which
+# --wheel-run names, as final_gate.sh runs it) fails while an approved
+# entry cites a temporary decision row (ratchet.py --locked); Phase 1's
+# halves and a locked run before the slice gate are judged as before,
+# since those entries stand until their packages land.
+temporary=()
+if [[ "$locked" =~ ^([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -ge 2 ] && [ -n "$wheel_run" ]; then
+  temporary=(--locked)
+fi
 judge_ratchet() {
   prepare || return 1
   if [ ${#given[@]} -eq 0 ]; then
@@ -727,7 +738,7 @@ judge_ratchet() {
   "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
     --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
     --effective-out "$scratch/effective.json" "${epic[@]+"${epic[@]}"}" \
-    ${locked:+--locked} \
+    "${temporary[@]+"${temporary[@]}"}" \
     "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
 }
 want ratchet && step ratchet judge_ratchet

@@ -16,9 +16,10 @@
     },
     "slice": {"enum": ["S0", "S1", "S2", "S3"]},
     "databases": {
-      "description": "The databases the case runs on, when not all three (design choice 2, KO2-19): absent, it runs on DuckDB, SQLite and Postgres. Only beside exclusion, the owner's approval for leaving the others out.",
+      "description": "The databases the case runs on, when not all three (design choice 2, KO2-19): absent, it runs on DuckDB, SQLite and Postgres. Only beside exclusion, the owner's approval for leaving the others out, and leaving at least one out.",
       "type": "array",
       "minItems": 1,
+      "maxItems": 2,
       "uniqueItems": true,
       "items": {"enum": ["duckdb", "sqlite", "postgres"]}
     },

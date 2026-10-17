@@ -305,16 +305,20 @@ fn some_text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String
     text(deserializer).map(Some)
 }
 
-/// `databases`, when given: at least one, none twice (`minItems`,
-/// `uniqueItems`).
+/// `databases`, when given: at least one, none twice, and not all three,
+/// since an exclusion leaves one out (`minItems`, `uniqueItems`,
+/// `maxItems`).
 fn some_databases<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Option<Vec<Database>>, D::Error> {
     let databases = Vec::<Database>::deserialize(deserializer)?;
     let distinct: BTreeSet<Database> = databases.iter().copied().collect();
-    if databases.is_empty() || distinct.len() != databases.len() {
+    if databases.is_empty()
+        || distinct.len() != databases.len()
+        || distinct.len() == Database::ALL.len()
+    {
         return Err(D::Error::custom(
-            "databases is empty or names a database twice",
+            "databases is empty, names a database twice or leaves none out",
         ));
     }
     Ok(Some(databases))

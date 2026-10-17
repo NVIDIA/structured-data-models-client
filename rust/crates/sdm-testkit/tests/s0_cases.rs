@@ -389,6 +389,10 @@ fn databases_come_only_with_their_exclusion() {
         (serde_json::json!("duckdb"), row.clone()),
         (narrowed.clone(), serde_json::json!("the owner said so")),
         (narrowed.clone(), serde_json::json!("KO2-")),
+        (
+            serde_json::json!(["duckdb", "sqlite", "postgres"]),
+            row.clone(),
+        ),
     ] {
         let case = with(&[("databases", databases), ("exclusion", exclusion)]);
         assert!(load_error("refused", &case).is_some(), "{case}");

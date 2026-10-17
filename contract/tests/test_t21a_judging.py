@@ -105,3 +105,65 @@ def test_a_refusal_two_sites_share_reaches_neither() -> None:
     assert census._reaches(
         sites[3], {'result': 'refusal', 'rule': 'x'}, [], True
     )
+
+
+def _temporary_flag(locked: str, wheel_run: str) -> str:
+    r"""What gate.sh's own text passes the ratchet for the temporary rule,
+    the block run as gate.sh runs it."""
+    import re
+    import subprocess
+
+    text = (ROOT / 'scripts/rust_core/gate.sh').read_text()
+    [block] = re.findall(r'^temporary=\(\)\n.*?^fi\n', text, re.M | re.S)
+    script = (
+        f'locked={locked!r}; wheel_run={wheel_run!r}\n{block}'
+        'echo "${temporary[@]+"${temporary[@]}"}"\n'
+    )
+    done = subprocess.run(
+        ['bash', '-c', script],
+        capture_output=True,
+        text=True,
+        check=True,
+        stdin=subprocess.DEVNULL,
+        timeout=60,
+    )
+    return done.stdout.strip()
+
+
+def test_only_the_slice_gate_s_locked_run_holds_temporary_entries() -> None:
+    r"""Fix 1 (round 1's P1-1): the slice gate's locked run, a Phase 2 half
+    on the candidate's CI wheels (``--wheel-run``, as final_gate.sh runs
+    it), passes the ratchet ``--locked``; Phase 1's halves, a locked run
+    before the slice gate and an unlocked run do not."""
+    assert _temporary_flag('2a', '12345') == '--locked'
+    assert _temporary_flag('3a', '12345') == '--locked'
+    assert _temporary_flag('2a', '') == ''
+    assert _temporary_flag('1a', '12345') == ''
+    assert _temporary_flag('1b', '') == ''
+    assert _temporary_flag('', '') == ''
+
+
+def test_an_exclusion_that_leaves_no_database_out_is_refused(
+    tmp_path: Path,
+) -> None:
+    r"""Fix 1 (round 1's P3-4): ``databases`` naming all three, with an
+    exclusion, is no case; its control, two of them, is one."""
+    runner = _module(ROOT / 'contract/runners/run_python.py', 't21a_runner')
+    case = json.loads(
+        (ROOT / 'contract/cases/s0/s0.accept.sum-window.json').read_text()
+    )
+    path = tmp_path / 'case.json'
+    for named, taken in (
+        (['duckdb', 'sqlite'], True),
+        (list(runner.DATABASES), False),
+    ):
+        path.write_text(
+            json.dumps({**case, 'databases': named, 'exclusion': 'KO2-19'})
+        )
+        try:
+            runner.load_cases([path])
+            loaded = True
+        except runner.RunnerFailure as failure:
+            assert 'not a case' in str(failure)
+            loaded = False
+        assert loaded is taken, named

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -286,3 +287,77 @@ def test_nested_composites_load_on_postgres() -> None:
         with psycopg.connect(dsn, autocommit=True) as admin:
             admin.execute(f'DROP SCHEMA {schema} CASCADE')
     assert row == ('(1)', 1, '(2,"x y")', True)
+
+
+def test_a_list_of_dates_keeps_every_date(tmp_path: Path) -> None:
+    r"""Fix 1 (round 1's P2-2): a list of dates, alone and in a struct, is
+    every date's ISO text, never mistaken for a map."""
+    assert _sqlite_rows(
+        tmp_path,
+        "CREATE TABLE t AS SELECT 1 AS id, [DATE '2020-01-01', "
+        "DATE '2021-06-30'] AS v, {'a': [DATE '2020-01-01', "
+        "DATE '2021-06-30']} AS s",
+    ) == [
+        (
+            1,
+            '["2020-01-01","2021-06-30"]',
+            '{"a":["2020-01-01","2021-06-30"]}',
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ('statement', 'named'),
+    [
+        ("CREATE TABLE t AS SELECT TIMETZ '12:00:00+05' AS v", 't.v'),
+        ("CREATE TABLE t AS SELECT '101'::BIT AS v", 't.v'),
+        (
+            "CREATE TABLE t AS SELECT TIMESTAMP '9999-12-31' + INTERVAL 2 DAY AS v",
+            't.v',
+        ),
+    ],
+    ids=['timetz', 'bit', 'past year 9999'],
+)
+def test_input_the_loader_cannot_carry_is_refused_by_name(
+    statement: str, named: str, tmp_path: Path
+) -> None:
+    r"""Fix 1 (round 1's P3-2): a type Arrow does not carry whole, and a
+    time past what the loader writes, are refused naming the column."""
+    with pytest.raises(databases.Unloadable, match=re.escape(named)):
+        _sqlite_rows(tmp_path, statement)
+
+
+@pytest.mark.parametrize(
+    'path',
+    sorted((ROOT / 'contract/cases/s1').glob('*.json')),
+    ids=lambda path: path.stem,
+)
+def test_every_s1_case_loads_on_postgres(path: Path) -> None:
+    r"""Fix 1 (round 1's P3-5): the Postgres twin of the SQLite load, where
+    a server is named; required, a missing one fails."""
+    import os
+    import uuid
+
+    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES')
+        return
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+
+    duck = _duck(json.loads(path.read_text()))
+    schema = f'loader_{uuid.uuid4().hex[:12]}'
+    with psycopg.connect(dsn, autocommit=True) as admin:
+        admin.execute(f'CREATE SCHEMA {schema}')
+    try:
+        scoped = make_conninfo(dsn, options=f'-c search_path={schema}')
+        databases.load(duck, 'postgres', scoped)
+        with psycopg.connect(scoped) as connection:
+            for table in databases._tables(duck):
+                [(count,)] = connection.execute(
+                    f'SELECT count(*) FROM {databases.quote(table)}'
+                ).fetchall()
+                assert count == databases._read(duck, table).num_rows, table
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(f'DROP SCHEMA {schema} CASCADE')
