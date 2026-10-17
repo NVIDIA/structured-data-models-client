@@ -62,22 +62,31 @@ After it, from this side:
 - `contract/refusal-maps/decimal.json` is rewritten by `refusal_map.py write`, its probe following its case.
 - The bridge freeze declares the 14 old-route entries the merge changes with T2.0e's `main` reason (`1fc5a686` for 12, `eb6c68eb` for 2); `_check_entity_count` leaves `COVERED`, as `main` deleted it; the baseline is written again; `selftest.py`'s entity-cap case moves `_check_limits`' batch cap instead, and its installed-wheel fixture reads the pinned checkout.
 
-### Register entries (lane B, P2B-1 to P2B-5)
+### Exact decimals
 
-Each is approved by the owner's one written answer to Q-I, recorded as KO2-45 ("approved by owner 2026-10-16"), its `decision_ref`; each names the package that retires it and lapses when it lands.
-P2B-1 also covers the approved P1B-18 and P1B-53, whose refusal of `decimal.class-target-38-18` is now of an input the reference answers.
-P1B-33's eight refs that name no vector at `6298913c` (no `decimal128-38-0-wide`, `decimal128-38-10-wide`, `decimal128-38-37` or decimal key-group vector fails `INTERNAL_ERROR` any more) are taken out, for the reviewers.
-`register.py validate` and the ratchet read KO2-45 from `phase-2/decisions.md`, which T2.0a lands; until then they refuse the five `decision_ref`s.
+The owner moved T2.17's exact decimals into T2.0c on 2026-10-17 (KO2-35, KO2-50): the core answers every decimal input the reference at `6298913c` answers, stays exact and never merges distinct keys.
+- A decimal sum past its column's 38 digits, or past `i128`, is summed exactly in 256 bits and read once at float32, and a mean is exact whatever its total (`sdm-engine` `labels.rs`, `ExactSum`).
+- A decimal target is read as the reference reads it: int64 at scale 0 where every value fits, float32 otherwise, and where two distinct values meet at one float32 each keeps its own digits, so no two values become one class (`decimal_target`).
+- A decimal column is compared with a constant exactly, at no scale but their own: the constant is the decimal the query wrote, the shortest decimal naming its double (the orchestrator's confirmed reading, so `d = 0.1` holds on `DECIMAL(38,18)`), a constant past the column's digits orders by its sign, an infinite one past every value (`decimal_order`; `d > 1.5` holds for d = 2, KO2-50).
+- A decimal feature is sent as the nearest double to its exact value (`sdm-request` `decimal_float`), where it was refused when a double did not hold it.
+- A null decimal key beside values is kept, as the reference keeps its integer twin's (`sdm-core` `subgraph.rs`); P1B-40's option (b) stays for text keys.
+- The Rust test host passes the case's asked inference options to predict, which the `26ecdd28` port needs (`sdm-testkit` `host.rs`).
+- The decimal family's refusal map holds no refusal any more, written by `refusal_map.py write` with rust-host's observations, and its probes' pin is regenerated from python-core's run.
+- New cases from the case author (`rust-core-phase-2-main-merge-recording-5`): the comparisons around 1.5 (`compare-finer-gt`, `-eq`, `-negative`, `-same-scale`, `-past-precision`, `-past-precision-gt`), `sum-10-2`, `sum-past-38`, `feature-inexact-38-18`, `key-wide`, `class-target-collide`.
 
-| Entry | Difference | Cause | Retired by |
-|---|---|---|---|
-| P2B-1 | The core keeps exact decimals and refuses decimal keys, class targets, sums past 38 digits and inexact features the reference now answers; 76 vector transitions named | `eb6c68eb` | T2.17 |
-| P2B-2 | python-core refuses a column named with a dot, backtick or line break, which the reference leaves out with a warning (measured, both routes) | `eb6c68eb` | T2.18 |
-| P2B-3 | The core refuses 1,001 to 10,000 entities (measured: the old route gathers 1,001) | `1fc5a686` | T2.8c |
-| P2B-4 | The core refuses `rows_per_call` (measured: the old route gathers 8 users as 3 payloads) | `1fc5a686` | T2.8c |
-| P2B-5 | Option (b) leaves out decimal null-key rows the reference now keeps (`mixed-null-decimal`, `nulls-1-decimal.200`) | `eb6c68eb` | T2.17 |
+### Register entries (lane B)
 
-P2B-5 is for the owner to confirm at the next check-in: it turns P1B-40's approved answer to a reference failure into a difference from a reference success.
+| Entry | What | Approval |
+|---|---|---|
+| P2B-1 | Exact decimals where the reference rounds, merges or refuses: text ids for keys with decimal places, the nearest double for features, exact sums and means, a sum past 38 digits answered, distinct class values kept apart; 46 vector transitions and the class target's two core outcomes | KO2-35, the owner's (permanent) |
+| P2B-2 | python-core refuses a column named with a dot, backtick or line break, which the reference leaves out (until T2.18) | KO2-45, the owner's (temporary) |
+| P2B-3 | The core refuses 1,001 to 10,000 entities (until T2.8c) | KO2-45 (temporary) |
+| P2B-4 | The core refuses `rows_per_call` (until T2.8c) | KO2-45 (temporary) |
+| P2B-7 | python-old answers the four decimal cases as the reference does, by `main`'s `eb6c68eb` | proposed, for the reviewers |
+| P2B-8 | An entity that names no key of a decimal key's type exactly is refused by name, where the reference rounds it onto a key (four key-cast vectors) | proposed, for the owner |
+
+P2B-5 and P2B-6 (decimal null keys, `d > 1.5`), temporary entries never landed, are gone with the fix.
+P1B-18's and P1B-53's refusal of `decimal.class-target-38-18` no longer exists, and their outcomes on it are taken out; P1B-33's eight refs that name no vector at `6298913c` are taken out; each for the reviewers.
 
 ### Probes
 
@@ -108,12 +117,8 @@ CI runs on Linux x86_64, as the recording was made.
 
 ### Waiting
 
-- T2.0e (lane a): the reference rule and the `main` reason with fix 3 (the bridge freeze, and with it `l0_deps.py` and 22 self-test controls); then the baselines by `ratchet.py accept` (a trial accept moves python-old's four decimal cases off its baseline, which needs T2.0e's entry format) and the gate.
-- T2.0a: `phase-2/decisions.md`, which `register.py validate` needs for P2B-1 to P2B-5's `decision_ref`.
-- The reviewers: P2B-1 to P2B-5 fit KO2-45; P1B-33's eight refs taken out.
-- The owner: `dates.json` and the two golden fixtures against T2.0e's rule (above); P2B-5.
-- The test author, tests resting on the old reference or the old bytes: `test_t136_forecast.py`'s two before-the-move tests (20 cases; the candidate side stays `fc2c0e2b`'s, whose bytes `26ecdd28` moves on both routes); `test_t136_refusal_codes.py::test_a_constant_no_decimal_reads_is_refused_alike[1e308]` (the reference answers `d > 1e308` since `eb6c68eb`); `sdm-testkit`'s `t132e_key_inference.rs` (two tests still expect `nulls-1-decimal.200` refused, as the Python ones did before `4f1c3247`); `test_labels_match_the_reference.py`'s `sum-decimal` and `avg-decimal` (exact decimal sums against the reference's float64 ones, P2B-1's, with no register mechanism in the test); `tests/test_t136_evidence_cells.py` (P1B-33's approved improvements on the three decimal keys are now correct successes).
-- After T2.0a and T2.0e: the ratchet's and the gate's tests (`test_gate_*`, `test_t20_*`, `test_cross_host.py`, `test_runners.py`, `tests/test_t20_bootstrap.py`, `tests/test_contract_ratchet.py`) refuse KO2-45's `decision_ref` until `phase-2/decisions.md` is on the branch, and P1B-18's and P1B-53's case outcomes on `decimal.class-target-38-18` until the ratchet writes them under P2B-1; the refusal map's `materialize/target_type` entry likewise.
-- The owner, not registered on purpose: `test_t136_refusal_codes.py::test_an_infinite_constant_elsewhere_materializes_alike` on `PREDICT ... users.d > 1.5`.
-  The core labels user 2 (`d = 2`, `DECIMAL(38, 0)`) false for `d > 1.5`, seemingly by rounding the constant to the column's scale; the reference since `eb6c68eb` labels it true, which is right.
-  Whether T2.0c fixes it or a temporary entry holds it until T2.17 is the owner's; the test is left failing until then.
+- T2.0g: the checkpoint's bridge freeze still names `_check_entity_count`, which `main` deleted (l0).
+- The case author (`recording-6`): `decimal.sum-past-38`'s and `decimal.class-target-38-18`'s cases carry predict to the core, and their python-ref lines; the test author: `t132b_float_constants.rs` against KO2-50, the option (b) tests for decimal keys, three refusal-map tests on an empty decimal map.
+- The owner: P2B-8, and how compare treats KO2-35's field-level differences (the payloads of `key.decimal-38-10`, `decimal.sum-10-2`, `decimal.feature-inexact-38-18`; `decimal.sum-past-38` and `decimal.class-target-collide`, answered where the reference refuses).
+- The reviewers: P2B-7 and the changed P1B-18, P1B-53 and P1B-33.
+- Then `ratchet.py accept` for the baselines (the eleven new cases and the moved outcomes) and the gate.
