@@ -6469,37 +6469,42 @@ entries:
 # --- lane C entries (P2C-1..19) ---
 
 - id: P2C-1
-  title: On Postgres a table named alone is found on the search path, as a FROM finds it
+  title: On Postgres a table named alone that a temporary or pg_catalog relation shadows is refused by name
   kind: change
   old_behavior: >-
     The reference reads a Postgres table named without a schema in
-    current_schema() only (PostgresTable's schema), so a table of a later
-    schema of the search path is refused as not found (INVALID_REQUEST),
-    and a temporary table or a pg_catalog table of the same name is passed
-    over.
+    current_schema() only (PostgresTable's schema), and qualifies every
+    read with that schema ("public"."t"), so a temporary table or a
+    pg_catalog relation of the same name, which an unqualified name finds
+    first on the search path, never shadows it.
   new_behavior: >-
-    The core finds the name as Postgres finds it in a FROM
-    (to_regclass over the name), so the catalog and every read of a run
-    resolve one relation: a table only in a later schema of the search
-    path is read, and a temporary table of the same name shadows it, as it
-    does in SQL. Where current_schema() holds the name, as in every case,
-    the two read the same table.
+    The core finds a table named alone as the reference does, in
+    current_schema() only (a table of a later schema of the search path is
+    not found, INVALID_REQUEST, as on the reference), but its reads name
+    the table alone, since a plan is rendered without the schema's name;
+    where a temporary or pg_catalog relation of the name would be read in
+    its place, the catalog answers no columns and the core refuses the
+    table as not found (INVALID_REQUEST), never reading another relation.
   affected_inputs: >-
     Schema.from_source on the core route over a Postgres source, a table
-    named alone that current_schema() does not hold or that a temporary
-    table or pg_catalog shadows.
+    named alone whose name a temporary table of the session or a
+    pg_catalog relation also has.
   cases: [T2.3]
-  refs: [KO2-39]
+  refs: [KO2-39, KO2-28]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Approver: owner: an answer where the reference refuses, not a
-    refusal, and no owner row covers it (P1B-5's E88 approves a quoted
-    name read, not a name's resolution). Probed at T2.3 on Postgres 17 with search_path = public,
-    other: a table only in other is read on the core and refused on the
-    old route; a view in public is read on both; a name nowhere is refused
-    INVALID_REQUEST on both.
+    Approver: owner, owner-pending: a refusal of input the reference
+    accepts, which no owner row covers. Matching it needs a plan to name
+    current_schema()'s schema, which the core does not know when it plans:
+    no catalog answer carries it and the contract has no field for it, and
+    Postgres reads an unqualified name by the search path. Probed at T2.3
+    on Postgres 17 (search_path = public, other): a view in public is read
+    on both routes; a table only in other and a name nowhere are refused
+    INVALID_REQUEST on both; a public table shadowed by a temporary table
+    of its name is read on the old route and refused INVALID_REQUEST on the
+    core.
 
 - id: P2C-2
   title: On Postgres the core runs fewer statements than the reference, without its unused reads
@@ -6568,6 +6573,27 @@ entries:
   - 'contract/postgres-key-vectors.json#fifteen.* success -> success'
   - 'contract/postgres-key-vectors.json#key.at-precision.d19-0 refusal UNNAMED -> success'
   - 'contract/postgres-key-vectors.json#key.at-precision.d38-0 refusal UNNAMED -> success'
+  more_exact:
+  - case: key.decimal-38-10@postgres
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+  - case: key.decimal-38-10@postgres
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/instance_table/rows/*/1'
+    - 'core.predicted.body/*/*/related_tables/orders/rows/*/4'
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/1'
+    - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
@@ -6578,11 +6604,8 @@ entries:
     joins the rows the same-type control joins (the key matrix's lesson 19
     test). The orchestrator asked for these, key.pair-merging.* and
     fifteen.* by name. key.decimal-38-10@postgres differs in exactly
-    P2B-1's more_exact fields for key.decimal-38-10 (the result's id dtype
-    and digest, the key's cells and dtypes in the payload), but the
-    register's schema takes no database key in more_exact's case
-    (contract/register.schema.json's pattern), so the fields are added
-    here once the orchestrator's fix for database keys lands, before T2.3.
+    P2B-1's more_exact fields for key.decimal-38-10, listed here under its
+    line's key (T2.1d).
   case_outcomes:
   - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
   - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
@@ -6621,43 +6644,42 @@ entries:
   - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
 
 - id: P2C-5
-  title: On Postgres a time column stored as text is windowed by its times, not its text
+  title: On Postgres a text time value the source cannot read as a timestamp fails its time bounds as the provider's error
   kind: change
   old_behavior: >-
-    The reference's Postgres sampler compares a text time column with the
-    window's bounds as text (it casts the bounds to the column's declared
-    type, text): '01/05/2023' sorts before '2023-...', so a US-ordered
-    date column's windows hold the wrong rows (time.text-us-date: a label
-    of 0.0 where the rows in the window sum to 100.0), and its time bounds
-    are the text's smallest and largest; a value no date reads is refused
-    later, INVALID_REQUEST at materialize (time.text-one-bad-value).
+    The reference's Postgres sampler takes a time column's bounds as MIN
+    and MAX of the column in its own type, a text column's by its text, and
+    reads them in the host (pandas): a value Postgres cannot read as a
+    timestamp but pandas can ('March 3rd 2023') is answered, and one
+    neither reads ('not a date') is refused INVALID_REQUEST at materialize.
   new_behavior: >-
-    The core reads such a column as the source reads its times, CAST to
-    timestamp, as it does on DuckDB (DT-12): the window holds the rows in
-    it, and a value the source cannot read fails the source's statement,
-    PROVIDER_ERROR at materialize.
+    The core takes the same MIN and MAX, by the text for a text column, as
+    it windows and orders such a column by its text, as the reference
+    does (time.text-us-date answers as the reference answers), but the
+    request's bounds are timestamps, so the source reads them (CAST to
+    timestamp): a text Postgres cannot read fails the source's statement,
+    PROVIDER_ERROR at materialize, whether or not pandas reads it.
   affected_inputs: >-
     PredictiveQuery.materialize on the core route over a Postgres source
-    whose time column is text.
-  cases: [time.text-us-date, time.text-one-bad-value]
+    whose text time column's smallest or largest text Postgres cannot read
+    as a timestamp.
+  cases: [time.text-one-bad-value]
   refs: [DT-12, DT-7, 'contract/refusal-census.json rule:text_time']
   status: proposed
   approved_by: null
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
-    Approver: owner, owner-pending: a payload that differs (the reference's
-    wrong rows) and a refusal under another code where the reference
-    answers or names its own refusal, which E66(b), DT-12's row on DuckDB,
-    does not cover. Matching the reference
-    would compare times as text. The refusal census's rule:text_time
-    probe ('March 3rd 2023' in a text time column) departs on Postgres for
-    the same reason: the core's CAST fails in the source where the
-    reference answers. Measured at T2.3 on Postgres 17,
-    python-core and rust-host alike; the reference also gives an
-    SDMWarning on time.text-us-date that the core does not.
+    Approver: owner. time.text-one-bad-value, where the reference refuses
+    by name too, is the named refusal E66 keeps (the orchestrator, as
+    DT-12 on DuckDB). The refusal census's rule:text_time probe ('March
+    3rd 2023'), where the reference answers, departs: matching it needs the
+    bounds as text, read by the core's own text reader, which the contract's
+    time_bounds answer (timestamps) does not carry; owner-pending under
+    KO2-28. Measured at T2.3 on Postgres 17, python-core and rust-host
+    alike.
   case_outcomes:
-  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'T2.3: the source CASTs the text, as on DuckDB (DT-12)'}
-  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'T2.3: the source CASTs the text, as on DuckDB (DT-12)'}
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'T2.3: the source reads the bounds, a named refusal where the reference names its own (E66)'}
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'T2.3: the source reads the bounds, a named refusal where the reference names its own (E66)'}
 
 - id: P2C-6
   title: On Postgres a seed past 2**64 - 1 is refused by name, where the reference hashes any integer
