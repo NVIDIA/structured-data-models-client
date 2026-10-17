@@ -5872,6 +5872,45 @@ entries:
   - 'contract/decimal-vectors.json#target.sum.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.sum.d4-2.max success -> success'
   - 'contract/decimal-vectors.json#target.sum.d9-9.max success -> success'
+  more_exact:
+  - case: decimal.feature-inexact-38-18
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/4/*'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/5/*'
+  - case: decimal.feature-inexact-38-18
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/4/*'
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/5/*'
+  - case: decimal.sum-10-2
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4/*'
+  - case: decimal.sum-10-2
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/related_tables/orders/rows/*/4/*'
+  - case: key.decimal-38-10
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+  - case: key.decimal-38-10
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/instance_table/rows/*/1'
+    - 'core.predicted.body/*/*/related_tables/orders/rows/*/4'
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/1'
+    - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
