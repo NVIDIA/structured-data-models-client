@@ -32,9 +32,11 @@
 
 #![forbid(unsafe_code)]
 
+mod blake2b;
 mod duckdb;
 mod keys;
 mod mt19937;
+mod postgres;
 mod quote;
 mod read;
 mod sqlite;
@@ -49,14 +51,14 @@ use sdm_contract::data::{
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
-/// The SQL dialects this build knows by name. It renders DuckDB's and
-/// SQLite's; the others are refused by name, as a dialect it has no
-/// rendering for, and a name it does not know is refused without being
-/// repeated.
+/// The SQL dialects this build knows by name. It renders DuckDB's,
+/// SQLite's and Postgres's (T2.2, T2.3); the others are refused by name,
+/// as a dialect it has no rendering for, and a name it does not know is
+/// refused without being repeated.
 const KNOWN: &[&str] = &[
     duckdb::NAME,
     sqlite::NAME,
-    "postgres",
+    postgres::NAME,
     "databricks",
     "snowflake",
 ];
@@ -68,12 +70,13 @@ const KNOWN: &[&str] = &[
 /// native module reports it as `PROVIDERS`, and a database's core legs run
 /// exactly when it is listed. A dialect's package adds its name with its
 /// rendering.
-pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME];
+pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME];
 
 /// A dialect this build renders.
 enum Rendered {
     Duckdb,
     Sqlite,
+    Postgres,
 }
 
 /// The dialect `dialect` names, if this build renders it.
@@ -81,6 +84,7 @@ fn rendered(dialect: &Dialect) -> Result<Rendered, CoreError> {
     match dialect.name() {
         duckdb::NAME => Ok(Rendered::Duckdb),
         sqlite::NAME => Ok(Rendered::Sqlite),
+        postgres::NAME => Ok(Rendered::Postgres),
         _ => Err(no_dialect(dialect)),
     }
 }
@@ -102,6 +106,7 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => Ok(duckdb::capabilities()),
                 Rendered::Sqlite => Ok(sqlite::capabilities()),
+                Rendered::Postgres => Ok(postgres::capabilities()),
             },
         }
     }
@@ -118,6 +123,7 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::plan(request),
                 Rendered::Sqlite => sqlite::plan(request),
+                Rendered::Postgres => postgres::plan(request),
             },
         }
     }
@@ -128,6 +134,7 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
                 Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
                 Rendered::Sqlite => None,
+                Rendered::Postgres => None,
             },
         }
     }
@@ -169,6 +176,7 @@ impl DataLayer for Data {
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::read(*part, batches)?,
                 Rendered::Sqlite => sqlite::read(request, *part, batches)?,
+                Rendered::Postgres => postgres::read(*part, batches)?,
             },
         };
         debug_assert_eq!(answer.part(), *part);
