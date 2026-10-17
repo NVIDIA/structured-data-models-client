@@ -74,6 +74,9 @@ By the orchestrator's scope change the first wave's SQLite legs (T2.17, T2.18, T
 - The client package's tests: 2,663 pass, 107 skipped.
 - `prepush.sh` (cheap tier): every check passes.
 - The root `tests` before the rebase: 1,605 pass; the 51 that failed were all `test_contract_reference.py`, on python-ref's six AdventureWorks lines off DuckDB recorded before T2.1b changed their case files, which T2.1b re-recorded since; after the rebase only the focused checks below ran (the machine's load rules).
+- On T2.1d's outcome-rule commit (59f0a07d): `t22_sqlite.rs` 7 pass, and its two pending ones fail as they must, on the `decimal.*` legs (T2.17's), P2B-10, P2B-11 and P2B-12 (proposed), and nothing else.
+- On the same base, `test_t22_sqlite.py`'s golden test passes and leaves `pending`; its two other pending ones fail on the same items.
+- P2B-13's SQLite line is named by its `case_outcomes`, so the owner's approval covers it in both files' checks.
 - After the rebase onto T2.1d: the SQLite cross-host check over the 24 S0 cases, `refuse.unknown-column`, the four cases T2.1d routes past `from_source`, `time.text-us-date` and `base.regression` agrees on every core field but `depth-999`'s operations (diagnostic).
 
 ### Protected and judging paths touched
