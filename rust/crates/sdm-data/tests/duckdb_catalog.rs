@@ -54,6 +54,8 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
             "referenced_column_names",
         ],
         DescribePart::Indexes => &["table_name", "expressions"],
+        // DuckDB lists an index's columns with the index; never planned.
+        DescribePart::IndexColumns => &[],
     }
 }
 

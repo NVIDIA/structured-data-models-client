@@ -29,8 +29,11 @@ pub enum CatalogAnswer {
     /// `foreign_keys`: each column pair of each foreign key the one table
     /// asked for declares.
     ForeignKeys(Vec<CatalogForeignKey>),
-    /// `indexes`: each index of the source.
+    /// `indexes`: each index of the source, or of the one table asked for.
     Indexes(Vec<CatalogIndex>),
+    /// `index_columns`: the columns of the one index asked for, in its
+    /// order, `None` for an expression.
+    IndexColumns(Vec<Option<String>>),
 }
 
 impl CatalogAnswer {
@@ -42,6 +45,7 @@ impl CatalogAnswer {
             CatalogAnswer::Keys(_) => DescribePart::Keys,
             CatalogAnswer::ForeignKeys(_) => DescribePart::ForeignKeys,
             CatalogAnswer::Indexes(_) => DescribePart::Indexes,
+            CatalogAnswer::IndexColumns(_) => DescribePart::IndexColumns,
         }
     }
 }

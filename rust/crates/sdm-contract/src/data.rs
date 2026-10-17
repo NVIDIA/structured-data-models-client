@@ -222,8 +222,15 @@ pub enum DescribePart {
     /// Each table's declared foreign keys.
     ForeignKeys,
     /// The tables' indexes, which feed the reference's "Missing N indices"
-    /// warning.
+    /// warning: the source's whole, or one table's where the provider's
+    /// index advice reads them so ([`IndexAdvice::LeadingColumn`]).
     Indexes,
+    /// The columns of one index, named by a relation as a table is (an
+    /// index is its schema's object): one row per column, in the index's
+    /// order, its name, null for an expression. Asked for an index whose
+    /// columns the catalog's list of keys or indexes does not give
+    /// (SQLite's `index_info`, as the reference reads it).
+    IndexColumns,
 }
 
 /// A column of a table.
@@ -614,6 +621,12 @@ pub enum IndexAdvice {
     /// An index over exactly that one column, its coverage resolved; one
     /// over several columns, or one the reader cannot resolve, serves none.
     SingleColumn,
+    /// The reference's SQLite sampler's: each table's indexes read one
+    /// table at a time, each index's columns by its name; a read wants an
+    /// index on the key, and on each foreign key with its table's time
+    /// column, and any index whose first column is the read's first serves
+    /// it.
+    LeadingColumn,
 }
 
 /// What a provider answers: a host provider declares it, and the data
@@ -831,6 +844,8 @@ pub mod catalog_columns {
     /// `columns`, for one table: one row per column, in the table's order:
     /// its name, its declared type as the source spells it, whether it is
     /// declared `NOT NULL` and whether it is part of the primary key.
+    /// `index_columns`, for one index: one row per column, in the index's
+    /// order, its name, null for an expression.
     pub const NAME: &str = "name";
     pub const TYPE: &str = "type";
     pub const NOT_NULL: &str = "not_null";
@@ -896,6 +911,7 @@ impl DataRequest {
                     field(c::TABLE, Utf8, false),
                     field(c::COLUMNS, names(), false),
                 ],
+                DescribePart::IndexColumns => vec![field(c::NAME, Utf8, true)],
             },
             DataRequest::KeyCounts { .. } => vec![
                 field(results::KEY_POSITION, Int32, false),

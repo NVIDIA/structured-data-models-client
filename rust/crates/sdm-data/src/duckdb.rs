@@ -338,6 +338,8 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
             field(c::TABLE_NAME, Utf8, false),
             field(c::EXPRESSIONS, Utf8, true),
         ],
+        // Never planned: DuckDB lists an index's columns with the index.
+        DescribePart::IndexColumns => return ExpectedSchema::Discover {},
     };
     ExpectedSchema::Schema { fields }
 }
@@ -395,6 +397,11 @@ pub(crate) fn read(
             }
             Ok(CatalogAnswer::Indexes(found))
         }
+        DescribePart::IndexColumns => Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "DuckDB answers no index's columns by its name",
+        )),
     }
 }
 
@@ -713,6 +720,13 @@ fn describe(
         DescribePart::Indexes => {
             whole()?;
             "SELECT table_name, expressions FROM duckdb_indexes()".to_owned()
+        }
+        // DuckDB's index list gives each index's columns
+        // (`IndexAdvice::SingleColumn`): none is read by its name.
+        DescribePart::IndexColumns => {
+            return Err(refused(
+                "DuckDB lists an index's columns with its indexes, never by its name",
+            ));
         }
     })
 }

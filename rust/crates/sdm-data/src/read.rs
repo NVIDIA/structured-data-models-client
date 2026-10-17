@@ -259,5 +259,13 @@ pub(crate) fn host(
             }
             Ok(CatalogAnswer::Indexes(found))
         }
+        DescribePart::IndexColumns => {
+            let mut found = Vec::new();
+            for batch in batches {
+                let names = strings(batch, c::NAME)?;
+                found.extend((0..batch.num_rows()).map(|row| text(names, row)));
+            }
+            Ok(CatalogAnswer::IndexColumns(found))
+        }
     }
 }

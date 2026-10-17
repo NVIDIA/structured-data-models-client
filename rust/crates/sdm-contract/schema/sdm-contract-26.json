@@ -3306,6 +3306,11 @@
           "description": "An index over exactly that one column, its coverage resolved; one\nover several columns, or one the reader cannot resolve, serves none.",
           "type": "string",
           "const": "single_column"
+        },
+        {
+          "description": "The reference's SQLite sampler's: each table's indexes read one\ntable at a time, each index's columns by its name; a read wants an\nindex on the key, and on each foreign key with its table's time\ncolumn, and any index whose first column is the read's first serves\nit.",
+          "type": "string",
+          "const": "leading_column"
         }
       ]
     },
@@ -4059,9 +4064,14 @@
           "const": "foreign_keys"
         },
         {
-          "description": "The tables' indexes, which feed the reference's \"Missing N indices\"\nwarning.",
+          "description": "The tables' indexes, which feed the reference's \"Missing N indices\"\nwarning: the source's whole, or one table's where the provider's\nindex advice reads them so ([`IndexAdvice::LeadingColumn`]).",
           "type": "string",
           "const": "indexes"
+        },
+        {
+          "description": "The columns of one index, named by a relation as a table is (an\nindex is its schema's object): one row per column, in the index's\norder, its name, null for an expression. Asked for an index whose\ncolumns the catalog's list of keys or indexes does not give\n(SQLite's `index_info`, as the reference reads it).",
+          "type": "string",
+          "const": "index_columns"
         }
       ]
     },
