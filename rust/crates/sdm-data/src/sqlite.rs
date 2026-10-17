@@ -21,9 +21,11 @@
 //! from the table's alias.
 //!
 //! A key set is bound by the provider as a temporary table of the name its
-//! parameter gives, replaced if it is there, its columns those of the key
-//! set as ADBC's SQLite driver ingests Arrow (`adbc_ingest(..., mode=
-//! 'replace', temporary=True)`): integers as `INTEGER`, floats as `REAL`,
+//! parameter gives, one per key set of the run ([`seeds_for`]); the
+//! provider creates it, replacing only a table of that name it made itself
+//! on the connection, never a relation the caller made. Its columns are
+//! those of the key set as ADBC's SQLite driver ingests Arrow
+//! (`adbc_ingest(..., temporary=True)`): integers as `INTEGER`, floats as `REAL`,
 //! text as `TEXT`, bytes as `BLOB`, a timestamp as ISO 8601 text with a `T`
 //! and as many fractional digits as its unit holds, so a nanosecond bound
 //! is `YYYY-MM-DDTHH:MM:SS.fffffffff`. The reference ingests its key tables
@@ -103,18 +105,20 @@ const RENDERED: &[OptionalRequest] = &[
 /// or an attached database) and a table (design choice 12).
 const MOST_PARTS: usize = 2;
 
-/// The name a statement reads its seeds by: the key set the provider binds
-/// as a temporary table, which a source table of the same name would hide
-/// from an unqualified name, so it is lengthened past the table's name
-/// ([`seeds_for`]) and read as `temp`'s.
-const SEEDS: &str = "__sdm_seeds__";
+/// The prefix of the name a statement reads its seeds by: the key set the
+/// provider binds as a temporary table, read as `temp`'s.
+const SEEDS: &str = "__sdm_seeds";
 
-/// The relation a statement joining `table` reads its seeds by: [`SEEDS`],
-/// lengthened by underscores until it is not `table`'s last part in any
-/// case (SQLite matches ASCII names without case).
-pub(crate) fn seeds_for(table: &Relation) -> String {
+/// The relation a statement joining `table` reads the key set `seeds` by:
+/// [`SEEDS`] and the key set's attachment, one name per key set of the run
+/// (`__sdm_seeds_3__`), so the provider never binds two over one table and
+/// a caller's own temporary table of the old fixed name is never the
+/// provider's; lengthened by underscores until it is not `table`'s last
+/// part in any case (SQLite matches ASCII names without case), which a
+/// source table of the same name would hide from an unqualified name.
+pub(crate) fn seeds_for(table: &Relation, seeds: &KeySet) -> String {
     let last = table.source.last().map(String::as_str).unwrap_or_default();
-    let mut name = SEEDS.to_owned();
+    let mut name = format!("{SEEDS}_{}__", seeds.attachment.0);
     while name.eq_ignore_ascii_case(last) {
         name.push('_');
     }
@@ -260,7 +264,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             per_seed,
             order,
         } => {
-            let seeds_name = seeds_for(table);
+            let seeds_name = seeds_for(table, seeds);
             let table = from(request, "table", table)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
@@ -284,7 +288,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             columns,
             seeds,
         } => {
-            let seeds_name = seeds_for(table);
+            let seeds_name = seeds_for(table, seeds);
             let table = from(request, "table", table)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),

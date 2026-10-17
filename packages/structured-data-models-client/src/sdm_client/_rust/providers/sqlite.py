@@ -12,11 +12,14 @@ module writes none. Each request gets its own cursor, as the reference's
 reads do. A key set a plan names (the seeds of a ``neighbors`` or
 ``lookup`` request) is the Arrow attachment the core sent with the step,
 which the run loop hands over by id: the driver ingests it as a temporary
-table of the name its parameter gives, replaced if it is there
-(``adbc_ingest(..., mode='replace', temporary=True)``), so its rows reach
-the statement as the driver writes Arrow into SQLite, and the source's
-database is left as it was (the reference ingests its key tables into the
-source's own database and leaves them there). A plan this provider cannot
+table of the name its parameter gives (``adbc_ingest(..., temporary=True)``),
+so its rows reach the statement as the driver writes Arrow into SQLite, and
+the source's database is left as it was (the reference ingests its key
+tables into the source's own database and leaves them there). The table is
+created (``mode='create'``), or replaced (``mode='replace'``) only where
+this module made that name on the connection before: a relation the caller
+made is never replaced or dropped, and one of the same name fails the
+ingest by name. A plan this provider cannot
 run, one for a host provider, one with a scalar parameter, which no request
 carries, or one naming a key set it was not handed, raises, and the run
 loop hands the core a provider error.
@@ -27,8 +30,24 @@ pyarrow, the client's base dependency.
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Mapping
 from typing import Any
+
+#: The key-set tables this module made, by connection (temporary tables are
+#: the connection's own): only these are ever replaced. A connection object
+#: that takes no weak reference (a wrapper's) is known by its ``id``.
+_MADE: weakref.WeakKeyDictionary[Any, set[str]] = weakref.WeakKeyDictionary()
+_MADE_BY_ID: dict[int, set[str]] = {}
+
+
+def _made(connection: Any) -> set[str]:
+    r"""The names of the key-set tables this module made on
+    ``connection``."""
+    try:
+        return _MADE.setdefault(connection, set())
+    except TypeError:
+        return _MADE_BY_ID.setdefault(id(connection), set())
 
 
 class PlanNotRun(Exception):
@@ -64,14 +83,16 @@ class SqliteProvider:
                 bound = relations.setdefault(param['relation'], attachment)
                 if bound != attachment:
                     raise PlanNotRun('a plan binding two key sets to one name')
+        made = _made(self._connection)
         with self._connection.cursor() as cursor:
             for relation, attachment in relations.items():
                 cursor.adbc_ingest(
                     relation,
                     _arrow_table((keys or {})[attachment]),
-                    mode='replace',
+                    mode='replace' if relation in made else 'create',
                     temporary=True,
                 )
+                made.add(relation)
             for statement in statements:
                 cursor.execute(statement['text'])
             return cursor.fetch_arrow_table()
