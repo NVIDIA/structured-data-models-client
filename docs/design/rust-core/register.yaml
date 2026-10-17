@@ -5794,6 +5794,45 @@ entries:
     b6ac5b76 in five zones: the core holds both the UTC instant and the wall
     clock to the years 1 to 9999 exactly as the reference does.
 
+# --- lane A entries (P2A-1..19) ---
+
+- id: P2A-1
+  title: The AdventureWorks cases' core inputs name their sources as contract 26 relations, shape only
+  kind: change
+  old_behavior: >-
+    Under contract 25 the core's describe_source took each table's source
+    as one string, so the core inputs of base.adventureworks,
+    base.adventureworks.churn and base.adventureworks.color named each
+    source as "adventureworks_customers" and so on.
+  new_behavior: >-
+    Contract 26 (T2.1b, design choice 12, the owner's KO2-39) makes a
+    table's source a relation, {"source": [name]}, and the Python host
+    sends each one-part name as that relation, so each case's
+    core.describe_source names its sources as the hosts now send them,
+    one part each, the same names. Shape only: the statements the core
+    renders for a one-part relation are byte for byte contract 25's, and
+    no outcome moves on any runner; each case's python-ref lines are
+    re-recorded for the new case files, identity only.
+  affected_inputs: >-
+    The core inputs of the three AdventureWorks cases named; no public
+    call.
+  cases: [base.adventureworks, base.adventureworks.churn, base.adventureworks.color]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-39}
+  notes: >-
+    Approved by the owner on 2026-10-16 as KO2-39, the table source's
+    relation in Phase 2's one contract bump, of which this is the case
+    files' input migration. The cases hold the core's own describe_source
+    message, which compare.py holds equal to the inputs each core host
+    records, so the shape moves with the contract rather than in a
+    runner. Found by T2.1b's round 1 review: the ratchet's case rule
+    (its input changed, and no approved entry names it).
+  case_outcomes:
+  - {case: base.adventureworks, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'input-only migration: the sources as contract 26 relations, the outcome unchanged'}
+  - {case: base.adventureworks.churn, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'input-only migration: the sources as contract 26 relations, the outcome unchanged'}
+  - {case: base.adventureworks.color, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'input-only migration: the sources as contract 26 relations, the outcome unchanged'}
+
 # --- lane B entries (P2B-1..19) ---
 
 - id: P2B-1
