@@ -4,10 +4,10 @@
   "files": {
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py": {
       "<module>": {
-        "fingerprint": "c553683ad6794e3d3be6a9e4812a073679afc5251e31a2e0049319f70bf004e0"
+        "fingerprint": "41e68d23ef7a7284103925b99590cb191584d1d96b307479e86b265efe6e1c69"
       },
       "_provider": {
-        "fingerprint": "449ca920594919414510b1d8ff215b4ecf97b88af54b04a74421c282428dad52"
+        "fingerprint": "f7de874335fc52bea7172736813770ceb2b7627b582e476bfc86e4e3525838bf"
       },
       "build": {
         "fingerprint": "f7f40728015d8cab1730f9d6ae1220bd5270ef28eba9dedc93a02aa98deed954"
@@ -18,7 +18,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "009ed2ff65b582b99eba18f3eb6215c8c58c3d9fd258fba8dbb411b07fbf4b5d"
+        "fingerprint": "a24676a3b0e419e68f1319ffe1a1257cd2135944f70ac3412f1a5b4af074418c"
       },
       "_anchor": {
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
@@ -30,7 +30,7 @@
         "fingerprint": "466127ee6c502f180f36fbe6b1e4750b86ffbce40dad1d2a16b53b2d79c117a0"
       },
       "_provider": {
-        "fingerprint": "449ca920594919414510b1d8ff215b4ecf97b88af54b04a74421c282428dad52"
+        "fingerprint": "f7de874335fc52bea7172736813770ceb2b7627b582e476bfc86e4e3525838bf"
       },
       "_text": {
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"

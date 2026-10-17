@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "refactor": "T2.2: the bridge imports the SQLite provider beside DuckDB's and gains _provider, which picks the dialect and provider by the source's backend; no rule added"
+      "refactor": "T2.3: imports the Postgres provider beside the DuckDB and SQLite providers; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -87,16 +87,16 @@
       "refactor": "T2.1b: a held table's source sent as contract v26 writes it, a relation of one part (codec.relation); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
-      "refactor": "T2.2: the bridge imports the SQLite provider beside DuckDB's and gains _provider, which picks the dialect and provider by the source's backend; no rule added"
+      "refactor": "T2.3: imports the Postgres provider beside the DuckDB and SQLite providers; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
       "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::_provider": {
-      "refactor": "T2.2: the provider choice and provider of a run over a source, its backend's built-in SQL dialect (DuckDB's, SQLite's) on its connection; no rule added"
+      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_provider": {
-      "refactor": "T2.2: the provider choice and provider of a run over a source, its backend's built-in SQL dialect (DuckDB's, SQLite's) on its connection; no rule added"
+      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
     }
   }
 }
