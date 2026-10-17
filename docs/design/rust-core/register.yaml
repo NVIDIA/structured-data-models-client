@@ -6180,3 +6180,187 @@ entries:
     Approver: reviewer. Not a refusal: the same error, without the answered
     steps main's client keeps on it. Found by T2.0c's round 1 review (the
     Claude subagent's P3-13). Temporary: it lapses when T2.8c lands.
+
+- id: P2B-15
+  title: On Postgres a table named alone is found on the search path, as a FROM finds it
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres table named without a schema in
+    current_schema() only (PostgresTable's schema), so a table of a later
+    schema of the search path is refused as not found (INVALID_REQUEST),
+    and a temporary table or a pg_catalog table of the same name is passed
+    over.
+  new_behavior: >-
+    The core finds the name as Postgres finds it in a FROM
+    (to_regclass over the name), so the catalog and every read of a run
+    resolve one relation: a table only in a later schema of the search
+    path is read, and a temporary table of the same name shadows it, as it
+    does in SQL. Where current_schema() holds the name, as in every case,
+    the two read the same table.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source, a table
+    named alone that current_schema() does not hold or that a temporary
+    table or pg_catalog shadows.
+  cases: [T2.3]
+  refs: [KO2-39]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer; an answer where the reference refuses, not a
+    refusal. Probed at T2.3 on Postgres 17 with search_path = public,
+    other: a table only in other is read on the core and refused on the
+    old route; a view in public is read on both; a name nowhere is refused
+    INVALID_REQUEST on both.
+
+- id: P2B-16
+  title: On Postgres the core runs fewer statements than the reference, without its unused reads
+  kind: change
+  old_behavior: >-
+    The reference's Postgres engine reads current_schema() once before it
+    reads a source's tables, and, when its sampler is built, counts every
+    table's rows (SELECT COUNT(*) FROM each table, kept as num_rows_dict,
+    which no Postgres read uses): from_source runs one statement more and
+    materialize one more per table than the core's requests.
+  new_behavior: >-
+    The core asks Postgres one statement per request it makes, as on
+    DuckDB, and names the current schema inside its catalog statements
+    (current_schema() in the table list, to_regclass for a named table),
+    so neither read is made. Every other statement answers the same step
+    with the same rows; the statement count per public call differs
+    (compare.py's sql.count, and the key matrix's counts), which shifts
+    the positional sql.result comparison too.
+  affected_inputs: >-
+    Every Schema.from_source and PredictiveQuery.materialize over a
+    Postgres source on the core route.
+  cases: [T2.3]
+  refs:
+  - KO2-20
+  - 'contract/postgres-key-vectors.json#* success -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner, owner-pending. The core could match the counts only
+    by making both reads, which answer nothing it uses, or by teaching the
+    comparator that Postgres's per-call counts may differ; T2.3 asks the
+    owner which (the orchestrator's rule: no gate or compare change without
+    asking). Measured on all 86 cases on Postgres 17: 102 sql.count
+    differences, none in a statement's answer to its own request.
+
+- id: P2B-17
+  title: Exact decimals on Postgres, where the reference reads numeric as a float or overflows
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres numeric column as Float64 when it has
+    decimal places and as Int64 when it has none, so a decimal key is sent
+    and read back as a float (two keys a float cannot tell apart merged),
+    and a numeric(20,0) or numeric(38,0) value past int64 (an unsigned
+    64-bit key past int64's max, a 38-digit key or feature) fails from_source
+    with an OverflowError.
+  new_behavior: >-
+    The core reads numeric(p,s) as decimal128(p,s) (decimal256 past 38
+    digits) and keeps it exact as on DuckDB (KO2-35, P2B-1): a key with
+    decimal places is sent and read back as its exact digits, no two keys
+    merge, keys equal across scales join by value, and a value past int64
+    is answered.
+  affected_inputs: >-
+    Postgres sources with a numeric key or feature, on the core route.
+  cases:
+  - key.decimal-38-10
+  - decimal.feature-38-0-wide
+  - decimal.key-wide
+  - key.uint64-above-int64-max
+  refs:
+  - P2B-1
+  - 'contract/postgres-key-vectors.json#pair.d12-4.* success -> success'
+  - 'contract/postgres-key-vectors.json#key.both.* success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.* success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair-merging.* success -> success'
+  - 'contract/postgres-key-vectors.json#fifteen.* success -> success'
+  - 'contract/postgres-key-vectors.json#key.at-precision.d19-0 refusal UNNAMED -> success'
+  - 'contract/postgres-key-vectors.json#key.at-precision.d38-0 refusal UNNAMED -> success'
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
+  notes: >-
+    Approver: owner (its more_exact fields and the OverflowError cases, a
+    reference crash answered), under KO2-35, as P2B-1 on DuckDB. Measured at
+    T2.3 on Postgres 17, python-core and rust-host alike; every key pair
+    joins the rows the same-type control joins (the key matrix's lesson 19
+    test). The orchestrator asked for these, key.pair-merging.* and
+    fifteen.* by name. key.decimal-38-10@postgres differs in exactly
+    P2B-1's more_exact fields for key.decimal-38-10 (the result's id dtype
+    and digest, the key's cells and dtypes in the payload), but the
+    register's schema takes no database key in more_exact's case
+    (contract/register.schema.json's pattern), so the fields are not
+    listed here: a judging change for the orchestrator.
+  case_outcomes:
+  - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
+  - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
+  - {case: decimal.key-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) key past int64 answered exactly where the reference overflows'}
+  - {case: decimal.key-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) key past int64 answered exactly where the reference overflows'}
+  - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
+  - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
+
+- id: P2B-18
+  title: On Postgres an empty fact table and an interval column are refused by name, as on DuckDB
+  kind: change
+  old_behavior: >-
+    On Postgres the reference fails from_source with a RuntimeError for a
+    table that holds no rows and a ValueError for an interval column,
+    neither a StructuredDataError.
+  new_behavior: >-
+    The core refuses them as it does on DuckDB: INVALID_REQUEST for the
+    empty table (P1B-11) and UNSUPPORTED_TYPE for the interval (P1B-8).
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source with an
+    empty table or an interval column.
+  cases: [empty.fact-table, time.feature-interval]
+  refs: [P1B-11, P1B-8, E66]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer (E66(b)'s class: where the reference gives an
+    unnamed error, a named refusal is approved). Measured at T2.3 on
+    Postgres 17, python-core and rust-host alike.
+  case_outcomes:
+  - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-11)'}
+  - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'T2.3: as on DuckDB (P1B-11)'}
+  - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-8)'}
+  - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
+
+- id: P2B-19
+  title: On Postgres a time column stored as text is windowed by its times, not its text
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler compares a text time column with the
+    window's bounds as text (it casts the bounds to the column's declared
+    type, text): '01/05/2023' sorts before '2023-...', so a US-ordered
+    date column's windows hold the wrong rows (time.text-us-date: a label
+    of 0.0 where the rows in the window sum to 100.0), and its time bounds
+    are the text's smallest and largest; a value no date reads is refused
+    later, INVALID_REQUEST at materialize (time.text-one-bad-value).
+  new_behavior: >-
+    The core reads such a column as the source reads its times, CAST to
+    timestamp, as it does on DuckDB (DT-12): the window holds the rows in
+    it, and a value the source cannot read fails the source's statement,
+    PROVIDER_ERROR at materialize.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source
+    whose time column is text.
+  cases: [time.text-us-date, time.text-one-bad-value]
+  refs: [DT-12, DT-7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner, owner-pending: a payload that differs (the reference's
+    wrong rows) and a refusal under another code. Matching the reference
+    would compare times as text. Measured at T2.3 on Postgres 17,
+    python-core and rust-host alike; the reference also gives an
+    SDMWarning on time.text-us-date that the core does not.
+  case_outcomes:
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'T2.3: the source CASTs the text, as on DuckDB (DT-12)'}
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'T2.3: the source CASTs the text, as on DuckDB (DT-12)'}
