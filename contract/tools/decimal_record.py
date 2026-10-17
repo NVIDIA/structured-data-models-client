@@ -613,6 +613,50 @@ def _keys() -> list[dict[str, Any]]:
                 'indices': [base, base + 1],
             }
         )
+    # The key-type pair matrix (design, T2.17's exit, moved into T2.0c):
+    # primary and foreign keys of different decimal precisions and scales
+    # holding equal values (1.00 against 1.0000) join, in both directions;
+    # and values float64 would merge (10**17 + 0 to 7, 16 apart at most in
+    # a double) stay distinct.
+    for (pp, ps), (fp, fs) in [
+        ((10, 2), (12, 4)),
+        ((12, 4), (10, 2)),
+        ((18, 0), (20, 2)),
+        ((20, 2), (18, 0)),
+    ]:
+        out.append(
+            {
+                'id': f'key.pair.{tag(pp, ps)}.{tag(fp, fs)}',
+                'columns': KEYS,
+                'setup': [
+                    _alter_key('users', 'user_id', sql_type(pp, ps)),
+                    _alter_key('orders', 'user_id', sql_type(fp, fs)),
+                ],
+            }
+        )
+    wide = 10**17
+    for (pp, ps), (fp, fs) in [((38, 0), (38, 2)), ((38, 2), (38, 0))]:
+        out.append(
+            {
+                'id': f'key.pair-merging.{tag(pp, ps)}.{tag(fp, fs)}',
+                'columns': KEYS,
+                'setup': [
+                    _alter_key(
+                        'users',
+                        'user_id',
+                        sql_type(pp, ps),
+                        f"user_id + '{wide}'::{sql_type(pp, ps)}",
+                    ),
+                    _alter_key(
+                        'orders',
+                        'user_id',
+                        sql_type(fp, fs),
+                        f"user_id + '{wide}'::{sql_type(fp, fs)}",
+                    ),
+                ],
+                'indices': [wide, wide + 1],
+            }
+        )
     out.append(
         {
             'id': 'key.null-foreign.d18-0',
@@ -923,6 +967,29 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
     'decimal.target-38-18': [
         ['instance_table', 'TARGET'],
         ['orders', 'price'],
+    ],
+    # T2.0c's exact-decimal cases.
+    'decimal.class-target-collide': [
+        ['instance_table', 'TARGET'],
+        ['users', 't'],
+    ],
+    **{
+        f'decimal.{name}': [['instance_table', 'TARGET'], ['users', 'd']]
+        for name in (
+            'compare-finer-eq',
+            'compare-finer-gt',
+            'compare-finer-negative',
+            'compare-past-precision',
+            'compare-past-precision-gt',
+            'compare-same-scale',
+        )
+    },
+    'decimal.feature-inexact-38-18': [['users', 'f'], ['users', 'g']],
+    'decimal.key-wide': [['users', 'user_id'], ['orders', 'user_id']],
+    'decimal.sum-10-2': [['instance_table', 'TARGET'], ['orders', 'amount']],
+    'decimal.sum-past-38': [
+        ['instance_table', 'TARGET'],
+        ['orders', 'amount'],
     ],
 }
 
