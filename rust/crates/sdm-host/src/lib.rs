@@ -30,6 +30,12 @@ pub fn providers() -> &'static [&'static str] {
     sdm_data::PROVIDERS
 }
 
+/// `query` as the PQL library writes it back (`sdm_core::pql::normalized`),
+/// or `None` when it does not parse: the text a host sends materialize.
+pub fn normalized_query(query: &str) -> Option<String> {
+    sdm_core::pql::normalized(query)
+}
+
 /// The composition root a binding starts its runs with: the one data layer,
 /// `sdm-data`'s, built here where every binding reaches it (decisions E21,
 /// H14, E30).
