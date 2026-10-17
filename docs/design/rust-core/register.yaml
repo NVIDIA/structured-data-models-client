@@ -6286,10 +6286,12 @@ entries:
     column (stored as text), under a forced core route.
   cases: [time.feature-time-of-day]
   refs: [DT-15]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-61}
   notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-61 (relayed by
+    the orchestrator): a permanent registered difference.
     Approver: owner (not a crash replaced, so outside KO2-11's reviewer
     classes): the core answers where the reference refuses, its reading the
     owner's E68 list. Measured at T2.2.
@@ -6312,10 +6314,12 @@ entries:
     Schema.from_source over a SQLite source with a column whose declared
     type names INT but whose values are text (INTERVAL, POINT and the like).
   cases: [time.feature-interval]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-62}
   notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-62 (relayed by
+    the orchestrator): a permanent registered difference.
     Approver: owner. Measured at T2.2 with the case's routes widened to
     materialize and predict (its committed routes stop at from_source,
     where DuckDB's reference refuses): the payload, warnings and result
@@ -6338,10 +6342,45 @@ entries:
     2**64 or more, under a forced core route.
   cases: [T2.2]
   refs: [RS-2, RS-7]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-59}
   notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-59 (relayed by
+    the orchestrator): a permanent registered difference.
     Approver: owner (a refusal of input the reference accepts). Lifting it
     needs max_seed wider than u64 in the contract. Found by reading, not
     measured by a case.
+
+- id: P2B-16
+  title: On SQLite, four S0 queries the reference answers are refused at materialize by E92-class rules, until T2.10
+  kind: change
+  old_behavior: >-
+    On SQLite the reference answers s0.boundary.deepest,
+    s0.boundary.digits-4300 and s0.boundary.start-past-64kb (a target
+    filtered by WHERE) and s0.boundary.escapes (a condition on the target)
+    through materialize.
+  new_behavior: >-
+    Off DuckDB every call a case makes runs on the core (T2.1d), so these
+    S0 cases reach the core's materialize on SQLite, which refuses them
+    UNSUPPORTED_REQUEST, rule target_filter (deepest, digits-4300,
+    start-past-64kb) and condition (escapes), E92's class (phase-1/not-yet-refusals.md, rows 43
+    and 20); python-core and rust-host alike. On DuckDB their materialize
+    takes the old route, as before. T2.10 (PQL targets, which lifts both
+    rules) retires this entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source on the core route of a
+    query whose target has a WHERE filter or a condition.
+  cases: [s0.boundary.deepest, s0.boundary.digits-4300, s0.boundary.escapes, s0.boundary.start-past-64kb]
+  refs: [P1B-3]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
+  notes: >-
+    Approved under the owner's standing approval KO2-56 (2026-10-17): a
+    temporary register entry naming the package that retires it, still
+    listed for the owner; the reviewers check this entry fits it.
+    Temporary: it lapses when T2.10 lands, and the final gate fails while
+    it remains (register.py's TEMPORARY). Its cases' SQLite lines
+    (<case>@sqlite) are the ones it covers. Measured at T2.2 on python-core
+    and rust-host.
