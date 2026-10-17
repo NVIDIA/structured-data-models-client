@@ -176,6 +176,36 @@ def on_database(path: str, database: str) -> str:
     return f'{head}/{database}' if backend == 'duckdb' else path
 
 
+def routes_on(case: dict[str, Any], database: str) -> list[str]:
+    r"""The routes python-core forces for ``case`` on ``database``: on DuckDB
+    the case's own; elsewhere the case's own over ``database``
+    (:func:`on_database`) and every route of each public call the case
+    makes, through its ``until`` (T2.1d). Off DuckDB the old route is not
+    the reference's (python-old runs on DuckDB only, T2.1a fix 4), so no
+    call of a core leg takes it: a case that routes only its DuckDB stop
+    (S0's validation, a source refused at ``from_source``) still runs on
+    the core where the database lets the call go further."""
+    routes = [on_database(route, database) for route in case['routes']]
+    if database == 'duckdb':
+        return routes
+    from sdm_client import _routing
+
+    named = bool((case['input'].get('from_source') or {}).get('tables'))
+    calls = list(
+        _routing.FROM_SOURCE_DUCKDB_TABLES
+        if named
+        else _routing.FROM_SOURCE_DUCKDB
+    )
+    if case['until'] != 'from_source':
+        calls += _routing.MATERIALIZE_DUCKDB
+    if case['until'] == 'predict':
+        calls += _routing.PREDICT_DUCKDB
+    for path in calls:
+        if on_database(path, database) not in routes:
+            routes.append(on_database(path, database))
+    return routes
+
+
 def case_key(case_id: str, database: str) -> str:
     r"""An observation's key on ``database``: DuckDB's the bare case ID,
     another's ``<case>@<database>``."""
@@ -2652,9 +2682,7 @@ def run(
         if capture is not None:
             capture.recording = record_fetches is not None
         if mode == 'python-core':
-            os.environ['SDM_CORE_ROUTES'] = ','.join(
-                on_database(route, database) for route in case['routes']
-            )
+            os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
         try:
             outcome, shown, driver, public, origins = _call(
                 case, bases, driver_capture, database
