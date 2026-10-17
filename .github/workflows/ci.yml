@@ -1159,7 +1159,7 @@ jobs:
     needs: native-wheel
     env:
       CELL: floor-pandas2.2
-      CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: sqlite
     steps:
       - *contract-checkout
@@ -1179,7 +1179,7 @@ jobs:
       postgres: *postgres-service
     env:
       CELL: floor-pandas2.2
-      CELL_PINS: pandas==2.2.0 pyarrow==14.0.1 numpy==1.26.4
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: postgres
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
