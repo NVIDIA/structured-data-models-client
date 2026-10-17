@@ -50,10 +50,13 @@ needed for a refusal of a reference success.
 
 What is held here: python-core's approved new successes, under an entry
 naming ``ref-pandas3`` only, are an ``approved improvement`` in every cell,
-both seeded and as the real register states them (``key.hugeint``,
-``key.decimal-18-0``, ``key.decimal-38-10``, ``key.varchar-large-buffers``
-and ``nested.fixed-array``, under P1B-33, P1B-6's addition to it, P1B-9 and
-P1B-53). The fail-closed seeds stay ``regression`` in every cell: another
+both seeded and as the real register states them
+(``key.varchar-large-buffers`` and ``nested.fixed-array``, under P1B-6's
+addition to P1B-33, P1B-9 and P1B-53). ``key.hugeint``,
+``key.decimal-18-0`` and ``key.decimal-38-10`` were among them until the
+reference at 6298913c (main's eb6c68eb) answered them: python-core's
+success there is now a correct success in every cell, and a refusal of
+them no improvement. The fail-closed seeds stay ``regression`` in every cell: another
 outcome than the entry states, an entry not approved, a new refusal under a
 reviewer's entry, a panic, an item naming the observed cell but not
 ``ref-pandas3``, and a Python observation with no cell. rust-host is
@@ -83,13 +86,19 @@ CELLS = ('ref-pandas3', 'dbr17-pandas2', 'floor-pandas2.2')
 OTHER_CELLS = ('dbr17-pandas2', 'floor-pandas2.2')
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 REFERENCE = next(iter(sorted((ROOT / 'contract/reference').glob('*.jsonl'))))
-#: python-core's owner-approved new successes (final review P2-3).
+#: python-core's owner-approved new successes (final review P2-3) where
+#: the reference at 6298913c still refuses.
 APPROVED_SUCCESSES = (
+    'key.varchar-large-buffers',
+    'nested.fixed-array',
+)
+#: The others of P2-3's five: since main's eb6c68eb (the reference at
+#: 6298913c) the reference answers them too, so python-core's success is a
+#: correct one, needing no entry.
+ANSWERED_BY_THE_REFERENCE = (
     'key.hugeint',
     'key.decimal-18-0',
     'key.decimal-38-10',
-    'key.varchar-large-buffers',
-    'nested.fixed-array',
 )
 
 
@@ -481,6 +490,35 @@ def test_the_real_rows_are_improvements_with_every_runner_and_cell(
     row = _classify(case, reference, observed, entries)
     assert row['unexcused'] == [], row['unexcused']
     assert row['class'] == 'approved improvement'
+
+
+@pytest.mark.parametrize('cell', CELLS)
+@pytest.mark.parametrize('case', ANSWERED_BY_THE_REFERENCE)
+def test_a_success_the_reference_now_gives_is_correct_in_every_cell(
+    case: str, cell: str
+) -> None:
+    r"""The real reference line is a success at predict now; python-core's
+    success observed in ``cell`` is a correct success, excused by nothing
+    and needing nothing; its refusal there is no improvement."""
+    entries, references = _real()
+    reference = references[case]
+    assert (
+        reference['outcome']['result'],
+        reference['outcome']['stage'],
+    ) == ('success', 'predict')
+    core = _as(reference, 'python-core', cell)
+    row = _classify(case, reference, {('python-core', cell): core}, entries)
+    assert row['unexcused'] == [], row['unexcused']
+    assert row['class'] == 'correct success'
+    refused = copy.deepcopy(core)
+    refused['outcome'] = {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'StructuredDataError',
+        'code': 'INVALID_REQUEST',
+    }
+    row = _classify(case, reference, {('python-core', cell): refused}, entries)
+    assert row['class'] not in ('correct success', 'approved improvement')
 
 
 # --- 3: what stays a regression ------------------------------------------------------
