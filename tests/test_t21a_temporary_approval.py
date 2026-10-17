@@ -41,10 +41,6 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 DECISIONS = 'docs/design/rust-core/phase-2/decisions.md'
 
-PENDING = pytest.mark.xfail(
-    reason='T2.1a: the temporary-approval rule (KO2-45, KO2-50)',
-    strict=True,
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -159,7 +155,6 @@ def test_the_seed_s_rows_are_the_temporary_owner_rows() -> None:
         assert 'approved by owner' in line
 
 
-@PENDING
 def test_the_temporary_rows_are_named_once_in_register_py() -> None:
     r"""Exit: the list lives in ``register.py``, and no other harness file
     under ``scripts/rust_core`` spells a temporary row."""
@@ -174,7 +169,6 @@ def test_the_temporary_rows_are_named_once_in_register_py() -> None:
     assert not spelled, spelled
 
 
-@PENDING
 @pytest.mark.parametrize('row', TEMPORARY)
 def test_the_locked_run_fails_naming_an_approved_temporary_entry(
     row: str, tree: Path
@@ -191,7 +185,6 @@ def test_the_locked_run_fails_naming_an_approved_temporary_entry(
     assert not [line for line in _failures(unlocked) if SEED in line], unlocked
 
 
-@PENDING
 @pytest.mark.parametrize(
     ('row', 'status'),
     [
@@ -212,7 +205,6 @@ def test_a_retired_entry_passes_the_locked_run(
     assert not [line for line in _failures(output) if SEED in line], output
 
 
-@PENDING
 def test_the_locked_run_names_every_approved_temporary_entry_of_the_register(
     tree: Path,
 ) -> None:

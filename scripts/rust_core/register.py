@@ -65,6 +65,13 @@ OUTCOME = re.compile(
 )
 #: The code a contained panic answers with; no entry accepts it.
 PANIC = 'INTERNAL_ERROR'
+#: The decision rows that approve only until a package lands (T2.1a's
+#: temporary-approval rule; Phase 2 design, T2.1a's row), named here and
+#: nowhere else in the harness: the locked run's ratchet step
+#: (``ratchet.py check --locked``) fails, naming each, while an approved
+#: entry's ``decision_ref`` cites one. The package that lands the fix
+#: retires its entries (``rejected``, or citing a permanent row).
+TEMPORARY = ('KO2-45', 'KO2-50')
 
 
 class Unreadable(Exception):

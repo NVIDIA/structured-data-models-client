@@ -9,7 +9,7 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
 
     ratchet.py checkpoint [--repo DIR] (--base REV | --phase-push BEFORE)
         [--epic] [--epic-ref REF]
-    ratchet.py check [--repo DIR] --checkpoint SHA [--epic]
+    ratchet.py check [--repo DIR] --checkpoint SHA [--epic] [--locked]
         [--protected-paths TEXT]
         [--observations FILE]... [--effective-out FILE]
     ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
@@ -91,6 +91,11 @@ checkpoint's files, read from git at ``--checkpoint``:
   owner (a row the package writes itself never authorizes);
 - ``known-differing``: the candidate's ``KNOWN_DIFFERING`` file a subset of
   the checkpoint's;
+- ``temporary``: with ``--locked`` (the locked run's ratchet step, as
+  ``gate.sh --locked`` passes it), each approved entry whose
+  ``decision_ref`` row approves only until a package lands (``register.py``'s
+  ``TEMPORARY``) fails by name (T2.1a; :func:`check_temporary`); a landing's
+  own gate lets them stand until their packages land;
 - with observations, ``baselines``: each checkpoint baseline
   (``contract/baselines/<cell>/<runner>.jsonl``) of a given runner equals the
   observation's projection (``compare-policy.yaml``'s ``baseline`` fields, the
@@ -2084,6 +2089,23 @@ def check_register(
     return mine
 
 
+def check_temporary(report: Report, entries: list[dict[str, Any]]) -> None:
+    r"""The locked run fails, naming each, while an approved entry cites a
+    decision row that approves only until a package lands (register.py's
+    ``TEMPORARY``; T2.1a): the package it waits for has not retired it."""
+    temporary = register_module().TEMPORARY
+    for entry in entries:
+        ref = entry.get('decision_ref')
+        row = ref.get('row') if isinstance(ref, dict) else None
+        if row in temporary:
+            report.fail(
+                'temporary',
+                f'{entry.get("id")} is approved under {row}, which approves '
+                'it only until its package lands; the locked run needs it '
+                'retired (rejected, or citing a permanent row)',
+            )
+
+
 def check_availability(
     report: Report,
     fields: Any,
@@ -2238,9 +2260,11 @@ def check(
     bootstrap: bool = False,
     effective_out: Path | None = None,
     epic: bool = False,
+    locked: bool = False,
 ) -> Report:
     r"""Every rule's problems; ``effective_out`` receives the effective
-    expectations (:func:`effective`) for the comparator."""
+    expectations (:func:`effective`) for the comparator. ``locked``, the
+    locked run's ratchet step, adds :func:`check_temporary`."""
     report = Report()
     checkpoint = Tree(repo, checkpoint_sha)
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
@@ -2268,6 +2292,8 @@ def check(
     try:
         mine = check_register(report, checkpoint, candidate, repo)
         entries = approved(mine)
+        if locked:
+            check_temporary(report, entries)
         held = baselines(checkpoint)
         if effective_out is not None:
             effective_out.write_text(
@@ -2595,6 +2621,7 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--observations', type=Path, action='append', default=[])
     judge.add_argument('--effective-out', type=Path)
     judge.add_argument('--epic', action='store_true')
+    judge.add_argument('--locked', action='store_true')
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
     expect = commands.add_parser('effective')
@@ -2674,6 +2701,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.bootstrap,
             arguments.effective_out,
             arguments.epic,
+            arguments.locked,
         )
     except Unreadable as error:
         print(f'ratchet: {error}\nratchet: FAIL')

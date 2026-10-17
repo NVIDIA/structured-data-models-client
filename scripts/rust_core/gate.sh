@@ -50,7 +50,9 @@
 #                 landing), reference immutability, removed, demoted and
 #                 changed cases, the register, the policy's and
 #                 availability's relaxations, KNOWN_DIFFERING, and with
-#                 observations the baselines and availability;
+#                 observations the baselines and availability; with
+#                 --locked, also no approved entry citing a temporary
+#                 decision row (register.py's TEMPORARY, T2.1a);
 #   compare       the checkpoint's compare.py on the observations, against
 #                 the candidate's cases, bases and reference, which the
 #                 ratchet lets differ from the checkpoint's only as approved,
@@ -725,6 +727,7 @@ judge_ratchet() {
   "$PYTHON" "$here/scripts/rust_core/ratchet.py" check --repo "$candidate" \
     --checkpoint "$checkpoint" "${bootstrap[@]+"${bootstrap[@]}"}" \
     --effective-out "$scratch/effective.json" "${epic[@]+"${epic[@]}"}" \
+    ${locked:+--locked} \
     "${protected[@]+"${protected[@]}"}" "${with[@]+"${with[@]}"}"
 }
 want ratchet && step ratchet judge_ratchet
