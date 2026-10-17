@@ -6,7 +6,8 @@
 r"""Compares runners' observations of the contract cases.
 
     scripts/rust_core/compare.py --cases DIR [--reference FILE]
-        [--policy FILE] [--bases FILE] [--expect FILE] OBSERVATIONS...
+        [--policy FILE] [--bases FILE] [--expect FILE] [--register FILE]
+        OBSERVATIONS...
 
 Each OBSERVATIONS file is one runner's output (run_python.py or
 sdm-contract-run); FILE is the committed reference observations
@@ -82,6 +83,22 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
 - ``sql.text``, ``sql.parameters``, ``sql.bindings``: each statement's raw
   text and typed parameters, and the relations bound, against the
   reference's: reported (H9).
+
+More exact than the reference (T2.0g, approved by the owner on
+2026-10-17): a register entry approved by the owner may list, under
+``more_exact``, a case, the core runners and the exact fields where the
+core answers more exactly than the reference (the nearest double where the
+reference's cast is one unit in the last place off, an exact text id where
+it sends a float). Each field is a path as this prints a difference
+(``public.payloads/0/2/context/...``, ``core.predicted.body/0/...``), ``*``
+standing for any one key or index. For that case and runner, the
+``schema``, ``result`` and ``payload`` rules leave out the value at each
+such path, on both sides, and compare everything else; a field present on
+one side only, a list of another length, or any other field still differs.
+The register is the candidate's (``--register``; ``gate.sh`` gives it), so
+the entry is read as the ratchet reads an entry's case outcomes, its
+approval the owner's and review's to check; an entry not approved by the
+owner, or a field that is not such a path, excuses nothing.
 
 Past the reference's stop (E112): for a case and runner whose effective
 expectation is an approved entry's move (``--expect``'s ``@moved``) of the
@@ -171,6 +188,17 @@ REGISTER = REPO / 'docs/design/rust-core/register.yaml'
 #: counted. Any other difference still fails.
 RUNTIME_DEPRECATIONS = 'HOST-5'
 RUNTIME_LIBRARIES = ('pandas', 'pyarrow')
+#: The runners a ``more_exact`` item may name: the core's, since it is the
+#: core that is more exact than the reference.
+MORE_EXACT_RUNNERS = ('python-core', 'rust-host')
+#: A ``more_exact`` field: a path under one of the roots the host and
+#: payload rules compare, at least one key or index below it.
+_MORE_EXACT_FIELD = re.compile(
+    r'(public\.schema|public\.result|public\.payloads|core\.predicted\.body)'
+    r'(/[^/]+)+'
+)
+#: What stands for a value ``more_exact`` leaves out, on both sides.
+_MORE_EXACT = 'left out: more exact than the reference'
 
 
 def _runner() -> ModuleType:
@@ -228,6 +256,9 @@ class Report:
         #: rule leaves out the runtime's DeprecationWarnings python-old
         #: alone shows in another cell (decision E81).
         self.narrowed = False
+        #: The fields left out as more exact than the reference, by case
+        #: and runner (:func:`more_exact`).
+        self.more_exact: dict[tuple[str, str], tuple[str, ...]] = {}
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -805,10 +836,43 @@ def _case_inputs(
         )
 
 
-def _path_of(mine: Any, theirs: Any, path: str) -> str | None:
-    r"""Where two values first differ, as a path, never the values."""
+def _path_of(
+    mine: Any, theirs: Any, path: str, excused: tuple[str, ...] = ()
+) -> str | None:
+    r"""Where two values first differ, as a path, never the values; the
+    value at each ``excused`` path (:func:`more_exact`) left out on both
+    sides."""
+    if excused:
+        mine = _left_out(mine, path, excused)
+        theirs = _left_out(theirs, path, excused)
     found: str | None = _capture_check()._first_difference(mine, theirs, path)
     return found
+
+
+def _left_out(value: Any, path: str, excused: tuple[str, ...]) -> Any:
+    r"""``value``, found at ``path``, with what is at each ``excused`` path
+    replaced by one marker; its keys and lengths kept."""
+    if any(_matches(path, field) for field in excused):
+        return _MORE_EXACT
+    if isinstance(value, dict):
+        return {
+            key: _left_out(item, f'{path}/{key}', excused)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [
+            _left_out(item, f'{path}/{index}', excused)
+            for index, item in enumerate(value)
+        ]
+    return value
+
+
+def _matches(path: str, field: str) -> bool:
+    mine, theirs = path.split('/'), field.split('/')
+    return len(mine) == len(theirs) and all(
+        part == want or want == '*'
+        for part, want in zip(mine, theirs, strict=True)
+    )
 
 
 def _lossless(value: Any) -> Any:
@@ -878,12 +942,13 @@ def _host_fields(
     ``schema``, ``warnings``, ``result`` and ``payload`` rules; past the
     reference's ``stop`` (:func:`past_stop`), only what it produced."""
     where = f'{case["id"]}: {who} against {against}'
+    excused = report.more_exact.get((case['id'], who), ())
     mine, theirs = observation.get('public'), reference.get('public')
     if mine is None or theirs is None:
         report.fail(f'{where}: public: not recorded', 'schema')
         return
     found = (
-        _path_of(mine['schema'], theirs['schema'], 'public.schema')
+        _path_of(mine['schema'], theirs['schema'], 'public.schema', excused)
         if stop is None or stop != 'from_source'
         else None
     )
@@ -910,7 +975,7 @@ def _host_fields(
     if stop is not None and stop != 'predict':
         return
     found = (
-        _path_of(mine['result'], theirs['result'], 'public.result')
+        _path_of(mine['result'], theirs['result'], 'public.result', excused)
         if stop is None or theirs['result'] is not None
         else None
     )
@@ -924,7 +989,7 @@ def _host_fields(
         (each['method'], each['path'], _payload(each['parsed'], report.paths))
         for each in theirs['payloads']
     ]
-    found = _path_of(sent, wanted, 'public.payloads')
+    found = _path_of(sent, wanted, 'public.payloads', excused)
     if found:
         report.fail(f'{where}: {found}', 'payload')
 
@@ -1026,6 +1091,49 @@ def owner_approved(entry: str, register: Path = REGISTER) -> bool:
     )
 
 
+def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
+    r"""The fields each owner-approved entry of ``register`` lists under
+    ``more_exact``, by case and runner: only a core runner's, only a path
+    under a root the host and payload rules compare; anything else, and a
+    file it cannot read, excuses nothing."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
+        return {}
+    entries = loaded.get('entries') if isinstance(loaded, dict) else None
+    found: dict[tuple[str, str], tuple[str, ...]] = {}
+    for entry in entries if isinstance(entries, list) else []:
+        if not (
+            isinstance(entry, dict)
+            and entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and isinstance(entry.get('more_exact'), list)
+        ):
+            continue
+        for item in entry['more_exact']:
+            if not isinstance(item, dict):
+                continue
+            case, runners = item.get('case'), item.get('runners')
+            fields = item.get('fields')
+            if not (
+                isinstance(case, str)
+                and isinstance(runners, list)
+                and isinstance(fields, list)
+            ):
+                continue
+            kept = tuple(
+                field
+                for field in fields
+                if isinstance(field, str) and _MORE_EXACT_FIELD.fullmatch(field)
+            )
+            for who in runners:
+                if who in MORE_EXACT_RUNNERS:
+                    found[case, who] = found.get((case, who), ()) + kept
+    return found
+
+
 def _core_payload(
     report: Report,
     case: dict[str, Any],
@@ -1064,7 +1172,12 @@ def _core_payload(
             _payload(each['parsed'], report.paths)
             for each in reference['public']['payloads']
         ]
-        found = _path_of([body], wanted, 'core.predicted.body')
+        found = _path_of(
+            [body],
+            wanted,
+            'core.predicted.body',
+            report.more_exact.get((case['id'], who), ()),
+        )
         if found:
             report.fail(
                 f'{case["id"]}: rust-host against python-ref: {found}',
@@ -1531,6 +1644,7 @@ def compare(
     bases_file: Path | None = None,
     expect_file: Path | None = None,
     register_file: Path = REGISTER,
+    improvements: Path | None = None,
 ) -> Report:
     check = _capture_check()
     try:
@@ -1543,6 +1657,7 @@ def compare(
         return report
     report = Report(policy['rules'], check.excluded(policy))
     report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
+    report.more_exact = more_exact(improvements or register_file)
     if set(policy['rules']) != set(RULES):
         report.fail(
             'compare-policy.yaml: its rules are not the ones this runs: '
@@ -1721,6 +1836,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--policy', type=Path)
     parser.add_argument('--bases', type=Path)
     parser.add_argument('--expect', type=Path)
+    parser.add_argument(
+        '--register',
+        type=Path,
+        help="the candidate's register, read for its owner-approved "
+        "more_exact fields (default: this tree's)",
+    )
     parser.add_argument('observations', type=Path, nargs='+')
     arguments = parser.parse_args(argv)
     report = compare(
@@ -1730,6 +1851,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments.policy,
         arguments.bases,
         arguments.expect,
+        improvements=arguments.register,
     )
     for text in report.info:
         print(f'statements per public call: {text}')

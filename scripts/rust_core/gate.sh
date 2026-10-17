@@ -56,7 +56,9 @@
 #                 ratchet lets differ from the checkpoint's only as approved,
 #                 each baselined case's outcome against its effective
 #                 expectation (--expect, which the ratchet writes: the
-#                 checkpoint's baseline or an approved transition from it);
+#                 checkpoint's baseline or an approved transition from it),
+#                 and the candidate's register for the fields an
+#                 owner-approved entry lists as more exact (T2.0g);
 #   l0            the checkpoint's l0_deps.py (with the bridge freeze, based
 #                 at the checkpoint) and l0_scan.py on the candidate's tree;
 #                 --no-l0 leaves them to the job that has cargo;
@@ -737,7 +739,8 @@ judge_compare() {
   "$PYTHON" "$here/scripts/rust_core/compare.py" \
     --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
     --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
-    --expect "$scratch/effective.json" "${given[@]}"
+    --expect "$scratch/effective.json" \
+    --register "$candidate/docs/design/rust-core/register.yaml" "${given[@]}"
 }
 if want compare && { [ ${#given[@]} -gt 0 ] || [ -n "$only" ]; }; then
   step compare judge_compare
