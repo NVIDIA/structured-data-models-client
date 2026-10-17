@@ -476,3 +476,95 @@ def test_a_relation_duckdb_cannot_read_is_refused_by_name() -> None:
             parts,
             raised.value.details,
         )
+
+
+# --- a relation's parts follow DuckDB's identifier case (review round 1, P2) --
+
+
+def _keyed_tables() -> Any:
+    r"""A DuckDB database holding ``u(code VARCHAR UNIQUE, n DOUBLE)`` in
+    ``main``, in a schema ``s``, and as ``s."q""t"``, a table name holding a
+    double quote, each with the same two rows."""
+    import duckdb
+
+    connection = duckdb.connect()
+    connection.execute('CREATE SCHEMA s')
+    for table in ('u', 's.u', 's."q""t"'):
+        connection.execute(
+            f'CREATE TABLE {table} (code VARCHAR UNIQUE, n DOUBLE)'
+        )
+        connection.execute(f"INSERT INTO {table} VALUES ('a', 1), ('b', 2)")
+    return connection
+
+
+def _keys(described: Any) -> tuple[list[str], dict[str, bool]]:
+    r"""A one-table description's primary key and each column's unique
+    flag."""
+    (table,) = described['tables']
+    return table['primary_key'], {
+        column['name']: column['unique'] for column in table['columns']
+    }
+
+
+#: What the reference (python-ref, 6298913c) reports of ``u`` read under
+#: its own spelling, ``Schema.from_source(DuckDBSource(c), {'u': 'u'})``:
+#: ``code`` its primary key, the unique column (an ``ID``), and ``n`` not.
+#: The reference reads no schema-qualified name at all (``'s.u'`` is a
+#: catalog error there), so the core's description of the same table under
+#: any spelling DuckDB resolves to it is held to this.
+REFERENCE_KEYS = (['code'], {'code': True, 'n': False})
+
+
+def test_the_main_table_is_described_as_the_reference_describes_it() -> None:
+    # The control: one part, the table's own spelling.
+    assert _keys(_describe(_keyed_tables(), ['u'])) == REFERENCE_KEYS
+
+
+@pytest.mark.parametrize(
+    'parts',
+    [
+        ['s', 'u'],
+        ['S', 'u'],
+        ['s', 'U'],
+        ['S', 'U'],
+        ['memory', 's', 'u'],
+        ['MEMORY', 'S', 'u'],
+        ['Memory', 's', 'U'],
+    ],
+    ids='.'.join,
+)
+def test_a_schema_qualified_table_keeps_its_keys_in_any_case(
+    parts: list[str],
+) -> None:
+    # DuckDB resolves an identifier whatever its case, quoted or not, so
+    # each spelling names s.u (shown by DuckDB itself below), and the
+    # description's unique column and primary key are the same for each.
+    connection = _keyed_tables()
+    quoted = '.'.join('"' + part.replace('"', '""') + '"' for part in parts)
+    assert connection.execute(f'SELECT count(*) FROM {quoted}').fetchone() == (
+        2,
+    )
+    assert _keys(_describe(connection, parts)) == REFERENCE_KEYS, parts
+
+
+@pytest.mark.parametrize(
+    'parts',
+    [
+        ['s', 'q"t'],
+        ['S', 'q"t'],
+        ['s', 'Q"T'],
+        ['MEMORY', 'S', 'q"t'],
+    ],
+    ids='.'.join,
+)
+def test_a_quoted_table_name_keeps_its_keys_when_its_qualifier_changes_case(
+    parts: list[str],
+) -> None:
+    # A table name holding a double quote is read by name from the catalog;
+    # a schema or database qualifier of another case still names it.
+    connection = _keyed_tables()
+    quoted = '.'.join('"' + part.replace('"', '""') + '"' for part in parts)
+    assert connection.execute(f'SELECT count(*) FROM {quoted}').fetchone() == (
+        2,
+    )
+    assert _keys(_describe(connection, parts)) == REFERENCE_KEYS, parts
