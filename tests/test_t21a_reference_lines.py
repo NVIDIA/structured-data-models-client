@@ -19,33 +19,22 @@ reads ``SDM_POSTGRES_TEST_DSN`` (the pinned ``POSTGRES_IMAGE`` of
 ``.github/workflows/ci.yml`` locally in a container). Once recorded, these
 tests read only the committed lines and need nothing running.
 
-The runner test (:func:`test_python_ref_on_sqlite_meets_the_reference_line`)
-runs ``run_python.py --mode python-ref --database sqlite`` on one case and
-holds its outcome to the committed ``@sqlite`` line: off DuckDB the
-reference side is python-ref's (the orchestrator's decision, T2.1a fix 4:
-until the core's providers land, a SQLite or Postgres job runs python-ref
-only, and python-old is refused there by name). The candidate's
-``sdm_client`` on its default routes stands in for the reference
-checkout's, as in ``contract/tests/test_runners.py``, so the test needs no
-reference checkout.
+The runner test, python-ref run on SQLite and held to the committed
+``@sqlite`` line, is ``contract/tests/test_t21a_python_ref_on_sqlite.py``:
+it needs the relational engine, which the contract jobs install and the
+root suite's ``test`` jobs do not.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNNER = ROOT / 'contract/runners/run_python.py'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
-#: A plain S1 case every database loads (int keys, a timestamp, a float).
-SMOKE = 'base.regression'
 
 
 def _reference() -> dict[str, dict[str, Any]]:
@@ -121,90 +110,3 @@ def test_the_capture_records_the_reference_s_statements_there(
         assert there['identity']['runner'] == 'python-ref'
         assert there['identity']['reference'] == bare['identity']['reference']
     assert short == []
-
-
-def test_python_ref_on_sqlite_meets_the_reference_line(
-    tmp_path: Path,
-) -> None:
-    r"""Exit: the reference side a SQLite job runs: python-ref over the
-    loaded SQLite database, its observation keyed ``<case>@sqlite`` and its
-    outcome the committed line's; python-old is refused there by name."""
-    reference = tmp_path / 'reference'
-    (reference / 'scripts').mkdir(parents=True)
-    (reference / 'scripts/reference_guard.py').write_text(
-        'def require_isolation():\n    pass\n'
-    )
-    # A clean checkout of one commit, whose SHA the identity records.
-    environment = {
-        **os.environ,
-        'GIT_AUTHOR_NAME': 'T',
-        'GIT_AUTHOR_EMAIL': 't@example.invalid',
-        'GIT_COMMITTER_NAME': 'T',
-        'GIT_COMMITTER_EMAIL': 't@example.invalid',
-    }
-    for command in (
-        ['init', '-q'],
-        ['add', '-A'],
-        ['commit', '-q', '--no-gpg-sign', '-m', 'the stand-in'],
-    ):
-        subprocess.run(
-            ['git', *command],
-            cwd=reference,
-            env=environment,
-            check=True,
-            capture_output=True,
-        )
-    out = tmp_path / 'python-ref.jsonl'
-    # The candidate's sdm_client stands in for the reference checkout's, so
-    # the check that it is the checkout's is replaced.
-    script = (
-        'import importlib.util, sys\n'
-        'spec = importlib.util.spec_from_file_location(\n'
-        f"    'run_python', {str(RUNNER)!r})\n"
-        'runner = importlib.util.module_from_spec(spec)\n'
-        'spec.loader.exec_module(runner)\n'
-        'runner._require_reference_client = lambda reference: None\n'
-        'sys.exit(runner.main([\n'
-        f"    '--mode', 'python-ref', '--reference', {str(reference)!r},\n"
-        f"    '--database', 'sqlite', '--out', {str(out)!r},\n"
-        f'    {str(ROOT / f"contract/cases/s1/{SMOKE}.json")!r},\n'
-        ']))\n'
-    )
-    done = subprocess.run(
-        [sys.executable, '-I', '-c', script],
-        cwd=ROOT,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    assert done.returncode == 0, done.stderr
-    [line] = map(json.loads, out.read_text().splitlines())
-    key = _key(SMOKE, 'sqlite')
-    assert line['case'] == key
-    assert line['identity']['runner'] == 'python-ref'
-    assert line['outcome'] == _reference()[key]['outcome']
-    assert _statements(line), 'python-ref read SQLite through the capture'
-
-    refused = subprocess.run(
-        [
-            sys.executable,
-            '-I',
-            str(RUNNER),
-            '--mode',
-            'python-old',
-            '--database',
-            'sqlite',
-            '--out',
-            str(tmp_path / 'python-old.jsonl'),
-            str(ROOT / f'contract/cases/s1/{SMOKE}.json'),
-        ],
-        cwd=ROOT,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=600,
-    )
-    assert refused.returncode == 1, refused.stdout + refused.stderr
-    assert 'python-old runs on DuckDB only' in refused.stderr
-    assert not (tmp_path / 'python-old.jsonl').exists()

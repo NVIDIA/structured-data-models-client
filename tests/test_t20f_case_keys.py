@@ -24,8 +24,10 @@ The ratchet: ``ratchet.py check`` on a real git history, built as
 two more landings on top, standing in for T2.1a's recordings:
 
 - ``recorded``: the reference holds ``X@sqlite`` and ``X@postgres`` lines
-  (copies of ``X``'s line, ``X`` an S0 acceptance case baselined on every
-  runner), and no baseline of them yet;
+  (copies of ``X``'s line in place of those T2.1a recorded, ``X`` an S0
+  acceptance case baselined on every runner), and no baseline of them yet;
+  a runner observes X on a database where a test says so, as a copy of
+  its X line (``observe`` replays the reference's DuckDB lines only);
 - ``held``: on top, every runner's baseline of ``X@sqlite`` and
   ``X@postgres``.
 
@@ -217,9 +219,10 @@ def _baseline_file(tree: Path, runner: str) -> Path:
 
 def _record_database_lines(tree: Path) -> None:
     r"""The reference's ``X@sqlite`` and ``X@postgres`` lines: copies of
-    ``X``'s, keyed by database."""
+    ``X``'s, keyed by database, in place of the lines T2.1a recorded for
+    them, so each database's baseline is a copy of ``X``'s."""
     path = _reference_file(tree)
-    lines = _jsonl(path)
+    lines = [x for x in _jsonl(path) if x['case'] not in (SQLITE, POSTGRES)]
     bare = next(x for x in lines if x['case'] == X)
     for key in (SQLITE, POSTGRES):
         added = copy.deepcopy(bare)
@@ -317,20 +320,41 @@ def _propose(
     return edit
 
 
+def _on_databases(
+    keys: tuple[str, ...],
+    then: Callable[[dict[str, Any]], None] | None = None,
+) -> Callable[[dict[str, Any]], None]:
+    r"""A runner's observations (``test_contract_ratchet.observe``, which
+    replays the reference's DuckDB lines only) with X observed under each
+    of ``keys`` too, as a copy of its X line (the reference's database
+    lines of X being copies of X's, :func:`_record_database_lines`); then
+    ``then``."""
+
+    def change(lines: dict[str, Any]) -> None:
+        for key in keys:
+            line = copy.deepcopy(lines[X])
+            line['case'] = key
+            lines[key] = line
+        if then is not None:
+            then(lines)
+
+    return change
+
+
 def _observe(
     tree: Path, tmp_path: Path, keep: tuple[str, ...]
 ) -> tuple[Path, ...]:
     r"""python-core's and python-old's observations, made from the
     reference's (``test_contract_ratchet.observe``), keeping of X's lines
     only ``keep``."""
-    mine = {X, SQLITE, POSTGRES} - set(keep)
+    on = tuple(key for key in (SQLITE, POSTGRES) if key in keep)
 
     def drop(lines: dict[str, Any]) -> None:
-        for key in mine:
-            lines.pop(key, None)
+        if X not in keep:
+            lines.pop(X)
 
     return tuple(
-        helpers.observe(tree, tmp_path, runner, drop)
+        helpers.observe(tree, tmp_path, runner, _on_databases(on, drop))
         for runner in ('python-core', 'python-old')
     )
 
@@ -561,7 +585,14 @@ def _moved_on_postgres(
     def moved(lines: dict[str, Any]) -> None:
         lines[POSTGRES]['outcome']['stage'] = 'predict'
 
-    files = (helpers.observe(held, tmp_path, 'python-old', moved),)
+    files = (
+        helpers.observe(
+            held,
+            tmp_path,
+            'python-old',
+            _on_databases((SQLITE, POSTGRES), moved),
+        ),
+    )
     commit(held, 'T2.0f: no entry')
     found = helpers.check(held, landed, files)
     assert found, 'an unapproved move of a database baseline passed'

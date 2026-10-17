@@ -188,7 +188,10 @@ def observe(
     files the checkpoint holds), so the unseeded observation is
     what that runner is held to wherever an admission has moved it from
     the reference (an approved transition, or python-old's recorded crash),
-    whichever cases are admitted."""
+    whichever cases are admitted. Only the reference's DuckDB lines (the
+    bare case IDs) are replayed: a runner's file is one database's run, and
+    the reference's ``<case>@sqlite`` and ``<case>@postgres`` lines
+    (T2.1a) are other runs', which a scenario about them adds itself."""
     # This checkout's, which the temporary repository's checkpoint copied:
     # a seed that edits or breaks the candidate's baseline files changes
     # nothing here.
@@ -205,6 +208,8 @@ def observe(
     }
     lines = {}
     for case, line in reference(repo).items():
+        if '@' in case:
+            continue
         line = copy.deepcopy(line)
         line['identity']['runner'] = runner
         line['identity']['reference'] = None
