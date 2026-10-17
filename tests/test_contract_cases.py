@@ -1220,6 +1220,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
             # From T1.11d, a prediction, for a case that predicts on the
             # core.
             predicted = None
+            refused = None
             if 'predict' in case['core']:
                 inputs.append(
                     {
@@ -1236,16 +1237,29 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 received = (observation.get('public') or {}).get(
                     'payloads'
                 ) or []
-                predicted = {
-                    'body': received[0]['parsed'] if received else {},
-                    'model': 'kumo-relational',
-                    'request_id': 'r1',
-                    'metadata': {},
-                    'result': {
-                        'columns': [{'name': 'ENTITY', 'type': 'int64'}],
-                        'rows': [[{'i64': '0'}]],
-                    },
-                }
+                outcome = observation['outcome']
+                if received:
+                    predicted = {
+                        'body': received[0]['parsed'],
+                        'model': 'kumo-relational',
+                        'request_id': 'r1',
+                        'metadata': {},
+                        'result': {
+                            'columns': [{'name': 'ENTITY', 'type': 'int64'}],
+                            'rows': [[{'i64': '0'}]],
+                        },
+                    }
+                elif outcome['result'] == 'refusal':
+                    # Refused at predict before any request was sent (T2.0c's
+                    # one-class comparisons): no prediction and no request,
+                    # the core's error the refusal's code, as a real
+                    # python-core run records it.
+                    refused = {
+                        'kind': outcome['code']
+                        .lower()
+                        .removesuffix('_request'),
+                        'code': outcome['code'],
+                    }
             # A query validated in place of materialize (from T1.32g:
             # refuse.unknown-column), answered as the call was.
             validated = None
@@ -1273,7 +1287,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 'described': described,
                 'materialized': materialized,
                 'predicted': predicted,
-                'error': None,
+                'error': refused,
             }
             return
         spec = case['core']['validate_query']
