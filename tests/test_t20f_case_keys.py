@@ -97,12 +97,6 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason='T2.0f: the <case>@<database> keys are not implemented yet',
-)
-
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
 #: The databases a key may name after ``@``; DuckDB's lines keep the bare
@@ -720,7 +714,6 @@ def _rerecord(drop: tuple[str, ...] = ()) -> Callable[[Path], None]:
     return edit
 
 
-@PENDING
 def test_an_approved_rerecord_drops_a_removed_case_s_database_lines(
     held: Path,
 ) -> None:

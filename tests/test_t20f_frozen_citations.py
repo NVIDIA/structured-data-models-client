@@ -47,12 +47,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: The marker the implementer deletes (see the module docstring).
-PENDING = pytest.mark.xfail(
-    strict=True,
-    reason='T2.0f: the frozen citing files are not implemented yet',
-)
-
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
 #: The ratchet's frozen list: ``ratchet.FROZEN``, each frozen file's path
@@ -128,7 +122,6 @@ def _twin(repo: Path) -> str:
     return checkpoint
 
 
-@PENDING
 def test_the_frozen_files_keep_the_old_sha_after_an_approved_rerecord(
     repo: Path,
 ) -> None:
@@ -137,7 +130,6 @@ def test_the_frozen_files_keep_the_old_sha_after_an_approved_rerecord(
     _twin(repo)
 
 
-@PENDING
 @pytest.mark.parametrize('left', [TABLE_FILE, PROSE_FILE])
 def test_any_other_file_left_at_the_old_sha_is_refused_by_name(
     repo: Path, left: str
@@ -158,7 +150,6 @@ def test_any_other_file_left_at_the_old_sha_is_refused_by_name(
     assert not any(name in p for p in found for name in FROZEN_FILES), found
 
 
-@PENDING
 def test_the_frozen_list_is_the_two_goldens_each_with_a_reason() -> None:
     r"""The frozen list is exactly the decision's two files, each with a
     reason, each in this checkout, none in the citation table the
@@ -171,7 +162,6 @@ def test_the_frozen_list_is_the_two_goldens_each_with_a_reason() -> None:
     assert not set(frozen) & set(ratchet.CITATIONS)
 
 
-@PENDING
 def test_the_frozen_list_can_t_hide_a_file_the_consistency_tests_read(
     repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

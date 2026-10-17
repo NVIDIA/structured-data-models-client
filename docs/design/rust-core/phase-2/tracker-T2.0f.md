@@ -6,7 +6,7 @@ The design branch owns `tracker.md`; this file holds T2.0f's section until it fo
 
 T2.0f teaches the gate Phase 2's locked set, adds the `main` step that holds locked check 7, and teaches the harness the `<case>@sqlite` and `<case>@postgres` keys.
 It changes judging paths (`gate.sh`, `compare.py`, `ratchet.py`, the observation schema), so it lands alone, with two reviewers, after T2.0e and before T2.0a.
-Base: T2.0's landing 292f8d8a on `rust-core-phase-2`.
+Base: T2.0's landing 292f8d8a on `rust-core-phase-2`, then T2.0e (aa0d927c) for the rebase (fix 2).
 Design: the T2.0f row, architecture choice 2 and "Locked acceptance checks" on `origin/rust-core-phase-2-design` at dce97ec9.
 
 ### What changed, by exit
@@ -59,9 +59,10 @@ Design: the T2.0f row, architecture choice 2 and "Locked acceptance checks" on `
 
 ### Tests and probes
 
-- Acceptance tests (the test author's): `tests/test_t20f_case_keys.py` and `contract/tests/test_t20f_gate.py`.
+- Acceptance tests (the test author's): `tests/test_t20f_case_keys.py` (20), `contract/tests/test_t20f_gate.py` (26) and `tests/test_t20f_frozen_citations.py` (5).
   The gate tests run a real `gate.sh`, which needs the built native core, so they run in the core's `contract-python` job.
-  All 38 pass, with the `PENDING` marker and its uses removed in the commit that implements them.
+  After the rebase onto T2.0e, all 51 pass with no `PENDING` mark left, and so do the 5 implementer seeds below.
+  T2.0e's own 94 tests pass unchanged.
 - The implementer's seeded faults:
   - `contract/tests/test_t20f_main_seeds.py` (beside the gate tests, for the same reason): a `reference-env.txt` with no reference line, and a reference commit missing from the clone, each fail the `main` step and check 7 by name.
   - `tests/test_t20f_key_seeds.py`: a baseline keyed `@oracle`, a baseline of no case, and a reference line whose key is an integer each fail `check_keys` by name, while the twin passes.
@@ -81,7 +82,18 @@ Design: the T2.0f row, architecture choice 2 and "Locked acceptance checks" on `
   - `check_reference` guards a key that is not a string.
   - The test author's round 1 seeds (4d8a4a42, 09508907, cherry-picked unchanged) cover each of these. They are: an ambiguous reference field; a `ci` check with no patterns; the `accept`-then-`check` round trip; the ratchet's suggested entry approving an `@postgres` baseline move; and an entry in the same form approving a changed `@postgres` reference line.
   - The test author's re-recording test stays gated until the rebase onto T2.0e's landing.
-    There, T2.0e's `check_new_reference` also reads the case part of a removed key.
+- Fix 2 (the rebase onto T2.0e at aa0d927c, after round 2's two APPROVEs on 4285b3de):
+  - T2.0f's commits are cherry-picked onto the test author's branch, which is built on T2.0e.
+    The one conflict is in `check()`. `check_keys(report, candidate)` now runs right after T2.0e's `check_reference(..., decisions)` call.
+  - T2.0e's `check_new_reference` reads the case part of a removed key (`case_of`), so a re-recording approved by the owner may drop a removed case's database lines.
+    The test author's re-recording test passes, and its last `PENDING` mark is removed.
+  - `ratchet.FROZEN` (the orchestrator's decision) holds exactly the two T1.32g goldens, `tests/golden/t132g-fixture-cases/python-ref.jsonl` and `tests/golden/t132g-later-stage/python-ref.jsonl`, each with its reason.
+    They are snapshots of one gate run, and they keep naming the reference they were recorded at.
+    They are out of `CITATIONS` and exempt from the rule that no file outside `docs/` keeps the old SHA.
+    Frozen means exempt from those reference rules only, not immutable.
+    A file listed in `CITATIONS` is checked there whatever `FROZEN` says.
+    The test author's `tests/test_t20f_frozen_citations.py` passes, with its `PENDING` marks removed.
+  - Round 2's P3s: `register.py`'s module docstring now says an outcome names a line's key, and the test counts here are updated.
 
 ### Deviations and notes
 

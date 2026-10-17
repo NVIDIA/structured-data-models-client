@@ -19,8 +19,10 @@ It holds the file, as ``--root``'s tree has it, to:
   so an entry is never deleted, and a withdrawn one is ``rejected``;
 - ``cases`` that resolve: a case of the corpus (``contract/cases``), or the
   legacy form of an entry written before it, a task ID (``T1.7c``) or a
-  Phase 1b inventory case ID; ``case_outcomes`` name corpus cases only, but
-  for a case they record as ``removed``;
+  Phase 1b inventory case ID; each of ``case_outcomes`` names a line's key
+  (``X``, or ``X@sqlite`` and ``X@postgres`` on another database, T2.0f)
+  whose case part is a corpus case, but for a case it records as
+  ``removed``;
 - each ``decision_ref`` a row of the decisions file it names;
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;

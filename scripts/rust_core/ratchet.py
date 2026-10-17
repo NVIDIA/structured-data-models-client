@@ -159,8 +159,9 @@ package that re-records. Then, each named when it fails: the file is exactly
 ``contract/reference/<NEW>.jsonl``, which the gate reads; ``NEW`` is no
 recorded reference's name; it is the only file added, and the only one left
 (the old one removed); ``contract/reference-env.txt`` names ``NEW`` in its
-one ``reference:`` line; no file outside ``docs/`` (history) and
-``contract/reference/`` cites the old SHA in full; each file
+one ``reference:`` line; no file outside ``docs/`` (history),
+``contract/reference/`` and the frozen snapshots (:data:`FROZEN`) cites the
+old SHA in full; each file
 :data:`CITATIONS` lists, the files and fields the reference SHA consistency
 tests read, is there, is not empty, parses as JSON (each line of a
 JSON-lines file), and its listed field equals ``NEW`` (on every line of a
@@ -1457,17 +1458,23 @@ CITATIONS: dict[str, tuple[str, ...]] = {
     'packages/structured-data-models-client/tests/t128b-predict-result.json': (
         'reference',
     ),
+}
+
+#: Citing files frozen as historical snapshots (the orchestrator's decision
+#: at T2.0f's rebase onto T2.0e), each with its reason: they keep naming
+#: the reference they were recorded at when the reference moves. Frozen is
+#: exempt from the reference rules only (out of :data:`CITATIONS`, and from
+#: the rule that no file outside ``docs/`` keeps the old SHA), not
+#: immutable; a file :data:`CITATIONS` lists is checked there whatever
+#: this says.
+FROZEN: dict[str, str] = {
     'tests/golden/t132g-fixture-cases/python-ref.jsonl': (
-        'identity',
-        'reference',
-        'commit',
-        'sha',
+        "a snapshot of one gate run's reference lines (T1.32g's fixture "
+        'cases), as recorded at the reference it was taken from'
     ),
     'tests/golden/t132g-later-stage/python-ref.jsonl': (
-        'identity',
-        'reference',
-        'commit',
-        'sha',
+        "a snapshot of one gate run's reference lines (T1.32g's later "
+        'stage), as recorded at the reference it was taken from'
     ),
 }
 
@@ -1596,7 +1603,7 @@ def check_new_reference(
         # A file outside the table that cited the old SHA (provenance prose)
         # names the new one now, never a third commit in its place.
         for name in citing(checkpoint, old):
-            if name in CITATIONS or name == ENV:
+            if name in CITATIONS or name == ENV or name in FROZEN:
                 continue
             text = candidate.read(name)
             if text is not None and new not in text:
@@ -1606,6 +1613,8 @@ def check_new_reference(
                     f'does not name the new one {new}',
                 )
         for name in citing(candidate, old):
+            if name in FROZEN and name not in CITATIONS:
+                continue
             report.fail(
                 'reference',
                 f'{name}: still cites the recorded reference {old[:12]}; every '
@@ -1643,7 +1652,7 @@ def check_new_reference(
     recorded = reference_lines(checkpoint)
     for case, line in sorted(recorded.items(), key=lambda item: str(item[0])):
         if case not in lines:
-            if case not in removed:
+            if not isinstance(case, str) or case_of(case) not in removed:
                 report.fail(
                     'reference',
                     f'{case}: its line removed: the new recording carries '
