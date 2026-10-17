@@ -29,6 +29,7 @@ Two commits of T2.2's (the runner's and comparator's database route, and the com
 - The client suites (`tests`, `tests_test_ops`) 2,839 passed with a Postgres server named.
 - Name resolution, with `search_path = public, other`: a view is read on both routes, a table only in `other` is read on the core and refused on the old route (P2B-15), a name nowhere is refused `INVALID_REQUEST` on both.
 - The replay's reader, outside JSON: 100,000 nested arrays are refused by name (serde_json's depth limit), an object of 300,000 members is read.
+- The refusal census on Postgres (`evidence/census/postgres.json`), run with the census's `route` forcing each probe's routes on Postgres (`run_python.on_database`, a one-line local change the census needs as the runner did, not committed here): 71 probes, 25 departing sites, DuckDB's 23 of E92's class and two more, `rule:text_time` (P2B-19's class) and `rule:seed_size`, a seed past 2**64 - 1 (P2B-14, owner-pending, KO2-28).
 - The rows-to-Arrow path: 200,000 rows of five columns, psycopg's read 0.6 to 0.7 s, the provider's whole read 0.9 to 2.0 s (`phase-1/dependencies.md`).
 - The old route's from_source on Postgres crashed with `AttributeError` (`TimeColumnChoice.instead_of`) only in a venv holding a stale build of the PQL package; with the lane's packages it runs, and the S0 cases on Postgres pass.
 
@@ -39,4 +40,6 @@ Two commits of T2.2's (the runner's and comparator's database route, and the com
 - rust-host's Postgres lines carry no `driver` section, since no statement runs, and `compare.py`'s SQL rules ask one of every runner; a judging change (the SQL rules do not apply to a replay).
 - The recording rust-host replays is 4.9 MB for all 86 cases; where it lives (a protected fixture the recorder makes, or a CI artifact of the Postgres `contract-python` job) is T2.3b's and the orchestrator's choice.
 - H24's common-input comparison and its control moved to T2.1c (orchestrator); the first wave's Postgres legs (T2.17, T2.18, T2.8c, T2.19) are those packages'.
-- Register IDs P2B-15 to P2B-19 are taken from the top of lane B's block, which T2.2 shares; the orchestrator renumbers if they meet.
+- The census's `route` forces each probe's DuckDB routes, as the runner did before T2.2's fix; the same one-line mapping is needed there (a judging change, T2.2's owner or the orchestrator's).
+- `sdm-testkit`'s `t136_forecast` (`a_forecast_of_many_steps_is_refused_at_once`, then a two-second limit) failed once at 3.6 s with the machine's load at about 25 and passed alone; the base's 763b1b50 (T2.1b's tests) bounds it by its own run instead.
+- Register IDs P2B-14 to P2B-19 are taken from the top of lane B's block, which T2.2 shares; the orchestrator renumbers if they meet.
