@@ -1,0 +1,580 @@
+{
+ "format": "sdm-sqlite-regression-vectors/1",
+ "recorded_by": "contract/tools/sqlite_regressions_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13"
+ },
+ "query": "PREDICT users.age FOR EACH users.id",
+ "scenarios": {
+  "seeds-table": {
+   "setup": [
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, age REAL)",
+    "INSERT INTO users VALUES (101, 10), (102, 20), (103, 30), (104, 40), (105, 50), (106, 60)",
+    "CREATE TEMP TABLE __sdm_seeds__ (important TEXT)",
+    "INSERT INTO temp.__sdm_seeds__ VALUES ('keep me')"
+   ],
+   "indices": [
+    101
+   ],
+   "temp_table": "__sdm_seeds__",
+   "reference": {
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ]
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "id": {
+           "dtype": "int64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          102,
+          20.0
+         ],
+         [
+          1,
+          106,
+          60.0
+         ],
+         [
+          2,
+          105,
+          50.0
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           0,
+           102
+          ],
+          [
+           1,
+           106
+          ],
+          [
+           2,
+           105
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0"
+        ],
+        "rows": [
+         [
+          3,
+          101
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           3,
+           101
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT users.age FOR EACH users.id",
+       "num_context_examples": 3,
+       "num_prediction_examples": 1
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "code": null
+    },
+    "temp_after": {
+     "columns": [
+      "important"
+     ],
+     "rows": [
+      [
+       "keep me"
+      ]
+     ]
+    }
+   }
+  },
+  "float-keys": {
+   "setup": [
+    "CREATE TABLE users (id INT PRIMARY KEY, age REAL)",
+    "INSERT INTO users VALUES (101.5, 10), (102.5, 20), (103.5, 30), (104.5, 40), (105.5, 50), (106.5, 60), (107.5, 70)"
+   ],
+   "indices": [
+    101.5
+   ],
+   "reference": {
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ]
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "float64",
+          "stype": "ID"
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "id": {
+           "dtype": "float64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          102.5,
+          20.0
+         ],
+         [
+          1,
+          106.5,
+          60.0
+         ],
+         [
+          2,
+          107.5,
+          70.0
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           0,
+           102.5
+          ],
+          [
+           1,
+           106.5
+          ],
+          [
+           2,
+           107.5
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0"
+        ],
+        "rows": [
+         [
+          3,
+          101.5
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           3,
+           101.5
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT users.age FOR EACH users.id",
+       "num_context_examples": 3,
+       "num_prediction_examples": 1
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "code": null
+    }
+   }
+  },
+  "null-key": {
+   "setup": [
+    "CREATE TABLE users (id INT PRIMARY KEY, age REAL)",
+    "INSERT INTO users VALUES (NULL, 99), (101, 10), (102, 20), (103, 30), (104, 40), (105, 50), (106, 60)"
+   ],
+   "indices": [
+    101
+   ],
+   "reference": {
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ]
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "id": {
+           "dtype": "int64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          102,
+          20.0
+         ],
+         [
+          1,
+          106,
+          60.0
+         ],
+         [
+          2,
+          105,
+          50.0
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           0,
+           102
+          ],
+          [
+           1,
+           106
+          ],
+          [
+           2,
+           105
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0"
+        ],
+        "rows": [
+         [
+          3,
+          101
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           3,
+           101
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT users.age FOR EACH users.id",
+       "num_context_examples": 3,
+       "num_prediction_examples": 1
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "code": null
+    }
+   }
+  }
+ }
+}
