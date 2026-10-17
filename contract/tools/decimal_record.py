@@ -991,6 +991,10 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
         ['instance_table', 'TARGET'],
         ['orders', 'amount'],
     ],
+    'decimal.target-regression-collide': [
+        ['instance_table', 'TARGET'],
+        ['orders', 'amount'],
+    ],
 }
 
 
