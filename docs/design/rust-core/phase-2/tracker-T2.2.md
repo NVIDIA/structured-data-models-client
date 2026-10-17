@@ -22,7 +22,7 @@ By the orchestrator's scope change the first wave's SQLite legs (T2.17, T2.18, T
 - **Contract v26's working entry** gains `IndexAdvice::LeadingColumn` (the reference's SQLite rule: each table's indexes read one at a time, any index whose first column is the read's serves it, a foreign key with its table's time column wanted) and `DescribePart::IndexColumns` (an index's columns by its name, SQLite's `index_info`); the schema and lock regenerated, v25 untouched.
 - **The catalog read** (Rust-internal types): `CatalogColumn.unique` (SQLite's rowid alias, which no index lists), `CatalogColumn.dtype` (a declared type's data type, used only for a column holding no value, which SQLite's driver types as integers), `CatalogKey.index` and `IndexColumns::Named` (read by name).
   The core reads a key's or index's columns by name in the reference's order, and `infer::preview` takes a rowid alias as unique.
-- **Answers in SQLite's shape**: the key counts' position and the time bounds' position of either integer width; the time bounds' text read by the provider's declared reading (DT-7's list).
+- **Answers in SQLite's shape**: the key counts' position and the time bounds' position of either integer width; the time bounds' text read by the provider's declared reading (DT-7's list); a fetched time column holding no value read as no time, whatever type the driver gave it.
 - **U12**: one `seed_integer` in `sdm-contract`, used by the core's seed check and both dialects; the duplicates in `compose.rs` and `duckdb.rs` are gone.
 - **The Python host**: `sdm_client._rust.providers.sqlite.SqliteProvider(connection)` over ADBC, the driver's Arrow handed over unconverted; each bridge's `_provider` picks the provider and dialect by the source's backend; the routing seam's SQLite paths (`_routing.FROM_SOURCE`, `MATERIALIZE`, `PREDICT` by backend, `on_the_core`), forced as DuckDB's are; the bridge changes declared (`bridge_changes.json`, baseline rewritten).
 - **rust-host**: `sdm-testkit/src/sqlite.rs`, the dev-only `rusqlite` provider typing every answer as ADBC's SQLite driver does (inference over the first 1,024 rows, its promotions and its failures) and binding key sets as ADBC ingests them; `sdm-contract-run --database sqlite`, each case loaded by the one contract loader through `contract/tools/load_case.py` (the Python `SDM_PYTHON` names) and keyed `<case>@sqlite`; `PROVIDERS` lists `sqlite` in both hosts.
@@ -40,7 +40,8 @@ By the orchestrator's scope change the first wave's SQLite legs (T2.17, T2.18, T
 ### Differences (register, proposed)
 
 - P2B-10: `empty.fact-table` on SQLite, P1B-11's named refusal (E66, reviewer).
-- P2B-11: `time.text-us-date` and `time.text-one-bad-value` on SQLite, DT-15's and DT-16's readings (E68); `time.text-us-date` is a refusal of an input the reference answers on SQLite, so the owner's.
+- P2B-11: `time.text-one-bad-value` on SQLite, DT-15's named refusal (E68), UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST.
+- `time.text-us-date` on SQLite is now answered as the reference answers it: its refusal was no reading of DT-16 but an empty windowed fetch, whose columns SQLite's driver types as integers, read as no time column (`time_type`); the core now reads a column holding no value as holding no time.
 - P2B-12: `key.uint64-above-int64-max` and the vectors `wide.ubigint.*`: a right join where the reference fails INTERNAL_ERROR (KO2-11 class (a), reviewer).
 - P2B-13: `time.feature-time-of-day` on SQLite answers where the reference reads a bare time as today's and refuses (owner).
 - P2B-14: `time.feature-interval` on SQLite describes its INTERVAL text as text where the reference takes `INT` from the declared name (owner).
