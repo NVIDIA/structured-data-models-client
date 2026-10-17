@@ -1,16 +1,11 @@
 {
  "about": "T2.2's acceptance tests that failed when the test author wrote them, before the implementation (contract/tests/test_t22_sqlite.py as py:<test>, sdm-testkit's tests/t22_sqlite.rs as rust:<test>). Each listed test must still fail (strict); the implementer takes a name out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": [
-  "py:test_the_core_reports_a_sqlite_provider",
   "py:test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does",
   "py:test_every_statement_python_core_ran_on_sqlite_is_a_golden",
   "py:test_each_key_pair_on_sqlite_is_the_reference_s_on_python_core",
-  "rust:the_test_host_and_the_core_report_a_sqlite_provider",
   "rust:rust_host_runs_every_s1_case_on_sqlite",
-  "rust:every_statement_rust_host_ran_on_sqlite_is_a_golden",
-  "rust:each_key_pair_on_sqlite_is_the_reference_s_on_rust_host",
-  "rust:each_relation_form_sqlite_takes_reads_the_table_its_parts_name",
-  "rust:a_relation_of_no_part_or_of_three_is_refused_by_name_on_sqlite"
+  "rust:each_key_pair_on_sqlite_is_the_reference_s_on_rust_host"
  ],
  "authored": [
   "py:test_the_core_reports_a_sqlite_provider",
