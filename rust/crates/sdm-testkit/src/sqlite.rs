@@ -32,7 +32,7 @@
 //! an unsigned integer past `int64`, is refused as ADBC refuses it.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -96,6 +96,9 @@ pub fn load(repository: &Path, case_file: &Path, out: &Path) -> Result<()> {
 pub struct Sqlite {
     connection: rusqlite::Connection,
     ran: RefCell<Vec<String>>,
+    /// The key-set tables this provider made on the connection: only these
+    /// are ever replaced, as the Python host's provider replaces only its own.
+    made: RefCell<BTreeSet<String>>,
 }
 
 impl Sqlite {
@@ -105,6 +108,7 @@ impl Sqlite {
             connection: rusqlite::Connection::open(path)
                 .with_context(|| format!("opening {}", path.display()))?,
             ran: RefCell::new(Vec::new()),
+            made: RefCell::new(BTreeSet::new()),
         })
     }
 
@@ -113,6 +117,7 @@ impl Sqlite {
         Ok(Sqlite {
             connection: rusqlite::Connection::open_in_memory()?,
             ran: RefCell::new(Vec::new()),
+            made: RefCell::new(BTreeSet::new()),
         })
     }
 
@@ -166,7 +171,10 @@ impl Sqlite {
                     None => {}
                 }
                 let fetched = keys.get(&set.attachment).ok_or_else(failed)?;
-                let sql = ingest(&self.connection, relation, fetched).map_err(|_| failed())?;
+                let mine = self.made.borrow().contains(relation);
+                let sql =
+                    ingest(&self.connection, relation, fetched, mine).map_err(|_| failed())?;
+                self.made.borrow_mut().insert(relation.clone());
                 self.ran.borrow_mut().push(sql.clone());
                 log.bound(handle, relation, &sql, &fetched.schema, &fetched.batches);
             }
@@ -221,9 +229,16 @@ fn declared(data_type: &DataType) -> Result<&'static str> {
     })
 }
 
-/// `keys` bound as the temporary table `name`, replaced: the statement
-/// that created it, as the record names a binding by.
-fn ingest(connection: &rusqlite::Connection, name: &str, keys: &Fetched) -> Result<String> {
+/// `keys` bound as the temporary table `name`, created, or replaced where
+/// it is `mine` (one this provider made): the statement that created it,
+/// as the record names a binding by. A table of that name it did not make
+/// fails the creation and is left as it was.
+fn ingest(
+    connection: &rusqlite::Connection,
+    name: &str,
+    keys: &Fetched,
+    mine: bool,
+) -> Result<String> {
     let table = format!("temp.{}", quoted(name));
     let columns = keys
         .schema
@@ -243,7 +258,9 @@ fn ingest(connection: &rusqlite::Connection, name: &str, keys: &Fetched) -> Resu
         quoted(name),
         columns.join(", ")
     );
-    connection.execute_batch(&format!("DROP TABLE IF EXISTS {table}"))?;
+    if mine {
+        connection.execute_batch(&format!("DROP TABLE IF EXISTS {table}"))?;
+    }
     connection.execute_batch(&create)?;
     let batch = concat_batches(&keys.schema, &keys.batches)?;
     let marks = vec!["?"; batch.num_columns()].join(", ");
@@ -510,6 +527,98 @@ fn read(connection: &rusqlite::Connection, sql: &str) -> Result<Fetched> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A key set's table never replaces a relation the provider did not
+    /// make: a caller's own temporary table of the key set's name fails the
+    /// fetch and holds its row after; the provider's own table is made, and
+    /// replaced on the next fetch.
+    #[test]
+    fn a_key_set_never_replaces_a_relation_the_provider_did_not_make() {
+        use sdm_contract::data::{DataRequest, Dialect, ProviderChoice};
+        use sdm_contract::run::ReplyId;
+
+        let source = Sqlite::in_memory().unwrap();
+        let connection = source.connection();
+        connection
+            .execute_batch(
+                "CREATE TABLE users (id INTEGER PRIMARY KEY, age REAL);
+                 INSERT INTO users VALUES (101, 10), (102, 20);",
+            )
+            .unwrap();
+        let request: DataRequest = serde_json::from_str(
+            r#"{"request": "lookup", "table": {"source": ["users"]}, "key": ["id"],
+                "columns": ["age"], "seeds": {"attachment": 0, "columns": [
+                  {"name": "key", "nullable": true, "type": {"type": "int64"}},
+                  {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}}"#,
+        )
+        .unwrap();
+        let sqlite = ProviderChoice::Sql {
+            dialect: Dialect::new("sqlite"),
+        };
+        let plan = sdm_host::default_root()
+            .data_access(&sqlite)
+            .unwrap()
+            .plan(&request)
+            .unwrap();
+        let FetchPlan::Sql { statements, .. } = &plan else {
+            panic!("not SQL");
+        };
+        let [SqlParam::KeySet { relation, .. }] = &statements[0].params[..] else {
+            panic!("no key set");
+        };
+        let relation = relation.clone();
+        let step = FetchStep {
+            id: ReplyId(1),
+            request,
+            plan,
+            continuation: None,
+        };
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("key", DataType::Int64, true),
+            Field::new("batch", DataType::Int64, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            Arc::clone(&schema),
+            vec![
+                Arc::new(Int64Array::from(vec![101])),
+                Arc::new(Int64Array::from(vec![0])),
+            ],
+        )
+        .unwrap();
+        let keys = BTreeMap::from([(
+            AttachmentId(0),
+            Fetched {
+                schema,
+                batches: vec![batch],
+            },
+        )]);
+        let theirs = quoted(&relation);
+        connection
+            .execute_batch(&format!(
+                "CREATE TEMP TABLE {theirs} (important TEXT);
+                 INSERT INTO temp.{theirs} VALUES ('keep me');"
+            ))
+            .unwrap();
+        let answer =
+            |source: &Sqlite| source.answer_logged(&step, &keys, &mut DriverLog::default());
+        assert!(answer(&source).is_err());
+        let kept: String = connection
+            .query_row(&format!("SELECT * FROM temp.{theirs}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(kept, "keep me");
+        connection
+            .execute_batch(&format!("DROP TABLE temp.{theirs}"))
+            .unwrap();
+        for _ in 0..2 {
+            let fetched = answer(&source).unwrap();
+            assert_eq!(
+                fetched.batches.iter().map(|b| b.num_rows()).sum::<usize>(),
+                1
+            );
+        }
+    }
 
     #[test]
     fn instants_and_dates_are_written_as_adbc_writes_them() {
