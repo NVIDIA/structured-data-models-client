@@ -24,6 +24,7 @@ import subprocess
 import sys
 import textwrap
 import warnings
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -1430,7 +1431,8 @@ def test_the_host_drops_a_state_on_the_core_s_word_not_the_field_it_names(
 
 #: A decimal average whose sum would not fit DECIMAL(38, 18) (T1.27's fix
 #: round 2): two prices of 6e19 for user 1 in the window, one earlier order
-#: bounding the data. The reference averages them; the sum it refuses.
+#: bounding the data. The reference averages them; the sum it refused at
+#: b413e9ad and answers since main's eb6c68eb (6298913c).
 DECIMAL_AVERAGE = (
     'CREATE TABLE users (user_id BIGINT PRIMARY KEY)',
     'INSERT INTO users SELECT i FROM range(4) t(i)',
@@ -1446,6 +1448,25 @@ DECIMAL_AVERAGE = (
 DECIMAL_AVERAGE_REFERENCE = [
     [0, 1, '2024-02-01T00:00:00.000000Z', 6.000000208206194e19]
 ]
+
+
+def _float32_once(exact: Fraction) -> float:
+    r"""The float32 nearest ``exact``, ties to even: one rounding, never
+    through a float64 first."""
+    import numpy as np
+
+    first = np.float32(float(exact))
+    candidates = {
+        first,
+        np.nextafter(first, np.float32(np.inf)),
+        np.nextafter(first, np.float32(-np.inf)),
+    }
+
+    def key(c: Any) -> tuple[Fraction, int]:
+        bits = int(np.array(c, dtype=np.float32).view(np.uint32))
+        return (abs(Fraction(float(c)) - exact), bits & 1)
+
+    return float(min(candidates, key=key))
 
 
 def _decimal_average(query: str) -> Any:
@@ -1465,25 +1486,35 @@ def test_a_decimal_average_past_38_digits_is_not_the_caller_s_error(
 ) -> None:
     average = 'PREDICT AVG(orders.price, 0, 1, months) FOR EACH users.user_id'
     total = 'PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id'
+
+    def rows_of(query: str) -> list[list[Any]]:
+        request = _decimal_average(query)
+        rows = request._payloads[0]['context']['instance_table']['rows']
+        return json.loads(json.dumps(rows))
+
+    six = 60_000_000_000_000_000_000
+    old = None
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         # The old route is the reference's: the average taken, as recorded,
-        # and the sum refused as the caller's error.
-        request = _decimal_average(average)
-        rows = request._payloads[0]['context']['instance_table']['rows']
-        assert json.loads(json.dumps(rows)) == DECIMAL_AVERAGE_REFERENCE
-        with pytest.raises(StructuredDataError) as refused:
-            _decimal_average(total)
-        assert refused.value.code == 'INVALID_REQUEST'
+        # and since main's eb6c68eb the sum answered too.
+        assert rows_of(average) == DECIMAL_AVERAGE_REFERENCE
+        old = rows_of(total)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    # On the core a decimal's average is the reference's (T1.32b), its
-    # total past 38 digits not the caller's error.
-    request = _decimal_average(average)
-    rows = request._payloads[0]['context']['instance_table']['rows']
-    assert json.loads(json.dumps(rows)) == DECIMAL_AVERAGE_REFERENCE
-    # The sum is the caller's error on both routes.
-    with pytest.raises(StructuredDataError) as refused:
-        _decimal_average(total)
-    assert refused.value.code == 'INVALID_REQUEST'
+    # On the core (exact decimals, T2.0c) neither is the caller's error:
+    # the average is the exact mean, 6e19, and user 1's sum the exact
+    # 1.2e20 though it passes DECIMAL(38, 18), each rounded once to
+    # float32; every other example's sum is 0.
+    assert rows_of(average) == [
+        [0, 1, '2024-02-01T00:00:00.000000Z', _float32_once(Fraction(six))]
+    ]
+    summed = rows_of(total)
+    labels = {(row[1], row[2]): row[3] for row in summed}
+    assert labels.pop((1, '2024-02-01T00:00:00.000000Z')) == _float32_once(
+        Fraction(2 * six)
+    )
+    assert labels and set(labels.values()) == {0.0}, labels
+    if old is not None:
+        assert summed == old
 
 
 #: Decimal sums whose running total passes 38 digits (or ``i128``) and
@@ -1715,12 +1746,14 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
-    for options in ({'indices': list(range(1_001))}, {'num_hops': 7}):
-        old = _refusal_of(**options)
-        assert (type(old), old.code) == (
-            StructuredDataError,
-            'UNSUPPORTED_REQUEST',
-        ), options
+    old = _refusal_of(num_hops=7)
+    assert (type(old), old.code) == (StructuredDataError, 'UNSUPPORTED_REQUEST')
+    # Since main's 1fc5a686 (the reference at 6298913c) the old route has no
+    # 1,000-entity limit: it refuses these 1,001 indices for another reason
+    # (the shop has 8 users), INVALID_REQUEST, where the core's limit
+    # refuses them first (register P2B-3, until T2.8c).
+    old = _refusal_of(indices=list(range(1_001)))
+    assert (type(old), old.code) == (StructuredDataError, 'INVALID_REQUEST')
 
 
 def test_an_average_compared_with_null_is_refused_by_name_register_p1b_21(
