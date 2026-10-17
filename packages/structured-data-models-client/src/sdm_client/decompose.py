@@ -143,6 +143,44 @@ def _ended(message: Any) -> str:
     return text if not text or text[-1] in '.!?' else f'{text}.'
 
 
+def refuse_a_part_that_would_take_several_calls(
+    rewritten: Decomposition, asked: int, per_call: int
+) -> None:
+    r"""Refuse a question asked in parts over more rows than one call scores.
+
+    A part is one call. The guard above counts parts on that basis, so a
+    batched part would make the parts times the batches: a ranking over 200
+    candidates and 50,000 entities passes as 200 calls and sends 1,000.
+
+    A ranking could not be batched in any case. Each batch samples its own
+    context, and a batch whose context holds one class leaves the candidate
+    out of every row rather than out of its own, because a candidate is
+    reported unscored for the whole ranking.
+
+    Checked before anything is gathered, from the count the caller gave, so a
+    refusal costs nothing and arrives before the ceilings that are about what
+    gathering holds.
+    """
+    if per_call <= 0 or asked <= per_call:
+        return
+    each = 'candidate' if rewritten.kind == RANKING else 'step'
+    why = (
+        'and a candidate is reported unscored for the whole ranking, so one '
+        'cold batch would drop it from every row rather than from its own'
+        if rewritten.kind == RANKING
+        else 'and the calls would be the batches times the steps rather than '
+        'the steps that were counted'
+    )
+    raise StructuredDataError(
+        f'{asked:,} entities are more than the {per_call:,} one call scores, '
+        f'and this question is asked as {len(rewritten.parts):,} of them, one '
+        f'per {each}. A part is not batched, {why}. Ask about fewer entities '
+        f'at a time',
+        code='UNSUPPORTED_REQUEST',
+        details={'entities': asked, 'rows_per_call': per_call},
+    )
+
+
 def about_the_part(
     error: StructuredDataError, rewritten: Decomposition, about: Any
 ) -> StructuredDataError:

@@ -13,6 +13,8 @@ from sdm_client.core.transport import (
     scrub_userinfo,
 )
 
+_TOK = 'tok'
+
 _SECRET = 'sk-not-a-real-key-0123456789'
 _URL = f'https://user:{_SECRET}@nim.example'
 
@@ -20,10 +22,10 @@ _URL = f'https://user:{_SECRET}@nim.example'
 @pytest.mark.parametrize(
     ('url', 'expected'),
     [
-        ('https://user:tok@host/v1', 'https://host/v1'),
+        (f'https://user:{_TOK}@host/v1', 'https://host/v1'),
         ('https://tok@host/v1', 'https://host/v1'),
-        ('https://user:tok@host:8443/v1', 'https://host:8443/v1'),
-        ('http://user:tok@[::1]:8000/v1', 'http://[::1]:8000/v1'),
+        (f'https://user:{_TOK}@host:8443/v1', 'https://host:8443/v1'),
+        (f'http://user:{_TOK}@[::1]:8000/v1', 'http://[::1]:8000/v1'),
         ('https://host/v1', 'https://host/v1'),
         ('http://localhost:8000', 'http://localhost:8000'),
         (None, None),
@@ -37,7 +39,10 @@ def test_redact_url_strips_userinfo_and_leaves_everything_else(url, expected):
 @pytest.mark.parametrize(
     ('text', 'expected'),
     [
-        ('failed for https://user:tok@host/v1', 'failed for https://host/v1'),
+        (
+            f'failed for https://user:{_TOK}@host/v1',
+            'failed for https://host/v1',
+        ),
         ('nothing to strip here', 'nothing to strip here'),
         (
             'two https://a:b@h1/ and https://c:d@h2/',

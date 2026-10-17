@@ -262,6 +262,9 @@ class TimeColumnChoice:
         unconfirmed: Every column the rows read would refuse for its values
             but that was kept, because the query over every row failed,
             each with what the rows read say.
+        instead_of: The columns derived from :attr:`column`, such as its
+            truncation to a month, that it was taken in place of. Set by a
+            caller that offered the column it derives from instead.
     """
 
     column: str | None
@@ -270,6 +273,7 @@ class TimeColumnChoice:
     refused: tuple[RejectedTimeColumn, ...]
     fallback: str | None = None
     unconfirmed: tuple[RejectedTimeColumn, ...] = ()
+    instead_of: tuple[str, ...] = ()
 
     @property
     def rejected(self) -> tuple[RejectedTimeColumn, ...]:

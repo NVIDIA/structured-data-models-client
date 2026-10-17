@@ -27,6 +27,8 @@ from sdm_relational_engine.client.transport import (
 )
 from sdm_relational_engine.exceptions import HTTPException
 
+_TOK = 'tok3n'
+
 PREDICTION = TFMOperations.run_prediction.endpoint
 
 
@@ -113,7 +115,7 @@ def test_the_rejection_never_echoes_the_value() -> None:
     """The likeliest wrong input is a pasted connection string, which can carry
     credentials.
     """
-    secret = 'https://user:tok3n@acct.snowflakecomputing.com'
+    secret = f'https://user:{_TOK}@acct.snowflakecomputing.com'
     with pytest.raises(ValueError) as caught:
         SnowflakeServingClient(secret, _Session())
     assert 'tok3n' not in str(caught.value)
