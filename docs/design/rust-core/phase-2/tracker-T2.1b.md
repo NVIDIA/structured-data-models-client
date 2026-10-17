@@ -34,7 +34,7 @@ All plain data, as a Python or Java host builds it (KO2-46).
 - `neighbors.key` and `lookup.key` are lists of column names; the seed key set holds `key` for a key of one column and `key_1` to `key_<n>` for several (`seed_key_columns`), and DuckDB joins each column to its seed column by the one-column rule, joined by `AND`.
 - `ProviderCapabilities.max_seed` is a required integer, never null; DuckDB declares 2**31 - 1.
   A seed past what a `u64` holds is now always RS-7's refusal: the `seed_size` refusal it took under a provider declaring no limit is unreachable.
-- Paging: `FetchOutcome::Data.continuation` (optional, opaque text) says more pages follow; the core asks again with `FetchStep.continuation` until a page comes without one, and the body reads the pages as one answer (`sdm-core`'s `Ask`); a page of another schema than the pages before ends the run, `PROVIDER_SCHEMA_MISMATCH`, check `pages`; a later page's provider error is the fetch's.
+- Paging: `FetchOutcome::Data.continuation` (optional, opaque text) says more pages follow; the core asks again with `FetchStep.continuation` until a page comes without one, and the body reads the pages as one answer (`sdm-core`'s `Ask`); each page is held to the request's expected schema as it arrives (`Run::submit_fetch`), as an answer of one page is, so a null where the request takes none is `PROVIDER_SCHEMA_MISMATCH`, check `expected`, on whichever page holds it; a page of another schema than the pages before ends the run, `PROVIDER_SCHEMA_MISMATCH`, check `pages`; a later page's provider error is the fetch's.
 - Fallback limits: `ProviderCapabilities.fallback` (`{max_rows, max_bytes}`, optional); T2.6 reads it, and until then an undeclared optional request is still refused, `UNSUPPORTED_REQUEST`.
 - Multi-call `predict`: `RequestState.batches` (each later call's `payload`, `rows` and `request_id`), `Materialize.most_entities` and `most_calls` (`main`'s `MOST_ENTITIES` and `MOST_CALLS`), `rows_per_call` among the call's values, and `CoreError.answered` (`{result, rows}`: an Arrow attachment of the answers received, `main`'s `answered` and `rows_answered`).
   T2.8c reads them; until then `predict` refuses a state with `batches` by name (`UNSUPPORTED_REQUEST`, field `state.batches`) and the core writes no `answered`.
@@ -42,7 +42,7 @@ All plain data, as a Python or Java host builds it (KO2-46).
 - `REQUEST_STATE_VERSION` is 2, `StatePayload`'s `x-request-state-version` with it; a version 1 state is refused by name.
 - The relation's part count is the dialect's: `sdm-data` renders every `FROM` through `relation` (`lib.rs`), DuckDB taking 1 to 3 parts; SQLite (1 or 2) and Postgres (1 or 2) declare theirs with their dialects (T2.2, T2.3).
   A relation of no part is `INVALID_REQUEST` and one of more parts `UNSUPPORTED_REQUEST`, both rule `relation`, with `parts` and `most`; `describe_source` refuses a relation of no part itself, whatever the provider.
-- DuckDB reads a relation of several parts' catalog where it resolves the name: `PRAGMA table_info("main"."t")` for its columns, and for its keys, foreign keys and the table list the catalog rows of its database, schema and table, two parts `[x, t]` as DuckDB reads `x.t` (schema `x` of the current database, else database `x`'s `main`).
+- DuckDB reads a relation of several parts' catalog where it resolves the name: `PRAGMA table_info("main"."t")` for its columns, and for its keys, foreign keys and the table list the catalog rows of its database, schema and table, two parts `[x, t]` as DuckDB reads `x.t` (schema `x` of the current database, else database `x`'s `main`), each part and each catalog name compared as DuckDB compares identifiers, its ASCII letters lowered (`duckdb.rs` `fold`), so `["S", "u"]` reads the catalog of the table `["s", "u"]` names; a relation of one part keeps the reference's text comparison of the table's name (its `DuckDBTable` at 6298913c), so its statements are unchanged.
   A foreign key's or an index's one table name matches only a relation of one part, so a relation of several parts takes no declared link and no index advice (Phase 2's hosts give one part).
 
 ### M1, M2, M3
@@ -57,6 +57,9 @@ All plain data, as a Python or Java host builds it (KO2-46).
 `TableKey.table` and `TableColumn.table` became relations, against the brief's decision that they name schema tables and stay strings.
 The code says otherwise: the core fills both with the table's source (`sdm-core/src/describe.rs` `count_keys`, `sdm-core/src/materialize.rs` `read_bounds`), and DuckDB renders each as the `FROM` of `key_counts` and `time_bounds`.
 Kept as strings, those two requests could not name a relation of several parts, and would bypass the one `FROM` function.
+
+`c011db08` edited a test author's fixture: nine request literals of `rust/crates/sdm-data/tests/decimal_family.rs`, written by T2.0c's `tests` commits and merged from `main`, rewritten in v26's request shape (each `table` a relation, each `lookup` and `neighbors` key a list).
+It is a shape migration only, outside the standing rule's pending-marker exception: `git show --stat c011db08` is 9 insertions and 9 deletions, every changed line one of those request literals, so each pinned SQL statement is byte for byte the one T2.0c's test author wrote, and the test still holds the core to it.
 
 ### Protected and judging paths touched
 
@@ -89,3 +92,9 @@ Its census (`contract/refusal-census.json`) will meet this package's new refusal
 - No route changes: the statements the core renders on the public route are byte for byte v25's (the golden), so no differential was rerun.
 - Outside JSON: no new reader; a relation and a continuation are read by the existing bounded readers. Probed through the native module: a `source` nested 100,000 levels deep and a relation object with 100,000 extra keys are each refused `INVALID_MESSAGE`, and a relation of 100,000 parts is refused `UNSUPPORTED_REQUEST`, rule `relation`, `parts` 100000; none crashes.
 - The census (T2.0d, not on this base) will meet the new rule `relation`; its probe is the provider-level one the design names.
+
+### Fix round 1
+
+The round 1 review found: pages after the first bypassed the expected-schema check (fixed in `Run::submit_fetch`, one check for a page and a whole answer); DuckDB's catalog reads of a relation of several parts compared names in their exact case (fixed with DuckDB's fold, measured on DuckDB 1.5.6: database, schema and table names fold ASCII letters only, `"É"` is not `"é"`); the three AdventureWorks cases' input migration had no register entry (P2A-1, the owner's KO2-39, shape only, no outcome moves); and `c011db08`'s fixture edit, recorded above.
+The reference reads no schema-qualified name (`'s.u'` is a catalog error there) and compares its one-part name's constraints case-sensitively (`'U'` loses the primary key of `u`), so a relation of several parts resolved in any case, as DuckDB resolves it, is better than the reference, not a difference from it, and no S1 case is affected; a relation of one part still renders the reference's statements.
+The test author's regression tests: `rust/bindings/sdm-py/tests/test_paged_schema.py` (the first, a middle and the only page) and `tests/test_t21b_contract_v26.py` (database, schema and table name case, and `s."q""t"` under a qualifier of another case).
