@@ -1,0 +1,142 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.key-wide",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "decimal128/primary-key",
+    "decimal128/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000",
+      "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        "10000000000000000000000000",
+        "10000000000000000000000001",
+        "10000000000000000000000002",
+        "10000000000000000000000003",
+        "10000000000000000000000004",
+        "10000000000000000000000005",
+        "10000000000000000000000006",
+        "10000000000000000000000007"
+      ],
+      "indices_as": "decimal",
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000000"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000001"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000002"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000003"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000004"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000005"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000006"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000007"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c: task regression, 112 context examples; the labels: {\"number\": \"0.0\"}, {\"number\": \"100.0\"}, {\"number\": \"11.5\"}, {\"number\": \"13.0\"}, {\"number\": \"14.5\"}, {\"number\": \"16.0\"}, {\"number\": \"17.5\"}, {\"number\": \"19.0\"}, {\"number\": \"20.5\"}, {\"number\": \"22.0\"}, {\"number\": \"23.5\"}, {\"number\": \"25.0\"}, {\"number\": \"26.5\"}, {\"number\": \"28.0\"}, {\"number\": \"29.5\"}, {\"number\": \"31.0\"}, {\"number\": \"32.5\"}, {\"number\": \"34.0\"}, {\"number\": \"35.5\"}, {\"number\": \"37.0\"}, {\"number\": \"38.5\"}, {\"number\": \"40.0\"}, {\"number\": \"41.5\"}, {\"number\": \"43.0\"}, {\"number\": \"44.5\"}, {\"number\": \"46.0\"}, {\"number\": \"47.5\"}, {\"number\": \"49.0\"}, {\"number\": \"50.5\"}, {\"number\": \"52.0\"}, {\"number\": \"53.5\"}, {\"number\": \"55.0\"}, {\"number\": \"56.5\"}, {\"number\": \"58.0\"}, {\"number\": \"59.5\"}, {\"number\": \"61.0\"}, {\"number\": \"62.5\"}, {\"number\": \"64.0\"}, {\"number\": \"65.5\"}, {\"number\": \"67.0\"}, {\"number\": \"68.5\"}, {\"number\": \"70.0\"}, {\"number\": \"71.5\"}, {\"number\": \"73.0\"}, {\"number\": \"74.5\"}, {\"number\": \"76.0\"}, {\"number\": \"77.5\"}, {\"number\": \"79.0\"}, {\"number\": \"80.5\"}, {\"number\": \"82.0\"}, {\"number\": \"83.5\"}, {\"number\": \"85.0\"}, {\"number\": \"86.5\"}, {\"number\": \"88.0\"}, {\"number\": \"89.5\"}, {\"number\": \"91.0\"}, {\"number\": \"92.5\"}, {\"number\": \"94.0\"}, {\"number\": \"95.5\"}, {\"number\": \"97.0\"}, {\"number\": \"98.5\"}; each id reaches the payload as its exact digits, as text, the eight distinct"
+  },
+  "why": "A DECIMAL(38, 0) key past int64 (10000000000000000000000000 to ...007), predicted for each id: neighbours a float64 reading merges",
+  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+}

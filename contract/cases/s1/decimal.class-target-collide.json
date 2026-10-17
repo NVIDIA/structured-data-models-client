@@ -1,0 +1,89 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.class-target-collide",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "client.predict/multiclass/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "decimal",
+  "cells": [
+    "decimal128/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id % 2 = 0 THEN 0.000000100000000000 ELSE 0.000000100000000001 END::DECIMAL(38, 18) AS t FROM users"
+    ],
+    "pql": "PREDICT users.t FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "today": "recorded at the reference 6298913c: refused UNSUPPORTED_REQUEST at predict; the reference is wrong here: materialize gathers a multiclass_classification with the single class 1.0000000116860974e-07 (measured), the two values read as one, which predict refuses; exact decimals keep the two classes and answer, an improvement to register"
+  },
+  "why": "Two DECIMAL(38, 18) classes 1e-18 apart, which a float64 reading collapses into one",
+  "source": "T2.0c exact decimals (KO2-50), the merger's request"
+}
