@@ -65,8 +65,8 @@ After it, from this side:
 ### Exact decimals
 
 The owner moved T2.17's exact decimals into T2.0c on 2026-10-17 (KO2-35, KO2-50): the core answers every decimal input the reference at `6298913c` answers, stays exact and never merges distinct keys.
-- A decimal sum past its column's 38 digits, or past `i128`, is summed exactly in 256 bits and read once at float32, and a mean is exact whatever its total (`sdm-engine` `labels.rs`, `ExactSum`).
-- A decimal target is read as the reference reads it: int64 at scale 0 where every value fits, float32 otherwise, and where two distinct values meet at one float32 each keeps its own digits, so no two values become one class (`decimal_target`).
+- A decimal sum, mean, minimum or maximum is exact at any size (a sum past the column's 38 digits or past `i128` summed in 256 bits) and rounded once to the nearest float32 (`sdm-engine` `labels.rs`, `ExactSum`, `exact_to_f32`; fix 1).
+- A decimal target is int64 at scale 0 where every value fits; otherwise a regression's values are numbers, each rounded once to the nearest float32, and a classification's classes are spelled as the reference spells them, where two distinct values meeting at one float32 keep their own digits, so no two values become one class (`decimal_target`, `label_classes`; fix 2).
 - A decimal column is compared with a constant exactly, at no scale but their own: the constant is the decimal the query wrote, the shortest decimal naming its double (the orchestrator's confirmed reading, so `d = 0.1` holds on `DECIMAL(38,18)`), a constant past the column's digits orders by its sign, an infinite one past every value (`decimal_order`; `d > 1.5` holds for d = 2, KO2-50).
 - A decimal feature is sent as the nearest double to its exact value (`sdm-request` `decimal_float`), where it was refused when a double did not hold it.
 - A null decimal key beside values is kept, as the reference keeps its integer twin's (`sdm-core` `subgraph.rs`); P1B-40's option (b) stays for text keys.
@@ -82,7 +82,8 @@ The owner moved T2.17's exact decimals into T2.0c on 2026-10-17 (KO2-35, KO2-50)
 | P2B-2 | python-core refuses a column named with a dot, backtick or line break, which the reference leaves out (until T2.18) | KO2-45, the owner's (temporary) |
 | P2B-3 | The core refuses 1,001 to 10,000 entities (until T2.8c) | KO2-45 (temporary) |
 | P2B-4 | The core refuses `rows_per_call` (until T2.8c) | KO2-45 (temporary) |
-| P2B-7 | python-old answers the four decimal cases as the reference does, by `main`'s `eb6c68eb` | proposed, for the reviewers |
+| P2B-7 | python-old answers the four decimal cases as the reference does, by `main`'s `eb6c68eb` | both reviewers, round 1 |
+| P2B-9 | On the core route a forecast failing at a step carries no answered steps (until T2.8c) | proposed, for the reviewers |
 | P2B-8 | An entity that names no key of a decimal key's type exactly is refused by name, where the reference rounds it onto a key (four key-cast vectors) | the owner's, 2026-10-17 ("keep refusing"; its decisions row to come) |
 
 P2B-5 and P2B-6 (decimal null keys, `d > 1.5`), temporary entries never landed, are gone with the fix.
@@ -97,10 +98,8 @@ P1B-18's and P1B-53's refusal of `decimal.class-target-38-18` no longer exists, 
 
 ### `dates.json` and the reference rule
 
-`rust/crates/sdm-pql/tests/dates.json` stays the macOS recording at `b413e9ad` (the recorder's choice: a Linux recording loses the padded-year rows two `dates.rs` tests need, and the reference's date reading does not move with `main`).
-No test holds its `source` to `contract/reference-env.txt`: `dates.rs` reads only its rows, and `tests/test_contract_reference.py` reads `contract/reference/`, so the tests pass.
-T2.0e's reference rule (lane a `f59f0d61`, `ratchet.py` `check_reference`) fails every file outside `docs/` and `contract/reference/` that cites the old SHA in full: `dates.json`, and also the two ratchet fixtures `tests/golden/t132g-fixture-cases/python-ref.jsonl` and `tests/golden/t132g-later-stage/python-ref.jsonl`, which the recorder did not re-record.
-The lightest honest routes, for the owner: a one-command macOS run of `dates_record.py` at `6298913c` (the rows equal, only the source line moves), or a named exemption in T2.0e's rule for recordings whose reading `main` did not move, listed by path; the two golden fixtures need the same choice (re-recorded, or exempt as ratchet fixtures that hold no reference identity).
+`rust/crates/sdm-pql/tests/dates.json` is the Linux recording at `6298913c` (the recorder's 3b7b3e9b): the owner made this machine the reference machine, so Linux's unpadded `%Y` is the reference's behaviour, and the two `dates.rs` tests that rested on the padded rows were adapted by the test author.
+The two ratchet fixtures `tests/golden/t132g-fixture-cases/python-ref.jsonl` and `tests/golden/t132g-later-stage/python-ref.jsonl` are in T2.0e's `FROZEN` list (`ratchet.py`), so the reference rule does not hold them to the new reference.
 
 ### `int64.float.2pow63` on Linux
 
@@ -110,10 +109,11 @@ CI runs on Linux x86_64, as the recording was made.
 
 ### Tests run
 
-- `cargo test --workspace`: all pass but the vector tests resting on the old reference's decimal and 1,001-entity refusals (listed under Waiting).
-- `contract/tests` in the `ref-pandas3` cell: 3835 passed, 167 failed before the last fixes; each remaining failure is listed under Waiting.
-- The CI `test` job's suites: 4123 passed; the failures were the 26ecdd28 recordings (now re-recorded), `engine-wheels`' timeout and the bytes test (fixed), and two environment-only ones (`SDM_PHASE_BRANCH` exported here; a sibling contract checkout).
-- `scripts/rust_core/selftest.py`: the bridge freeze's controls pass once the freeze passes on the tree (after T2.0e fix 3).
+At `T2.0c fix 2`, on this machine (the `ref-pandas3` cell for the Python suites):
+- `sdm-engine`'s label unit tests (13), with one test per round-1 arithmetic finding, and `sdm-testkit`'s `t132a_key_cast`, `t132b_decimal_vectors`, `labels`, `duckdb_provider`, `refusal_map` and `t136_forecast` pass; `t132b_decimal_sql` waits on the test author (the family's pinned case list).
+- `contract/tests/test_t132a_key_cast.py`, `test_t132b_decimal_vectors.py` and `test_refusal_map.py` pass; `test_t136_refusal_codes.py` and the decimal family's pinned tests wait on the test author.
+- The gate against T2.0a's landing: see Waiting.
+- Each decimal SUM, AVG, MIN and MAX label is its exact value rounded once to the nearest float32 (`exact_to_f32`); a decimal regression target's values likewise; a classification's classes are spelled as the reference spells them.
 
 ### Waiting
 

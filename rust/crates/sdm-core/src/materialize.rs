@@ -883,10 +883,10 @@ fn unsigned(array: &ArrayRef) -> Result<Vec<Option<i64>>, CoreError> {
 
 /// A static target's values at `rows` of `array`, the entity rows sampled,
 /// as the executor reads them: a float at float32, an integer at int64,
-/// a boolean, text, a decimal exactly (which only a condition compares,
-/// `labels::label` refusing it as a target, P1B-18); a time or any other
-/// type is refused by name (`target_type`): the reference's task table
-/// takes none of them.
+/// a boolean, text, a decimal exactly (compared exactly in a condition,
+/// read as a target by `labels::label` and `labels::label_classes`,
+/// T2.0c); a time or any other type is refused by name (`target_type`):
+/// the reference's task table takes none of them.
 fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
     use labels::Column;
     let taken = take(array, rows)?;
@@ -2054,7 +2054,13 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     }
     .target(&asked.target, aggregated.as_ref())
     .await?;
-    let labelled = labels::label(&target)?;
+    // A classification keeps a decimal column's distinct values apart as
+    // classes; any other task reads them as numbers (T2.0c, round 1).
+    let labelled = if matches!(asked.task, Task::Multiclass) {
+        labels::label_classes(&target)?
+    } else {
+        labels::label(&target)?
+    };
     null_compared(&asked.target, &labelled.mask)?;
     // The examples with a label, in order, the first a context holds.
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
