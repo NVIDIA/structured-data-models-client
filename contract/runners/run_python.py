@@ -81,12 +81,21 @@ SCHEMAS = {
     'observation': CONTRACT / 'observation.schema.json',
 }
 MODES = ('python-ref', 'python-core', 'python-old')
+
+#: A cell's earlier pins, still that cell of ``CELLS``: the floor's before
+#: T2.0c moved it to pandas 2.2.2 and NumPy 1.23.5 (KO2-37). The phase
+#: branch's ci.yml installs these until that landing, so the floor job
+#: records its cell on either side of it.
+EARLIER_PINS = {
+    ('3.10', '2.2.0', '14.0.1', '1.26.4'): 'floor-pandas2.2',
+}
+
 #: The runtime cells (design, "Runtime cells"): Python, pandas, pyarrow and
 #: NumPy versions. An environment with exactly one's versions is that cell.
 CELLS = {
     'ref-pandas3': ('3.12', '3.0.6', '25.0.1', '2.5.3'),
     'dbr17-pandas2': ('3.12', '2.2.3', '19.0.1', '2.1.3'),
-    'floor-pandas2.2': ('3.10', '2.2.0', '14.0.1', '1.26.4'),
+    'floor-pandas2.2': ('3.10', '2.2.2', '14.0.1', '1.23.5'),
 }
 
 
@@ -360,7 +369,10 @@ def _cell(versions: dict[str, str]) -> str | None:
         versions.get('pyarrow'),
         versions.get('numpy'),
     )
-    return next((name for name, want in CELLS.items() if want == have), None)
+    return next(
+        (name for name, want in CELLS.items() if want == have),
+        EARLIER_PINS.get(have),
+    )
 
 
 def _environment() -> str:
