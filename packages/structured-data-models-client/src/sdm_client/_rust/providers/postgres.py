@@ -32,8 +32,8 @@ by the type's name in the driver's registry, never by its number (a type
 the registry does not name, a user's composite or enum, is read as text,
 which is how the driver reads it); the values are the driver's, converted
 by pyarrow. Where the driver's value would lose what the server holds, the
-column is read as the server writes it instead: ``json`` and ``jsonb`` as
-their text, and an ``interval`` from its text, months, days and
+column is read another way: ``json`` and ``jsonb`` as the reference's text
+of the value (compact JSON), and an ``interval`` from its text, months, days and
 microseconds kept apart (``month_day_nano_interval``, each value pyarrow's
 ``MonthDayNano``). A ``timestamptz`` is built as the instant in UTC,
 whatever the session's zone.
@@ -91,8 +91,8 @@ _TEXT = frozenset(
     }
 )
 
-#: The types read as the server's own text, not the driver's value.
-_SERVER_TEXT = ('json', 'jsonb')
+#: The types read as the reference's text of their value (:func:`json_text`).
+_JSON = ('json', 'jsonb')
 
 
 class PlanNotRun(Exception):
@@ -169,11 +169,15 @@ def _psycopg_text(text: str) -> str:
 
 
 def _read_as_the_server_writes(cursor: Any) -> None:
-    r"""The cursor's loaders for the types read as the server writes them,
-    on this cursor alone: ``json`` and ``jsonb`` as their text, and
-    ``interval`` as its months, days and nanoseconds (:func:`interval`)."""
+    r"""The cursor's loaders for the types read as the reference reads them,
+    on this cursor alone: ``json`` and ``jsonb`` as the reference's text of
+    the value (:func:`json_text`), and ``interval`` as its months, days and
+    nanoseconds (:func:`interval`)."""
     from psycopg.adapt import Loader
-    from psycopg.types.string import TextLoader
+
+    class _Json(Loader):
+        def load(self, data: Any) -> Any:
+            return json_text(json.loads(bytes(data)))
 
     class _Interval(Loader):
         def load(self, data: Any) -> Any:
@@ -182,9 +186,21 @@ def _read_as_the_server_writes(cursor: Any) -> None:
             return pa.MonthDayNano(interval(bytes(data).decode()))
 
     adapters = cursor.adapters
-    for name in _SERVER_TEXT:
-        adapters.register_loader(name, TextLoader)
+    for name in _JSON:
+        adapters.register_loader(name, _Json)
     adapters.register_loader('interval', _Interval)
+
+
+def json_text(value: Any) -> str | None:
+    r"""A ``json`` or ``jsonb`` value as the reference writes it
+    (``_sanitize_postgres_frame``'s ``stringify``): an object or array as
+    compact JSON, ASCII only, a JSON null as a null, and any other value as
+    Python's text of it."""
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, separators=(',', ':'))
+    return str(value)
 
 
 #: The units of an interval's text in Postgres's default style, as months
