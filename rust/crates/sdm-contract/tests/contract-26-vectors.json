@@ -1,0 +1,764 @@
+{
+ "format": "sdm-contract-vectors/1",
+ "contract": 26,
+ "about": "Accept and refuse vectors of contract v26's table source (T2.1b; design choices 1 and 12): Relation { source: Vec<String> } in place of each data request's table string and each schema table's source string, and multi-column keys in neighbors and lookup. Each vector names the $defs definition it is an instance of. Both loaders read them: the Python one (tests/test_t21b_contract_v26.py) validates each against sdm-contract-26.json, and the Rust one (sdm-contract's tests) deserializes each into the type of that name, an accepted one round-tripping to an equal value. A vector marked v25 is a v25 message, valid under sdm-contract-25.json, which v26 no longer reads (host and core ship together, decision H25). How many parts a dialect takes is the dialect's to refuse by name (rule relation), not the contract's, so no vector here holds a relation of no part or of more than three.",
+ "accept": [
+  {
+   "name": "scan reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "scan",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   }
+  },
+  {
+   "name": "preview reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "preview",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "columns": [
+     "user_id"
+    ],
+    "limit": 1000
+   }
+  },
+  {
+   "name": "count_rows reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "count_rows",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "filters": []
+   }
+  },
+  {
+   "name": "column_ranges reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "column_ranges",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "columns": [
+     "ts"
+    ]
+   }
+  },
+  {
+   "name": "repeated_key reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "repeated_key",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "key": [
+     "user_id"
+    ]
+   }
+  },
+  {
+   "name": "sample_entities reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "sample_entities",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "key": [
+     "user_id"
+    ],
+    "n": 10000,
+    "seed": {
+     "t": "i64",
+     "v": "42"
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [
+     {
+      "filter": "not_null",
+      "column": "user_id"
+     }
+    ]
+   }
+  },
+  {
+   "name": "neighbors reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "neighbors",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "key": [
+     "user_id"
+    ],
+    "columns": [
+     "order_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    },
+    "window": null,
+    "per_seed": null,
+    "order": null
+   }
+  },
+  {
+   "name": "lookup reads a one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "lookup",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "key": [
+     "user_id"
+    ],
+    "columns": [
+     "user_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "scan of a dotted one-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "scan",
+    "table": {
+     "source": [
+      "a.b"
+     ]
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   }
+  },
+  {
+   "name": "scan of a two-part relation",
+   "definition": "DataRequest",
+   "value": {
+    "request": "scan",
+    "table": {
+     "source": [
+      "main",
+      "users"
+     ]
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   }
+  },
+  {
+   "name": "neighbors on a two-column key",
+   "definition": "DataRequest",
+   "value": {
+    "request": "neighbors",
+    "table": {
+     "source": [
+      "orders"
+     ]
+    },
+    "key": [
+     "shop_id",
+     "user_id"
+    ],
+    "columns": [
+     "order_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    },
+    "window": null,
+    "per_seed": null,
+    "order": null
+   }
+  },
+  {
+   "name": "lookup on a two-column key",
+   "definition": "DataRequest",
+   "value": {
+    "request": "lookup",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "key": [
+     "shop_id",
+     "user_id"
+    ],
+    "columns": [
+     "user_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a relation of one dotted part",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     "a.b"
+    ]
+   }
+  },
+  {
+   "name": "a relation of a part holding a double quote",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     "say \"hi\""
+    ]
+   }
+  },
+  {
+   "name": "a relation of three parts",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     "memory",
+     "main",
+     "users"
+    ]
+   }
+  },
+  {
+   "name": "a schema table named for its source",
+   "definition": "NamedTable",
+   "value": {
+    "name": "orders",
+    "source": {
+     "source": [
+      "a.b"
+     ]
+    }
+   }
+  },
+  {
+   "name": "a source spec naming one table's source",
+   "definition": "SourceSpec",
+   "value": {
+    "tables": [
+     {
+      "name": "orders",
+      "source": {
+       "source": [
+        "a.b"
+       ]
+      }
+     }
+    ],
+    "primary_keys": {},
+    "time_columns": {}
+   }
+  },
+  {
+   "name": "a described table over a dotted source",
+   "definition": "DescribedTable",
+   "value": {
+    "name": "orders",
+    "source": {
+     "source": [
+      "a.b"
+     ]
+    },
+    "columns": [],
+    "primary_key": [],
+    "time_column": null,
+    "time_column_inferred": null,
+    "duplicate_keys": null
+   }
+  },
+  {
+   "name": "a held table over a dotted source",
+   "definition": "HeldTable",
+   "value": {
+    "name": "orders",
+    "source": {
+     "source": [
+      "a.b"
+     ]
+    },
+    "columns": [],
+    "primary_key": [],
+    "time_column": null
+   }
+  }
+ ],
+ "refuse": [
+  {
+   "name": "scan naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "scan",
+    "table": "users",
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   }
+  },
+  {
+   "name": "preview naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "preview",
+    "table": "users",
+    "columns": [
+     "user_id"
+    ],
+    "limit": 1000
+   }
+  },
+  {
+   "name": "count_rows naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "count_rows",
+    "table": "users",
+    "filters": []
+   }
+  },
+  {
+   "name": "column_ranges naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "column_ranges",
+    "table": "users",
+    "columns": [
+     "ts"
+    ]
+   }
+  },
+  {
+   "name": "repeated_key naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "repeated_key",
+    "table": "users",
+    "key": [
+     "user_id"
+    ]
+   }
+  },
+  {
+   "name": "sample_entities naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "sample_entities",
+    "table": "users",
+    "key": [
+     "user_id"
+    ],
+    "n": 10000,
+    "seed": {
+     "t": "i64",
+     "v": "42"
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [
+     {
+      "filter": "not_null",
+      "column": "user_id"
+     }
+    ]
+   }
+  },
+  {
+   "name": "neighbors naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "neighbors",
+    "table": "users",
+    "key": "user_id",
+    "columns": [
+     "order_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    },
+    "window": null,
+    "per_seed": null,
+    "order": null
+   }
+  },
+  {
+   "name": "lookup naming its table as v25's string",
+   "definition": "DataRequest",
+   "v25": true,
+   "value": {
+    "request": "lookup",
+    "table": "users",
+    "key": "user_id",
+    "columns": [
+     "user_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a relation whose source is one string, never split",
+   "definition": "Relation",
+   "value": {
+    "source": "a.b"
+   }
+  },
+  {
+   "name": "a relation with a part that is not text",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     "main",
+     1
+    ]
+   }
+  },
+  {
+   "name": "a relation with a null part",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     null
+    ]
+   }
+  },
+  {
+   "name": "a relation with no source field",
+   "definition": "Relation",
+   "value": {}
+  },
+  {
+   "name": "a relation with a row filter (Phase 3 adds it)",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     "t"
+    ],
+    "filter": "x > 1"
+   }
+  },
+  {
+   "name": "a relation with columns (Phase 3 adds them)",
+   "definition": "Relation",
+   "value": {
+    "source": [
+     "t"
+    ],
+    "columns": []
+   }
+  },
+  {
+   "name": "a relation as a bare list",
+   "definition": "Relation",
+   "value": [
+    "t"
+   ]
+  },
+  {
+   "name": "scan of a relation whose source is one string",
+   "definition": "DataRequest",
+   "value": {
+    "request": "scan",
+    "table": {
+     "source": "a.b"
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   }
+  },
+  {
+   "name": "scan of a relation with an unknown field",
+   "definition": "DataRequest",
+   "value": {
+    "request": "scan",
+    "table": {
+     "source": [
+      "t"
+     ],
+     "schema": "main"
+    },
+    "columns": [
+     "user_id"
+    ],
+    "filters": [],
+    "limit": null
+   }
+  },
+  {
+   "name": "neighbors on v25's single-string key",
+   "definition": "DataRequest",
+   "value": {
+    "request": "neighbors",
+    "table": {
+     "source": [
+      "orders"
+     ]
+    },
+    "key": "user_id",
+    "columns": [
+     "order_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    },
+    "window": null,
+    "per_seed": null,
+    "order": null
+   }
+  },
+  {
+   "name": "lookup on v25's single-string key",
+   "definition": "DataRequest",
+   "value": {
+    "request": "lookup",
+    "table": {
+     "source": [
+      "users"
+     ]
+    },
+    "key": "user_id",
+    "columns": [
+     "user_id"
+    ],
+    "seeds": {
+     "attachment": 1,
+     "columns": [
+      {
+       "name": "key",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": true
+      },
+      {
+       "name": "batch",
+       "type": {
+        "type": "int64"
+       },
+       "nullable": false
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "a schema table naming its source as v25's string",
+   "definition": "NamedTable",
+   "v25": true,
+   "value": {
+    "name": "orders",
+    "source": "a.b"
+   }
+  },
+  {
+   "name": "a source spec naming a source as v25's string",
+   "definition": "SourceSpec",
+   "v25": true,
+   "value": {
+    "tables": [
+     {
+      "name": "orders",
+      "source": "a.b"
+     }
+    ],
+    "primary_keys": {},
+    "time_columns": {}
+   }
+  },
+  {
+   "name": "a described table naming its source as v25's string",
+   "definition": "DescribedTable",
+   "v25": true,
+   "value": {
+    "name": "orders",
+    "source": "a.b",
+    "columns": [],
+    "primary_key": [],
+    "time_column": null,
+    "time_column_inferred": null,
+    "duplicate_keys": null
+   }
+  },
+  {
+   "name": "a held table naming its source as v25's string",
+   "definition": "HeldTable",
+   "v25": true,
+   "value": {
+    "name": "orders",
+    "source": "a.b",
+    "columns": [],
+    "primary_key": [],
+    "time_column": null
+   }
+  }
+ ]
+}
