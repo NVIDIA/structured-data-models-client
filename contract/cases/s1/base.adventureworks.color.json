@@ -115,19 +115,35 @@
         "tables": [
           {
             "name": "customers",
-            "source": "adventureworks_customers"
+            "source": {
+              "source": [
+                "adventureworks_customers"
+              ]
+            }
           },
           {
             "name": "products",
-            "source": "adventureworks_products"
+            "source": {
+              "source": [
+                "adventureworks_products"
+              ]
+            }
           },
           {
             "name": "sales_order_headers",
-            "source": "adventureworks_sales_order_headers"
+            "source": {
+              "source": [
+                "adventureworks_sales_order_headers"
+              ]
+            }
           },
           {
             "name": "sales_order_details",
-            "source": "adventureworks_sales_order_details"
+            "source": {
+              "source": [
+                "adventureworks_sales_order_details"
+              ]
+            }
           }
         ],
         "primary_keys": {
