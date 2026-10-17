@@ -6208,37 +6208,35 @@ entries:
     against python-ref's committed empty.fact-table line.
 
 - id: P2B-11
-  title: On SQLite, text times outside the core's list or with their order of day and month open are refused by name, as DT-15 and DT-16 refuse them
+  title: On SQLite, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
   kind: change
   old_behavior: >-
     Over SQLite, where a time is stored as text and no CAST reads it, the
-    reference reads a text time column value by value with pandas:
-    time.text-us-date's 01/01/2023 month first, answered; time.text-one-bad-
-    value's unreadable value refused INVALID_REQUEST at materialize.
+    reference reads a text time column value by value with pandas, and
+    refuses time.text-one-bad-value's unreadable value at materialize,
+    INVALID_REQUEST.
   new_behavior: >-
     The core reads SQLite's stored text by its fixed list of formats
-    (DT-7's capability, the readings of DT-15 and DT-16): an order of day
-    and month the values leave open is refused, UNSUPPORTED_REQUEST rule
-    text_time_order (DT-16), and a value outside the list UNSUPPORTED_REQUEST
-    rule text_time (DT-15), at materialize; python-core and rust-host
-    alike. Over DuckDB the reference fails both on its own CAST (DT-12).
+    (DT-7's capability, DT-15's reading): the value outside the list is
+    refused at materialize, UNSUPPORTED_REQUEST rule text_time;
+    python-core and rust-host alike. Over DuckDB the reference fails on
+    its own CAST (DT-12).
   affected_inputs: >-
     PredictiveQuery.materialize over a SQLite source whose time column's
-    stored text the core's list does not read, or leaves the order of day
-    and month open, under a forced core route.
-  cases: [time.text-us-date, time.text-one-bad-value]
-  refs: [DT-7, DT-15, DT-16]
+    stored text the core's list does not read, under a forced core route.
+  cases: [time.text-one-bad-value]
+  refs: [DT-7, DT-15]
   status: proposed
   approved_by: null
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
   notes: >-
-    Approver: owner. The readings are DT-15's and DT-16's, owner-approved
-    under E68, applied to the SQLite legs of their cases (T2.2). New on
-    SQLite: time.text-us-date is a refusal of an input the reference
-    answers (it reads the slash date month first), where over DuckDB the
-    reference fails on its CAST; so it goes to the owner rather than
-    passing as the DuckDB legs' class. Measured at T2.2 against
-    python-ref's committed lines.
+    Approver: owner, as DT-15 was. Both refuse the input; only the code
+    differs, the core's DT-15's, owner-approved under E68, applied to the
+    SQLite leg of its case (T2.2). time.text-us-date, first listed here,
+    is answered as the reference answers it since the core reads an
+    empty fetch's columns, which SQLite's driver types as integers, as
+    holding no time (T2.2); it is no longer a difference. Measured at T2.2
+    against python-ref's committed lines.
 
 - id: P2B-12
   title: On SQLite, an unsigned key past int64 is joined by its stored text where the reference fails INTERNAL_ERROR ingesting it
