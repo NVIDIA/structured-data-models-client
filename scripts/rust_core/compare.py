@@ -1842,6 +1842,11 @@ def compare(
             if on_duckdb:
                 _expectation(report, case, 'python-ref', ref['outcome'])
             _route(report, case, 'python-ref', ref)
+            if not observed:
+                # The reference alone (a SQLite or Postgres job before the
+                # core's providers, T2.1a fix 5): its record of what ran is
+                # held complete, as _sql holds it beside a runner's.
+                _complete(report, f'{case["id"]}: python-ref', ref)
             if reach is not None:
                 _reach(report, case, 'python-ref', ref, reach)
             found = counts(ref)

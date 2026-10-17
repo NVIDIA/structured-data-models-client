@@ -155,3 +155,24 @@ def test_the_phase_end_gate_run_holds_temporary_entries() -> None:
         for call in locked:
             assert re.search(r'--wheel-run \S+', call), (script, call)
     assert _temporary_flag('2a', '39041748123') == '--locked'
+
+
+def test_the_reference_alone_is_held_complete(tmp_path: Path) -> None:
+    r"""Fix 5 (round 4's P1): compared alone, as a SQLite or Postgres job
+    does before the core's providers, a reference line whose capture its
+    query log does not count alike fails; its control, the line as
+    recorded, passes."""
+    compare = _module(ROOT / 'scripts/rust_core/compare.py', 't21a_compare')
+    line = _reference_line('base.regression@sqlite')
+    case = ROOT / 'contract/cases/s1/base.regression.json'
+
+    def judged(found: dict[str, object]) -> list[str]:
+        path = tmp_path / 'reference.jsonl'
+        path.write_text(json.dumps(found) + '\n')
+        report = compare.compare([case], path, [], database='sqlite')
+        return [text for text in report.texts if 'record of what ran' in text]
+
+    assert judged(line) == []
+    seeded = copy.deepcopy(line)
+    seeded['driver']['query_log']['statements'] -= 1  # type: ignore[index]
+    assert judged(seeded), 'a short query log passed'
