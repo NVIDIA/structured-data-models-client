@@ -713,16 +713,23 @@ jobs:
       # missing here, which is how a driver release that refused every
       # ordinary connection keyword reached main reading as a pass. The
       # client is the native wheel's, the one abi3 build every interpreter
-      # here installs.
+      # here installs; its test extra carries pytest-xdist, and
+      # pytest-timeout is for the run's --timeout.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*' "tomli; python_version < '3.11'"
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout "tomli; python_version < '3.11'"
           pip install -e './packages/structured-data-models-api[test]' -e './packages/structured-data-models-pql[test]' \
             "$(ls native/*.whl)[test]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
+      # In parallel, as contract/tests runs: each test file on one worker,
+      # so its module fixtures are built once. Serial, the gate's tooling
+      # tests in tests/ outgrew the job's hour. A test past 10 minutes
+      # fails with its stack, and a worker that dies ends the run rather
+      # than leaving xdist waiting on it.
       - run: |
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
-            -m 'not live_nim and not live_warehouse'
+            -m 'not live_nim and not live_warehouse' \
+            -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -777,9 +784,11 @@ jobs:
       # backends, which skip whole modules without them; pyyaml reads the
       # semantic-view fixtures, and `explain` carries the SDK the explanation
       # tests fake around. jsonschema validates the contract's cases and
-      # observations, which the root suite checks.
+      # observations, which the root suite checks. pytest-timeout is for
+      # the root suite's --timeout; the client's test extra, installed
+      # below, carries pytest-xdist.
       - run: |
-          pip install --upgrade pip 'ruff==0.16.*'
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout
           pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
             pyyaml jsonschema
@@ -801,8 +810,8 @@ jobs:
       # only exercise anything with an engine installed, so running them in
       # the test job would prove nothing.
       # The contract cases and the runner's controls (contract/tests) run
-      # in contract-python, from T1.18.
-      - run: python -m pytest tests -q
+      # in contract-python, from T1.18. In parallel, as in the test job.
+      - run: python -m pytest tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
