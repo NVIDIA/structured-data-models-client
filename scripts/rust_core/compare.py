@@ -604,8 +604,31 @@ def _inputs(
         )
 
 
+def _later_error(
+    case: dict[str, Any], core: dict[str, Any], database: str
+) -> bool:
+    r"""Whether ``core``'s error, beside an accepted validation, is a later
+    call's: off DuckDB every call a case makes runs through its ``until``
+    (T2.1d), so an accepted query goes on to ``materialize`` (and
+    ``predict``), and the outcome is that of the last call reached, the
+    one with no answer; every call before it answered, none after it ran.
+    A refused query, a call that both answers and errors, and DuckDB,
+    where the calls stop at the case's own, are never one."""
+    calls = {'materialize': 1, 'predict': 2}.get(case['until'], 0)
+    if database == 'duckdb' or core['accepted'] is not True or not calls:
+        return False
+    answered = [
+        core[field] is not None for field in ('materialized', 'predicted')
+    ][:calls]
+    return False in answered and not any(answered[answered.index(False) :])
+
+
 def _core_consistent(
-    report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
+    report: Report,
+    case: dict[str, Any],
+    who: str,
+    observation: dict[str, Any],
+    database: str = 'duckdb',
 ) -> None:
     r"""The core's answer is the outcome, as the route maps it: an accepted
     query succeeds, a refused one is ``INVALID_REQUEST``, and a core error
@@ -613,7 +636,9 @@ def _core_consistent(
     description or an error, never both, and its error ends the call there,
     as a refusal with its code; a description lets the call go on, so the
     outcome is the later calls', the user's edits first (``edit_schema``,
-    from T1.24b), whose refusal ends it beside the description."""
+    from T1.24b), whose refusal ends it beside the description. Off DuckDB
+    an accepted query goes on through the case's ``until``, and a later
+    call's error is the outcome (:func:`_later_error`)."""
     core = observation['core']
     if core is None:
         return
@@ -694,7 +719,9 @@ def _core_consistent(
     outcome = observation['outcome']
     if core['error'] is not None:
         wanted = ('refusal', core['error']['code'])
-        if core['accepted'] is not None:
+        if core['accepted'] is not None and not _later_error(
+            case, core, database
+        ):
             report.fail(
                 f'{case["id"]}: {who}: core: an answer and an error', 'outcome'
             )
@@ -2085,7 +2112,7 @@ def compare(
                 continue
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
-            _core_consistent(report, case, who, observation)
+            _core_consistent(report, case, who, observation, database)
             wanted = effective.get(case['id'], {}).get(who)
             stop = past_stop(
                 who,
