@@ -198,12 +198,9 @@ cases:
   - ALTER TABLE users ALTER user_id TYPE HUGEINT
   - ALTER TABLE orders ALTER user_id TYPE HUGEINT
   expect:
-    outcome: refusal
-    stage: materialize
-    error: StructuredDataError
-    code: INTERNAL_ERROR
-    message: unsupported data type 'decimal128(38, 0)[pyarrow]' for column 'ENTITY'
-    today: Schema.from_source accepts it and reports user_id as int64 / ID
+    outcome: success
+    stage: predict
+    today: 'Schema.from_source accepts it and reports user_id as int64 / ID; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type ''decimal128(38, 0)[pyarrow]'' for column ''ENTITY''), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers'
   register: Today the engine fails after the schema accepted the key; a 128-bit integer reaches the core as decimal128(38, 0), outside the integer set
   why: An integer key wider than int64 that DuckDB hands over as a decimal; tests the host conversion and the key path together
   source: plan (type set); DV131
@@ -251,12 +248,9 @@ cases:
   - ALTER TABLE orders ALTER user_id TYPE DECIMAL(18, 0)
   materialize: {indices: ['0', '1'], indices_as: decimal, anchor_time: '2024-03-01'}
   expect:
-    outcome: refusal
-    stage: materialize
-    error: StructuredDataError
-    code: INTERNAL_ERROR
-    message: unsupported data type 'decimal128(18, 0)[pyarrow]' for column 'ENTITY'
-    today: Schema.from_source reports user_id as int64 / ID
+    outcome: success
+    stage: predict
+    today: 'Schema.from_source reports user_id as int64 / ID; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type ''decimal128(18, 0)[pyarrow]'' for column ''ENTITY''), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers'
   register: Engine failure after the schema accepted the key
   why: Integral decimal keys are common in warehouses (NUMBER(18,0)); the first attempt left decimal keys out, then mis-keyed them
   source: DV35; DV131
@@ -270,12 +264,9 @@ cases:
   - ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 10) USING user_id + 0.5
   materialize: {indices: ['0.5', '1.5'], indices_as: decimal, anchor_time: '2024-03-01'}
   expect:
-    outcome: refusal
-    stage: materialize
-    error: StructuredDataError
-    code: INTERNAL_ERROR
-    message: unsupported data type 'decimal128(38, 10)[pyarrow]' for column 'ENTITY'
-    today: Schema.from_source reports user_id as float64 / ID
+    outcome: success
+    stage: predict
+    today: 'Schema.from_source reports user_id as float64 / ID; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type ''decimal128(38, 10)[pyarrow]'' for column ''ENTITY''), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers'
   register: Engine failure after the schema accepted the key
   why: A fractional, full-precision decimal key; the case where float keys would collide
   source: DV131; DV133
@@ -328,12 +319,9 @@ cases:
   pql: PREDICT users.tier FOR EACH users.user_id
   materialize: {indices: [0, 1]}
   expect:
-    outcome: refusal
-    stage: materialize
-    error: StructuredDataError
-    code: INTERNAL_ERROR
-    message: unsupported data type 'decimal128(38, 18)[pyarrow]' for column 'TARGET'
-    today: Schema.from_source reports tier as float64 / categorical
+    outcome: success
+    stage: predict
+    today: 'Schema.from_source reports tier as float64 / categorical; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type ''decimal128(38, 18)[pyarrow]'' for column ''TARGET''), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers'
   register: Engine failure on a decimal static target
   why: DECIMAL(38,18) classes collided to 0.1 in the first attempt
   source: DV133
