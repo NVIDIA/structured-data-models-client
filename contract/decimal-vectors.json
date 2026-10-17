@@ -2180,6 +2180,182 @@
      "request": null
     }
    }
+  },
+  "decimal.target-regression-collide": {
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "schema": {
+    "links": [
+     [
+      "orders",
+      "user_id",
+      "users",
+      "user_id"
+     ]
+    ],
+    "tables": [
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "order_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "float64",
+        "name": "price",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "timestamp[us]",
+        "name": "ts",
+        "stype": "timestamp"
+       },
+       {
+        "dtype": "float64",
+        "name": "amount",
+        "stype": "numerical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "orders",
+      "primary_key": "order_id",
+      "time_column": "ts"
+     },
+     {
+      "columns": [
+       {
+        "dtype": "int64",
+        "name": "user_id",
+        "stype": "ID"
+       },
+       {
+        "dtype": "int64",
+        "name": "age",
+        "stype": "numerical"
+       },
+       {
+        "dtype": "string",
+        "name": "country",
+        "stype": "categorical"
+       }
+      ],
+      "duplicate_keys": 0,
+      "name": "users",
+      "primary_key": "user_id",
+      "time_column": null
+     }
+    ]
+   },
+   "warnings": [
+    "UserWarning"
+   ],
+   "payload": [
+    {
+     "method": "POST",
+     "path": "/v1/predictions",
+     "digest": "c64d707ee9a5c270ffd2bb5cab9b3bbb81acd60a033ff20ee8a3a3d0ae801fc4",
+     "tables": {
+      "context.instance_table": {
+       "rows": 112,
+       "nulls": 0
+      },
+      "context.related_tables.orders": {
+       "rows": 408,
+       "nulls": 0
+      },
+      "context.related_tables.users": {
+       "rows": 112,
+       "nulls": 0
+      },
+      "predict.instance_table": {
+       "rows": 2,
+       "nulls": 0
+      },
+      "predict.related_tables.orders": {
+       "rows": 16,
+       "nulls": 0
+      },
+      "predict.related_tables.users": {
+       "rows": 2,
+       "nulls": 0
+      }
+     }
+    }
+   ],
+   "result": {
+    "columns": [
+     {
+      "dtype": "int64",
+      "name": "row_index"
+     },
+     {
+      "dtype": "int64",
+      "name": "id"
+     },
+     {
+      "dtype": "float64",
+      "name": "prediction"
+     }
+    ],
+    "digest": "bd1c414de19a1ad32f94c4f0ddbf3aa1d86d2968d3fee9e395c97eb7cb293f81",
+    "rows": 2
+   },
+   "columns": {
+    "instance_table.TARGET": {
+     "described": null,
+     "request": [
+      {
+       "context": {
+        "dtype": "float32",
+        "stype": "numerical",
+        "cells": {
+         "{\"number\":\"0.0\"}": 52,
+         "{\"number\":\"1234567.0\"}": 60
+        }
+       },
+       "predict": null
+      }
+     ]
+    },
+    "orders.amount": {
+     "described": {
+      "dtype": "float64",
+      "stype": "numerical"
+     },
+     "request": [
+      {
+       "context": {
+        "dtype": "float64",
+        "stype": "numerical",
+        "cells": {
+         "{\"number\":\"1234567.0\"}": 140,
+         "{\"number\":\"1234567.01\"}": 136,
+         "{\"number\":\"1234567.02\"}": 132
+        }
+       },
+       "predict": {
+        "dtype": "float64",
+        "stype": "numerical",
+        "cells": {
+         "{\"number\":\"1234567.0\"}": 6,
+         "{\"number\":\"1234567.01\"}": 5,
+         "{\"number\":\"1234567.02\"}": 5
+        }
+       }
+      }
+     ]
+    }
+   }
   }
  },
  "vectors": [
