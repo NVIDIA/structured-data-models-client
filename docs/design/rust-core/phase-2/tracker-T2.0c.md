@@ -83,7 +83,7 @@ The owner moved T2.17's exact decimals into T2.0c on 2026-10-17 (KO2-35, KO2-50)
 | P2B-3 | The core refuses 1,001 to 10,000 entities (until T2.8c) | KO2-45 (temporary) |
 | P2B-4 | The core refuses `rows_per_call` (until T2.8c) | KO2-45 (temporary) |
 | P2B-7 | python-old answers the four decimal cases as the reference does, by `main`'s `eb6c68eb` | proposed, for the reviewers |
-| P2B-8 | An entity that names no key of a decimal key's type exactly is refused by name, where the reference rounds it onto a key (four key-cast vectors) | proposed, for the owner |
+| P2B-8 | An entity that names no key of a decimal key's type exactly is refused by name, where the reference rounds it onto a key (four key-cast vectors) | the owner's, 2026-10-17 ("keep refusing"; its decisions row to come) |
 
 P2B-5 and P2B-6 (decimal null keys, `d > 1.5`), temporary entries never landed, are gone with the fix.
 P1B-18's and P1B-53's refusal of `decimal.class-target-38-18` no longer exists, and their outcomes on it are taken out; P1B-33's eight refs that name no vector at `6298913c` are taken out; each for the reviewers.
@@ -119,6 +119,6 @@ CI runs on Linux x86_64, as the recording was made.
 
 - T2.0g: the checkpoint's bridge freeze still names `_check_entity_count`, which `main` deleted (l0).
 - The case author (`recording-6`): `decimal.sum-past-38`'s and `decimal.class-target-38-18`'s cases carry predict to the core, and their python-ref lines; the test author: `t132b_float_constants.rs` against KO2-50, the option (b) tests for decimal keys, three refusal-map tests on an empty decimal map.
-- The owner: P2B-8, and how compare treats KO2-35's field-level differences (the payloads of `key.decimal-38-10`, `decimal.sum-10-2`, `decimal.feature-inexact-38-18`; `decimal.sum-past-38` and `decimal.class-target-collide`, answered where the reference refuses).
+- T2.0g's compare rule (the owner's "A ok" of 2026-10-17): P2B-1 then names exactly the fields it covers on `key.decimal-38-10`, `decimal.sum-10-2` and `decimal.feature-inexact-38-18`; `decimal.sum-past-38` and `decimal.class-target-collide`, answered where the reference refuses, are outcome-level, which compare already takes.
 - The reviewers: P2B-7 and the changed P1B-18, P1B-53 and P1B-33.
 - Then `ratchet.py accept` for the baselines (the eleven new cases and the moved outcomes) and the gate.
