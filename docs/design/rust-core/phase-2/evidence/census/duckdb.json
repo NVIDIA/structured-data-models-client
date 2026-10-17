@@ -1,7 +1,7 @@
 {
   "commit": {
     "clean": true,
-    "sha": "828ccaf610aaffab728a04b5f7c9e016abfb8f66"
+    "sha": "dcac0f6e4fd86b9bf1d04cfeb599ec773b3d1222"
   },
   "database": "duckdb",
   "departs": [
