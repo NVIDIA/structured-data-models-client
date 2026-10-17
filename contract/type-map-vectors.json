@@ -2,11 +2,133 @@
   "format": "sdm-type-map-vectors/1",
   "about": "T2.1a's type map (design, choice 2), written by the package's independent test author before the implementation, recorded by contract/tools/type_map_record.py: the one definition of a decimal's canonical text (plain positional notation, no exponent, no trailing fractional zeros, no trailing point, -0 written 0), which the Python loader and the Rust key binders each implement and both run; a SQLite decimal stored in a column declared TEXT as that text, since a column declared DECIMAL takes numeric affinity and rounds what it stores (sqlite_distinct_keys, KO2-35); and equal keys of different scales that must still join on every engine (join_across_scales, lesson 19). `map` is the stored type per engine; the rest of the type set's entries are the implementer's, added here under review.",
   "map": {
+    "boolean": {
+      "duckdb": "BOOLEAN",
+      "sqlite": "BOOLEAN",
+      "postgres": "boolean"
+    },
+    "int8": {
+      "duckdb": "TINYINT",
+      "sqlite": "INTEGER",
+      "postgres": "smallint"
+    },
+    "int16": {
+      "duckdb": "SMALLINT",
+      "sqlite": "INTEGER",
+      "postgres": "smallint"
+    },
+    "int32": {
+      "duckdb": "INTEGER",
+      "sqlite": "INTEGER",
+      "postgres": "integer"
+    },
+    "int64": {
+      "duckdb": "BIGINT",
+      "sqlite": "INTEGER",
+      "postgres": "bigint"
+    },
+    "uint8": {
+      "duckdb": "UTINYINT",
+      "sqlite": "INTEGER",
+      "postgres": "smallint"
+    },
+    "uint16": {
+      "duckdb": "USMALLINT",
+      "sqlite": "INTEGER",
+      "postgres": "integer"
+    },
+    "uint32": {
+      "duckdb": "UINTEGER",
+      "sqlite": "INTEGER",
+      "postgres": "bigint"
+    },
+    "uint64": {
+      "duckdb": "UBIGINT",
+      "sqlite": "TEXT",
+      "sqlite_value": "digits",
+      "postgres": "numeric(20,0)"
+    },
+    "float32": {
+      "duckdb": "FLOAT",
+      "sqlite": "REAL",
+      "postgres": "real"
+    },
+    "float64": {
+      "duckdb": "DOUBLE",
+      "sqlite": "REAL",
+      "postgres": "double precision"
+    },
     "decimal": {
       "duckdb": "DECIMAL(p,s)",
       "sqlite": "TEXT",
       "sqlite_value": "canonical",
       "postgres": "numeric(p,s)"
+    },
+    "string": {
+      "duckdb": "VARCHAR",
+      "sqlite": "TEXT",
+      "postgres": "text"
+    },
+    "binary": {
+      "duckdb": "BLOB",
+      "sqlite": "BLOB",
+      "postgres": "bytea"
+    },
+    "date": {
+      "duckdb": "DATE",
+      "sqlite": "DATE",
+      "sqlite_value": "iso",
+      "postgres": "date"
+    },
+    "time": {
+      "duckdb": "TIME",
+      "sqlite": "TIME",
+      "sqlite_value": "iso",
+      "postgres": "time"
+    },
+    "timestamp": {
+      "duckdb": "TIMESTAMP",
+      "sqlite": "TIMESTAMP",
+      "sqlite_value": "iso",
+      "postgres": "timestamp"
+    },
+    "timestamptz": {
+      "duckdb": "TIMESTAMP WITH TIME ZONE",
+      "sqlite": "TIMESTAMPTZ",
+      "sqlite_value": "iso",
+      "postgres": "timestamp with time zone"
+    },
+    "interval": {
+      "duckdb": "INTERVAL",
+      "sqlite": "INTERVAL",
+      "sqlite_value": "iso",
+      "postgres": "interval"
+    },
+    "list": {
+      "duckdb": "T[] or T[n]",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "T[]"
+    },
+    "struct": {
+      "duckdb": "STRUCT(...)",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "(n)"
+    },
+    "map": {
+      "duckdb": "MAP(VARCHAR, T)",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "jsonb",
+      "postgres_value": "json"
+    },
+    "union": {
+      "duckdb": "UNION(...)",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "jsonb",
+      "postgres_value": "json"
     }
   },
   "canonical_text": [

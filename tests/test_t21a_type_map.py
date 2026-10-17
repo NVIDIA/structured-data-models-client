@@ -52,10 +52,6 @@ ROOT = Path(__file__).resolve().parents[1]
 VECTORS = json.loads((ROOT / 'contract/type-map-vectors.json').read_text())
 LOADER = ROOT / 'contract/runners/databases.py'
 
-PENDING = pytest.mark.xfail(
-    reason="T2.1a: the contract loader's type map (contract/runners/databases.py)",
-    strict=True,
-)
 
 # --- the interface assumed (the implementer matches it, or asks) ---------------
 #
@@ -119,7 +115,6 @@ def test_the_vector_file_holds_what_the_design_names() -> None:
 # --- the canonical text ------------------------------------------------------------
 
 
-@PENDING
 @pytest.mark.parametrize(
     'vector',
     VECTORS['canonical_text'],
@@ -174,7 +169,6 @@ def _join_base() -> Any:
     )
 
 
-@PENDING
 def test_sqlite_keeps_two_keys_equal_to_15_digits_distinct(
     tmp_path: Path,
 ) -> None:
@@ -199,7 +193,6 @@ def test_sqlite_keeps_two_keys_equal_to_15_digits_distinct(
     ]
 
 
-@PENDING
 def test_sqlite_joins_equal_keys_of_different_scales(tmp_path: Path) -> None:
     r"""Exit (lesson 19): ``DECIMAL(10,2)`` and ``DECIMAL(12,4)`` keys of
     equal value join on SQLite as on DuckDB, ``-0.00`` with ``0.0000``
@@ -257,7 +250,6 @@ def _postgres(dsn: str, query: str) -> list[tuple[Any, ...]]:
         return connection.execute(query).fetchall()
 
 
-@PENDING
 def test_postgres_keeps_the_keys_as_numeric(postgres_dsn: str) -> None:
     r"""Exit: on Postgres a decimal is the engine's own ``numeric`` with its
     precision and scale, and the two keys stay two, exact."""
@@ -273,7 +265,6 @@ def test_postgres_keeps_the_keys_as_numeric(postgres_dsn: str) -> None:
     assert [str(k) for (k,) in rows] == VECTORS['sqlite_distinct_keys']['keys']
 
 
-@PENDING
 def test_postgres_joins_equal_keys_of_different_scales(
     postgres_dsn: str,
 ) -> None:

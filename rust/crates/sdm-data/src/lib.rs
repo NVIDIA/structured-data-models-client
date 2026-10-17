@@ -33,7 +33,10 @@
 #![forbid(unsafe_code)]
 
 mod duckdb;
+mod keys;
 mod read;
+
+pub use keys::canonical_decimal_text;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
