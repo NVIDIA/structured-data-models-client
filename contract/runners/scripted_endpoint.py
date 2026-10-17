@@ -158,6 +158,10 @@ def _predictions(payload: Any) -> list[dict[str, Any]]:
     return answered
 
 
+def _failed(call: int) -> tuple[int, dict[str, Any]]:
+    return FAILED, {'error': 'scripted_failure', 'call': call}
+
+
 def answer(
     method: str,
     path: str,
@@ -169,7 +173,7 @@ def answer(
     r"""The rule: the status and JSON body answering the request that is
     call number ``call``, the call numbered ``fail_call`` failed."""
     if call == fail_call:
-        return FAILED, {'error': 'scripted_failure', 'call': call}
+        return _failed(call)
     if method != 'POST' or path != PREDICTIONS:
         return 404, {'error': 'not_found'}
     try:
@@ -212,12 +216,12 @@ class _Handler(BaseHTTPRequestHandler):
         body = self.rfile.read(length) if length else b''
         received: Received = self.server.received  # type: ignore[attr-defined]
         call = received.take(self.command, self.path, body)
-        status, reply = answer(
-            self.command,
-            self.path,
-            body,
-            call=call,
-            fail_call=received.fail_call,
+        # The chosen call fails here, and every other is the rule's, called
+        # as one request is (a test may stand a rule of its own in for it).
+        status, reply = (
+            _failed(call)
+            if call == received.fail_call
+            else answer(self.command, self.path, body)
         )
         out = json.dumps(reply).encode()
         self.send_response(status)
