@@ -49,6 +49,7 @@ use crate::case::{
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
 use crate::replay::{Recording, Replay, Replayed};
+use crate::sqlite::Sqlite;
 use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
@@ -475,11 +476,13 @@ fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
 }
 
 /// Where a case's fetches are answered: its DuckDB base, through the
-/// DuckDB provider, or a Postgres server's recorded answers, replayed
-/// ([`crate::replay`], KO2-20).
+/// DuckDB provider; its tables loaded into SQLite, through the dev-only
+/// `rusqlite` provider ([`crate::sqlite`], T2.2); or a Postgres server's
+/// recorded answers, replayed ([`crate::replay`], KO2-20).
 #[derive(Clone, Copy)]
 enum Source<'a> {
     Duck(&'a duckdb::Connection),
+    Sqlite(&'a Sqlite),
     Replay(&'a Replay<'a>),
 }
 
@@ -490,11 +493,69 @@ impl Source<'_> {
     fn provider(self, given: ProviderChoice) -> ProviderChoice {
         match self {
             Source::Duck(_) => given,
+            Source::Sqlite(_) => ProviderChoice::Sql {
+                dialect: Dialect::new(Database::Sqlite.name()),
+            },
             Source::Replay(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Postgres.name()),
             },
         }
     }
+}
+
+/// Runs `case` over its data loaded into a new SQLite file by the contract
+/// loader ([`crate::sqlite::load`], run from `repository`) and read through
+/// the dev-only `rusqlite` provider (T2.2): every call the case makes
+/// through its `until`, on SQLite's provider ([`through_until`], T2.1d), as
+/// python-core makes them over a SQLite source; the record of what ran is
+/// the provider's own log of its statements and bindings.
+pub fn run_sqlite(case: &Case, bases: &Bases, repository: &std::path::Path) -> Result<Observed> {
+    let case = &through_until(case, Database::Sqlite.name())?;
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        bail!("{}: names no describe_source after its derivation", case.id);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    if bases.get(&case.input.base).is_none() {
+        bail!("{}: unknown base", case.id);
+    }
+    let directory = std::env::temp_dir().join(format!(
+        "sdm-case-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default()
+    ));
+    std::fs::create_dir_all(&directory)?;
+    let loaded = (|| -> Result<Observed> {
+        // What the loader reads of the case: its base and setup.
+        let input = directory.join("case.json");
+        std::fs::write(
+            &input,
+            serde_json::to_vec(&json!({
+                "id": case.id,
+                "input": {
+                    "base": case.input.base,
+                    "setup": case.input.setup.clone().unwrap_or_default(),
+                },
+            }))?,
+        )?;
+        let file = directory.join("case.sqlite");
+        crate::sqlite::load(repository, &input, &file)?;
+        let source = Sqlite::open(&file)?;
+        let mut log = DriverLog::default();
+        let mut observed = describe_on(case, spec, Source::Sqlite(&source), &mut log, &edits)?;
+        observed.driver = Some(log.record(&source.logged()));
+        Ok(observed)
+    })();
+    std::fs::remove_dir_all(&directory).ok();
+    loaded
 }
 
 /// Runs `case` on Postgres as [`run`] runs it on DuckDB, each fetch
@@ -633,6 +694,7 @@ fn drive(
                         Source::Duck(connection) => {
                             duck::answer_logged(connection, step, &keys, log)
                         }
+                        Source::Sqlite(source) => source.answer_logged(step, &keys, log),
                         Source::Replay(replay) => {
                             let replayed = replay.answer(step)?;
                             log_replayed(log, &replayed);
