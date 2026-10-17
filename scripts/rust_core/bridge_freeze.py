@@ -76,8 +76,13 @@ by an entry the merge base's declarations already hold (spent: a later
 change states its own reason, so a declaration once landed does not wave
 through every later change to its entry); on ``gone`` for an entry that is
 not gone, or a gone entry declared anything but gone or moved; and on a
-``moved`` that names no task. It reads each frozen file's bytes, as the
-interpreter does, and refuses one declaring a source encoding other than
+``moved`` that names no task. A function ``COVERED`` names that its file no
+longer defines fails by name, unless it is declared ``main`` (T2.0g): the
+gate judges a candidate with its checkpoint's ``COVERED``, so a candidate
+merging ``main``'s deletion of a covered function cannot first take it out;
+the ratchet judges that reason as for any entry gone, and the commit it
+names must be the one that deleted the entry. It reads each frozen file's
+bytes, as the interpreter does, and refuses one declaring a source encoding other than
 UTF-8 (a ``raw_unicode_escape`` or ``utf-7`` cookie runs what a UTF-8
 reader takes for a comment); and it refuses a directory beside a frozen
 module with the module's name, whose package would be imported in the
@@ -604,9 +609,13 @@ def load_changes(
 
 
 def exactness(
-    code: Mapping[Path, Measured | None], baseline: Baseline
+    code: Mapping[Path, Measured | None],
+    baseline: Baseline,
+    deleted_by_main: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Where the code differs from the baseline."""
+    """Where the code differs from the baseline. A covered name the file no
+    longer defines is excused only when ``deleted_by_main`` holds its key
+    (declared ``main``, a reason :func:`ratchet` judges)."""
     problems = []
     covered = entries(code)
     remedy = 'rewrite the baseline (bridge_freeze.py --write)'
@@ -617,11 +626,12 @@ def exactness(
             problems.append(f'{rel}: a frozen bridge file that does not exist')
             continue
         for name in COVERED.get(rel, ()):
-            if name not in found:
+            if name not in found and f'{rel}::{name}' not in deleted_by_main:
                 problems.append(
                     f'{rel}::{name}: COVERED names it, but the file defines '
                     'no such function: take it out of COVERED '
-                    '(bridge_freeze.py) and declare the change'
+                    "(bridge_freeze.py) and declare the change, or main's "
+                    'commit that deleted it'
                 )
         now = covered[str(rel)]
         for name in sorted(set(recorded) - set(now)):
@@ -768,7 +778,11 @@ def check(root: Path, base: Base | str) -> list[str]:
         return [*problems, f'{error.filename}: does not parse: {error.msg}']
     except Unreadable as error:
         return [*problems, str(error)]
-    problems += exactness(code, baseline)
+    problems += exactness(
+        code,
+        baseline,
+        frozenset(key for key, (kind, _) in declared.items() if kind == 'main'),
+    )
     problems += shadowing(root)
     if isinstance(base, str):
         problems.append(f'no base to ratchet against: {base}')
@@ -942,6 +956,8 @@ def main_judge(
             parent.stdout.strip(), rel, name
         ):
             return f'{sha[:12]} does not change the entry {name}'
+        if now is None and entry_at(sha, rel, name) is not None:
+            return f'{sha[:12]} does not delete the entry {name}, now gone'
         # The entry as the merge bringing the commit in holds it: main's
         # change merged with the phase's, which no main commit alone made.
         held = entry_at(merge_base, rel, name)
