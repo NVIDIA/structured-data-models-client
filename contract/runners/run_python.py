@@ -1126,6 +1126,15 @@ def _nanos(days: int, seconds: int, micros: int, nanos: int = 0) -> str:
     return str(((days * 86400 + seconds) * 1_000_000 + micros) * 1000 + nanos)
 
 
+def _month_day_nano(value: Any) -> bool:
+    r"""Whether ``value`` is pyarrow's month-day-nano interval."""
+    if not isinstance(value, tuple):
+        return False
+    import pyarrow as pa
+
+    return isinstance(value, pa.MonthDayNano)
+
+
 def canonical_cell(value: Any, odd: list[str]) -> Any:
     r"""One value of a result in its canonical form (decision H9; design,
     "Observations and comparator"): the value itself, never its Python
@@ -1143,7 +1152,8 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     ...]]``; read from Arrow (:func:`_arrow_cells`), a map is ``["map",
     [[key, value], ...]]`` in Arrow's entry order, a union ``["union",
     type code, member name, cell]`` and a month-day-nano interval
-    ``["interval", months, days, nanoseconds as digits]``. A value of any
+    ``["interval", months, days, nanoseconds as digits]``, as is pyarrow's
+    ``MonthDayNano`` read as a row's value. A value of any
     other kind is ``["?",
     its type's name]`` and is listed as unencodable, which the comparator
     never takes as equal. This
@@ -1202,6 +1212,11 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
             'dur',
             _nanos(value.days, value.seconds, value.microseconds),
         ]
+    elif _month_day_nano(value):
+        # pyarrow's month-day-nano interval, a named tuple, which a driver
+        # hands over for an interval read whole (T2.1d): the cell Arrow
+        # gives the same interval, never a list.
+        return ['interval', value.months, value.days, str(value.nanoseconds)]
     elif isinstance(value, (list, tuple)):
         return ['list', [canonical_cell(item, odd) for item in value]]
     elif isinstance(value, dict) and all(isinstance(k, str) for k in value):
