@@ -13,17 +13,21 @@ client hands it over whole. These tests hold the Python side to
 ``contract/t136-forecast-vectors.json`` (``contract/tools/forecast_record.py``):
 
 - ``test_python_core_sends_what_it_sent_before_the_move``: ``python-core``
-  (forced onto the core's DuckDB routes) gives, for every vector, exactly
-  what it gave at fc2c0e2b: the outcome (code, stage, class and message),
-  each request's raw bytes (SHA-256, ``metadata.request_id`` masked), count
-  and order included, the result through ``to_pandas()`` (dtypes, rows,
-  values) and the warning classes.
+  (forced onto the core's DuckDB routes) gives, for every vector, what it
+  gave at fc2c0e2b: the outcome (code, stage, class and message), each
+  request's method, path and tables, count and order included, the result
+  through ``to_pandas()`` (dtypes, rows, values) and the warning classes.
+  Each request's raw bytes (SHA-256, ``metadata.request_id`` masked) were
+  held to fc2c0e2b's too until main's 26ecdd28 (T2.0c) took the inference
+  config the caller did not set out of every request on both routes; they
+  now differ from fc2c0e2b's in every request, and each request is the
+  reference's under the ``payload`` rule.
 - ``test_python_core_answers_as_the_reference``: where the reference
   answers and the core ports what is asked, ``python-core``'s requests
   (``payload``-rule digests) and result are the reference's.
 - ``test_python_old_answers_as_the_reference_and_as_before``: the default
-  route is unchanged: the reference's requests and result, and its own
-  messages as recorded.
+  route answers as the reference (its requests and result) and as at
+  fc2c0e2b, held as ``python-core`` is above (its own messages included).
 - The refusals around a forecast stay what they are, on both routes:
   ``top_k``; more steps than ``decompose.MOST_PARTS`` (and raising it lets
   them through); zero steps (``s0.refuse.task-forecast-zero``); pinning a
@@ -135,19 +139,45 @@ def test_the_vectors_are_not_vacuous() -> None:
     assert len(BY_ID['sum-days-3']['python_core']['payloads']) == 3
 
 
+def _requests_but_their_bytes(answer: dict[str, Any]) -> list[dict[str, Any]]:
+    r"""Each request as recorded, its bytes' digests left out: the method,
+    path and each table's rows and nulls, in order."""
+    return [
+        {k: v for k, v in p.items() if k not in ('masked_sha256', 'digest')}
+        for p in answer['payloads']
+    ]
+
+
+def _held_before_and_now(
+    got: dict[str, Any], vector: dict[str, Any], before: dict[str, Any]
+) -> None:
+    r"""What a route sent at fc2c0e2b, held but for the bytes main's
+    26ecdd28 moved on both routes (no inference config the caller did not
+    set): the outcome, result and warnings exactly; each request's method,
+    path and tables, count and order included; and each request's bytes,
+    under the payload rule, are now the reference's."""
+    assert got['outcome'] == before['outcome']
+    assert got['result'] == before['result']
+    assert got['warnings'] == before['warnings']
+    assert _requests_but_their_bytes(got) == _requests_but_their_bytes(before)
+    reference = vector['reference']
+    if reference['outcome']['result'] == 'success' and got['payloads']:
+        assert [p['digest'] for p in got['payloads']] == [
+            p['digest'] for p in reference['payloads']
+        ], "each request is the reference's under the payload rule"
+    # Not vacuous: where it sent requests, fc2c0e2b's bytes were the
+    # Python decomposition's with the engine's inference config, which no
+    # route sends now.
+    for now, then in zip(got['payloads'], before['payloads'], strict=True):
+        assert now['masked_sha256'] != then['masked_sha256']
+
+
 @pytest.mark.parametrize('vector_id', IDS)
 def test_python_core_sends_what_it_sent_before_the_move(
     vector_id: str, core_runs: dict[str, Any]
 ) -> None:
-    got = core_runs[vector_id]
-    want = BY_ID[vector_id]['python_core']
-    assert got['outcome'] == want['outcome']
-    assert [p['masked_sha256'] for p in got['payloads']] == [
-        p['masked_sha256'] for p in want['payloads']
-    ], 'the requests sent, byte for byte (request id masked)'
-    assert got['payloads'] == want['payloads']
-    assert got['result'] == want['result']
-    assert got['warnings'] == want['warnings']
+    vector = BY_ID[vector_id]
+    _held_before_and_now(core_runs[vector_id], vector, vector['python_core'])
 
 
 @pytest.mark.parametrize('vector_id', AS_THE_REFERENCE)
@@ -163,7 +193,8 @@ def test_python_old_answers_as_the_reference_and_as_before(
 ) -> None:
     got = old_runs[vector_id]
     assert R.public(got) == BY_ID[vector_id]['reference']
-    assert got == BY_ID[vector_id]['python_old']
+    vector = BY_ID[vector_id]
+    _held_before_and_now(got, vector, vector['python_old'])
 
 
 # --- the refusals around a forecast -------------------------------------------
