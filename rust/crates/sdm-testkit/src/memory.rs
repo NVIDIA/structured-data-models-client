@@ -67,6 +67,10 @@ use sdm_contract::data::{
     SEED_BATCH, TieTerm, Window, catalog_columns as c, results, seed_integer, seed_key_columns,
 };
 
+/// A DuckDB constraint as [`Memory::from_duckdb`] reads it: its type, its
+/// columns as JSON, its number, and what a foreign key refers to.
+type Constraint = (String, String, i64, Option<String>, Option<String>);
+
 /// One column as the source declares it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Column {
@@ -480,25 +484,24 @@ impl Memory {
             let rows = concat_batches(&read.schema, &read.batches)?;
             // Each constraint: its type, its columns, and, for a foreign
             // key, its number and what it refers to (lists as JSON text).
-            let constraints: Vec<(String, String, i64, Option<String>, Option<String>)> =
-                connection
-                    .prepare(&format!(
-                        "SELECT constraint_type, CAST(to_json(constraint_column_names) AS VARCHAR),
+            let constraints: Vec<Constraint> = connection
+                .prepare(&format!(
+                    "SELECT constraint_type, CAST(to_json(constraint_column_names) AS VARCHAR),
                                 CAST(constraint_index AS BIGINT), referenced_table,
                                 CAST(to_json(referenced_column_names) AS VARCHAR)
                          FROM duckdb_constraints() WHERE table_name = {} AND {HERE}",
-                        quoted(&name)
-                    ))?
-                    .query_map([], |row| {
-                        Ok((
-                            row.get(0)?,
-                            row.get(1)?,
-                            row.get(2)?,
-                            row.get(3)?,
-                            row.get(4)?,
-                        ))
-                    })?
-                    .collect::<Result<_, _>>()?;
+                    quoted(&name)
+                ))?
+                .query_map([], |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                    ))
+                })?
+                .collect::<Result<_, _>>()?;
             let list = |json: &str| -> Result<Vec<String>> {
                 serde_json::from_str(json)
                     .map_err(|e| anyhow!("{name}: a constraint's columns: {e}"))

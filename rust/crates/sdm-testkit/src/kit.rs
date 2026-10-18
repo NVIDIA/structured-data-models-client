@@ -33,6 +33,7 @@
 //! on the Python host's Postgres provider.
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -447,19 +448,16 @@ fn drive(
                     FetchPlan::Host { .. } => Memory::key_sets(&step.request),
                 };
                 for set in sets {
-                    if !keys.contains_key(&set.attachment) {
+                    if let Entry::Vacant(entry) = keys.entry(set.attachment) {
                         let Ok(Some(Attachment::Arrow(data))) =
                             handle.take_attachment(set.attachment)
                         else {
                             bail!("a key set is not attached");
                         };
-                        keys.insert(
-                            set.attachment,
-                            Fetched {
-                                schema: data.schema,
-                                batches: data.batches,
-                            },
-                        );
+                        entry.insert(Fetched {
+                            schema: data.schema,
+                            batches: data.batches,
+                        });
                     }
                 }
             }

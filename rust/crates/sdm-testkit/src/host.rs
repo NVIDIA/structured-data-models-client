@@ -20,6 +20,7 @@
 //! no schema for it, and its loader refuses one (decision E50).
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -853,19 +854,16 @@ fn drive(
                     };
                     let mut keys = BTreeMap::new();
                     for set in sets {
-                        if !keys.contains_key(&set.attachment) {
+                        if let Entry::Vacant(entry) = keys.entry(set.attachment) {
                             let Ok(Some(Attachment::Arrow(data))) =
                                 handle.take_attachment(set.attachment)
                             else {
                                 bail!("{}: a key set is not attached", case.id);
                             };
-                            keys.insert(
-                                set.attachment,
-                                duck::Fetched {
-                                    schema: data.schema,
-                                    batches: data.batches,
-                                },
-                            );
+                            entry.insert(duck::Fetched {
+                                schema: data.schema,
+                                batches: data.batches,
+                            });
                         }
                     }
                     let answered = match source {
