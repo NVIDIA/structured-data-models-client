@@ -1,6 +1,6 @@
 # T2.8c: multi-call `predict`
 
-Lane f's worktree, on the phase head after T2.19's landing (dfdd532a).
+Lane f's worktree, started on the phase head after T2.19's landing (dfdd532a) and moved onto T2.4's landing (8006efce) before the first hand-off.
 `main`'s 1fc5a686 (in the reference at 6298913c) gathers a request of more entities than one call scores as several calls and predicts them as one; this package writes it in the core (design, choice 6), never in the host.
 The acceptance cases are the test author's (`T2.8c tests:` commits on `t28c-tests`: 72521060, 217eea1b).
 
