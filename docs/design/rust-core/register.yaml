@@ -6529,7 +6529,7 @@ entries:
   cases: [T2.3]
   refs:
   - KO2-20
-  - 'contract/postgres-key-vectors.json#* success -> success'
+  - 'contract/postgres-key-vectors.json#* statements'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-58}
@@ -6564,11 +6564,23 @@ entries:
   - key.uint64-above-int64-max
   refs:
   - P2B-1
-  - 'contract/postgres-key-vectors.json#pair.d12-4.* success -> success'
-  - 'contract/postgres-key-vectors.json#key.both.* success -> success'
-  - 'contract/postgres-key-vectors.json#key.pair.* success -> success'
-  - 'contract/postgres-key-vectors.json#key.pair-merging.* success -> success'
-  - 'contract/postgres-key-vectors.json#fifteen.* success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.i16 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.i32 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.i64 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.u64 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.d38-0 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.d12-4 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.f32 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.f64 success -> success'
+  - 'contract/postgres-key-vectors.json#key.both.d9-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.both.d18-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.d10-2.d12-4 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.d12-4.d10-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.d20-2.d18-0 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair-merging.d38-0.d38-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair-merging.d38-2.d38-0 success -> success'
+  - 'contract/postgres-key-vectors.json#fifteen.d17-16.d17-16 success -> success'
+  - 'contract/postgres-key-vectors.json#fifteen.d17-16.d18-17 success -> success'
   - 'contract/postgres-key-vectors.json#key.at-precision.d19-0 refusal UNNAMED -> success'
   - 'contract/postgres-key-vectors.json#key.at-precision.d38-0 refusal UNNAMED -> success'
   more_exact:
