@@ -1053,9 +1053,9 @@ pub(crate) fn read(
             ))
         }
         DescribePart::Keys => {
-            // Each unique index is a key, its columns read by its name;
-            // a partial one is read too, as the reference reads it, but is
-            // no key: it holds its rows unique only where it covers them.
+            // Each unique index is a key, its columns read by its name; a
+            // partial one too, which keeps a column of its own unique as
+            // the reference reads it, but is no key of several columns.
             let mut found = Vec::new();
             for batch in batches {
                 let names = texts(batch, c::NAME)?;
@@ -1065,7 +1065,7 @@ pub(crate) fn read(
                     if let (Some(name), Some(1..)) = (&names[row], unique[row]) {
                         found.push(CatalogKey {
                             kind: if partial[row].is_some_and(|p| p != 0) {
-                                KeyKind::Other
+                                KeyKind::PartialUnique
                             } else {
                                 KeyKind::Unique
                             },

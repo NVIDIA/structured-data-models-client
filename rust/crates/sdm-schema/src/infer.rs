@@ -422,7 +422,9 @@ pub fn preview(
     // A column the source keeps unique by itself (a SQLite rowid alias) is
     // unique as a key of its own is.
     let kept_unique = catalog.iter().filter(|c| c.unique).map(|c| c.name.clone());
-    let mut declared_unique = single(&[KeyKind::Primary, KeyKind::Unique]);
+    // A partial unique index keeps its one column unique as the reference
+    // reads it (SQLite's `unique_keys`), but makes no key of several.
+    let mut declared_unique = single(&[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique]);
     declared_unique.extend(kept_unique.clone());
     let unique = constraints
         .iter()
