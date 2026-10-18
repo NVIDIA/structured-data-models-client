@@ -255,7 +255,9 @@ class _Handler(BaseHTTPRequestHandler):
         received: Received = self.server.received  # type: ignore[attr-defined]
         call = received.take(self.command, self.path, body)
         # The chosen call fails here, and every other is the rule's, called
-        # as one request is (a test may stand a rule of its own in for it).
+        # as one request is with the call's number and whether to answer
+        # probabilities as keywords (a test may stand a rule of its own in
+        # for it, taking the same arguments).
         status, reply = (
             _failed(call)
             if call == received.fail_call
