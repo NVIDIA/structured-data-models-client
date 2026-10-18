@@ -284,8 +284,9 @@ def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
 
 def test_a_refusal_inside_a_session_is_filed_as_the_sessions(relational):
     """A NIM reports a request refused while creating a session under that
-    session's code, and refuses a relational context with no rows, such as
-    one a holdout of every entity has emptied."""
+    session's code. A holdout can empty a relational context, or leave a
+    binary one a single class, after the client has checked it; the NIM
+    refuses both."""
     tables = graph()
     texty = Schema.from_data(tables)
     texty['users']['tier'].stype = 'text'
@@ -295,6 +296,10 @@ def test_a_refusal_inside_a_session_is_filed_as_the_sessions(relational):
             (
                 PredictiveQuery(COUNT, tables).materialize(indices=[0, 1]),
                 list(range(40)),
+            ),
+            (
+                PredictiveQuery(BINARY, tables).materialize(indices=[1, 3]),
+                list(range(0, 40, 2)),
             ),
         ):
             error = refused(

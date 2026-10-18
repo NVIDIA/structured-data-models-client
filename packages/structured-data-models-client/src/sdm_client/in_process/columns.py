@@ -6,7 +6,7 @@ r"""What both models share: a column's meaning, a table's shape, the labels."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -182,18 +182,63 @@ def labelled(
     if not classifies:
         return y, (), ()
     encoded = tuple(y.categorical.categories[0].tolist())
-    return y, encoded, _as_declared(target.get('classes'), encoded)
-
-
-def _as_declared(
-    declared: Sequence[Any] | None, encoded: tuple[Any, ...]
-) -> tuple[Any, ...]:
+    declared = target.get('classes')
+    _check_classes(task['kind'], declared, encoded)
     if not declared:
-        return encoded
-    fold = all(isinstance(label, bool) for label in encoded)
-
-    def text(label: Any) -> str:
-        return str(label).casefold() if fold else str(label)
-
+        return y, encoded, encoded
+    text = _text_of(encoded)
     named = {text(label): label for label in declared}
-    return tuple(named.get(text(label), label) for label in encoded)
+    return y, encoded, tuple(named.get(text(label), label) for label in encoded)
+
+
+def _check_classes(
+    kind: str, declared: Sequence[Any] | None, encoded: tuple[Any, ...]
+) -> None:
+    r"""Refuse classes the task contradicts, as the NIM does.
+
+    Asked of the context that arrived: a holdout can take every row of a
+    class out of it after the client has counted them.
+    """
+    count = len(encoded)
+    if kind == 'binary_classification' and count != 2:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'binary_classification needs exactly two classes, the context '
+            f'carries {count}',
+        )
+    if kind == 'multiclass_classification' and count < 2:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'multiclass_classification needs at least two classes, the '
+            f'context carries {count}',
+        )
+    if declared is None:
+        return
+    text = _text_of(encoded)
+    named = [text(label) for label in declared]
+    if not named:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            'the task declares an empty class list, which no label can satisfy',
+        )
+    if len(set(named)) != len(named):
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'declared classes repeat a label: {sorted(named)}',
+        )
+    present = {text(label) for label in encoded}
+    if set(named) != present:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'declared classes {sorted(set(named))} do not match the labels '
+            f'present in the context {sorted(present)}',
+        )
+
+
+def _text_of(encoded: tuple[Any, ...]) -> Callable[[Any], str]:
+    r"""How a declared class is matched to an encoded one: by its text, and
+    for a boolean target without case, since it is declared ``'true'`` and
+    encodes as ``True``."""
+    if all(isinstance(label, bool) for label in encoded):
+        return lambda label: str(label).casefold()
+    return str
