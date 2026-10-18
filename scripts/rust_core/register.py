@@ -17,16 +17,18 @@ It holds the file, as ``--root``'s tree has it, to:
 - unique IDs, and with ``--checkpoint`` (the checkpoint's register, of
   either format) never reused: every ID the checkpoint has is still there,
   so an entry is never deleted, and a withdrawn one is ``rejected``;
-- ``cases`` that resolve: a case of the corpus (``contract/cases``), or the
-  legacy form of an entry written before it, a task ID (``T1.7c``) or a
-  Phase 1b inventory case ID; each of ``case_outcomes`` names a line's key
+- ``cases`` that resolve: a case of the corpus (``contract/cases``), or
+  its line on another database (``X@sqlite``, ``X@postgres``, T2.1e), which
+  names that line only, or the legacy form of an entry written before it,
+  a task ID (``T1.7c``) or a Phase 1b inventory case ID; each of
+  ``case_outcomes`` names a line's key
   (``X``, or ``X@sqlite`` and ``X@postgres`` on another database, T2.0f)
   whose case part is a corpus case, but for a case it records as
   ``removed``;
 - each ``decision_ref`` a row of the decisions file it names;
 - each ``more_exact`` item's case a line's key (``X``, ``X@sqlite`` or
-  ``X@postgres``, T2.1d) whose case part is one of its entry's ``cases``
-  (T2.0g);
+  ``X@postgres``, T2.1d) that is one of its entry's ``cases``, or whose
+  case part is (T2.0g);
 - a ``case_outcomes`` row's ``statements_differ`` the one call its old
   outcome refuses at, on a move from that refusal to a success (T2.1e);
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
@@ -62,6 +64,8 @@ REFERENCE = Path('contract/reference')
 INVENTORY = Path('docs/design/rust-core/phase-0/phase-1b-inventory.yaml')
 #: A task ID, the legacy form of a case: ``T0.6``, ``T1.7c``, ``T1.11f``.
 TASK = re.compile(r'T[0-9]+\.[0-9]+[a-z]?')
+#: A line's key on another database: the case, ``@``, the database.
+ON_DATABASE = re.compile(r'(?P<case>.+)@(?:sqlite|postgres)')
 #: A projected outcome as ratchet.py writes it (the schema's pattern).
 OUTCOME = re.compile(
     r'(?P<result>success|refusal) ?(?P<code>[A-Z][A-Z0-9_]*|-)?'
@@ -226,8 +230,10 @@ def problems(
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
+            line = ON_DATABASE.fullmatch(case)
+            base = case if line is None else line['case']
             if not (
-                case in corpus or TASK.fullmatch(case) or case in inventory
+                base in corpus or TASK.fullmatch(base) or base in inventory
             ):
                 found.append(
                     f'{where}: case {case}: not a corpus case, a task ID '
@@ -258,7 +264,10 @@ def problems(
             found += _outcome_problems(entry, outcome, corpus, accepted)
         for item in entry.get('more_exact', []):
             # A line's key: the case, or the case and its database (T2.1d).
-            if item['case'].partition('@')[0] not in entry['cases']:
+            if (
+                item['case'] not in entry['cases']
+                and item['case'].partition('@')[0] not in entry['cases']
+            ):
                 found.append(
                     f'{where}: more_exact: {item["case"]} is not one of its cases'
                 )
