@@ -2251,6 +2251,7 @@ def _cell_pair(
     core: dict[str, Any] | None,
     old: dict[str, Any] | None,
     stop: str | None = None,
+    on_duckdb: bool = True,
 ) -> None:
     r"""H1's comparison in a cell other than the reference's: ``python-core``
     and ``python-old`` observed in the same cell, and their host fields
@@ -2259,12 +2260,20 @@ def _cell_pair(
     there is a failure: the cell's comparison needs both. ``stop``, where
     python-old stopped as the reference did and an approved move took
     python-core past it (E114): held only that far, as :func:`_host_fields`
-    holds a runner past the reference's stop."""
+    holds a runner past the reference's stop.
+
+    Off DuckDB python-old does not run (its SQLite sampling lacks the
+    reference's seeding, main's f0f324ce; T2.1a fix 4), so there
+    python-core alone in another cell is no failure: its host fields stay
+    reported against the reference, and every core rule still gates it
+    (T2.4: the SQLite and Postgres jobs in every cell)."""
     cells = {
         each['identity'].get('cell') for each in (core, old) if each is not None
     }
     other = cells - {None, REFERENCE_CELL}
     if not other:
+        return
+    if old is None and not on_duckdb:
         return
     where = f'{case["id"]}: cell {sorted(other)[0]}'
     if core is None or old is None:
@@ -2527,7 +2536,7 @@ def compare(
             and all(old['outcome'][f] == ref['outcome'][f] for f in OUTCOME)
             else None
         )
-        _cell_pair(report, case, python, old, pair_stop)
+        _cell_pair(report, case, python, old, pair_stop, on_duckdb)
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(
