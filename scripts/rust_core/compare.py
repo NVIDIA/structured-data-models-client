@@ -144,6 +144,31 @@ core block is DuckDB's run. There the ``core`` rule between the two
 core runners, where one went on past the operations both ran into the
 call the line stops at or a later one, holds them on the operations
 both ran.
+Columns only the core keeps (T2.1f, KO2-36): an owner-approved entry,
+under a row of this harness's decisions the owner approved (as
+``statements_differ``), may list ``core_only_columns``, each
+``<table>.<column>`` (the table's name holds no dot; the column's may), for
+the lines of its ``cases`` (each database's). For those lines a core
+runner's observation is compared with the reference's (and, in a cell
+other than the reference's, python-core's with python-old's, which leaves
+them out as the reference does) with exactly those
+columns taken out of the core side wherever they appear, and the links
+and key they make: the public schema's columns, its primary key and time
+column naming one and its links with one at either end; each payload
+table's columns and its rows' cells, its schema's column and key, and its
+relationships naming one; and each statement result's columns, types and
+Arrow fields of that name where the reference's result lacks them (the
+reference reads a column it then leaves out). The reference's from_source warning that it
+leaves a column out, one ``SDMWarning`` per table the entry names, the
+first of its warnings of that class, is taken out of the reference side
+for each table whose named column the runner kept (a warning's class does
+not say its table). A statement's result columns
+are taken out where its text names the table, quoted.
+A statement result read with such a column cannot have its row digests
+compared, which hash the column: its row count is, and its digests are
+reported, not gated. Everything else is compared exactly, an extra column
+the entry does not name included; between the core runners nothing
+changes.
 And a row read's DuckDB types name the Arrow
 types DuckDB reads them as with ``arrow_large_buffer_size`` where the
 case's own setup sets it (``large_string``, ``large_binary``,
@@ -300,6 +325,9 @@ class Report:
         #: The public calls whose statements an entry says differ from the
         #: reference's, by case and runner (:func:`statements_differ`).
         self.statements_differ: dict[tuple[str, str], tuple[str, ...]] = {}
+        #: The columns only the core keeps, by case (the bare ID) and
+        #: table (:func:`core_only_columns`, T2.1f).
+        self.core_only: dict[str, dict[str, frozenset[str]]] = {}
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -1576,6 +1604,298 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
     return found
 
 
+def core_only_columns(register: Path) -> dict[str, dict[str, frozenset[str]]]:
+    r"""The columns each entry of ``register`` lists under
+    ``core_only_columns``, by each of its ``cases`` (the bare case ID) and
+    table, from an entry approved by the owner under a row of this
+    harness's decisions the owner approved, as :func:`statements_differ`
+    reads one (T2.1f): a column the core keeps and the reference leaves
+    out (KO2-36). Each is ``<table>.<column>``, split at the first dot;
+    anything else, and a file it cannot read, names nothing."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
+        return {}
+    approved = _owner_rows()
+    entries = loaded.get('entries') if isinstance(loaded, dict) else None
+    found: dict[str, dict[str, frozenset[str]]] = {}
+    for entry in entries if isinstance(entries, list) else []:
+        if not (
+            isinstance(entry, dict)
+            and entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and isinstance(entry.get('decision_ref'), dict)
+            and isinstance(entry['decision_ref'].get('row'), str)
+            and entry['decision_ref']['row'] in approved
+            and isinstance(entry.get('core_only_columns'), list)
+            and isinstance(entry.get('cases'), list)
+        ):
+            continue
+        named: dict[str, set[str]] = {}
+        for each in entry['core_only_columns']:
+            if not isinstance(each, str):
+                continue
+            table, dot, column = each.partition('.')
+            if table and dot and column:
+                named.setdefault(table, set()).add(column)
+        for case in entry['cases']:
+            if not isinstance(case, str):
+                continue
+            mine = found.setdefault(case, {})
+            for table, columns in named.items():
+                mine[table] = mine.get(table, frozenset()) | columns
+    return found
+
+
+def _without_in_schema(schema: Any, named: dict[str, frozenset[str]]) -> Any:
+    r"""A public schema with the named columns taken out, and the key, time
+    column and links they make."""
+    if not isinstance(schema, dict):
+        return schema
+    tables = []
+    for table in schema.get('tables') or []:
+        out = (
+            set()
+            if not isinstance(table, dict)
+            else named.get(table.get('name'), set())
+        )
+        if not out:
+            tables.append(table)
+            continue
+        kept = dict(table)
+        kept['columns'] = [
+            c
+            for c in table.get('columns') or []
+            if not (isinstance(c, dict) and c.get('name') in out)
+        ]
+        key = table.get('primary_key')
+        if isinstance(key, str) and key in out:
+            kept['primary_key'] = None
+        elif isinstance(key, list):
+            left = [k for k in key if k not in out]
+            kept['primary_key'] = (
+                None if not left else left[0] if len(left) == 1 else left
+            )
+        if table.get('time_column') in out:
+            kept['time_column'] = None
+        tables.append(kept)
+    links = [
+        link
+        for link in schema.get('links') or []
+        if not (
+            isinstance(link, list)
+            and len(link) == 4
+            and (
+                link[1] in named.get(link[0], set())
+                or link[3] in named.get(link[2], set())
+            )
+        )
+    ]
+    return {**schema, 'tables': tables, 'links': links}
+
+
+def _without_in_payload(value: Any, named: dict[str, frozenset[str]]) -> Any:
+    r"""A payload with the named columns taken out of each table's columns
+    and rows' cells, its schema's columns and key, and the relationships
+    naming one."""
+    if isinstance(value, list):
+        return [_without_in_payload(item, named) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        if key == 'related_tables' and isinstance(item, dict):
+            out[key] = {
+                table: _without_in_table(section, named.get(table, set()))
+                for table, section in item.items()
+            }
+        elif key == 'relationships' and isinstance(item, list):
+            out[key] = [
+                link for link in item if not _relationship_names(link, named)
+            ]
+        else:
+            out[key] = _without_in_payload(item, named)
+    return out
+
+
+def _without_in_table(section: Any, out: frozenset[str] | set[str]) -> Any:
+    if not out or not isinstance(section, dict):
+        return section
+    kept = dict(section)
+    columns = section.get('columns')
+    if isinstance(columns, list):
+        drop = {i for i, name in enumerate(columns) if name in out}
+        kept['columns'] = [c for i, c in enumerate(columns) if i not in drop]
+        rows = section.get('rows')
+        if isinstance(rows, list):
+            kept['rows'] = [
+                [cell for i, cell in enumerate(row) if i not in drop]
+                if isinstance(row, list)
+                else row
+                for row in rows
+            ]
+    elif isinstance(columns, dict):
+        kept['columns'] = {k: v for k, v in columns.items() if k not in out}
+    key = section.get('primary_key')
+    if isinstance(key, list):
+        kept['primary_key'] = [k for k in key if k not in out]
+    elif isinstance(key, str) and key in out:
+        kept['primary_key'] = None
+    for name in ('time_column', 'end_time_column'):
+        if section.get(name) in out:
+            kept[name] = None
+    return kept
+
+
+def _relationship_names(link: Any, named: dict[str, frozenset[str]]) -> bool:
+    r"""Whether a payload relationship has a named column at either end."""
+    if not isinstance(link, dict):
+        return False
+    for table, columns in (
+        (link.get('source_table'), link.get('source_columns')),
+        (link.get('target_table'), link.get('target_columns')),
+    ):
+        if isinstance(columns, list) and any(
+            c in named.get(table, set()) for c in columns
+        ):
+            return True
+    return False
+
+
+#: How a statement result read with a column only the core keeps marks
+#: itself, so its row digests, which hash the column, are reported.
+_CORE_ONLY = 'core_only'
+
+
+def _without_in_results(
+    statement: Any, named: dict[str, frozenset[str]]
+) -> Any:
+    r"""A captured statement with each result read with a named column of
+    a table its text names (quoted, as every dialect quotes it) marked
+    with those columns, which :func:`_results` takes out where the
+    reference's result lacks them."""
+    if not isinstance(statement, dict) or not statement.get('results'):
+        return statement
+    text = statement.get('sql') if isinstance(statement.get('sql'), str) else ''
+    names = frozenset().union(
+        *(
+            columns
+            for table, columns in named.items()
+            if '"' + table.replace('"', '""') + '"' in text
+        )
+    )
+    results = []
+    for read in statement['results']:
+        values = read.get('values') if isinstance(read, dict) else None
+        columns = values.get('columns') if isinstance(values, dict) else None
+        if not isinstance(columns, list) or not names & set(columns):
+            results.append(read)
+            continue
+        marked = {**values, _CORE_ONLY: sorted(names & set(columns))}
+        results.append({**read, 'values': marked})
+    return {**statement, 'results': results}
+
+
+def _core_only_out(read: dict[str, Any], theirs: dict[str, Any]) -> bool:
+    r"""Takes out of ``read`` the columns marked as only the core's
+    (:func:`_without_in_results`) that ``theirs`` did not read; whether it
+    took any."""
+    values = read['values']
+    columns = values['columns']
+    missing = {
+        name
+        for name in values.get(_CORE_ONLY) or ()
+        if name not in theirs['values']['columns']
+    }
+    if not missing:
+        return False
+    drop = {i for i, name in enumerate(columns) if name in missing}
+    values['columns'] = [c for i, c in enumerate(columns) if i not in drop]
+    if isinstance(values.get('types'), list):
+        values['types'] = [
+            t for i, t in enumerate(values['types']) if i not in drop
+        ]
+    if isinstance(read.get('schema'), list):
+        read['schema'] = [
+            f for i, f in enumerate(read['schema']) if i not in drop
+        ]
+    return True
+
+
+def without_core_only(
+    observation: dict[str, Any], named: dict[str, frozenset[str]]
+) -> dict[str, Any]:
+    r"""A core runner's observation with the columns only the core keeps
+    taken out, as the reference never had them (T2.1f)."""
+    if not named:
+        return observation
+    found = copy.deepcopy(observation)
+    public = found.get('public')
+    if isinstance(public, dict):
+        public['schema'] = _without_in_schema(public.get('schema'), named)
+        for each in public.get('payloads') or []:
+            if isinstance(each, dict):
+                each['parsed'] = _without_in_payload(each.get('parsed'), named)
+    predicted = (found.get('core') or {}).get('predicted')
+    if isinstance(predicted, dict) and predicted.get('body') is not None:
+        predicted['body'] = _without_in_payload(predicted['body'], named)
+    capture = (found.get('driver') or {}).get('capture')
+    if isinstance(capture, dict):
+        capture['statements'] = [
+            _without_in_results(statement, named)
+            for statement in capture.get('statements') or []
+        ]
+    return found
+
+
+def without_left_out_warning(
+    reference: dict[str, Any],
+    named: dict[str, frozenset[str]],
+    observation: dict[str, Any],
+) -> dict[str, Any]:
+    r"""The reference's observation with its from_source warning of the
+    columns it leaves out taken out for each table whose named column the
+    core runner kept (its public schema holds it): one ``SDMWarning`` per
+    such table, the first of its warnings of that class. A runner that
+    left the column out, as the reference did, is held to the warning."""
+    found = copy.deepcopy(reference)
+    schema = (observation.get('public') or {}).get('schema') or {}
+    kept = 0
+    for table in schema.get('tables') or [] if isinstance(schema, dict) else []:
+        if not isinstance(table, dict):
+            continue
+        names = {
+            c.get('name')
+            for c in table.get('columns') or []
+            if isinstance(c, dict)
+        }
+        if names & named.get(table.get('name'), frozenset()):
+            kept += 1
+    host = found.get('host')
+    if not isinstance(host, dict):
+        return found
+    shown = list(host.get('warnings') or [])
+    origins = host.get('origins')
+    # The warnings' recorded origins, where the runner keeps them, lose the
+    # same entries, so the two lists stay aligned (HOST-5 reads them);
+    # origins that never matched are left as they are, still refused.
+    aligned = isinstance(origins, list) and len(origins) == len(shown)
+    kept_origins = list(origins) if aligned else origins
+    for _ in range(kept):
+        if 'SDMWarning' not in shown:
+            break
+        at = shown.index('SDMWarning')
+        del shown[at]
+        if aligned:
+            del kept_origins[at]
+    host['warnings'] = shown
+    if aligned:
+        host['origins'] = kept_origins
+    return found
+
+
 def _core_payload(
     report: Report,
     case: dict[str, Any],
@@ -1964,6 +2284,12 @@ def _results(
             _evidence(report, at, who[0], a) & _evidence(report, at, who[1], b)
         ):
             continue
+        # A column only the core keeps, which the reference's result lacks,
+        # is taken out of the core's (T2.1f); its digests hash it.
+        marked = False
+        if a['values'].get(_CORE_ONLY):
+            a = copy.deepcopy(a)
+            marked = _core_only_out(a, b)
         va, vb = a['values'], b['values']
         if va['unencodable'] or vb['unencodable']:
             # A value the canonical form does not hold is never equal.
@@ -1987,7 +2313,13 @@ def _results(
                 f'{at}: {a["rows"]} rows, against {b["rows"]}', 'sql.result'
             )
         key = 'ordered' if ordered else 'unordered'
-        if va[key] != vb[key]:
+        if marked and va[key] != vb[key]:
+            # The digests hash a column only the core keeps (T2.1f).
+            report.note(
+                f'{at}: rows read with a column only the core keeps; their '
+                'digests are not compared'
+            )
+        elif va[key] != vb[key]:
             report.fail(
                 f'{at}: rows differ '
                 + ('in order' if ordered else 'as a multiset'),
@@ -2285,6 +2617,13 @@ def _cell_pair(
     if len(cells) != 1:
         report.fail(f'{where}: python-core and python-old in different cells')
         return
+    # python-old leaves out what only the core keeps, as the reference does
+    # (T2.1f): taken out of the core's side, and its warning of leaving it
+    # out out of python-old's, as against the reference.
+    named = report.core_only.get(case['id'].partition('@')[0], {})
+    if named:
+        old = without_left_out_warning(old, named, core)
+        core = without_core_only(core, named)
     _host_fields(
         report, case, 'python-core', core, old, 'python-old', stop=stop
     )
@@ -2314,6 +2653,7 @@ def compare(
     report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
     report.more_exact = more_exact(improvements or register_file)
     report.statements_differ = statements_differ(improvements or register_file)
+    report.core_only = core_only_columns(improvements or register_file)
     if set(policy['rules']) != set(RULES):
         report.fail(
             'compare-policy.yaml: its rules are not the ones this runs: '
@@ -2477,22 +2817,31 @@ def compare(
             found = counts(observation)
             if found is not None:
                 report.info.append(f'{case["id"]}: {who}: {found}')
-            _core_payload(report, case, who, observation, ref, stop)
+            # Against the reference, what only the core keeps is taken out
+            # of the core's side, and the reference's warning of leaving it
+            # out of the reference's (T2.1f); between the core runners,
+            # below, nothing is.
+            seen, against = observation, ref
+            named = report.core_only.get(case['id'].partition('@')[0], {})
+            if named and who in MORE_EXACT_RUNNERS and ref is not None:
+                seen = without_core_only(observation, named)
+                against = without_left_out_warning(ref, named, observation)
+            _core_payload(report, case, who, seen, against, stop)
             refused = statements_refused(report, case['id'], who, wanted, ref)
-            if ref is not None:
+            if against is not None:
                 cell = observation['identity'].get('cell')
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
                     # H1: in a cell other than the reference's, the host
                     # fields against the reference are reported; python-core
                     # against python-old gates them (below).
                     since = len(report.failures)
-                    _host_fields(report, case, who, observation, ref, stop=stop)
+                    _host_fields(report, case, who, seen, against, stop=stop)
                     report.reported(
                         since, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
                     since = len(report.failures)
-                    _host_fields(report, case, who, observation, ref, stop=stop)
+                    _host_fields(report, case, who, seen, against, stop=stop)
                     if refused is not None:
                         # The warnings of a call refused by the approval.
                         report.demote(
@@ -2503,8 +2852,8 @@ def compare(
                     report,
                     case,
                     who,
-                    observation,
-                    ref,
+                    seen,
+                    against,
                     ordered,
                     stop if refused is None else refused,
                     large,
