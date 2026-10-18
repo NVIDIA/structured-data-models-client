@@ -6639,14 +6639,15 @@ entries:
     empty table or an interval column.
   cases: [empty.fact-table, time.feature-interval]
   refs: [P1B-11, P1B-8]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
-    Approver: reviewer, under E66(b)'s class, as P1B-11 and P1B-8 on
-    DuckDB: where the reference gives an unnamed error, a named refusal is
-    approved. Measured at T2.3 on
-    Postgres 17, python-core and rust-host alike.
+    Approved by both reviewers of T2.3's round 1, Codex and the Claude
+    reviewer (APPROVE-P2C-4 each, relayed by the orchestrator), under E66(b)
+    as P1B-11 and P1B-8 on DuckDB: the committed reference lines give an
+    unnamed RuntimeError and ValueError at from_source, and the core refuses
+    by name, INVALID_REQUEST and UNSUPPORTED_TYPE.
   case_outcomes:
   - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-11)'}
   - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'T2.3: as on DuckDB (P1B-11)'}
