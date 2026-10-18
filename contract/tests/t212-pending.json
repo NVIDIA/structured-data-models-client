@@ -6,9 +6,7 @@
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.key-tie-entity@postgres]",
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.composite-key-declared@postgres]",
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.composite-foreign-key-declared@postgres]",
-  "py:test_python_core_holds_the_composite_key_pair_matrix[postgres]",
-  "py:test_python_core_casts_fr_p3_8_s_entities[int64.time.timedelta]",
-  "py:test_python_core_casts_fr_p3_8_s_entities[int64.time.time-of-day]"
+  "py:test_python_core_holds_the_composite_key_pair_matrix[postgres]"
  ],
  "authored": [
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-feature]",

@@ -3550,6 +3550,7 @@ entries:
   - 'contract/key-cast-vectors.json#*.numpy.float64-half success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#*.text.hex success -> refusal INVALID_REQUEST'
   - 'contract/key-cast-vectors.json#int64.time.timestamp-1us success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-p3-8-vectors.json#int64.time.* success -> refusal INVALID_REQUEST'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3558,6 +3559,10 @@ entries:
     8's direction: no pandas coercion quirks, clear errors); never
     self-approved. A truncated entity predicts for another entity than the
     one given, which is why the core refuses it. Approved by the owner on 2026-10-13, relayed by the orchestrator.
+    T2.12 adds one ref, FR P3-8's two vectors (a timedelta and a time of
+    day of one microsecond into an integer key, which the reference casts
+    to 1 and the core refuses as a type, reason type): the coercion this
+    entry approves refusing; for the reviewers to hold to its meaning.
 
 - id: P1B-35
   title: Numbers mixed with text are cast as their text, where the reference refuses the mix
