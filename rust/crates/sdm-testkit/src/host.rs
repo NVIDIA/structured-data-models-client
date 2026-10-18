@@ -420,6 +420,7 @@ pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
             || given.inference_config.is_some()
             || given.candidates.is_some()
             || given.top_k.is_some()
+            || given.rows_per_call.is_some()
         {
             return Err(not_derived("materialize's options"));
         }
@@ -1312,7 +1313,15 @@ fn start_materialize(
             Value::Object(options.clone()),
         );
     }
-    let values_bytes = serde_json::to_vec(&Value::Object(values))?;
+    let mut values_bytes = serde_json::to_vec(&Value::Object(values))?;
+    // `rows_per_call` as the case wrote it (T2.8c's cases), whatever JSON
+    // scalar it is, as the Python host hands the caller's value over: the
+    // core holds its type and size to what the reference takes. Spliced in
+    // as text, so a whole number past 64 bits is not read through a double.
+    if let Some(written) = &case.input.materialize.rows_per_call {
+        values_bytes.pop();
+        values_bytes.extend_from_slice(format!(r#","rows_per_call":{}}}"#, written.0).as_bytes());
+    }
     observed.operations.push("materialize".into());
     observed.edits.push(json!({
         "op": "materialize",
@@ -1704,6 +1713,9 @@ fn predict(
     // records `core.predicted.body`, and every call's is kept in the
     // answer's `calls`, which the observation leaves out (T1.36 fix 22).
     let mut bodies: Vec<Value> = Vec::new();
+    // The scripted endpoint over the calls in order, failing the case's
+    // `fail_call` (T2.1a), as the Python runner serves it.
+    let mut scripted = endpoint::Endpoint::new(case.input.fail_call);
     let mut next = handle.next();
     take_warnings(&handle, &mut observed.warnings)?;
     loop {
@@ -1734,7 +1746,7 @@ fn predict(
             );
         }
         bodies.push(sent);
-        let (status, answered) = endpoint::answer("POST", endpoint::PREDICTIONS, &body);
+        let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
         let reply = encode(&ControlMessage::ModelReply(ModelReply {
             id: call.id,
             outcome: ModelOutcome::Response {
