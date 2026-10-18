@@ -30,6 +30,8 @@ T2.5 is the provider conformance kit and the in-memory fallback: one fixture dat
 
 - The test author's tests: all 19 of `test_t25_provider_kit.py` pass on DuckDB, SQLite and Postgres (a local Postgres 17), and all 12 of `t25_provider_kit.rs`; the pending list is empty.
 - The fallback's own tests (`sdm-core/tests/fallback.rs`, 15): each request's answer worked out by hand, the limits by name, the same sample whatever order the provider scans in, integer keys of two widths joined exactly, a provider's scan failure carried with its retryability, a declared request never the fallback's.
+- The kit's test file run from a shipped build of `sdm_client._native` with `SDM_KIT_PYTHON` naming a test-ops interpreter: all 19 pass; with none named, the runner exits 2, naming the build.
+- Before handoff: the cheap prepush tier, `cargo test --workspace --no-fail-fast` (137 test targets), `pytest contract/tests -n 4 --dist loadfile` with a Postgres server named (4,669 passed), `tests/test_ci_workflow.py`, `tests/test_wheel_smoke.py`, `tests/test_release_contract.py`, `register.py validate` and `ratchet.py check --checkpoint f42d92ea` (17 protected paths for the landing to name): all pass.
 - Measured, a release build over 1,000,000 rows: `neighbors` (window, five per seed, 1,000 seeds) 0.32 s, `key_counts` 0.31 s.
 
 ### Deviations and questions
