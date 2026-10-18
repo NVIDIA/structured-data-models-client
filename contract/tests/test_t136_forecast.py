@@ -47,6 +47,12 @@ From the review of fix 21:
   N distinct request ids, each ``sdm-`` and twelve hex digits, as the
   reference draws them.
 
+From T2.8, which lifts ``target_filter``: ``count-filtered-3`` (a target
+with ``WHERE``) is answered as the reference answers it on both core hosts;
+its ``python_core`` is recorded again under T2.8's candidate (the
+recorder's ``recandidate``, ``python_core_candidate``), and it is no longer
+among the refusals worded as before.
+
 ``sdm-testkit``'s ``tests/t136_forecast.rs`` holds ``rust-host`` to the same
 vectors. The implementer changes nothing of this file, the vectors or the
 recorder.
@@ -119,6 +125,11 @@ def test_the_vector_file_is_the_recorder_s() -> None:
         assert vector['rust_host'] == R.RUST_HOST.get(
             written['id'], 'reference'
         )
+    # Recorded again under a later candidate: only what that package
+    # changed by design.
+    assert {
+        v['id'] for v in RECORDED['vectors'] if 'python_core_candidate' in v
+    } == RECANDIDATED
 
 
 def test_the_vectors_are_not_vacuous() -> None:
@@ -148,8 +159,16 @@ def _requests_but_their_bytes(answer: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+#: The vectors whose python-core is recorded again under a later candidate
+#: (``python_core_candidate``): T2.8 lifts ``target_filter``.
+RECANDIDATED = {'count-filtered-3'}
+
+
 def _held_before_and_now(
-    got: dict[str, Any], vector: dict[str, Any], before: dict[str, Any]
+    got: dict[str, Any],
+    vector: dict[str, Any],
+    before: dict[str, Any],
+    again: bool = False,
 ) -> None:
     r"""What a route sent at fc2c0e2b, held but for the bytes main's
     26ecdd28 moved on both routes (no inference config the caller did not
@@ -165,6 +184,12 @@ def _held_before_and_now(
         assert [p['digest'] for p in got['payloads']] == [
             p['digest'] for p in reference['payloads']
         ], "each request is the reference's under the payload rule"
+    if again:
+        # Recorded after 26ecdd28, under the later candidate: its bytes too.
+        assert [p['masked_sha256'] for p in got['payloads']] == [
+            p['masked_sha256'] for p in before['payloads']
+        ]
+        return
     # Not vacuous: where it sent requests, fc2c0e2b's bytes were the
     # Python decomposition's with the engine's inference config, which no
     # route sends now.
@@ -177,7 +202,12 @@ def test_python_core_sends_what_it_sent_before_the_move(
     vector_id: str, core_runs: dict[str, Any]
 ) -> None:
     vector = BY_ID[vector_id]
-    _held_before_and_now(core_runs[vector_id], vector, vector['python_core'])
+    _held_before_and_now(
+        core_runs[vector_id],
+        vector,
+        vector['python_core'],
+        again='python_core_candidate' in vector,
+    )
 
 
 @pytest.mark.parametrize('vector_id', AS_THE_REFERENCE)
@@ -245,7 +275,6 @@ FILTER_CORE = (
         ('refuse.zero-steps', False, ZERO),
         ('refuse.step-outruns-data', True, OUTRAN_CORE),
         ('refuse.step-outruns-data', False, OUTRAN_OLD),
-        ('count-filtered-3', True, FILTER_CORE),
         ('sum-entity-filter-3', True, FILTER_CORE),
     ],
 )

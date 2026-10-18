@@ -19,6 +19,13 @@ digest, ``empty_null_record.digest``, and the tables it carries), and the
 result through ``to_pandas()`` (columns, dtypes, row digest, and the rows
 as the core writes cells: an integer's digits, a float's IEEE-754 bits).
 
+``recandidate <commit> <id> ...`` records again, for the vectors named,
+what python-core gives (``python_core``) under a later candidate, whose
+commit it keeps beside them (``python_core_candidate``), and each one's
+``rust_host`` as :data:`RUST_HOST` says now: a vector a later package
+changed on the core by design (T2.8's ``count-filtered-3``, whose
+``target_filter`` refusal it lifts).
+
 ``candidate`` runs each vector through this checkout, forced onto the core
 (``python-core``) and on the default routes (``python-old``), and keeps
 what each gives today: the same projection, the error's message, and the
@@ -167,7 +174,9 @@ VECTORS: list[dict[str, Any]] = [
     ),
 ]
 RUST_HOST = {
-    'count-filtered-3': 'python-core',
+    # count-filtered-3 (a target with WHERE) is the reference's on both core
+    # hosts from T2.8, which lifts target_filter for a ranking's questions;
+    # an entity filter waits for T2.13.
     'sum-entity-filter-3': 'python-core',
     'refuse.top-k': 'none',
 }
@@ -494,6 +503,25 @@ def main(argv: list[str]) -> int:
                 entry['python_core']['outcome']['code'],
                 file=sys.stderr,
             )
+    elif part == 'recandidate':
+        # A later candidate's python-core for the vectors named, which it
+        # changed by design, with the candidate's commit beside each.
+        if len(argv) < 3 or any(i not in by_id for i in argv[2:]):
+            print('usage: recandidate <commit> <id> ...', file=sys.stderr)
+            return 2
+        for vector in VECTORS:
+            if vector['id'] not in argv[2:]:
+                continue
+            entry = by_id[vector['id']]
+            entry['python_core'] = drive(vector, core=True)
+            entry['python_core_candidate'] = argv[1]
+            entry['rust_host'] = RUST_HOST.get(vector['id'], 'reference')
+            print(
+                vector['id'],
+                entry['python_core']['outcome']['result'],
+                entry['python_core']['outcome']['code'],
+                file=sys.stderr,
+            )
     elif part == 'observation':
         # python-core's observation (run_python.py --mode python-core) of
         # each forecast the reference answers, recorded after fix 21: the
@@ -509,7 +537,8 @@ def main(argv: list[str]) -> int:
                 ]
     else:
         print(
-            'usage: forecast_record.py reference|candidate|observation',
+            'usage: forecast_record.py '
+            'reference|candidate|recandidate|observation',
             file=sys.stderr,
         )
         return 2
