@@ -6558,10 +6558,10 @@ entries:
   affected_inputs: >-
     Postgres sources with a numeric key or feature, on the core route.
   cases:
-  - key.decimal-38-10
-  - decimal.feature-38-0-wide
-  - decimal.key-wide
-  - key.uint64-above-int64-max
+  - key.decimal-38-10@postgres
+  - decimal.feature-38-0-wide@postgres
+  - decimal.key-wide@postgres
+  - key.uint64-above-int64-max@postgres
   refs:
   - P2B-1
   - 'contract/postgres-key-vectors.json#pair.d12-4.i16 success -> success'
@@ -6637,7 +6637,7 @@ entries:
   affected_inputs: >-
     Schema.from_source on the core route over a Postgres source with an
     empty table or an interval column.
-  cases: [empty.fact-table, time.feature-interval]
+  cases: [empty.fact-table@postgres, time.feature-interval@postgres]
   refs: [P1B-11, P1B-8]
   status: approved
   approved_by: reviewer
@@ -6674,7 +6674,7 @@ entries:
     PredictiveQuery.materialize on the core route over a Postgres source
     whose text time column's smallest or largest text Postgres cannot read
     as a timestamp.
-  cases: [time.text-one-bad-value]
+  cases: [time.text-one-bad-value@postgres]
   refs: [DT-12, DT-7, 'contract/refusal-census.json rule:text_time']
   status: approved
   approved_by: owner
@@ -6739,10 +6739,10 @@ entries:
     PredictiveQuery.materialize on the core route over a Postgres source of
     a query whose target has a filter or is a condition.
   cases:
-  - s0.boundary.deepest
-  - s0.boundary.digits-4300
-  - s0.boundary.escapes
-  - s0.boundary.start-past-64kb
+  - s0.boundary.deepest@postgres
+  - s0.boundary.digits-4300@postgres
+  - s0.boundary.escapes@postgres
+  - s0.boundary.start-past-64kb@postgres
   refs: [E92, T2.10]
   status: approved
   approved_by: owner
