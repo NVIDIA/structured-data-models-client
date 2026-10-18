@@ -25,7 +25,10 @@
 //! `["interval", months, days, nanoseconds as digits]` (a month-day-nano
 //! interval); a dictionary is read as its values; text a field marks as
 //! JSON (Arrow's `arrow.json`) as the value it holds, as a driver reads
-//! JSON ([`json_cell`]). A value of any other
+//! JSON ([`json_cell`]); a month-day-nano interval of a column tagged as
+//! built from `timedelta`s ([`INTERVAL_TAG`]) as that `timedelta`,
+//! `["dur", nanoseconds]`, a month 30 days ([`folded_interval_cell`]). A
+//! value of any other
 //! type (a `date64`, a year-month or day-time interval) is `["?", its
 //! type's name]` and is listed as unencodable, inside a map or a chosen
 //! union member too, which the comparator never takes as equal; a member
@@ -62,6 +65,7 @@ pub fn values(fields: &[&Field], batches: &[RecordBatch]) -> Value {
     let mut odd = BTreeSet::new();
     let mut texts = Vec::new();
     let json: Vec<bool> = fields.iter().map(|f| is_json(f)).collect();
+    let folded: Vec<bool> = fields.iter().map(|f| is_folded_interval(f)).collect();
     for batch in batches {
         for row in 0..batch.num_rows() {
             let cells: Vec<Value> = batch
@@ -71,6 +75,8 @@ pub fn values(fields: &[&Field], batches: &[RecordBatch]) -> Value {
                 .map(|(at, column)| {
                     if json.get(at).copied().unwrap_or(false) {
                         json_cell(column, row, &mut odd)
+                    } else if folded.get(at).copied().unwrap_or(false) {
+                        folded_interval_cell(column, row)
                     } else {
                         cell(column, row, &mut odd)
                     }
@@ -88,6 +94,31 @@ pub fn values(fields: &[&Field], batches: &[RecordBatch]) -> Value {
         "unordered": digest_of(&texts),
         "unencodable": odd.into_iter().collect::<Vec<_>>(),
     })
+}
+
+/// The field metadata key, and its value, marking a month-day-nano
+/// interval column built from a driver's `timedelta`s (the Postgres
+/// provider's, psycopg's reading of an `interval`).
+pub const INTERVAL_TAG: (&str, &str) = ("sdm:interval", "timedelta");
+
+/// Whether `field` is a month-day-nano interval built from `timedelta`s
+/// ([`INTERVAL_TAG`]).
+fn is_folded_interval(field: &Field) -> bool {
+    field.metadata().get(INTERVAL_TAG.0).map(String::as_str) == Some(INTERVAL_TAG.1)
+        && field.data_type() == &DataType::Interval(IntervalUnit::MonthDayNano)
+}
+
+/// One interval of a column built from `timedelta`s, `row` of `array`, in
+/// the canonical cell of the `timedelta` itself, `["dur", nanoseconds]`,
+/// a month counted as 30 days as psycopg counts it; null where it is null.
+fn folded_interval_cell(array: &ArrayRef, row: usize) -> Value {
+    if array.is_null(row) {
+        return Value::Null;
+    }
+    let value = array.as_primitive::<IntervalMonthDayNanoType>().value(row);
+    let days = i128::from(value.months) * 30 + i128::from(value.days);
+    let nanos = days * 86_400_000_000_000 + i128::from(value.nanoseconds);
+    tagged("dur", nanos.to_string())
 }
 
 /// Whether `field` is text holding JSON: Arrow's canonical `arrow.json`
@@ -784,7 +815,8 @@ mod tests {
     use std::collections::HashMap;
     use std::sync::Arc;
 
-    use duckdb::arrow::datatypes::Schema;
+    use duckdb::arrow::array::IntervalMonthDayNanoArray;
+    use duckdb::arrow::datatypes::{IntervalMonthDayNano, Schema};
 
     use super::*;
 
@@ -805,6 +837,39 @@ mod tests {
         let array: ArrayRef = Arc::new(StringArray::from(texts.to_vec()));
         let batch = RecordBatch::try_new(schema, vec![array]).unwrap();
         values(&[&field], &[batch])
+    }
+
+    fn intervals(tagged: bool, cells: &[IntervalMonthDayNano]) -> Value {
+        let mut field = Field::new("f", DataType::Interval(IntervalUnit::MonthDayNano), true);
+        if tagged {
+            field = field.with_metadata(HashMap::from([(
+                INTERVAL_TAG.0.to_owned(),
+                INTERVAL_TAG.1.to_owned(),
+            )]));
+        }
+        let schema = Arc::new(Schema::new(vec![field.clone()]));
+        let array: ArrayRef = Arc::new(IntervalMonthDayNanoArray::from(cells.to_vec()));
+        let batch = RecordBatch::try_new(schema, vec![array]).unwrap();
+        values(&[&field], &[batch])
+    }
+
+    /// The canonical row of `timedelta(days=31, microseconds=5)`, which
+    /// `tests/test_t21e_interval_timedelta.py` holds the Python runner's
+    /// reading to.
+    const DELTA_ROW: &str = r#"[["dur","2678400000005000"]]"#;
+
+    #[test]
+    fn a_tagged_interval_reads_as_the_timedelta_it_was_built_from() {
+        let digest = crate::case::sha256(format!("[{DELTA_ROW}]").as_bytes());
+        let one = IntervalMonthDayNano::new(0, 31, 5_000);
+        assert_eq!(intervals(true, &[one])["ordered"], digest);
+        // A month counts as 30 days, as psycopg counts it.
+        let month = IntervalMonthDayNano::new(1, 1, 5_000);
+        assert_eq!(intervals(true, &[month])["ordered"], digest);
+        // Untagged, an interval keeps its own cell; another one differs.
+        assert_ne!(intervals(false, &[one])["ordered"], digest);
+        let other = IntervalMonthDayNano::new(0, 31, 6_000);
+        assert_ne!(intervals(true, &[other])["ordered"], digest);
     }
 
     #[test]

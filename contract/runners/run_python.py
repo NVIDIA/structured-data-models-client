@@ -1711,6 +1711,43 @@ def _chosen_odd(cell: Any, odd: list[str]) -> None:
         _chosen_odd(cell[3], odd)
 
 
+#: The field metadata key, and its value, marking a month-day-nano interval
+#: column built from a driver's ``timedelta``s (the Postgres provider's,
+#: psycopg's reading of an ``interval``); ``sdm-testkit``'s ``INTERVAL_TAG``.
+_INTERVAL_TAG = (b'sdm:interval', b'timedelta')
+
+
+def _is_folded_interval(field: Any) -> bool:
+    r"""Whether ``field`` is a month-day-nano interval column built from
+    ``timedelta``s (:data:`_INTERVAL_TAG`)."""
+    import pyarrow as pa
+
+    key, value = _INTERVAL_TAG
+    return (
+        field.type == pa.month_day_nano_interval()
+        and (field.metadata or {}).get(key) == value
+    )
+
+
+def _folded_intervals(array: Any, odd: list[str]) -> list[Any]:
+    r"""The cells of an interval column built from ``timedelta``s, each the
+    ``timedelta``'s own, ``["dur", nanoseconds]``, a month counted as 30
+    days as psycopg counts it."""
+    del odd
+    return [
+        None
+        if value is None
+        else [
+            'dur',
+            str(
+                ((value.months * 30 + value.days) * 86_400 * 10**9)
+                + value.nanoseconds
+            ),
+        ]
+        for value in array.to_pylist()
+    ]
+
+
 def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
     r"""An Arrow table's columns and rows in canonical form, read from
     Arrow (:func:`_arrow_cells`) column by column, so two columns of one
@@ -1719,13 +1756,13 @@ def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
 
     odd: list[str] = []
     columns = [
-        _arrow_cells(
+        (_folded_intervals if _is_folded_interval(field) else _arrow_cells)(
             column.combine_chunks()
             if column.num_chunks
             else pa.array([], type=column.type),
             odd,
         )
-        for column in table.columns
+        for field, column in zip(table.schema, table.columns, strict=True)
     ]
     rows = (
         [list(row) for row in zip(*columns, strict=True)]
