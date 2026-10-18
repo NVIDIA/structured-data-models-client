@@ -14,7 +14,15 @@ cache, so a change to the ``logging`` configuration takes effect
 A provider's failure reaches the core as the contract's ``ProviderError``:
 kind, ``retryable``, SQLSTATE and vendor code, never the driver's text; the
 exception the run then ends with names the driver's class and is raised
-``from None`` (decision H17).
+``from None`` (decision H17). A failure is retryable when the provider's
+exception says so, by a ``retryable`` attribute that is ``True``, and not
+otherwise.
+
+A provider may answer a fetch one page at a time (design choice 1,
+paging): it returns a :class:`Page`, one page with more following, and the
+core asks again with the same request and the page's ``continuation`` in
+the step (``step['continuation']``), until the provider returns its last
+page as an answer; the core reads the pages as one answer.
 
 A model call (from T1.11d, ``predict``'s) is answered by the caller's
 ``model``: given the body's bytes, it returns the answer's bytes, which the
@@ -37,14 +45,27 @@ from sdm_client._rust import codec, errors, facts
 from sdm_client.errors import StructuredDataError
 
 #: A provider: answers one fetch, the ``FetchStep`` as the contract writes
-#: it, with an object that exports Arrow through ``__arrow_c_stream__``; the
-#: key sets its plan names are handed over with it, by attachment id, each
-#: an object exporting Arrow the same way.
+#: it, with an object that exports Arrow through ``__arrow_c_stream__``, or
+#: with a :class:`Page` of it; the key sets its plan names are handed over
+#: with it, by attachment id, each an object exporting Arrow the same way.
 Provider = Callable[[dict[str, Any], Mapping[int, Any]], Any]
 
 #: A model: answers one call, given its body's bytes, with the bytes of the
 #: endpoint's answer.
 Model = Callable[[bytes], bytes]
+
+
+class Page:
+    r"""One page of a provider's answer to a fetch, more following:
+    ``data`` exports Arrow through ``__arrow_c_stream__``, and
+    ``continuation`` is the text the core hands back, in the step that asks
+    for the next page."""
+
+    __slots__ = ('continuation', 'data')
+
+    def __init__(self, data: Any, continuation: str) -> None:
+        self.data = data
+        self.continuation = continuation
 
 
 class TransportFailed(Exception):
@@ -95,7 +116,7 @@ def _driver(error: Exception) -> tuple[dict[str, Any], str]:
     kind = type(error)
     provided = {
         'kind': 'data_source',
-        'retryable': False,
+        'retryable': getattr(error, 'retryable', False) is True,
         'sqlstate': sqlstate,
         'vendor_code': vendor,
     }
@@ -252,8 +273,19 @@ def _steps(
         for request in step['requests']:
             attached: dict[int, Any] = {}
             try:
-                attached[1] = provider(request, _key_sets(handle, request))
+                # A later page's step names the key sets the first took.
+                keys = (
+                    {}
+                    if request.get('continuation')
+                    else _key_sets(handle, request)
+                )
+                answer = provider(request, keys)
                 outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
+                if isinstance(answer, Page):
+                    attached[1] = answer.data
+                    outcome['continuation'] = answer.continuation
+                else:
+                    attached[1] = answer
             except RouteError:
                 # The route itself failed (an import of the old engine on
                 # it, say), which is no provider's error to hand the core.

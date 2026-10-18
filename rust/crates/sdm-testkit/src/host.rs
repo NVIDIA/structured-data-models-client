@@ -887,18 +887,30 @@ fn describe_on(
             }
         }
     }
-    // Off DuckDB a case runs every call through its `until` (T2.1d,
-    // [`through_until`]): a query the case validates is validated on the
-    // schema this host described, as the Python host builds its query
-    // schema from the source's, then materialized when accepted.
-    if off_duckdb
-        && let Some(validating) = case.core.as_ref().and_then(|c| c.validate_query.as_ref())
-    {
-        let described = ValidateQueryInput {
-            profile: validating.profile.clone(),
-            schema: serde_json::to_value(query_schema(&schema))?,
+    // A query the client refuses before the core's materialize: the client
+    // validates it first, on S0's route by the core's validate_query
+    // (design, "Routing seam"), as the reference refuses it before any
+    // data is read; so a case that names validate_query beside
+    // describe_source runs it after the description, and runs materialize
+    // only once it is accepted (refuse.unknown-column, T1.32d; whether or
+    // not the case names materialize, carried row G5). On DuckDB it is
+    // validated with the schema and profile the case gives; off DuckDB a
+    // case runs every call through its `until` (T2.1d, [`through_until`]),
+    // and the query is validated on the schema this host described, as
+    // the Python host builds its query schema from the source's.
+    let materializing = case.core.as_ref().and_then(|c| c.materialize.as_ref());
+    if let Some(validating) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
+        let described;
+        let given = if off_duckdb {
+            described = ValidateQueryInput {
+                profile: validating.profile.clone(),
+                schema: serde_json::to_value(query_schema(&schema))?,
+            };
+            &described
+        } else {
+            validating
         };
-        let (input, answer) = validate(case, &described)?;
+        let (input, answer) = validate(case, given)?;
         observed.operations.push("validate_query".into());
         observed.inputs.push(input);
         let accepted = matches!(answer, Answer::Validated(true));
@@ -906,24 +918,11 @@ fn describe_on(
         if !accepted {
             return Ok(observed);
         }
-        observed.accepted = Some(true);
+        if off_duckdb || materializing.is_some() {
+            observed.accepted = Some(true);
+        }
     }
-    let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
-        if off_duckdb {
-            return Ok(observed);
-        }
-        // A query the client refuses before the core's materialize: the
-        // client validates it first, on S0's route by the core's
-        // validate_query (design, "Routing seam"), as the reference refuses
-        // it before any data is read; so a case that names validate_query
-        // beside describe_source runs it after the description, with the
-        // schema and profile the case gives (refuse.unknown-column, T1.32d).
-        if let Some(spec) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
-            let (input, answer) = validate(case, spec)?;
-            observed.operations.push("validate_query".into());
-            observed.inputs.push(input);
-            observed.answer = answer;
-        }
+    let Some(spec) = materializing else {
         return Ok(observed);
     };
     // The schema materialize samples is this host's own description, with

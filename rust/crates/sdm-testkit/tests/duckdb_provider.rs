@@ -65,6 +65,8 @@ fn start(request: &Value) -> HostRun {
             dialect: Dialect::new("duckdb"),
         }),
         echo: true,
+        undeclared: vec![],
+        fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
@@ -500,6 +502,8 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
             dialect: Dialect::new("duckdb"),
         }),
         echo: true,
+        undeclared: vec![],
+        fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,

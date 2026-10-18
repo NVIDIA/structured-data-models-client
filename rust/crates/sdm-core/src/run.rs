@@ -35,7 +35,7 @@ use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, Sam
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
 
-use crate::compose::DataAccess;
+use crate::compose::{DataAccess, Route};
 
 /// Data that travels beside a control message.
 #[derive(Debug, Clone)]
@@ -174,8 +174,42 @@ impl Asker {
                 "the operation asked for data and names no provider",
             ));
         };
-        let plan = data.plan(&request)?;
-        Ok(self.ask_planned(request, plan))
+        let limits = match data.route(&request)? {
+            Route::Plan(plan) => return Ok(self.ask_planned(request, plan)),
+            Route::Fallback(limits) => limits,
+        };
+        // The in-memory fallback (T2.6): the request is never the host's;
+        // its seeds, attached for the host, come back to the core.
+        let seeds = match &request {
+            DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => {
+                Some(self.take_attached(seeds.attachment)?)
+            }
+            _ => None,
+        };
+        Ok(Ask {
+            shared: Arc::clone(&self.shared),
+            state: AskState::Fallback(Box::pin(crate::fallback::answer(
+                self.clone(),
+                request,
+                limits,
+                seeds,
+            ))),
+        })
+    }
+
+    /// The Arrow data the body attached as `id`, taken back before the host
+    /// took it: the seeds of a request the fallback answers.
+    fn take_attached(&self, id: AttachmentId) -> Result<ArrowData, CoreError> {
+        match lock(&self.shared).attachments.remove(&id) {
+            Some(Attachment::Arrow(data)) => Ok(data),
+            _ => Err(internal("a request's seeds are not attached as Arrow")),
+        }
+    }
+
+    /// Ends the run with `error` at its next step, as a provider's pages
+    /// that do not match end it: what the in-memory fallback fails with.
+    pub(crate) fn fail(&self, error: CoreError) {
+        lock(&self.shared).exhausted.get_or_insert(error);
     }
 
     /// What the run's provider declared it answers, for an operation that
@@ -327,6 +361,9 @@ pub struct Ask {
 
 enum AskState {
     New(Asked),
+    /// Answered by the in-memory fallback (T2.6), which asks its own
+    /// requests of the host through the run.
+    Fallback(Pin<Box<dyn Future<Output = Reply> + Send>>),
     /// Asked under the id; a fetch keeps its request and plan, to ask for
     /// the next page, and the pages read so far.
     Asked {
@@ -368,8 +405,12 @@ fn add_page(pages: Option<ArrowData>, page: ArrowData) -> Result<ArrowData, Core
 impl Future for Ask {
     type Output = Reply;
 
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Reply> {
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Reply> {
         let this = self.get_mut();
+        // The fallback's own asks lock the run's state as they are polled.
+        if let AskState::Fallback(answer) = &mut this.state {
+            return answer.as_mut().poll(context);
+        }
         let mut shared = lock(&this.shared);
         match mem::replace(&mut this.state, AskState::Answered) {
             AskState::New(asked) => {
@@ -463,6 +504,7 @@ impl Future for Ask {
                 }
                 Some(reply) => Poll::Ready(reply),
             },
+            AskState::Fallback(_) => unreachable!("polled above"),
             AskState::Answered => panic!("a request's reply was awaited after it was taken"),
         }
     }

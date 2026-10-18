@@ -9,7 +9,13 @@
 //! sdm-contract-run --providers
 //! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --database sqlite --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --kit DATABASE [--fault truncate|silent_capability] --out REPORT
 //! ```
+//!
+//! `--kit` runs the provider conformance kit on this host's provider for
+//! DATABASE, `duckdb` or `sqlite` ([`sdm_testkit::kit`], T2.5): it writes
+//! REPORT and exits 0 when every case passes, 1 when any fails, and 2
+//! when it cannot run.
 //!
 //! `--database sqlite` (T2.2) runs each case that runs on SQLite over its
 //! tables loaded into a new SQLite file by the contract loader, read
@@ -145,11 +151,42 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     Ok((out, count))
 }
 
+/// `--kit DATABASE [--fault F] --out REPORT`: whether every case passed.
+fn kit(arguments: &[String]) -> Result<bool> {
+    let (database, fault, out) = match arguments {
+        [kit, database, out_flag, out] if kit == "--kit" && out_flag == "--out" => {
+            (database, None, out)
+        }
+        [kit, database, fault_flag, fault, out_flag, out]
+            if kit == "--kit" && fault_flag == "--fault" && out_flag == "--out" =>
+        {
+            (database, Some(fault.as_str()), out)
+        }
+        _ => bail!(
+            "usage: sdm-contract-run --kit DATABASE [--fault truncate|silent_capability] --out REPORT"
+        ),
+    };
+    let repository = observation::repository(&std::env::current_dir()?)?;
+    let (report, passed) = sdm_testkit::kit::run(&repository, database, fault)?;
+    std::fs::write(out, serde_json::to_string_pretty(&report)? + "\n")?;
+    Ok(passed)
+}
+
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     if arguments == ["--providers"] {
         println!("{}", serde_json::json!(sdm_testkit::PROVIDERS));
         return ExitCode::SUCCESS;
+    }
+    if arguments.first().is_some_and(|a| a == "--kit") {
+        return match kit(&arguments) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::from(1),
+            Err(failure) => {
+                eprintln!("provider kit: {failure:#}");
+                ExitCode::from(2)
+            }
+        };
     }
     match run(&arguments) {
         Ok((_, count)) => {

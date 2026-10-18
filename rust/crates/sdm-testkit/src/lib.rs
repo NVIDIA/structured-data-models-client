@@ -21,7 +21,8 @@
 //! [`pre_given`] reads a case written before contract 23, for
 //! `sdm-contract-run --pre-given-specs` alone. [`sqlite`] is its SQLite
 //! (T2.2): a case's tables loaded by the contract loader, and the dev-only
-//! `rusqlite` provider.
+//! `rusqlite` provider. [`kit`] runs the provider conformance kit on its
+//! providers (T2.5).
 
 /// The databases the pure-Rust host has a provider for (rust-host's marker
 /// for the staging rule, `contract/runners/run_python.py`'s `check_legs`;
@@ -38,6 +39,7 @@ pub mod duck;
 pub mod edits;
 pub mod endpoint;
 pub mod host;
+pub mod kit;
 pub mod observation;
 pub mod pre_given;
 pub mod replay;

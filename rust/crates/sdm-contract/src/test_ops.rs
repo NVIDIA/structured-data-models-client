@@ -13,7 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::data::{AttachmentId, DataRequest, FetchPlan, ProviderChoice};
+use crate::data::{
+    AttachmentId, DataRequest, FallbackLimits, FetchPlan, OptionalRequest, ProviderChoice,
+};
 use crate::ops::{AttachmentKind, Materialize, Operation};
 use crate::scalar::Scalar;
 
@@ -115,6 +117,15 @@ pub struct TestFetch {
     /// can export what the core holds.
     #[serde(default)]
     pub echo: bool,
+    /// Optional requests the `provider` is taken not to declare for this
+    /// fetch, out of what its data layer gives it: the conformance kit's
+    /// cases with a capability undeclared, on any provider (T2.5, T2.6).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undeclared: Vec<OptionalRequest>,
+    /// The in-memory fallback's limits the `provider` is taken to declare
+    /// for this fetch, in place of its own (T2.6).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<FallbackLimits>,
 }
 
 /// A test-only operation's result.

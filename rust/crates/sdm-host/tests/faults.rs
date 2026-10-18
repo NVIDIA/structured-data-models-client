@@ -85,6 +85,8 @@ fn text(error: &CoreError, field: &str) -> String {
 fn fetching(expect: ExpectedSchema) -> HostRun {
     let fetch = TestFetch {
         echo: false,
+        undeclared: vec![],
+        fallback: None,
         request: DataRequest::Scan {
             table: "t".into(),
             columns: vec![],

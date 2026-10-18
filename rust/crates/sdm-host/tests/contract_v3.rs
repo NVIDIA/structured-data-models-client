@@ -239,6 +239,8 @@ fn wide_fetch(pad: usize) -> TestFetch {
         .collect();
     TestFetch {
         echo: false,
+        undeclared: vec![],
+        fallback: None,
         request: DataRequest::Scan {
             table: "orders".into(),
             columns: (0..200).map(|i| format!("column_{i:03}")).collect(),

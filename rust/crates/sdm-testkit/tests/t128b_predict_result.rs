@@ -471,6 +471,14 @@ fn run_recorded(covers: &[&str]) -> usize {
                     Ended::Refused { code: got, fields } => {
                         assert_eq!(got, code, "{name}: {fields}");
                         assert!(fields.get("status").is_none(), "{name}: {fields}");
+                        // The fields the policy names, as python-core is
+                        // held to them (carried row M9).
+                        for key in ["field", "reason"] {
+                            if let Some(want) = policy.get(key) {
+                                let have = fields.get(key).map(|v| v.get("v").unwrap_or(v));
+                                assert_eq!(have, Some(want), "{name}: {key} in {fields}");
+                            }
+                        }
                     }
                     Ended::Result(_) => panic!("{name}: a result where the policy refuses"),
                 }

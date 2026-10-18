@@ -252,6 +252,8 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
         plan: Some(FetchPlan::Host { expect }),
         provider: None,
         echo: true,
+        undeclared: vec![],
+        fallback: None,
     };
     let run = HostRun::start(
         &sdm_host::default_root(),
