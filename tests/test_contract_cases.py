@@ -291,6 +291,17 @@ T219_SHAPES = (
 )
 
 
+#: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
+#: each of a dot, a backtick and a line break in a column's name, as a
+#: feature the query does not name, the target, the entity (users' declared
+#: primary key), a filter and an aggregation's column.
+T218_NAMES = tuple(
+    f'name.{name}-{role}'
+    for name in ('dot', 'backtick', 'line-break')
+    for role in ('feature', 'target', 'entity', 'filter', 'aggregation')
+)
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -313,15 +324,17 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # T2.0c adds the exact-decimal cases (KO2-50), no inventory case either;
     # each is an acceptance case carrying its call as far as the reference
     # goes. T2.19 adds the two-path sampling cases, acceptance cases through
-    # predict, no inventory case either.
+    # predict, no inventory case either. T2.18 adds the column-name cases
+    # (KO2-36), each carrying its call through predict.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
         'base.adventureworks.color',
         *T20C_DECIMAL,
         *T219_SHAPES,
+        *T218_NAMES,
     }
-    for case_id in T20C_DECIMAL:
+    for case_id in (*T20C_DECIMAL, *T218_NAMES):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
     for case_id in T219_SHAPES:
