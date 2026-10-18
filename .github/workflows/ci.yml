@@ -1153,6 +1153,12 @@ jobs:
       - &contract-postgres-required
         name: The Postgres service, and the contract loader on it
         run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
+      # T2.3's regression and key vectors, on the service with the job's
+      # DSN, failing where it is not there (SDM_REQUIRE_POSTGRES); the
+      # provider's own test needs the test-ops build, which this job does
+      # not install.
+      - name: T2.3's Postgres regression and key vectors on the service
+        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py -q
       - *contract-database
 
 
