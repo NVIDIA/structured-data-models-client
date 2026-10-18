@@ -1,0 +1,3836 @@
+{
+ "format": "sdm-t28c-multicall-vectors/1",
+ "about": "What T2.8c's multi-call cases (contract/cases/s1/multicall.*.json, main's 1fc5a686) give beside their observation lines, by case key, recorded from the reference's public calls: the rows each call scores, the result through to_pandas() (every row, or both ends of a long one), and a refusal's details, the answers carried on it (details answered), its first sentence and, for a call past the 30 MiB body, the remedy the client names. contract/tests/test_t28c_multicall.py holds python-core to them, observed by the same code (observe).",
+ "recorded_by": "contract/tools/multicall_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "vectors": {
+  "multicall.body-30mib.one-row": {
+   "case": "cdf619166e2bbc28db994150cf9fabd73e07bf22f7dfcde325d91a527adc94ff",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "batch_too_large_to_send": true
+   },
+   "answered": null,
+   "opening": "[INVALID_REQUEST] Context size exceeds the 30MB limit.",
+   "remedy": "A call already scores one row, so there is no smaller one to ask for: what comes down is num_context_samples, num_neighbors or the columns the graph carries."
+  },
+  "multicall.body-30mib.one-row@postgres": {
+   "case": "cdf619166e2bbc28db994150cf9fabd73e07bf22f7dfcde325d91a527adc94ff",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "batch_too_large_to_send": true
+   },
+   "answered": null,
+   "opening": "[INVALID_REQUEST] Context size exceeds the 30MB limit.",
+   "remedy": "A call already scores one row, so there is no smaller one to ask for: what comes down is num_context_samples, num_neighbors or the columns the graph carries."
+  },
+  "multicall.body-30mib.one-row@sqlite": {
+   "case": "cdf619166e2bbc28db994150cf9fabd73e07bf22f7dfcde325d91a527adc94ff",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "batch_too_large_to_send": true
+   },
+   "answered": null,
+   "opening": "[INVALID_REQUEST] Context size exceeds the 30MB limit.",
+   "remedy": "A call already scores one row, so there is no smaller one to ask for: what comes down is num_context_samples, num_neighbors or the columns the graph carries."
+  },
+  "multicall.body-30mib.several-rows": {
+   "case": "938c5a02db1418fd7c77b84d847ef84b5ad09ddbc0f4df75dc047d621782e80c",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "batch_too_large_to_send": true
+   },
+   "answered": null,
+   "opening": "[INVALID_REQUEST] Context size exceeds the 30MB limit.",
+   "remedy": "What comes down is one of three. For an ordinary question it is the call: materialize(rows_per_call=N) below the 3 this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities."
+  },
+  "multicall.body-30mib.several-rows@postgres": {
+   "case": "938c5a02db1418fd7c77b84d847ef84b5ad09ddbc0f4df75dc047d621782e80c",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "batch_too_large_to_send": true
+   },
+   "answered": null,
+   "opening": "[INVALID_REQUEST] Context size exceeds the 30MB limit.",
+   "remedy": "What comes down is one of three. For an ordinary question it is the call: materialize(rows_per_call=N) below the 3 this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities."
+  },
+  "multicall.body-30mib.several-rows@sqlite": {
+   "case": "938c5a02db1418fd7c77b84d847ef84b5ad09ddbc0f4df75dc047d621782e80c",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "batch_too_large_to_send": true
+   },
+   "answered": null,
+   "opening": "[INVALID_REQUEST] Context size exceeds the 30MB limit.",
+   "remedy": "What comes down is one of three. For an ordinary question it is the call: materialize(rows_per_call=N) below the 3 this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities."
+  },
+  "multicall.calls.100": {
+   "case": "77f86d03198a297121f6c64d7cc724385bd8b9c4d9e11a73ebb3a36d718c5d63",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 100,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ],
+     [
+      8,
+      8,
+      1.0
+     ],
+     [
+      9,
+      9,
+      1.0
+     ],
+     [
+      10,
+      10,
+      1.0
+     ],
+     [
+      11,
+      11,
+      1.0
+     ],
+     [
+      12,
+      12,
+      1.0
+     ],
+     [
+      13,
+      13,
+      1.0
+     ],
+     [
+      14,
+      14,
+      1.0
+     ],
+     [
+      15,
+      15,
+      1.0
+     ],
+     [
+      16,
+      16,
+      1.0
+     ],
+     [
+      17,
+      17,
+      1.0
+     ],
+     [
+      18,
+      18,
+      1.0
+     ],
+     [
+      19,
+      19,
+      1.0
+     ],
+     [
+      20,
+      20,
+      1.0
+     ],
+     [
+      21,
+      21,
+      1.0
+     ],
+     [
+      22,
+      22,
+      1.0
+     ],
+     [
+      23,
+      23,
+      1.0
+     ],
+     [
+      24,
+      24,
+      1.0
+     ],
+     [
+      25,
+      25,
+      1.0
+     ],
+     [
+      26,
+      26,
+      1.0
+     ],
+     [
+      27,
+      27,
+      1.0
+     ],
+     [
+      28,
+      28,
+      1.0
+     ],
+     [
+      29,
+      29,
+      1.0
+     ],
+     [
+      30,
+      30,
+      1.0
+     ],
+     [
+      31,
+      31,
+      1.0
+     ],
+     [
+      32,
+      32,
+      1.0
+     ],
+     [
+      33,
+      33,
+      1.0
+     ],
+     [
+      34,
+      34,
+      1.0
+     ],
+     [
+      35,
+      35,
+      1.0
+     ],
+     [
+      36,
+      36,
+      1.0
+     ],
+     [
+      37,
+      37,
+      1.0
+     ],
+     [
+      38,
+      38,
+      1.0
+     ],
+     [
+      39,
+      39,
+      1.0
+     ],
+     [
+      40,
+      40,
+      1.0
+     ],
+     [
+      41,
+      41,
+      1.0
+     ],
+     [
+      42,
+      42,
+      1.0
+     ],
+     [
+      43,
+      43,
+      1.0
+     ],
+     [
+      44,
+      44,
+      1.0
+     ],
+     [
+      45,
+      45,
+      1.0
+     ],
+     [
+      46,
+      46,
+      1.0
+     ],
+     [
+      47,
+      47,
+      1.0
+     ],
+     [
+      48,
+      48,
+      1.0
+     ],
+     [
+      49,
+      49,
+      1.0
+     ],
+     [
+      50,
+      50,
+      1.0
+     ],
+     [
+      51,
+      51,
+      1.0
+     ],
+     [
+      52,
+      52,
+      1.0
+     ],
+     [
+      53,
+      53,
+      1.0
+     ],
+     [
+      54,
+      54,
+      1.0
+     ],
+     [
+      55,
+      55,
+      1.0
+     ],
+     [
+      56,
+      56,
+      1.0
+     ],
+     [
+      57,
+      57,
+      1.0
+     ],
+     [
+      58,
+      58,
+      1.0
+     ],
+     [
+      59,
+      59,
+      1.0
+     ],
+     [
+      60,
+      60,
+      1.0
+     ],
+     [
+      61,
+      61,
+      1.0
+     ],
+     [
+      62,
+      62,
+      1.0
+     ],
+     [
+      63,
+      63,
+      1.0
+     ],
+     [
+      64,
+      64,
+      1.0
+     ],
+     [
+      65,
+      65,
+      1.0
+     ],
+     [
+      66,
+      66,
+      1.0
+     ],
+     [
+      67,
+      67,
+      1.0
+     ],
+     [
+      68,
+      68,
+      1.0
+     ],
+     [
+      69,
+      69,
+      1.0
+     ],
+     [
+      70,
+      70,
+      1.0
+     ],
+     [
+      71,
+      71,
+      1.0
+     ],
+     [
+      72,
+      72,
+      1.0
+     ],
+     [
+      73,
+      73,
+      1.0
+     ],
+     [
+      74,
+      74,
+      1.0
+     ],
+     [
+      75,
+      75,
+      1.0
+     ],
+     [
+      76,
+      76,
+      1.0
+     ],
+     [
+      77,
+      77,
+      1.0
+     ],
+     [
+      78,
+      78,
+      1.0
+     ],
+     [
+      79,
+      79,
+      1.0
+     ],
+     [
+      80,
+      80,
+      1.0
+     ],
+     [
+      81,
+      81,
+      1.0
+     ],
+     [
+      82,
+      82,
+      1.0
+     ],
+     [
+      83,
+      83,
+      1.0
+     ],
+     [
+      84,
+      84,
+      1.0
+     ],
+     [
+      85,
+      85,
+      1.0
+     ],
+     [
+      86,
+      86,
+      1.0
+     ],
+     [
+      87,
+      87,
+      1.0
+     ],
+     [
+      88,
+      88,
+      1.0
+     ],
+     [
+      89,
+      89,
+      1.0
+     ],
+     [
+      90,
+      90,
+      1.0
+     ],
+     [
+      91,
+      91,
+      1.0
+     ],
+     [
+      92,
+      92,
+      1.0
+     ],
+     [
+      93,
+      93,
+      1.0
+     ],
+     [
+      94,
+      94,
+      1.0
+     ],
+     [
+      95,
+      95,
+      1.0
+     ],
+     [
+      96,
+      96,
+      1.0
+     ],
+     [
+      97,
+      97,
+      1.0
+     ],
+     [
+      98,
+      98,
+      1.0
+     ],
+     [
+      99,
+      99,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.calls.100@postgres": {
+   "case": "77f86d03198a297121f6c64d7cc724385bd8b9c4d9e11a73ebb3a36d718c5d63",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 100,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ],
+     [
+      8,
+      8,
+      1.0
+     ],
+     [
+      9,
+      9,
+      1.0
+     ],
+     [
+      10,
+      10,
+      1.0
+     ],
+     [
+      11,
+      11,
+      1.0
+     ],
+     [
+      12,
+      12,
+      1.0
+     ],
+     [
+      13,
+      13,
+      1.0
+     ],
+     [
+      14,
+      14,
+      1.0
+     ],
+     [
+      15,
+      15,
+      1.0
+     ],
+     [
+      16,
+      16,
+      1.0
+     ],
+     [
+      17,
+      17,
+      1.0
+     ],
+     [
+      18,
+      18,
+      1.0
+     ],
+     [
+      19,
+      19,
+      1.0
+     ],
+     [
+      20,
+      20,
+      1.0
+     ],
+     [
+      21,
+      21,
+      1.0
+     ],
+     [
+      22,
+      22,
+      1.0
+     ],
+     [
+      23,
+      23,
+      1.0
+     ],
+     [
+      24,
+      24,
+      1.0
+     ],
+     [
+      25,
+      25,
+      1.0
+     ],
+     [
+      26,
+      26,
+      1.0
+     ],
+     [
+      27,
+      27,
+      1.0
+     ],
+     [
+      28,
+      28,
+      1.0
+     ],
+     [
+      29,
+      29,
+      1.0
+     ],
+     [
+      30,
+      30,
+      1.0
+     ],
+     [
+      31,
+      31,
+      1.0
+     ],
+     [
+      32,
+      32,
+      1.0
+     ],
+     [
+      33,
+      33,
+      1.0
+     ],
+     [
+      34,
+      34,
+      1.0
+     ],
+     [
+      35,
+      35,
+      1.0
+     ],
+     [
+      36,
+      36,
+      1.0
+     ],
+     [
+      37,
+      37,
+      1.0
+     ],
+     [
+      38,
+      38,
+      1.0
+     ],
+     [
+      39,
+      39,
+      1.0
+     ],
+     [
+      40,
+      40,
+      1.0
+     ],
+     [
+      41,
+      41,
+      1.0
+     ],
+     [
+      42,
+      42,
+      1.0
+     ],
+     [
+      43,
+      43,
+      1.0
+     ],
+     [
+      44,
+      44,
+      1.0
+     ],
+     [
+      45,
+      45,
+      1.0
+     ],
+     [
+      46,
+      46,
+      1.0
+     ],
+     [
+      47,
+      47,
+      1.0
+     ],
+     [
+      48,
+      48,
+      1.0
+     ],
+     [
+      49,
+      49,
+      1.0
+     ],
+     [
+      50,
+      50,
+      1.0
+     ],
+     [
+      51,
+      51,
+      1.0
+     ],
+     [
+      52,
+      52,
+      1.0
+     ],
+     [
+      53,
+      53,
+      1.0
+     ],
+     [
+      54,
+      54,
+      1.0
+     ],
+     [
+      55,
+      55,
+      1.0
+     ],
+     [
+      56,
+      56,
+      1.0
+     ],
+     [
+      57,
+      57,
+      1.0
+     ],
+     [
+      58,
+      58,
+      1.0
+     ],
+     [
+      59,
+      59,
+      1.0
+     ],
+     [
+      60,
+      60,
+      1.0
+     ],
+     [
+      61,
+      61,
+      1.0
+     ],
+     [
+      62,
+      62,
+      1.0
+     ],
+     [
+      63,
+      63,
+      1.0
+     ],
+     [
+      64,
+      64,
+      1.0
+     ],
+     [
+      65,
+      65,
+      1.0
+     ],
+     [
+      66,
+      66,
+      1.0
+     ],
+     [
+      67,
+      67,
+      1.0
+     ],
+     [
+      68,
+      68,
+      1.0
+     ],
+     [
+      69,
+      69,
+      1.0
+     ],
+     [
+      70,
+      70,
+      1.0
+     ],
+     [
+      71,
+      71,
+      1.0
+     ],
+     [
+      72,
+      72,
+      1.0
+     ],
+     [
+      73,
+      73,
+      1.0
+     ],
+     [
+      74,
+      74,
+      1.0
+     ],
+     [
+      75,
+      75,
+      1.0
+     ],
+     [
+      76,
+      76,
+      1.0
+     ],
+     [
+      77,
+      77,
+      1.0
+     ],
+     [
+      78,
+      78,
+      1.0
+     ],
+     [
+      79,
+      79,
+      1.0
+     ],
+     [
+      80,
+      80,
+      1.0
+     ],
+     [
+      81,
+      81,
+      1.0
+     ],
+     [
+      82,
+      82,
+      1.0
+     ],
+     [
+      83,
+      83,
+      1.0
+     ],
+     [
+      84,
+      84,
+      1.0
+     ],
+     [
+      85,
+      85,
+      1.0
+     ],
+     [
+      86,
+      86,
+      1.0
+     ],
+     [
+      87,
+      87,
+      1.0
+     ],
+     [
+      88,
+      88,
+      1.0
+     ],
+     [
+      89,
+      89,
+      1.0
+     ],
+     [
+      90,
+      90,
+      1.0
+     ],
+     [
+      91,
+      91,
+      1.0
+     ],
+     [
+      92,
+      92,
+      1.0
+     ],
+     [
+      93,
+      93,
+      1.0
+     ],
+     [
+      94,
+      94,
+      1.0
+     ],
+     [
+      95,
+      95,
+      1.0
+     ],
+     [
+      96,
+      96,
+      1.0
+     ],
+     [
+      97,
+      97,
+      1.0
+     ],
+     [
+      98,
+      98,
+      1.0
+     ],
+     [
+      99,
+      99,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.calls.100@sqlite": {
+   "case": "77f86d03198a297121f6c64d7cc724385bd8b9c4d9e11a73ebb3a36d718c5d63",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 100,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ],
+     [
+      8,
+      8,
+      1.0
+     ],
+     [
+      9,
+      9,
+      1.0
+     ],
+     [
+      10,
+      10,
+      1.0
+     ],
+     [
+      11,
+      11,
+      1.0
+     ],
+     [
+      12,
+      12,
+      1.0
+     ],
+     [
+      13,
+      13,
+      1.0
+     ],
+     [
+      14,
+      14,
+      1.0
+     ],
+     [
+      15,
+      15,
+      1.0
+     ],
+     [
+      16,
+      16,
+      1.0
+     ],
+     [
+      17,
+      17,
+      1.0
+     ],
+     [
+      18,
+      18,
+      1.0
+     ],
+     [
+      19,
+      19,
+      1.0
+     ],
+     [
+      20,
+      20,
+      1.0
+     ],
+     [
+      21,
+      21,
+      1.0
+     ],
+     [
+      22,
+      22,
+      1.0
+     ],
+     [
+      23,
+      23,
+      1.0
+     ],
+     [
+      24,
+      24,
+      1.0
+     ],
+     [
+      25,
+      25,
+      1.0
+     ],
+     [
+      26,
+      26,
+      1.0
+     ],
+     [
+      27,
+      27,
+      1.0
+     ],
+     [
+      28,
+      28,
+      1.0
+     ],
+     [
+      29,
+      29,
+      1.0
+     ],
+     [
+      30,
+      30,
+      1.0
+     ],
+     [
+      31,
+      31,
+      1.0
+     ],
+     [
+      32,
+      32,
+      1.0
+     ],
+     [
+      33,
+      33,
+      1.0
+     ],
+     [
+      34,
+      34,
+      1.0
+     ],
+     [
+      35,
+      35,
+      1.0
+     ],
+     [
+      36,
+      36,
+      1.0
+     ],
+     [
+      37,
+      37,
+      1.0
+     ],
+     [
+      38,
+      38,
+      1.0
+     ],
+     [
+      39,
+      39,
+      1.0
+     ],
+     [
+      40,
+      40,
+      1.0
+     ],
+     [
+      41,
+      41,
+      1.0
+     ],
+     [
+      42,
+      42,
+      1.0
+     ],
+     [
+      43,
+      43,
+      1.0
+     ],
+     [
+      44,
+      44,
+      1.0
+     ],
+     [
+      45,
+      45,
+      1.0
+     ],
+     [
+      46,
+      46,
+      1.0
+     ],
+     [
+      47,
+      47,
+      1.0
+     ],
+     [
+      48,
+      48,
+      1.0
+     ],
+     [
+      49,
+      49,
+      1.0
+     ],
+     [
+      50,
+      50,
+      1.0
+     ],
+     [
+      51,
+      51,
+      1.0
+     ],
+     [
+      52,
+      52,
+      1.0
+     ],
+     [
+      53,
+      53,
+      1.0
+     ],
+     [
+      54,
+      54,
+      1.0
+     ],
+     [
+      55,
+      55,
+      1.0
+     ],
+     [
+      56,
+      56,
+      1.0
+     ],
+     [
+      57,
+      57,
+      1.0
+     ],
+     [
+      58,
+      58,
+      1.0
+     ],
+     [
+      59,
+      59,
+      1.0
+     ],
+     [
+      60,
+      60,
+      1.0
+     ],
+     [
+      61,
+      61,
+      1.0
+     ],
+     [
+      62,
+      62,
+      1.0
+     ],
+     [
+      63,
+      63,
+      1.0
+     ],
+     [
+      64,
+      64,
+      1.0
+     ],
+     [
+      65,
+      65,
+      1.0
+     ],
+     [
+      66,
+      66,
+      1.0
+     ],
+     [
+      67,
+      67,
+      1.0
+     ],
+     [
+      68,
+      68,
+      1.0
+     ],
+     [
+      69,
+      69,
+      1.0
+     ],
+     [
+      70,
+      70,
+      1.0
+     ],
+     [
+      71,
+      71,
+      1.0
+     ],
+     [
+      72,
+      72,
+      1.0
+     ],
+     [
+      73,
+      73,
+      1.0
+     ],
+     [
+      74,
+      74,
+      1.0
+     ],
+     [
+      75,
+      75,
+      1.0
+     ],
+     [
+      76,
+      76,
+      1.0
+     ],
+     [
+      77,
+      77,
+      1.0
+     ],
+     [
+      78,
+      78,
+      1.0
+     ],
+     [
+      79,
+      79,
+      1.0
+     ],
+     [
+      80,
+      80,
+      1.0
+     ],
+     [
+      81,
+      81,
+      1.0
+     ],
+     [
+      82,
+      82,
+      1.0
+     ],
+     [
+      83,
+      83,
+      1.0
+     ],
+     [
+      84,
+      84,
+      1.0
+     ],
+     [
+      85,
+      85,
+      1.0
+     ],
+     [
+      86,
+      86,
+      1.0
+     ],
+     [
+      87,
+      87,
+      1.0
+     ],
+     [
+      88,
+      88,
+      1.0
+     ],
+     [
+      89,
+      89,
+      1.0
+     ],
+     [
+      90,
+      90,
+      1.0
+     ],
+     [
+      91,
+      91,
+      1.0
+     ],
+     [
+      92,
+      92,
+      1.0
+     ],
+     [
+      93,
+      93,
+      1.0
+     ],
+     [
+      94,
+      94,
+      1.0
+     ],
+     [
+      95,
+      95,
+      1.0
+     ],
+     [
+      96,
+      96,
+      1.0
+     ],
+     [
+      97,
+      97,
+      1.0
+     ],
+     [
+      98,
+      98,
+      1.0
+     ],
+     [
+      99,
+      99,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.calls.101": {
+   "case": "fa420938ef198b5bf001088de418a5eb7f9f21da1d53ae6a4962f77233d1d859",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "calls": 101,
+    "entities": 101,
+    "rows_per_call": 1
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 101 entities are gathered as 101 calls of 1, and every one is built, with its own context, before any is sent.",
+   "remedy": null
+  },
+  "multicall.calls.101@postgres": {
+   "case": "fa420938ef198b5bf001088de418a5eb7f9f21da1d53ae6a4962f77233d1d859",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "calls": 101,
+    "entities": 101,
+    "rows_per_call": 1
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 101 entities are gathered as 101 calls of 1, and every one is built, with its own context, before any is sent.",
+   "remedy": null
+  },
+  "multicall.calls.101@sqlite": {
+   "case": "fa420938ef198b5bf001088de418a5eb7f9f21da1d53ae6a4962f77233d1d859",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "calls": 101,
+    "entities": 101,
+    "rows_per_call": 1
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 101 entities are gathered as 101 calls of 1, and every one is built, with its own context, before any is sent.",
+   "remedy": null
+  },
+  "multicall.entities-per-call.10001": {
+   "case": "905c9269b09ee6937cb02aed7294df0ea1077c48b31fc9390797a53c7218c59b",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    10000,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 10001,
+    "first": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ]
+    ],
+    "last": [
+     [
+      9998,
+      9998,
+      1.0
+     ],
+     [
+      9999,
+      9999,
+      1.0
+     ],
+     [
+      10000,
+      10000,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.entities-per-call.10001@postgres": {
+   "case": "905c9269b09ee6937cb02aed7294df0ea1077c48b31fc9390797a53c7218c59b",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    10000,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 10001,
+    "first": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ]
+    ],
+    "last": [
+     [
+      9998,
+      9998,
+      1.0
+     ],
+     [
+      9999,
+      9999,
+      1.0
+     ],
+     [
+      10000,
+      10000,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.entities-per-call.10001@sqlite": {
+   "case": "905c9269b09ee6937cb02aed7294df0ea1077c48b31fc9390797a53c7218c59b",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    10000,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 10001,
+    "first": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ]
+    ],
+    "last": [
+     [
+      9998,
+      9998,
+      1.0
+     ],
+     [
+      9999,
+      9999,
+      1.0
+     ],
+     [
+      10000,
+      10000,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.entities.100000": {
+   "case": "294e482ea9c264f09c9806c43e4b9ea76510a07fd04240f388f476bb86d5cdeb",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "calls": [],
+   "result": null,
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.entities.100000@postgres": {
+   "case": "294e482ea9c264f09c9806c43e4b9ea76510a07fd04240f388f476bb86d5cdeb",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "calls": [],
+   "result": null,
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.entities.100000@sqlite": {
+   "case": "294e482ea9c264f09c9806c43e4b9ea76510a07fd04240f388f476bb86d5cdeb",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "calls": [],
+   "result": null,
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.entities.100001": {
+   "case": "4e830ea1b34fa611b9248b2a935ba7f3cf8e42f21c6c77c5f7f1e280430310fc",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "entities": 100001,
+    "gathered_times": 1,
+    "total": 100001
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 100,001 entities is past the 100,000 one materialize() will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time",
+   "remedy": null
+  },
+  "multicall.entities.100001@postgres": {
+   "case": "4e830ea1b34fa611b9248b2a935ba7f3cf8e42f21c6c77c5f7f1e280430310fc",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "entities": 100001,
+    "gathered_times": 1,
+    "total": 100001
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 100,001 entities is past the 100,000 one materialize() will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time",
+   "remedy": null
+  },
+  "multicall.entities.100001@sqlite": {
+   "case": "4e830ea1b34fa611b9248b2a935ba7f3cf8e42f21c6c77c5f7f1e280430310fc",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "entities": 100001,
+    "gathered_times": 1,
+    "total": 100001
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 100,001 entities is past the 100,000 one materialize() will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time",
+   "remedy": null
+  },
+  "multicall.fail-call-0": {
+   "case": "aa86d177673316c1947a261573b2e8bdfce1c280777122e92ca7bd91493c7418",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3
+   ],
+   "result": null,
+   "details": {
+    "call": 0,
+    "error": "scripted_failure"
+   },
+   "answered": null,
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 0}",
+   "remedy": null
+  },
+  "multicall.fail-call-0@postgres": {
+   "case": "aa86d177673316c1947a261573b2e8bdfce1c280777122e92ca7bd91493c7418",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3
+   ],
+   "result": null,
+   "details": {
+    "call": 0,
+    "error": "scripted_failure"
+   },
+   "answered": null,
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 0}",
+   "remedy": null
+  },
+  "multicall.fail-call-0@sqlite": {
+   "case": "aa86d177673316c1947a261573b2e8bdfce1c280777122e92ca7bd91493c7418",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3
+   ],
+   "result": null,
+   "details": {
+    "call": 0,
+    "error": "scripted_failure"
+   },
+   "answered": null,
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 0}",
+   "remedy": null
+  },
+  "multicall.fail-call-2": {
+   "case": "7b9f41dac6c555d82b1e24fa0c88e6fe4fe88ef6044a102f9766982e3df89aa8",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3,
+    2
+   ],
+   "result": null,
+   "details": {
+    "call": 2,
+    "calls_answered": 2,
+    "error": "scripted_failure",
+    "rows_answered": 6
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ]
+    ]
+   },
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 2}",
+   "remedy": null
+  },
+  "multicall.fail-call-2@postgres": {
+   "case": "7b9f41dac6c555d82b1e24fa0c88e6fe4fe88ef6044a102f9766982e3df89aa8",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3,
+    2
+   ],
+   "result": null,
+   "details": {
+    "call": 2,
+    "calls_answered": 2,
+    "error": "scripted_failure",
+    "rows_answered": 6
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ]
+    ]
+   },
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 2}",
+   "remedy": null
+  },
+  "multicall.fail-call-2@sqlite": {
+   "case": "7b9f41dac6c555d82b1e24fa0c88e6fe4fe88ef6044a102f9766982e3df89aa8",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3,
+    2
+   ],
+   "result": null,
+   "details": {
+    "call": 2,
+    "calls_answered": 2,
+    "error": "scripted_failure",
+    "rows_answered": 6
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ]
+    ]
+   },
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 2}",
+   "remedy": null
+  },
+  "multicall.forecast.batched": {
+   "case": "bfd9b81c872064bd2e5b0583e7a3866d15a1181f2caf663d56ffa277d34b49db",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "entities": 8,
+    "rows_per_call": 3
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 8 entities are more than the 3 one call scores, and this question is asked as 2 of them, one per step.",
+   "remedy": null
+  },
+  "multicall.forecast.batched@postgres": {
+   "case": "bfd9b81c872064bd2e5b0583e7a3866d15a1181f2caf663d56ffa277d34b49db",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "entities": 8,
+    "rows_per_call": 3
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 8 entities are more than the 3 one call scores, and this question is asked as 2 of them, one per step.",
+   "remedy": null
+  },
+  "multicall.forecast.batched@sqlite": {
+   "case": "bfd9b81c872064bd2e5b0583e7a3866d15a1181f2caf663d56ffa277d34b49db",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {
+    "entities": 8,
+    "rows_per_call": 3
+   },
+   "answered": null,
+   "opening": "[UNSUPPORTED_REQUEST] 8 entities are more than the 3 one call scores, and this question is asked as 2 of them, one per step.",
+   "remedy": null
+  },
+  "multicall.forecast.fail-call-1": {
+   "case": "001e395fe81ca98b7775c6b1daac652624ca894854e991729c416eae5de0ba3a",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": null,
+   "details": {
+    "call": 1,
+    "error": "scripted_failure",
+    "parts_answered": 1
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 1}.",
+   "remedy": null
+  },
+  "multicall.forecast.fail-call-1@postgres": {
+   "case": "001e395fe81ca98b7775c6b1daac652624ca894854e991729c416eae5de0ba3a",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": null,
+   "details": {
+    "call": 1,
+    "error": "scripted_failure",
+    "parts_answered": 1
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 1}.",
+   "remedy": null
+  },
+  "multicall.forecast.fail-call-1@sqlite": {
+   "case": "001e395fe81ca98b7775c6b1daac652624ca894854e991729c416eae5de0ba3a",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "NimRequestError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": null,
+   "details": {
+    "call": 1,
+    "error": "scripted_failure",
+    "parts_answered": 1
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "opening": "[500] {\"error\": \"scripted_failure\", \"call\": 1}.",
+   "remedy": null
+  },
+  "multicall.forecast.one-call": {
+   "case": "d5116ecb593901b79dcc0269d3d63ec99aa536997680574ef40b01ed159ffdfc",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      0,
+      0,
+      2,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      2,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      2,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.forecast.one-call@postgres": {
+   "case": "d5116ecb593901b79dcc0269d3d63ec99aa536997680574ef40b01ed159ffdfc",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      0,
+      0,
+      2,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      2,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      2,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.forecast.one-call@sqlite": {
+   "case": "d5116ecb593901b79dcc0269d3d63ec99aa536997680574ef40b01ed159ffdfc",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      0,
+      0,
+      2,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      2,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      2,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call-3": {
+   "case": "dd0a4b49ebefc85c52ed150f8d8fb07abebfd34dccf80b060f319fc50a5f18dd",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    3,
+    3,
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call-3@postgres": {
+   "case": "dd0a4b49ebefc85c52ed150f8d8fb07abebfd34dccf80b060f319fc50a5f18dd",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    3,
+    3,
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call-3@sqlite": {
+   "case": "dd0a4b49ebefc85c52ed150f8d8fb07abebfd34dccf80b060f319fc50a5f18dd",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    3,
+    3,
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.above-the-cap": {
+   "case": "d6442ccea5024fe79130b3658ea5b84eaf7104793dda9d79ff9840cad77da76a",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    8
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.above-the-cap@postgres": {
+   "case": "d6442ccea5024fe79130b3658ea5b84eaf7104793dda9d79ff9840cad77da76a",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    8
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.above-the-cap@sqlite": {
+   "case": "d6442ccea5024fe79130b3658ea5b84eaf7104793dda9d79ff9840cad77da76a",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    8
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.bool": {
+   "case": "1094fee6f0598afb03298d0123abcab04ff2c51d352b40c7602745fecf6c7ad5",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is True, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.bool@postgres": {
+   "case": "1094fee6f0598afb03298d0123abcab04ff2c51d352b40c7602745fecf6c7ad5",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is True, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.bool@sqlite": {
+   "case": "1094fee6f0598afb03298d0123abcab04ff2c51d352b40c7602745fecf6c7ad5",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is True, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.fraction": {
+   "case": "dcf61d350d238021eaccda9e8496fe651fc0b52ec65dd717d7d63c182fff444d",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 2.5, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.fraction@postgres": {
+   "case": "dcf61d350d238021eaccda9e8496fe651fc0b52ec65dd717d7d63c182fff444d",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 2.5, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.fraction@sqlite": {
+   "case": "dcf61d350d238021eaccda9e8496fe651fc0b52ec65dd717d7d63c182fff444d",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 2.5, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.negative": {
+   "case": "e0860eb8290664c407fb37f6b8256d54401149ece2ab6ae02d2bab42614d3a64",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is -1, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.negative@postgres": {
+   "case": "e0860eb8290664c407fb37f6b8256d54401149ece2ab6ae02d2bab42614d3a64",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is -1, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.negative@sqlite": {
+   "case": "e0860eb8290664c407fb37f6b8256d54401149ece2ab6ae02d2bab42614d3a64",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is -1, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.past-int64": {
+   "case": "e22c78f69cb2640902cf63b5f5355a3eed191f810ffc2b9c05124db44eeba5a7",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    8
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.past-int64@postgres": {
+   "case": "e22c78f69cb2640902cf63b5f5355a3eed191f810ffc2b9c05124db44eeba5a7",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    8
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.past-int64@sqlite": {
+   "case": "e22c78f69cb2640902cf63b5f5355a3eed191f810ffc2b9c05124db44eeba5a7",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    8
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 8,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ],
+     [
+      6,
+      6,
+      1.0
+     ],
+     [
+      7,
+      7,
+      1.0
+     ]
+    ]
+   },
+   "details": null,
+   "answered": null,
+   "opening": null,
+   "remedy": null
+  },
+  "multicall.rows-per-call.text": {
+   "case": "bb3f57391af4aa297aaaaaea7bbea9a3a3e28fc7ff1db1a65abd23e1678d0d4a",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is '3', and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.text@postgres": {
+   "case": "bb3f57391af4aa297aaaaaea7bbea9a3a3e28fc7ff1db1a65abd23e1678d0d4a",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is '3', and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.text@sqlite": {
+   "case": "bb3f57391af4aa297aaaaaea7bbea9a3a3e28fc7ff1db1a65abd23e1678d0d4a",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is '3', and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.whole-float": {
+   "case": "b74e519c8a1d94d1b3e8c4293876bafef33c686bc7c2a1fbbf9c0fef6deaf8d2",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 3.0, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.whole-float@postgres": {
+   "case": "b74e519c8a1d94d1b3e8c4293876bafef33c686bc7c2a1fbbf9c0fef6deaf8d2",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 3.0, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.whole-float@sqlite": {
+   "case": "b74e519c8a1d94d1b3e8c4293876bafef33c686bc7c2a1fbbf9c0fef6deaf8d2",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 3.0, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.zero": {
+   "case": "d94588a9d673c1db16c4d0a24f1bd272e1f7fb6faeac1aadcb565b707cad8d32",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 0, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.zero@postgres": {
+   "case": "d94588a9d673c1db16c4d0a24f1bd272e1f7fb6faeac1aadcb565b707cad8d32",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 0, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  },
+  "multicall.rows-per-call.zero@sqlite": {
+   "case": "d94588a9d673c1db16c4d0a24f1bd272e1f7fb6faeac1aadcb565b707cad8d32",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "details": {},
+   "answered": null,
+   "opening": "[INVALID_REQUEST] rows_per_call is 0, and a call scores a whole number of rows, at least one",
+   "remedy": null
+  }
+ }
+}
