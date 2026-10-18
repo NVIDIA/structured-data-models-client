@@ -22,7 +22,9 @@
 //! `sdm-contract-run --pre-given-specs` alone. [`sqlite`] is its SQLite
 //! (T2.2): a case's tables loaded by the contract loader, and the dev-only
 //! `rusqlite` provider. [`kit`] runs the provider conformance kit on its
-//! providers (T2.5).
+//! providers (T2.5). [`memory`] is the minimal non-SQL test provider, and
+//! [`layer`] the second data layer, for host providers alone, swapped in
+//! at the composition root (T2.7).
 
 /// The databases the pure-Rust host has a provider for (rust-host's marker
 /// for the staging rule, `contract/runners/run_python.py`'s `check_legs`;
@@ -40,6 +42,8 @@ pub mod edits;
 pub mod endpoint;
 pub mod host;
 pub mod kit;
+pub mod layer;
+pub mod memory;
 pub mod observation;
 pub mod pre_given;
 pub mod replay;

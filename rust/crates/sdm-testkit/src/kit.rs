@@ -8,9 +8,12 @@
 //! It builds `contract/fixtures/provider-kit/dataset.sql` on DATABASE
 //! (DuckDB from the file; SQLite loaded from it by the one contract loader,
 //! through `contract/runners/provider_kit.py --load sqlite`, as
-//! `--database sqlite` loads a case), and runs each case of
-//! `expected.json` through the core on this host's provider for it
-//! ([`crate::duck`], [`crate::sqlite`]), as the file's `about` says: the
+//! `--database sqlite` loads a case; `memory`, the minimal non-SQL test
+//! provider, T2.7, its tables copied whole from DuckDB's into Arrow), and
+//! runs each case of `expected.json` through the core on this host's
+//! provider for it ([`crate::duck`], [`crate::sqlite`], [`crate::memory`],
+//! the last a host provider, declaring what it declares), as the file's
+//! `about` says: the
 //! core plans the case's request for the provider (the test-only fetch,
 //! which a build with `sdm-host`'s `test-ops` feature carries, as `cargo
 //! test` builds this crate), with what the case withholds taken out of
@@ -37,7 +40,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use duckdb::arrow::array::{Array, ArrayRef, Int64Array, RecordBatch};
 use duckdb::arrow::compute::{cast, concat_batches};
 use duckdb::arrow::datatypes::{DataType, Field, Schema};
-use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError, SqlParam};
+use sdm_contract::data::{AttachmentId, FetchPlan, KeySet, ProviderError, SqlParam};
 use sdm_contract::run::{FetchOutcome, FetchReply, FetchStep};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, CoreError, ErrorKind, Step};
 use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, read};
@@ -46,12 +49,15 @@ use serde_json::{Value, json};
 use crate::driver::DriverLog;
 use crate::duck::{self, Fetched};
 use crate::host::facts;
+use crate::memory::Memory;
 use crate::sqlite::Sqlite;
 
 /// The report's format, `expected.json`'s.
 pub const FORMAT: &str = "sdm-provider-kit/1";
 /// The databases this host runs the kit on.
-pub const DATABASES: &[&str] = &["duckdb", "sqlite"];
+/// `memory` is the minimal non-SQL test provider ([`crate::memory`],
+/// T2.7) over the dataset's tables copied from DuckDB, a host provider.
+pub const DATABASES: &[&str] = &["duckdb", "sqlite", "memory"];
 /// The faults a run may seed.
 pub const FAULTS: &[&str] = &["truncate", "silent_capability"];
 
@@ -62,6 +68,7 @@ const KIT: &str = "contract/fixtures/provider-kit";
 enum Source {
     Duck(duckdb::Connection),
     Sqlite(Sqlite),
+    Memory(Memory),
 }
 
 impl Source {
@@ -73,6 +80,26 @@ impl Source {
         match self {
             Source::Duck(connection) => duck::answer_with(connection, step, keys),
             Source::Sqlite(source) => source.answer_logged(step, keys, &mut DriverLog::default()),
+            Source::Memory(source) => {
+                let mut sets = BTreeMap::new();
+                for (id, fetched) in keys {
+                    let batch =
+                        concat_batches(&fetched.schema, &fetched.batches).map_err(|_| {
+                            ProviderError {
+                                kind: ErrorKind::Internal,
+                                retryable: false,
+                                sqlstate: None,
+                                vendor_code: None,
+                            }
+                        })?;
+                    sets.insert(*id, batch);
+                }
+                let batch = source.answer(&step.request, &sets)?;
+                Ok(Fetched {
+                    schema: batch.schema(),
+                    batches: vec![batch],
+                })
+            }
         }
     }
 }
@@ -81,7 +108,9 @@ impl Source {
 /// `repository`: the report, and whether every case passed.
 pub fn run(repository: &Path, database: &str, fault: Option<&str>) -> Result<(Value, bool)> {
     if !DATABASES.contains(&database) {
-        bail!("--kit {database}: this host runs the kit on DuckDB or SQLite");
+        bail!(
+            "--kit {database}: this host runs the kit on DuckDB, SQLite or the non-SQL memory provider"
+        );
     }
     if let Some(fault) = fault
         && !FAULTS.contains(&fault)
@@ -148,12 +177,15 @@ fn tempdir() -> Result<std::path::PathBuf> {
 
 /// The dataset on `database`.
 fn source(repository: &Path, database: &str, directory: &Path) -> Result<Source> {
-    if database == "duckdb" {
+    if database == "duckdb" || database == "memory" {
         let connection = duck::open()?;
         let dataset = std::fs::read_to_string(repository.join(KIT).join("dataset.sql"))?;
         connection
             .execute_batch(&dataset)
             .context("building the kit's dataset on DuckDB")?;
+        if database == "memory" {
+            return Ok(Source::Memory(Memory::from_duckdb(&connection)?));
+        }
         return Ok(Source::Duck(connection));
     }
     let file = directory.join("kit.sqlite");
@@ -302,7 +334,10 @@ fn run_case(
     let capabilities = case.get("capabilities").cloned().unwrap_or(json!({}));
     let mut fetch = json!({
         "request": request,
-        "provider": {"provider": "sql", "dialect": database},
+        "provider": match source {
+            Source::Memory(_) => json!({"provider": "host", "capabilities": Memory::capabilities()}),
+            _ => json!({"provider": "sql", "dialect": database}),
+        },
         "echo": true,
         "undeclared": capabilities.get("withhold").cloned().unwrap_or(json!([])),
     });
@@ -399,13 +434,20 @@ fn drive(
         };
         for step in &requests {
             let mut keys = BTreeMap::new();
-            if step.continuation.is_none()
-                && let FetchPlan::Sql { statements, .. } = &step.plan
-            {
-                for param in statements.iter().flat_map(|s| &s.params) {
-                    if let SqlParam::KeySet { keys: set, .. } = param
-                        && !keys.contains_key(&set.attachment)
-                    {
+            if step.continuation.is_none() {
+                let sets: Vec<&KeySet> = match &step.plan {
+                    FetchPlan::Sql { statements, .. } => statements
+                        .iter()
+                        .flat_map(|s| &s.params)
+                        .filter_map(|param| match param {
+                            SqlParam::KeySet { keys, .. } => Some(keys),
+                            SqlParam::Value { .. } => None,
+                        })
+                        .collect(),
+                    FetchPlan::Host { .. } => Memory::key_sets(&step.request),
+                };
+                for set in sets {
+                    if !keys.contains_key(&set.attachment) {
                         let Ok(Some(Attachment::Arrow(data))) =
                             handle.take_attachment(set.attachment)
                         else {

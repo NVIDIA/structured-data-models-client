@@ -26,8 +26,9 @@ use anyhow::{Context, Result, anyhow, bail};
 use std::sync::Arc;
 
 use duckdb::arrow::array::{ArrayRef, RecordBatch};
+use duckdb::arrow::compute::concat_batches;
 use duckdb::arrow::datatypes::{Field, Schema};
-use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, KeySet, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, Dtype, EditSchema, ForecastStep, Materialize, Operation, OperationResult,
@@ -39,7 +40,9 @@ use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar,
     Step, Unit,
 };
-use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, read};
+use sdm_host::{
+    ArrowData, Attachment, CompositionRoot, HostRun, Outgoing, default_root, encode, read,
+};
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
@@ -49,6 +52,7 @@ use crate::case::{
 };
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
+use crate::memory::Memory;
 use crate::replay::{Recording, Replay, Replayed};
 use crate::sqlite::Sqlite;
 use crate::{duck, endpoint};
@@ -332,7 +336,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
             case.id
         );
     };
-    let (input, answer) = validate(case, spec)?;
+    let (input, answer) = validate(case, spec, &default_root())?;
     Ok(Observed {
         operations: vec!["validate_query".into()],
         inputs: vec![input],
@@ -541,7 +545,11 @@ pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
 
 /// S0's `validate_query` with the case's query, schema and profile: what
 /// this host sent, as it recorded it, and the core's answer.
-fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
+fn validate(
+    case: &Case,
+    spec: &ValidateQueryInput,
+    root: &CompositionRoot,
+) -> Result<(Value, Answer)> {
     let profile: ProfileSpec = serde_json::from_value(spec.profile.clone()).map_err(|_| {
         anyhow!(
             "{}: core.validate_query.profile is not a ProfileSpec",
@@ -577,7 +585,7 @@ fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
         (AttachmentId(2), Attachment::Bytes(schema_bytes)),
     ]);
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
-    let answer = match HostRun::start(&default_root(), &message, attachments) {
+    let answer = match HostRun::start(root, &message, attachments) {
         Err(refused) => error_of(&refused)?,
         Ok(handle) => match handle.next() {
             Err(failed) => error_of(&failed)?,
@@ -601,6 +609,7 @@ enum Source<'a> {
     Duck(&'a duckdb::Connection),
     Sqlite(&'a Sqlite),
     Replay(&'a Replay<'a>),
+    Memory(&'a Memory),
 }
 
 impl Source<'_> {
@@ -616,6 +625,20 @@ impl Source<'_> {
             Source::Replay(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Postgres.name()),
             },
+            // The non-SQL provider, a host provider, as it declares itself.
+            Source::Memory(_) => ProviderChoice::Host {
+                capabilities: Memory::capabilities(),
+            },
+        }
+    }
+
+    /// The composition root a run over this source starts with: the
+    /// second data layer, for host providers alone, for the non-SQL
+    /// provider ([`crate::layer`], T2.7); `sdm-data`'s for every other.
+    fn root(self) -> CompositionRoot {
+        match self {
+            Source::Memory(_) => crate::layer::root(),
+            _ => default_root(),
         }
     }
 }
@@ -709,6 +732,35 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
     Ok(observed)
 }
 
+/// Runs `case` as [`run`] runs it on DuckDB, over its DuckDB base copied
+/// into the minimal non-SQL test provider ([`crate::memory`], T2.7), and
+/// through the second data layer swapped in at the composition root
+/// ([`crate::layer`]): every operation the case names, its fetches
+/// answered from in-memory Arrow tables, never by a statement. Its run
+/// records no driver: nothing runs SQL.
+pub fn run_memory(case: &Case, bases: &Bases) -> Result<Observed> {
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        bail!("{}: reads no data (names no describe_source)", case.id);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    // The base built once on DuckDB and copied out, the connection then
+    // closed: the run reads the copy alone.
+    let memory = Memory::from_duckdb(&database(case, bases)?)?;
+    describe_on(
+        case,
+        spec,
+        Source::Memory(&memory),
+        &mut DriverLog::default(),
+        &edits,
+    )
+}
+
 /// What the driver ran for a replayed fetch, recorded as run: each
 /// statement the recording names on the fetch's own cursor, the last with
 /// this host's read of the answer replayed (or its failure), as the DuckDB
@@ -786,25 +838,34 @@ fn drive(
                     observed
                         .fetches
                         .push(json!({"request": step.request, "plan": step.plan}));
+                    // The key sets the step names: a SQL plan's parameters,
+                    // or, for a host provider, the request's own.
+                    let sets: Vec<&KeySet> = match &step.plan {
+                        FetchPlan::Sql { statements, .. } => statements
+                            .iter()
+                            .flat_map(|s| &s.params)
+                            .filter_map(|param| match param {
+                                SqlParam::KeySet { keys, .. } => Some(keys),
+                                SqlParam::Value { .. } => None,
+                            })
+                            .collect(),
+                        FetchPlan::Host { .. } => Memory::key_sets(&step.request),
+                    };
                     let mut keys = BTreeMap::new();
-                    if let FetchPlan::Sql { statements, .. } = &step.plan {
-                        for param in statements.iter().flat_map(|s| &s.params) {
-                            if let SqlParam::KeySet { keys: set, .. } = param
-                                && !keys.contains_key(&set.attachment)
-                            {
-                                let Ok(Some(Attachment::Arrow(data))) =
-                                    handle.take_attachment(set.attachment)
-                                else {
-                                    bail!("{}: a key set is not attached", case.id);
-                                };
-                                keys.insert(
-                                    set.attachment,
-                                    duck::Fetched {
-                                        schema: data.schema,
-                                        batches: data.batches,
-                                    },
-                                );
-                            }
+                    for set in sets {
+                        if !keys.contains_key(&set.attachment) {
+                            let Ok(Some(Attachment::Arrow(data))) =
+                                handle.take_attachment(set.attachment)
+                            else {
+                                bail!("{}: a key set is not attached", case.id);
+                            };
+                            keys.insert(
+                                set.attachment,
+                                duck::Fetched {
+                                    schema: data.schema,
+                                    batches: data.batches,
+                                },
+                            );
                         }
                     }
                     let answered = match source {
@@ -816,6 +877,21 @@ fn drive(
                             let replayed = replay.answer(step)?;
                             log_replayed(log, &replayed);
                             replayed.answer
+                        }
+                        Source::Memory(memory) => {
+                            let mut sets = BTreeMap::new();
+                            for (id, fetched) in &keys {
+                                sets.insert(
+                                    *id,
+                                    concat_batches(&fetched.schema, &fetched.batches)?,
+                                );
+                            }
+                            memory
+                                .answer(&step.request, &sets)
+                                .map(|batch| duck::Fetched {
+                                    schema: batch.schema(),
+                                    batches: vec![batch],
+                                })
                         }
                     };
                     let (outcome, attachments) = match answered {
@@ -930,7 +1006,7 @@ fn describe_on(
         edits: Vec::new(),
         answered: None,
     };
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
             observed.answer = error_of(&refused)?;
@@ -991,7 +1067,7 @@ fn describe_on(
         } else {
             validating
         };
-        let (input, answer) = validate(case, given)?;
+        let (input, answer) = validate(case, given, &source.root())?;
         observed.operations.push("validate_query".into());
         observed.inputs.push(input);
         let accepted = matches!(answer, Answer::Validated(true));
@@ -1013,7 +1089,7 @@ fn describe_on(
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
         log.stage = "predict";
-        predict(case, spec, state, &mut observed)?;
+        predict(case, spec, state, &mut observed, &source.root())?;
     }
     Ok(observed)
 }
@@ -1056,7 +1132,7 @@ fn edit_schema(
         (AttachmentId(2), Attachment::Bytes(held_bytes)),
         (AttachmentId(3), Attachment::Bytes(edit_bytes)),
     ]);
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => return Ok(Err(error_of(&refused)?)),
     };
@@ -1468,7 +1544,7 @@ fn start_materialize(
     if let Some(Some((_, memo))) = sampler.as_ref().map(|held| held.as_ref()) {
         attachments.insert(AttachmentId(4), Attachment::Bytes(memo.clone()));
     }
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
             // The core's word on the sampler state handed to it (decision
@@ -1717,6 +1793,7 @@ fn predict(
     spec: &PredictInput,
     state: HeldState,
     observed: &mut Observed,
+    root: &CompositionRoot,
 ) -> Result<()> {
     observed.operations.push("predict".into());
     observed.inputs.push(json!({
@@ -1792,7 +1869,7 @@ fn predict(
     for (at, (payload, _)) in (0u32..).zip(state.batches.unwrap_or_default()) {
         attachments.insert(AttachmentId(3 + at), Attachment::Bytes(payload));
     }
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    let handle = match HostRun::start(root, &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
             observed.answer = error_of(&refused)?;

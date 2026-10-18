@@ -16,6 +16,12 @@ publish.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
+# The non-SQL test provider (T2.7) answers from in-memory Arrow tables:
+# selecting, ordering and grouping their rows.
+arrow-array.workspace = true
+arrow-row.workspace = true
+arrow-schema.workspace = true
+arrow-select.workspace = true
 # The Postgres replay (KO2-20): a recorded answer is an Arrow IPC stream
 # in base64 text.
 arrow-ipc.workspace = true
@@ -37,10 +43,6 @@ rusqlite.workspace = true
 # The test-only fetch, which echoes what the core admitted, for the
 # provider's tests.
 sdm-host = { path = "../sdm-host", features = ["test-ops"] }
-# The labels' test reads the test-only labels operation's Arrow batch.
-arrow-array.workspace = true
-arrow-schema.workspace = true
-arrow-select.workspace = true
 # T2.2's tests execute the SQLite dialect's relation goldens on SQLite.
 rusqlite.workspace = true
 

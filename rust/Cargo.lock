@@ -1652,6 +1652,7 @@ dependencies = [
  "anyhow",
  "arrow-array",
  "arrow-ipc",
+ "arrow-row",
  "arrow-schema",
  "arrow-select",
  "base64 0.22.1",
