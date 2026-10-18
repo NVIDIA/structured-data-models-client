@@ -135,6 +135,150 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'addresses'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'addresses'\n           AND c.oid = to_regclass('\"addresses\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'buyers'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'buyers'\n           AND c.oid = to_regclass('\"buyers\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'customers'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'customers'\n           AND c.oid = to_regclass('\"customers\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'details'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'details'\n           AND c.oid = to_regclass('\"details\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'headers'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'headers'\n           AND c.oid = to_regclass('\"headers\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'lines'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'lines'\n           AND c.oid = to_regclass('\"lines\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'products'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'products'\n           AND c.oid = to_regclass('\"products\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &[
+            "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'stores'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'stores'\n           AND c.oid = to_regclass('\"stores\"'))\nORDER BY c.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'addresses'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'buyers'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'customers'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'details'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'headers'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'lines'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'products'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &[
+            "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = current_schema() AND tc.table_name = 'stores'\nORDER BY tc.constraint_name, kcu.ordinal_position",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'addresses'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'buyers'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'customers'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'details'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'headers'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'lines'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'products'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &[
+            "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = current_schema() AND tc.table_name = 'stores'\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')",
+        ],
+    ),
+    (
         r##"{"keys": [{"columns": ["CustomerID"], "table": {"source": ["adventureworks_customers"]}}, {"columns": ["ProductID"], "table": {"source": ["adventureworks_products"]}}, {"columns": ["SalesOrderDetailID"], "table": {"source": ["adventureworks_sales_order_details"]}}], "request": "key_counts"}"##,
         &[
             "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"CustomerID\") AS d, COUNT(CASE WHEN \"CustomerID\" IS NULL THEN 1 END) AS z\nFROM \"adventureworks_customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"ProductID\") AS d, COUNT(CASE WHEN \"ProductID\" IS NULL THEN 1 END) AS z\nFROM \"adventureworks_products\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"SalesOrderDetailID\") AS d, COUNT(CASE WHEN \"SalesOrderDetailID\" IS NULL THEN 1 END) AS z\nFROM \"adventureworks_sales_order_details\"",
@@ -144,6 +288,48 @@ const GOLDENS: goldens::Goldens = &[
         r##"{"keys": [{"columns": ["order_id"], "table": {"source": ["orders"]}}, {"columns": ["user_id"], "table": {"source": ["users"]}}], "request": "key_counts"}"##,
         &[
             "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["aid"], "table": {"source": ["addresses"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["lid"], "table": {"source": ["lines"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"aid\") AS d, COUNT(CASE WHEN \"aid\" IS NULL THEN 1 END) AS z\nFROM \"addresses\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"lid\") AS d, COUNT(CASE WHEN \"lid\" IS NULL THEN 1 END) AS z\nFROM \"lines\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["aid"], "table": {"source": ["addresses"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"aid\") AS d, COUNT(CASE WHEN \"aid\" IS NULL THEN 1 END) AS z\nFROM \"addresses\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["buyers"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"buyers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["buyers"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"buyers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["did"], "table": {"source": ["details"]}}, {"columns": ["hid"], "table": {"source": ["headers"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"did\") AS d, COUNT(CASE WHEN \"did\" IS NULL THEN 1 END) AS z\nFROM \"details\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"headers\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["hid"], "table": {"source": ["headers"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"headers\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}, {"columns": ["pid"], "table": {"source": ["products"]}}, {"columns": ["sid"], "table": {"source": ["stores"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"pid\") AS d, COUNT(CASE WHEN \"pid\" IS NULL THEN 1 END) AS z\nFROM \"products\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"sid\") AS d, COUNT(CASE WHEN \"sid\" IS NULL THEN 1 END) AS z\nFROM \"stores\"",
         ],
     ),
     (
@@ -258,6 +444,102 @@ const GOLDENS: goldens::Goldens = &[
         r##"{"columns": ["user_id", "age"], "key": ["user_id"], "request": "lookup", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"##,
         &[
             "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"user_id\", l.c1 AS \"age\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"user_id\" AS c0, t.\"age\" AS c1,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"user_id\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"users\" t\n    ON t.\"user_id\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid", "city", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"aid\", l.c1 AS \"city\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"aid\" AS c0, t.\"city\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"aid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"addresses\" t\n    ON t.\"aid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid", "city", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"aid\", l.c1 AS \"city\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"aid\" AS c0, t.\"city\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"aid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"addresses\" t\n    ON t.\"aid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"aid\", l.c1 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"aid\" AS c0, t.\"tag\" AS c1,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"aid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"addresses\" t\n    ON t.\"aid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["buyers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"aid\", l.c2 AS \"seg\", l.c3 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"buyers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"aid\", l.c2 AS \"seg\", l.c3 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"customers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["buyers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"aid\", l.c2 AS \"seg\", l.c3 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"buyers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"aid\", l.c2 AS \"seg\", l.c3 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"customers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"aid\", l.c2 AS \"seg\", l.c3 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"customers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"aid\", l.c2 AS \"seg\", l.c3 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"customers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "seg"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"cid\", l.c1 AS \"seg\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"cid\" AS c0, t.\"seg\" AS c1,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"cid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"customers\" t\n    ON t.\"cid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["hid", "cid", "ts"], "key": ["hid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["headers"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"hid\", l.c1 AS \"cid\", l.c2 AS \"ts\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"hid\" AS c0, t.\"cid\" AS c1, t.\"ts\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"hid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"headers\" t\n    ON t.\"hid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"pid\", l.c1 AS \"price\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"pid\" AS c0, t.\"price\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"pid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"products\" t\n    ON t.\"pid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"pid\", l.c1 AS \"price\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"pid\" AS c0, t.\"price\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"pid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"products\" t\n    ON t.\"pid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"pid\", l.c1 AS \"price\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"pid\" AS c0, t.\"price\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"pid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"products\" t\n    ON t.\"pid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["sid", "size", "tag"], "key": ["sid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["stores"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"sid\", l.c1 AS \"size\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"sid\" AS c0, t.\"size\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"sid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"stores\" t\n    ON t.\"sid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns": ["sid", "size", "tag"], "key": ["sid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["stores"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"sid\", l.c1 AS \"size\", l.c2 AS \"tag\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"sid\" AS c0, t.\"size\" AS c1, t.\"tag\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"sid\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"stores\" t\n    ON t.\"sid\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
         ],
     ),
     (
@@ -441,6 +723,114 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["aid"], "order": [{"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}, "window": null}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"cid\", n.c1 AS \"aid\", n.c2 AS \"seg\", n.c3 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"cid\" ASC NULLS LAST) AS r\n  FROM \"customers\" t\n  WHERE t.\"aid\" = s.\"key\"\n  ORDER BY t.\"cid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["aid"], "order": [{"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}, "window": null}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"cid\", n.c1 AS \"aid\", n.c2 AS \"seg\", n.c3 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"cid\" AS c0, t.\"aid\" AS c1, t.\"seg\" AS c2, t.\"tag\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"cid\" ASC NULLS LAST) AS r\n  FROM \"customers\" t\n  WHERE t.\"aid\" = s.\"key\"\n  ORDER BY t.\"cid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": true}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"details\" AS base FROM \"details\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"did\", n.c1 AS \"cid\", n.c2 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"did\" AS c0, t.\"cid\" AS c1, t.\"ts\" AS c2, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"cid\" ASC NULLS LAST, t.\"did\" ASC NULLS LAST) AS r\n  FROM \"details\" t\n  WHERE t.\"cid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"cid\" ASC NULLS LAST, t.\"did\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": true}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": true}, {"as_timestamp": false, "column": "hid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"details\" AS base FROM \"details\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"did\", n.c1 AS \"hid\", n.c2 AS \"cid\", n.c3 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"did\" AS c0, t.\"hid\" AS c1, t.\"cid\" AS c2, t.\"ts\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"cid\" ASC NULLS LAST, t.\"did\" ASC NULLS LAST, t.\"hid\" ASC NULLS LAST) AS r\n  FROM \"details\" t\n  WHERE t.\"cid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"cid\" ASC NULLS LAST, t.\"did\" ASC NULLS LAST, t.\"hid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"details\" AS base FROM \"details\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"did\", n.c1 AS \"hid\", n.c2 AS \"cid\", n.c3 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"did\" AS c0, t.\"hid\" AS c1, t.\"cid\" AS c2, t.\"ts\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"did\" ASC NULLS LAST) AS r\n  FROM \"details\" t\n  WHERE t.\"cid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"did\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["hid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": true}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": true}, {"as_timestamp": false, "column": "hid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"details\" AS base FROM \"details\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"did\", n.c1 AS \"hid\", n.c2 AS \"cid\", n.c3 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"did\" AS c0, t.\"hid\" AS c1, t.\"cid\" AS c2, t.\"ts\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"cid\" ASC NULLS LAST, t.\"did\" ASC NULLS LAST, t.\"hid\" ASC NULLS LAST) AS r\n  FROM \"details\" t\n  WHERE t.\"hid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"cid\" ASC NULLS LAST, t.\"did\" ASC NULLS LAST, t.\"hid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["hid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"details\" AS base FROM \"details\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"did\", n.c1 AS \"hid\", n.c2 AS \"cid\", n.c3 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"did\" AS c0, t.\"hid\" AS c1, t.\"cid\" AS c2, t.\"ts\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"did\" ASC NULLS LAST) AS r\n  FROM \"details\" t\n  WHERE t.\"hid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"did\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["hid", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "hid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["headers"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"headers\" AS base FROM \"headers\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"hid\", n.c1 AS \"cid\", n.c2 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"hid\" AS c0, t.\"cid\" AS c1, t.\"ts\" AS c2, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"hid\" ASC NULLS LAST) AS r\n  FROM \"headers\" t\n  WHERE t.\"cid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"hid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["aid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"oid\", n.c1 AS \"cid\", n.c2 AS \"aid\", n.c3 AS \"pid\", n.c4 AS \"sid\", n.c5 AS \"ts\", n.c6 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"oid\" AS c0, t.\"cid\" AS c1, t.\"aid\" AS c2, t.\"pid\" AS c3, t.\"sid\" AS c4, t.\"ts\" AS c5, t.\"tag\" AS c6, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"aid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"oid\", n.c1 AS \"cid\", n.c2 AS \"aid\", n.c3 AS \"pid\", n.c4 AS \"sid\", n.c5 AS \"ts\", n.c6 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"oid\" AS c0, t.\"cid\" AS c1, t.\"aid\" AS c2, t.\"pid\" AS c3, t.\"sid\" AS c4, t.\"ts\" AS c5, t.\"tag\" AS c6, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"cid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"oid\", n.c1 AS \"cid\", n.c2 AS \"aid\", n.c3 AS \"pid\", n.c4 AS \"sid\", n.c5 AS \"ts\", n.c6 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"oid\" AS c0, t.\"cid\" AS c1, t.\"aid\" AS c2, t.\"pid\" AS c3, t.\"sid\" AS c4, t.\"ts\" AS c5, t.\"tag\" AS c6, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"cid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["pid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"oid\", n.c1 AS \"cid\", n.c2 AS \"aid\", n.c3 AS \"pid\", n.c4 AS \"sid\", n.c5 AS \"ts\", n.c6 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"oid\" AS c0, t.\"cid\" AS c1, t.\"aid\" AS c2, t.\"pid\" AS c3, t.\"sid\" AS c4, t.\"ts\" AS c5, t.\"tag\" AS c6, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"pid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["sid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"oid\", n.c1 AS \"cid\", n.c2 AS \"aid\", n.c3 AS \"pid\", n.c4 AS \"sid\", n.c5 AS \"ts\", n.c6 AS \"tag\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"oid\" AS c0, t.\"cid\" AS c1, t.\"aid\" AS c2, t.\"pid\" AS c3, t.\"sid\" AS c4, t.\"ts\" AS c5, t.\"tag\" AS c6, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"sid\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"oid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["aid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"end\", w3.\"ts\" AS \"start\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->3)) AS w3\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"aid\" = s.\"key\"\n AND t.\"ts\" <= s.\"end\"\n AND t.\"ts\" > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["cid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"end\", w3.\"ts\" AS \"start\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"details\" AS base FROM \"details\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->3)) AS w3\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"details\" t\n  ON t.\"cid\" = s.\"key\"\n AND t.\"ts\" <= s.\"end\"\n AND t.\"ts\" > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["cid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"end\", w3.\"ts\" AS \"start\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->3)) AS w3\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"cid\" = s.\"key\"\n AND t.\"ts\" <= s.\"end\"\n AND t.\"ts\" > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["pid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"end\", w3.\"ts\" AS \"start\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->3)) AS w3\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"pid\" = s.\"key\"\n AND t.\"ts\" <= s.\"end\"\n AND t.\"ts\" > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["sid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"end\", w3.\"ts\" AS \"start\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->3)) AS w3\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"sid\" = s.\"key\"\n AND t.\"ts\" <= s.\"end\"\n AND t.\"ts\" > s.\"start\"",
+        ],
+    ),
+    (
         r##"{"columns": ["CustomerID", "PersonID", "StoreID", "TerritoryID", "AccountNumber", "rowguid", "ModifiedDate"], "limit": 1000, "request": "preview", "table": {"source": ["adventureworks_customers"]}}"##,
         &[
             "SELECT \"CustomerID\", \"PersonID\", \"StoreID\", \"TerritoryID\", \"AccountNumber\", \"rowguid\", \"ModifiedDate\" FROM \"adventureworks_customers\" LIMIT 1000",
@@ -521,6 +911,52 @@ const GOLDENS: goldens::Goldens = &[
         &["SELECT \"user_id\", \"age\", \"country\" FROM \"users\" LIMIT 1000"],
     ),
     (
+        r##"{"columns": ["aid", "city", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["addresses"]}}"##,
+        &["SELECT \"aid\", \"city\", \"tag\" FROM \"addresses\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["buyers"]}}"##,
+        &["SELECT \"cid\", \"aid\", \"seg\", \"tag\" FROM \"buyers\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["customers"]}}"##,
+        &["SELECT \"cid\", \"aid\", \"seg\", \"tag\" FROM \"customers\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["cid", "seg"], "limit": 1000, "request": "preview", "table": {"source": ["customers"]}}"##,
+        &["SELECT \"cid\", \"seg\" FROM \"customers\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["did", "cid", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["details"]}}"##,
+        &["SELECT \"did\", \"cid\", \"ts\" FROM \"details\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["details"]}}"##,
+        &["SELECT \"did\", \"hid\", \"cid\", \"ts\" FROM \"details\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["hid", "cid", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["headers"]}}"##,
+        &["SELECT \"hid\", \"cid\", \"ts\" FROM \"headers\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["lid", "oid", "qty", "ts", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["lines"]}}"##,
+        &["SELECT \"lid\", \"oid\", \"qty\", \"ts\", \"tag\" FROM \"lines\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["orders"]}}"##,
+        &[
+            "SELECT \"oid\", \"cid\", \"aid\", \"pid\", \"sid\", \"ts\", \"tag\" FROM \"orders\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["products"]}}"##,
+        &["SELECT \"pid\", \"price\", \"tag\" FROM \"products\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["sid", "size", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["stores"]}}"##,
+        &["SELECT \"sid\", \"size\", \"tag\" FROM \"stores\" LIMIT 1000"],
+    ),
+    (
         r##"{"columns": ["CustomerID"], "filters": [{"column": "CustomerID", "filter": "not_null"}], "key": ["CustomerID"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["adventureworks_customers"]}}"##,
         &[
             "SELECT setseed(-0.31481207155156876)",
@@ -591,6 +1027,55 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
+        r##"{"columns": ["aid", "city"], "filters": [{"column": "aid", "filter": "not_null"}], "key": ["aid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"aid\", \"city\"\nFROM \"addresses\"\nWHERE \"aid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid"], "filters": [], "key": ["aid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"aid\"\nFROM \"addresses\"\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid"], "filters": [{"column": "aid", "filter": "not_null"}], "key": ["aid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"aid\"\nFROM \"addresses\"\nWHERE \"aid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid"], "filters": [{"column": "cid", "filter": "not_null"}], "key": ["cid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["buyers"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"cid\"\nFROM \"buyers\"\nWHERE \"cid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid"], "filters": [{"column": "cid", "filter": "not_null"}], "key": ["cid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"cid\"\nFROM \"customers\"\nWHERE \"cid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid"], "filters": [{"column": "pid", "filter": "not_null"}], "key": ["pid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["products"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"pid\"\nFROM \"products\"\nWHERE \"pid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["sid"], "filters": [{"column": "sid", "filter": "not_null"}], "key": ["sid"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["stores"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"sid\"\nFROM \"stores\"\nWHERE \"sid\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
         r##"{"columns": [{"column": "OrderDate", "table": {"source": ["adventureworks_sales_order_details"]}}], "request": "time_bounds"}"##,
         &[
             "SELECT 0 AS table_index, MIN(\"OrderDate\") AS min_date, MAX(\"OrderDate\") AS max_date\nFROM \"adventureworks_sales_order_details\"",
@@ -624,6 +1109,18 @@ const GOLDENS: goldens::Goldens = &[
         r##"{"columns": [{"column": "ts", "table": {"source": ["orders"]}}], "request": "time_bounds"}"##,
         &[
             "SELECT 0 AS table_index, MIN(\"ts\") AS min_date, MAX(\"ts\") AS max_date\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"columns": [{"column": "ts", "table": {"source": ["details"]}}], "request": "time_bounds"}"##,
+        &[
+            "SELECT 0 AS table_index, MIN(\"ts\") AS min_date, MAX(\"ts\") AS max_date\nFROM \"details\"",
+        ],
+    ),
+    (
+        r##"{"columns": [{"column": "ts", "table": {"source": ["lines"]}}, {"column": "ts", "table": {"source": ["orders"]}}], "request": "time_bounds"}"##,
+        &[
+            "SELECT 0 AS table_index, MIN(\"ts\") AS min_date, MAX(\"ts\") AS max_date\nFROM \"lines\"\nUNION ALL\nSELECT 1 AS table_index, MIN(\"ts\") AS min_date, MAX(\"ts\") AS max_date\nFROM \"orders\"",
         ],
     ),
 ];
