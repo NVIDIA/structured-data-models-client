@@ -1955,7 +1955,18 @@ fn predict(
         let (status, answered) = match endpoint::scripted(&body) {
             Some(given) => given,
             None => {
+                // The scripted endpoint, failing the case's call, and a
+                // classification's probabilities given where the case asks
+                // the endpoint for them (T2.8), by the call's number.
+                let call = scripted.calls();
                 let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
+                let (status, answered) = if case.input.probabilities == Some(true)
+                    && case.input.fail_call != Some(call)
+                {
+                    endpoint::answer_with_probabilities("POST", endpoint::PREDICTIONS, &body, call)
+                } else {
+                    (status, answered)
+                };
                 (status, serde_json::to_vec(&answered)?)
             }
         };
