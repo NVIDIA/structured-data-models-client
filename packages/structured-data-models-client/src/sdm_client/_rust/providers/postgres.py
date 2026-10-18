@@ -36,7 +36,7 @@ by pyarrow. The driver reads each value as it reads the reference's (its
 own loaders, so the statements' results are the reference's), and a value
 is converted after the read where the core takes it another way: a
 ``json`` or ``jsonb`` value as the reference's text of it (compact JSON,
-its field marked as JSON, Arrow's ``arrow.json``),
+its field marked as JSON, Arrow's ``arrow.json`` metadata, :data:`JSON_TAG`),
 an ``interval`` (the driver's ``timedelta``, a month counted as 30 days as
 the reference's driver counts it) as pyarrow's ``MonthDayNano``, its field
 tagged ``sdm:interval`` = ``timedelta`` (:data:`INTERVAL_TAG`). A
@@ -55,6 +55,12 @@ from typing import Any
 #: The field metadata key marking a column of numbers handed over as their
 #: exact text (``sdm_contract::data::EXACT_NUMBER_MARKER``).
 EXACT_NUMBER_MARKER = 'sdm:exact_number'
+#: The field metadata of Arrow's ``arrow.json`` extension over a string,
+#: marking a column of JSON text.
+JSON_TAG = {
+    'ARROW:extension:name': 'arrow.json',
+    'ARROW:extension:metadata': '',
+}
 #: The field metadata key, and its value, marking an interval column built
 #: from the driver's ``timedelta``s (:func:`_interval`), a month counted as
 #: 30 days as psycopg counts it.
@@ -288,14 +294,7 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
         fields.append(
             kind.field(column.name, (row[at] for row in rows))
             if isinstance(kind, _Numeric)
-            else pa.field(
-                column.name,
-                kind,
-                # Built from the driver's timedelta (_interval): so tagged.
-                metadata=dict([INTERVAL_TAG])
-                if kind == pa.month_day_nano_interval()
-                else None,
-            )
+            else pa.field(column.name, kind, metadata=_tags(column, connection))
         )
     schema = pa.schema(fields)
     types = [field.type for field in fields]
@@ -343,6 +342,22 @@ class _Numeric:
             if value is not None and not _INT64_MIN <= value <= _INT64_MAX:
                 return pa.field(name, pa.string())
         return pa.field(name, pa.int64())
+
+
+def _tags(column: Any, connection: Any) -> dict[str, str] | None:
+    r"""A result column's field metadata: a ``json`` or ``jsonb`` column's
+    text marked as JSON (Arrow's ``arrow.json`` extension, written as its
+    metadata over a string, which every supported pyarrow keeps); an
+    ``interval`` column's built from the driver's ``timedelta``s
+    (:data:`INTERVAL_TAG`); none for any other."""
+    info = connection.adapters.types.get(column.type_code)
+    if info is None or info.oid != column.type_code:
+        return None
+    if info.name in _JSON:
+        return dict(JSON_TAG)
+    if info.name == 'interval':
+        return dict([INTERVAL_TAG])
+    return None
 
 
 def _array(values: Any, kind: Any) -> Any:
@@ -463,10 +478,6 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
         return pa.time64('us')
     if name == 'interval':
         return pa.month_day_nano_interval()
-    if name in _JSON:
-        # The reference's text of the value (json_text), marked as JSON
-        # (Arrow's arrow.json over a string).
-        return pa.json_()
     return pa.string()
 
 
