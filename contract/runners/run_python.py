@@ -1511,6 +1511,19 @@ def _unencodable(name: str, odd: list[str]) -> list[str]:
 _UNIT_NANOS = {'s': 10**9, 'ms': 10**6, 'us': 10**3, 'ns': 1}
 
 
+def _json_cell(text: str | None, odd: list[str]) -> Any:
+    r"""A JSON text as the value it holds, the canonical cell of a driver's
+    reading of it; a text that is not JSON is unencodable."""
+    if text is None:
+        return None
+    try:
+        value = json.loads(text)
+    except ValueError:
+        odd.append('arrow:json')
+        return ['?', 'arrow:json']
+    return canonical_cell(value, odd)
+
+
 def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     r"""The canonical cells of one Arrow array, read from Arrow itself, as
     ``sdm-testkit``'s ``values`` reads them: temporal values from their
@@ -1519,7 +1532,9 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     entries in Arrow's order, duplicate keys kept), a union as its chosen
     member's cell under its type code and name (:func:`_union_cells`), a
     month-day-nano interval as ``["interval", months, days, nanoseconds
-    as digits]``, a dictionary as its values; a type outside that set (a
+    as digits]``, a dictionary as its values, text Arrow marks as JSON
+    (``arrow.json``) as the value it holds, as a driver reads JSON
+    (``json.loads``, then :func:`canonical_cell`); a type outside that set (a
     ``date64``, Arrow's year-month and day-time intervals) is unencodable,
     its non-null values ``["?", "arrow:<type>"]``."""
     import pyarrow as pa
@@ -1527,6 +1542,12 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
 
     kind = array.type
     valid = [not null for null in array.is_null().to_pylist()]
+    if (
+        isinstance(kind, pa.BaseExtensionType)
+        and kind.extension_name == 'arrow.json'
+        and is_.is_string(kind.storage_type)
+    ):
+        return [_json_cell(text, odd) for text in array.storage.to_pylist()]
     if is_.is_dictionary(kind):
         return _arrow_cells(array.dictionary_decode(), odd)
     if is_.is_time(kind) or is_.is_timestamp(kind) or is_.is_duration(kind):

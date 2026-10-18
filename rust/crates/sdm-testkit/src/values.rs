@@ -23,7 +23,9 @@
 //! kept), `["union", type code, member name, cell]` (never null itself:
 //! a null member, or a union DuckDB writes as null, keeps its tag) and
 //! `["interval", months, days, nanoseconds as digits]` (a month-day-nano
-//! interval); a dictionary is read as its values. A value of any other
+//! interval); a dictionary is read as its values; text a field marks as
+//! JSON (Arrow's `arrow.json`) as the value it holds, as a driver reads
+//! JSON ([`json_cell`]). A value of any other
 //! type (a `date64`, a year-month or day-time interval) is `["?", its
 //! type's name]` and is listed as unencodable, inside a map or a chosen
 //! union member too, which the comparator never takes as equal; a member
@@ -59,12 +61,20 @@ use serde_json::{Value, json};
 pub fn values(fields: &[&Field], batches: &[RecordBatch]) -> Value {
     let mut odd = BTreeSet::new();
     let mut texts = Vec::new();
+    let json: Vec<bool> = fields.iter().map(|f| is_json(f)).collect();
     for batch in batches {
         for row in 0..batch.num_rows() {
             let cells: Vec<Value> = batch
                 .columns()
                 .iter()
-                .map(|column| cell(column, row, &mut odd))
+                .enumerate()
+                .map(|(at, column)| {
+                    if json.get(at).copied().unwrap_or(false) {
+                        json_cell(column, row, &mut odd)
+                    } else {
+                        cell(column, row, &mut odd)
+                    }
+                })
                 .collect();
             texts.push(ascii_json(&Value::Array(cells)));
         }
@@ -78,6 +88,250 @@ pub fn values(fields: &[&Field], batches: &[RecordBatch]) -> Value {
         "unordered": digest_of(&texts),
         "unencodable": odd.into_iter().collect::<Vec<_>>(),
     })
+}
+
+/// Whether `field` is text holding JSON: Arrow's canonical `arrow.json`
+/// extension over a string.
+fn is_json(field: &Field) -> bool {
+    field
+        .metadata()
+        .get("ARROW:extension:name")
+        .is_some_and(|name| name == "arrow.json")
+        && field.data_type() == &DataType::Utf8
+}
+
+/// One JSON text, `row` of `array`, as the value it holds, in the canonical
+/// form a driver's reading of the same JSON has (`json.loads`, then
+/// `run_python.py`'s `canonical_cell`): an object a `struct` of its members
+/// in their order (a repeated name its last value, at its first place), an
+/// array a `list`, a whole number `["i", its digits]`, any other number a
+/// double, a string `["s", text]`; null and the booleans themselves. A
+/// text that is not JSON, or holds a string no text holds (a lone
+/// surrogate), is unencodable.
+fn json_cell(array: &ArrayRef, row: usize, odd: &mut BTreeSet<String>) -> Value {
+    if array.is_null(row) {
+        return Value::Null;
+    }
+    let Some(text) = array.as_string_opt::<i32>().map(|a| a.value(row)) else {
+        return unencodable(array.data_type(), odd);
+    };
+    let mut parser = JsonText {
+        chars: text.chars().collect(),
+        at: 0,
+    };
+    match parser.value() {
+        Some(value) if parser.done() => value,
+        _ => {
+            odd.insert("arrow:json".to_owned());
+            json!(["?", "arrow:json"])
+        }
+    }
+}
+
+/// A JSON text read into its canonical value ([`json_cell`]).
+struct JsonText {
+    chars: Vec<char>,
+    at: usize,
+}
+
+impl JsonText {
+    fn space(&mut self) {
+        while self
+            .chars
+            .get(self.at)
+            .is_some_and(|c| matches!(c, ' ' | '\t' | '\n' | '\r'))
+        {
+            self.at += 1;
+        }
+    }
+
+    fn done(&mut self) -> bool {
+        self.space();
+        self.at == self.chars.len()
+    }
+
+    fn eat(&mut self, word: &str) -> bool {
+        let n = word.chars().count();
+        let found = self
+            .chars
+            .get(self.at..self.at + n)
+            .is_some_and(|w| w.iter().copied().eq(word.chars()));
+        if found {
+            self.at += n;
+        }
+        found
+    }
+
+    fn value(&mut self) -> Option<Value> {
+        self.space();
+        let first = *self.chars.get(self.at)?;
+        match first {
+            '{' => {
+                self.at += 1;
+                let mut members: Vec<(String, Value)> = Vec::new();
+                self.space();
+                if !self.eat("}") {
+                    loop {
+                        self.space();
+                        let name = self.string()?;
+                        self.space();
+                        if !self.eat(":") {
+                            return None;
+                        }
+                        let value = self.value()?;
+                        match members.iter_mut().find(|(n, _)| *n == name) {
+                            Some(member) => member.1 = value,
+                            None => members.push((name, value)),
+                        }
+                        self.space();
+                        if self.eat("}") {
+                            break;
+                        }
+                        if !self.eat(",") {
+                            return None;
+                        }
+                    }
+                }
+                let members: Vec<Value> = members
+                    .into_iter()
+                    .map(|(name, value)| json!([name, value]))
+                    .collect();
+                Some(json!(["struct", members]))
+            }
+            '[' => {
+                self.at += 1;
+                let mut items = Vec::new();
+                self.space();
+                if !self.eat("]") {
+                    loop {
+                        items.push(self.value()?);
+                        self.space();
+                        if self.eat("]") {
+                            break;
+                        }
+                        if !self.eat(",") {
+                            return None;
+                        }
+                    }
+                }
+                Some(json!(["list", items]))
+            }
+            '"' => self.string().map(|s| tagged("s", s)),
+            _ if self.eat("true") => Some(Value::Bool(true)),
+            _ if self.eat("false") => Some(Value::Bool(false)),
+            _ if self.eat("null") => Some(Value::Null),
+            // Python's reading takes these three too.
+            _ if self.eat("NaN") => Some(float(f64::NAN)),
+            _ if self.eat("Infinity") => Some(float(f64::INFINITY)),
+            _ if self.eat("-Infinity") => Some(float(f64::NEG_INFINITY)),
+            _ => self.number(),
+        }
+    }
+
+    fn digits(&mut self) -> bool {
+        let from = self.at;
+        while self.chars.get(self.at).is_some_and(char::is_ascii_digit) {
+            self.at += 1;
+        }
+        self.at > from
+    }
+
+    fn number(&mut self) -> Option<Value> {
+        let start = self.at;
+        self.eat("-");
+        let whole_from = self.at;
+        if !self.digits() {
+            return None;
+        }
+        // JSON writes no leading zero.
+        if self.chars[whole_from] == '0' && self.at - whole_from > 1 {
+            return None;
+        }
+        let mut whole = true;
+        if self.eat(".") {
+            whole = false;
+            if !self.digits() {
+                return None;
+            }
+        }
+        if self
+            .chars
+            .get(self.at)
+            .is_some_and(|c| *c == 'e' || *c == 'E')
+        {
+            whole = false;
+            self.at += 1;
+            if !self.eat("+") {
+                self.eat("-");
+            }
+            if !self.digits() {
+                return None;
+            }
+        }
+        let token: String = self.chars[start..self.at].iter().collect();
+        if !whole {
+            return token.parse::<f64>().ok().map(float);
+        }
+        let digits = token.trim_start_matches('-');
+        if token.starts_with('-') && !digits.chars().all(|c| c == '0') {
+            Some(tagged("i", format!("-{digits}")))
+        } else {
+            Some(tagged("i", digits.to_owned()))
+        }
+    }
+
+    fn string(&mut self) -> Option<String> {
+        if !self.eat("\"") {
+            return None;
+        }
+        let mut out = String::new();
+        loop {
+            let c = *self.chars.get(self.at)?;
+            self.at += 1;
+            match c {
+                '"' => return Some(out),
+                '\\' => {
+                    let escaped = *self.chars.get(self.at)?;
+                    self.at += 1;
+                    match escaped {
+                        '"' => out.push('"'),
+                        '\\' => out.push('\\'),
+                        '/' => out.push('/'),
+                        'b' => out.push('\u{8}'),
+                        'f' => out.push('\u{c}'),
+                        'n' => out.push('\n'),
+                        'r' => out.push('\r'),
+                        't' => out.push('\t'),
+                        'u' => {
+                            let high = self.hex4()?;
+                            let code = if (0xD800..0xDC00).contains(&high) {
+                                if !self.eat("\\u") {
+                                    return None;
+                                }
+                                let low = self.hex4()?;
+                                if !(0xDC00..0xE000).contains(&low) {
+                                    return None;
+                                }
+                                0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)
+                            } else {
+                                high
+                            };
+                            out.push(char::from_u32(code)?);
+                        }
+                        _ => return None,
+                    }
+                }
+                c if u32::from(c) < 0x20 => return None,
+                c => out.push(c),
+            }
+        }
+    }
+
+    fn hex4(&mut self) -> Option<u32> {
+        let text: String = self.chars.get(self.at..self.at + 4)?.iter().collect();
+        self.at += 4;
+        u32::from_str_radix(&text, 16).ok()
+    }
 }
 
 fn digest_of(texts: &[String]) -> String {
@@ -523,4 +777,49 @@ fn write_string(text: &str, out: &mut String) {
         }
     }
     out.push('"');
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    use duckdb::arrow::datatypes::Schema;
+
+    use super::*;
+
+    /// The JSON text and its canonical row that
+    /// `tests/test_t21e_json_cell.py` holds the Python runner's reading to.
+    const TEXT: &str = r#"{"b": [1], "a": {"n": -0, "big": 123456789012345678901234567890}, "c": [2.5, 1e2, null, true, "\u00e9\ud83d\ude00"], "b": "last"}"#;
+    const ROW: &str = r#"[["struct",[["b",["s","last"]],["a",["struct",[["n",["i","0"]],["big",["i","123456789012345678901234567890"]]]]],["c",["list",[["f","4004000000000000"],["f","4059000000000000"],null,true,["s","\u00e9\ud83d\ude00"]]]]]]]"#;
+
+    fn rows(json: bool, texts: &[&str]) -> Value {
+        let mut field = Field::new("f", DataType::Utf8, true);
+        if json {
+            field = field.with_metadata(HashMap::from([(
+                "ARROW:extension:name".to_owned(),
+                "arrow.json".to_owned(),
+            )]));
+        }
+        let schema = Arc::new(Schema::new(vec![field.clone()]));
+        let array: ArrayRef = Arc::new(StringArray::from(texts.to_vec()));
+        let batch = RecordBatch::try_new(schema, vec![array]).unwrap();
+        values(&[&field], &[batch])
+    }
+
+    #[test]
+    fn json_text_reads_as_the_value_a_driver_reads() {
+        let array: ArrayRef = Arc::new(StringArray::from(vec![TEXT]));
+        let mut odd = BTreeSet::new();
+        let row = Value::Array(vec![json_cell(&array, 0, &mut odd)]);
+        assert_eq!(ascii_json(&row), ROW);
+        assert!(odd.is_empty());
+        let digest = crate::case::sha256(format!("[{ROW}]").as_bytes());
+        assert_eq!(rows(true, &[TEXT])["ordered"], digest);
+        // Another JSON value differs; text not marked as JSON stays text;
+        // a text that is no JSON is unencodable.
+        assert_ne!(rows(true, &[r#"{"a": 2}"#])["ordered"], digest);
+        assert_ne!(rows(false, &[TEXT])["ordered"], digest);
+        assert_eq!(rows(true, &["{"])["unencodable"], json!(["arrow:json"]));
+    }
 }
