@@ -466,6 +466,121 @@ fn an_accepted_query_is_handed_on_in_the_validated_query_format() {
     assert_eq!(time_column.as_ref().unwrap().column, "ts");
 }
 
+/// The `shop` tables with `name` as a column of each: the users' key,
+/// and an orders' number, which the query names as entity, filter, target
+/// and aggregated column (KO2-36).
+fn shop_naming(name: &str) -> QuerySchema {
+    serde_json::from_value(json!({
+        "tables": [
+            {"name": "orders", "columns": [
+                {"name": "order_id", "dtype": "int", "stype": "ID"},
+                {"name": "user_id", "dtype": "int", "stype": "ID"},
+                {"name": name, "dtype": "float", "stype": "numerical"},
+                {"name": "ts", "dtype": "time", "stype": "timestamp"}],
+             "primary_key": "order_id", "time_column": "ts", "end_time_column": null},
+            {"name": "users", "columns": [
+                {"name": name, "dtype": "int", "stype": "ID"},
+                {"name": "age", "dtype": "int", "stype": "numerical"}],
+             "primary_key": name, "time_column": null, "end_time_column": null}],
+        "links": [[{"table": "orders", "column": "user_id"}, {"table": "users", "column": name}]],
+    }))
+    .unwrap()
+}
+
+/// Every column the validated query names, as table and column.
+fn columns_named(node: &sdm_contract::pql::PqlNode, out: &mut Vec<(String, String)>) {
+    use sdm_contract::pql::PqlNode;
+    let mut push = |c: &sdm_contract::ops::ColumnRef| out.push((c.table.clone(), c.column.clone()));
+    let children: Vec<&PqlNode> = match &node.kind {
+        NodeKind::Column { column } => {
+            push(column);
+            vec![]
+        }
+        NodeKind::Constant { .. } => vec![],
+        NodeKind::Condition { target, value, .. } => vec![target, value],
+        NodeKind::Logical { left, right, .. } => {
+            let mut v = vec![&**left];
+            v.extend(right.as_deref());
+            v
+        }
+        NodeKind::Filter { target, condition } => vec![target, condition],
+        NodeKind::Aggregation { target, .. } => vec![target],
+        NodeKind::Join {
+            target,
+            lhs_key,
+            rhs_key,
+        } => {
+            push(lhs_key);
+            push(rhs_key);
+            vec![target]
+        }
+    };
+    for child in children {
+        columns_named(child, out);
+    }
+}
+
+#[test]
+fn a_column_named_with_a_dot_a_backtick_or_a_line_break_is_held_apart_from_its_table() {
+    // Each name, and how a query spells it: in backticks, a backtick
+    // doubled, a line break as it stands (KO2-36).
+    for (name, spelled) in [
+        ("a.b", "`a.b`"),
+        ("a`b", "`a``b`"),
+        ("a\nb", "`a\nb`"),
+        ("a\r\nb", "`a\r\nb`"),
+        (".", "`.`"),
+        ("`", "````"),
+    ] {
+        let query = format!(
+            "PREDICT SUM(orders.{spelled} WHERE orders.{spelled} > 1, 0, 30, days) \
+             FOR EACH users.{spelled}"
+        );
+        let schema = shop_naming(name);
+        let relational = profile(ProfileName::Relational, &[]);
+        let validation = resolve(&query, &schema, &relational, &facts(), &NoZones).unwrap();
+        assert!(
+            validation.diagnostics.is_empty(),
+            "{name:?}: {:?}",
+            validation.diagnostics
+        );
+        // Written back, it spells each name as the query did.
+        assert_eq!(validation.text.as_deref(), Some(query.as_str()), "{name:?}");
+        let resolved = validation.facts(&schema).unwrap();
+        assert_eq!(resolved.entity_table, "users");
+        assert!(resolved.windowed);
+        let query = validation.query.unwrap();
+        let mut named = Vec::new();
+        for part in [&query.entity, &query.target] {
+            columns_named(part, &mut named);
+        }
+        let name = name.to_string();
+        for want in [
+            ("users".to_string(), name.clone()),
+            ("orders".to_string(), name.clone()),
+            ("orders".to_string(), "user_id".to_string()),
+        ] {
+            assert!(named.contains(&want), "{want:?} in {named:?}");
+        }
+        assert!(
+            named
+                .iter()
+                .all(|(table, _)| table == "users" || table == "orders"),
+            "{named:?}"
+        );
+    }
+}
+
+#[test]
+fn a_quoted_name_the_schema_lacks_is_refused_by_its_whole_name() {
+    // `a.b` is one column, never the column `b` of a table `a`.
+    let codes = codes_of(
+        "PREDICT users.`a.b` FOR EACH users.user_id",
+        &profile(ProfileName::Relational, &[]),
+    );
+    assert_eq!(codes, ["PQL_SCHEMA_UNKNOWN_COLUMN"]);
+}
+
 /// The parser's nesting limit (`parser::MAX_DEPTH`).
 const MAX_DEPTH: usize = 1000;
 

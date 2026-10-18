@@ -12,6 +12,7 @@ use crate::dor::{DateOffsetRange, DorRef};
 use crate::literal::Literal;
 use crate::pyint::PyInt;
 use crate::response::ValidationResponse;
+use crate::schema::ColumnKey;
 use crate::types::{BoolOp, Dtype, Op, ProblemType, QueryType, Stype};
 
 /// A query as the parser produced it: no types, no joins.
@@ -32,17 +33,13 @@ pub struct ParsedQuery {
 }
 
 impl ParsedQuery {
-    /// The entity column, `table.column`.
-    pub fn entity_column(&self) -> String {
-        ast::fqn(&self.entity_column_obj())
+    /// The entity column, its table and column apart (KO2-36).
+    pub fn entity_column(&self) -> ColumnKey {
+        ast::column_name(&self.entity_column_obj()).unwrap_or_else(|| ColumnKey::new("", ""))
     }
 
     pub fn entity_table(&self) -> String {
-        self.entity_column()
-            .split('.')
-            .next()
-            .unwrap_or_default()
-            .to_string()
+        self.entity_column().table_name
     }
 
     /// The entity column's node, through a filter if there is one.
@@ -74,8 +71,8 @@ impl ParsedQuery {
     /// Every column the query names, with where, each once. Python's set
     /// gives them in an order that changes from run to run; here they come
     /// entity first, then target, then `ASSUMING`, in the order written.
-    pub fn all_query_columns_with_locations(&self) -> Vec<(String, Location)> {
-        let mut out: Vec<(String, Location)> = Vec::new();
+    pub fn all_query_columns_with_locations(&self) -> Vec<(ColumnKey, Location)> {
+        let mut out: Vec<(ColumnKey, Location)> = Vec::new();
         for part in self.parts() {
             for item in ast::all_query_columns_with_locations(&part) {
                 if !out.contains(&item) {
@@ -87,8 +84,8 @@ impl ParsedQuery {
     }
 
     /// Every column the query names, each once, in the order above.
-    pub fn all_query_columns(&self) -> Vec<String> {
-        let mut out: Vec<String> = Vec::new();
+    pub fn all_query_columns(&self) -> Vec<ColumnKey> {
+        let mut out: Vec<ColumnKey> = Vec::new();
         for part in self.parts() {
             for column in ast::all_query_columns(&part) {
                 if !out.contains(&column) {
@@ -228,8 +225,9 @@ impl ValidatedQuery {
     }
 
     /// The key joining the target's table to the entity's: the first in
-    /// sort order of those found, `None` if the tables are one.
-    pub fn get_single_target_fkey(&self, lhs: bool) -> Option<String> {
+    /// the sort order of their `table.column` text, as the reference sorts
+    /// them, of those found; `None` if the tables are one.
+    pub fn get_single_target_fkey(&self, lhs: bool) -> Option<ColumnKey> {
         single_target_fkey(&self.query.target_ast, lhs)
     }
 
@@ -293,7 +291,7 @@ impl ValidatedQuery {
     }
 }
 
-fn single_target_fkey(node: &NodeRef, lhs: bool) -> Option<String> {
+fn single_target_fkey(node: &NodeRef, lhs: bool) -> Option<ColumnKey> {
     if let Kind::Join {
         lhs_key, rhs_key, ..
     } = &node.borrow().kind
@@ -306,7 +304,7 @@ fn single_target_fkey(node: &NodeRef, lhs: bool) -> Option<String> {
     ast::children(node)
         .iter()
         .filter_map(|c| single_target_fkey(c, lhs))
-        .min()
+        .min_by_key(ToString::to_string)
 }
 
 fn final_node(node: &NodeRef, wanted: fn(&NodeRef) -> bool) -> Option<NodeRef> {
@@ -336,12 +334,8 @@ fn target_aggregations(node: &NodeRef, out: &mut Vec<NodeRef>) {
 }
 
 fn exclude_cols(node: &NodeRef) -> BTreeMap<String, Vec<String>> {
-    if ast::is_column(node) {
-        let fqn = ast::fqn(node);
-        let mut parts = fqn.split('.');
-        let table = parts.next().unwrap_or_default().to_string();
-        let column = parts.next().unwrap_or_default().to_string();
-        return BTreeMap::from([(table, vec![column])]);
+    if let Some(name) = ast::column_name(node) {
+        return BTreeMap::from([(name.table_name, vec![name.col_name])]);
     }
     if ast::is_aggregation(node) {
         return BTreeMap::new();

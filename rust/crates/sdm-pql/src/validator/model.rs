@@ -15,7 +15,6 @@ use crate::schema::{ColumnKey, SchemaDefinition};
 use crate::types::{AggregationType, Dtype, MemberOp, Op, ProblemType, RelOp, Stype};
 
 use super::type_validator::typed;
-use super::{col_name, table_name};
 
 pub const FOR: &str = "FOR";
 pub const FOR_EACH: &str = "FOR EACH";
@@ -80,8 +79,8 @@ impl ModelValidator<'_> {
             ));
         }
         if ast::aggr(&target) == Some(AggregationType::ListDistinct) {
-            let aggregated = ast::get_target_column_name(&target);
-            let (_, target_is_fkey) = self.is_key_col(&aggregated);
+            let (_, target_is_fkey) = ast::get_target_column_name(&target)
+                .map_or((false, false), |aggregated| self.is_key_col(&aggregated));
             if query.problem_type == Some(ProblemType::Classify)
                 || (ast::stype(&target) == Some(Stype::Multicategorical) && !target_is_fkey)
             {
@@ -236,7 +235,7 @@ impl ModelValidator<'_> {
                      {rhs_key}. Please remove the reference to table {} and retry, or train a \
                      new model instead of the foundation model.",
                     loc_start(node),
-                    table_name(rhs_key)
+                    rhs_key.table_name
                 ),
                 codes::MODEL_NO_IMPLICIT_JOIN,
                 span(node),
@@ -250,17 +249,12 @@ impl ModelValidator<'_> {
 
     /// `_is_key_col`: whether a column is a primary key, and whether a
     /// foreign key.
-    pub fn is_key_col(&self, fqn: &str) -> (bool, bool) {
-        let (table, column) = (table_name(fqn), col_name(fqn));
+    pub fn is_key_col(&self, column: &ColumnKey) -> (bool, bool) {
         let is_pkey = self
             .schema
-            .table(&table)
-            .is_some_and(|t| t.pkey.as_deref() == Some(column.as_str()));
-        let is_fkey = self
-            .schema
-            .all_keys()
-            .contains(&&ColumnKey::new(&table, &column))
-            && !is_pkey;
+            .table(&column.table_name)
+            .is_some_and(|t| t.pkey.as_deref() == Some(column.col_name.as_str()));
+        let is_fkey = self.schema.all_keys().contains(&column) && !is_pkey;
         (is_pkey, is_fkey)
     }
 
@@ -295,7 +289,8 @@ impl ModelValidator<'_> {
                 ));
             }
             let target_stype = ast::stype(&target);
-            let (is_pkey, is_fkey) = self.is_key_col(&ast::fqn(&target));
+            let (is_pkey, is_fkey) =
+                ast::column_name(&target).map_or((false, false), |column| self.is_key_col(&column));
             if ast::is_column(&target)
                 && target_stype == Some(Stype::Id)
                 && (is_pkey || is_fkey)
@@ -429,8 +424,8 @@ impl ModelValidator<'_> {
             permit_fkey = self.filters.key_columns;
             permit_pkey = self.filters.key_columns;
         }
-        if ast::is_column(node) && col_name(&ast::fqn(node)) != "*" {
-            let (is_pkey, is_fkey) = self.is_key_col(&ast::fqn(node));
+        if let Some(column) = ast::column_name(node).filter(|c| !c.is_wildcard()) {
+            let (is_pkey, is_fkey) = self.is_key_col(&column);
             if (is_pkey && !permit_pkey) || (is_fkey && !permit_fkey) {
                 response.errors.push(ValidationError::new(
                     "Unsupported column reference",

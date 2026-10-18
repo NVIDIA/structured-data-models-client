@@ -26,7 +26,8 @@ use std::collections::BTreeSet;
 
 use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::{
-    ColumnRef, Dtype, PqlDiagnostic, QuerySchema, QueryValidation, Severity, Span, Stype,
+    ColumnRef, Dtype, PqlDiagnostic, QueryFacts, QuerySchema, QueryValidation, Severity, Span,
+    Stype,
 };
 use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
@@ -88,6 +89,19 @@ impl Validation {
             accepted: self.query.is_some(),
             diagnostics: self.diagnostics.clone(),
         }
+    }
+
+    /// The facts of the accepted query a host reads ([`QueryFacts`],
+    /// T2.18); `None` when the query was refused.
+    pub fn facts(&self, schema: &QuerySchema) -> Option<QueryFacts> {
+        let query = self.query.as_ref()?;
+        let features = features(query, schema);
+        Some(QueryFacts {
+            entity_table: features.entity_table,
+            problem_type: query.problem_type,
+            windowed: features.temporal_target,
+            num_forecasts: query.num_forecasts,
+        })
     }
 }
 
@@ -572,14 +586,13 @@ fn validated_query(validated: &parser::ValidatedQuery) -> Result<ValidatedQuery,
     })
 }
 
-fn column_ref(fqn: &str) -> Result<ColumnRef, CoreError> {
-    let (table, column) = fqn
-        .rsplit_once('.')
-        .ok_or_else(|| internal(format!("{fqn} is not table.column")))?;
-    Ok(ColumnRef {
-        table: table.to_owned(),
-        column: column.to_owned(),
-    })
+/// The parser holds a column's table and column apart, as the contract
+/// does, so neither is ever split on a dot (KO2-36).
+fn column_ref(name: &parser::schema::ColumnKey) -> ColumnRef {
+    ColumnRef {
+        table: name.table_name.clone(),
+        column: name.col_name.clone(),
+    }
 }
 
 fn window(range: &parser::dor::DateOffsetRange) -> Result<Window, CoreError> {
@@ -668,8 +681,8 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
     let borrowed = n.borrow();
     let base = &borrowed.base;
     let kind = match &borrowed.kind {
-        Kind::Column { fqn, .. } => NodeKind::Column {
-            column: column_ref(fqn)?,
+        Kind::Column { name, .. } => NodeKind::Column {
+            column: column_ref(name),
         },
         Kind::Constant { value, .. } => NodeKind::Constant {
             literal: literal(n, value)?,
@@ -711,8 +724,8 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
                 .as_ref()
                 .map(|r| window(&r.borrow()))
                 .transpose()?,
-            group_by: group_by.as_deref().map(column_ref).transpose()?,
-            time_column: time_col.as_deref().map(column_ref).transpose()?,
+            group_by: group_by.as_ref().map(column_ref),
+            time_column: time_col.as_ref().map(column_ref),
         },
         Kind::Join {
             rhs_target,
@@ -720,8 +733,8 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
             rhs_key,
         } => NodeKind::Join {
             target: boxed(rhs_target)?,
-            lhs_key: column_ref(lhs_key)?,
-            rhs_key: column_ref(rhs_key)?,
+            lhs_key: column_ref(lhs_key),
+            rhs_key: column_ref(rhs_key),
         },
     };
     Ok(PqlNode {

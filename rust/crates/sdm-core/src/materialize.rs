@@ -73,8 +73,8 @@ use sdm_contract::data::{
 use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
     ColumnRef, ForecastStep, Materialized, MemoBounds, MemoStoredTime, OperationResult,
-    ProfileName, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestState, SamplerMemo,
-    Seed, SourceDescription,
+    ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestState,
+    SamplerMemo, Seed, SourceDescription,
 };
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
@@ -1875,7 +1875,8 @@ enum Gathered {
 }
 
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
-    let Some(steps) = forecast_steps(&inputs) else {
+    let (steps, facts) = resolved(&inputs);
+    let Some(steps) = steps else {
         return match one(&asker, inputs).await? {
             Gathered::Done(result) => Ok(result),
             Gathered::Request(payload, query) => {
@@ -1888,6 +1889,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                         forecast: None,
                         batches: None,
                     },
+                    query: facts,
                 }))
             }
         };
@@ -1963,6 +1965,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             forecast: Some(attached),
             batches: None,
         },
+        query: facts,
     }))
 }
 
@@ -1980,26 +1983,33 @@ fn attach_request(
 }
 
 /// A forecast's plan ([`crate::pql::resolve`]'s `steps`), when the query
-/// resolves to one;
-/// none otherwise, the query then gathered as itself, which refuses it
-/// where it does not resolve as before.
-fn forecast_steps(inputs: &Inputs) -> Option<crate::pql::ForecastPlan> {
+/// resolves to one, none otherwise, the query then gathered as itself,
+/// which refuses it where it does not resolve as before; and the facts of
+/// the query a host reads ([`QueryFacts`], T2.18), when it resolves.
+fn resolved(inputs: &Inputs) -> (Option<crate::pql::ForecastPlan>, Option<QueryFacts>) {
     let mut description = inputs.description.clone();
-    consistent(&mut description).ok()?;
+    if consistent(&mut description).is_err() {
+        return (None, None);
+    }
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,
         model: None,
         capabilities: Default::default(),
     });
-    crate::pql::resolve(
+    let schema = query_schema(&description);
+    match crate::pql::resolve(
         &inputs.query,
-        &query_schema(&description),
+        &schema,
         &profile,
         &inputs.facts,
         &*inputs.zones,
-    )
-    .ok()?
-    .steps
+    ) {
+        Ok(validation) => {
+            let facts = validation.facts(&schema);
+            (validation.steps, facts)
+        }
+        Err(_) => (None, None),
+    }
 }
 
 /// One question gathered: the body of `materialize` before T1.36 fix 21.

@@ -633,6 +633,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 forecast: None,
                 batches: None,
             },
+            query: None,
         }))
     }));
     let Step::Done {

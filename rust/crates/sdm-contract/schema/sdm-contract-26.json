@@ -4597,6 +4597,17 @@
             "state": {
               "$ref": "#/$defs/RequestState"
             },
+            "query": {
+              "description": "What the core resolved of the query it gathered (contract v26,\nT2.18), which a host reads instead of resolving the query itself:\nthe core resolves a query naming any column (KO2-36), which a host's\nown validator may not. Absent from a core that does not say.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QueryFacts"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "op": {
               "type": "string",
               "const": "materialize"
@@ -4721,6 +4732,50 @@
         "start_col",
         "end_row",
         "end_col"
+      ]
+    },
+    "QueryFacts": {
+      "description": "The facts of a resolved query a host reads: plain values, no tree. Its\ntext, as the core writes it back, is the state's `query`.",
+      "type": "object",
+      "properties": {
+        "entity_table": {
+          "description": "The table whose rows are the entities.",
+          "type": "string"
+        },
+        "problem_type": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProblemType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "windowed": {
+          "description": "Whether the target carries a time range, so its answer moves with\nthe moment it is asked at.",
+          "type": "boolean"
+        },
+        "num_forecasts": {
+          "description": "How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "entity_table",
+        "windowed",
+        "num_forecasts"
+      ]
+    },
+    "ProblemType": {
+      "type": "string",
+      "enum": [
+        "rank",
+        "classify",
+        "forecast"
       ]
     },
     "CoreError": {

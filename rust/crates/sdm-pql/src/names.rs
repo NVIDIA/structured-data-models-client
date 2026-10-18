@@ -5,8 +5,16 @@
 //! How a query spells table and column names (`predictive_query.names`).
 //!
 //! A name the grammar's bare identifier cannot spell is written in
-//! backticks. The quotes are only spelling: once parsed, the tree holds the
-//! name the data uses, and writing a query back quotes it again.
+//! backticks, a backtick inside it doubled: `` `a``b` `` names `` a`b ``. A
+//! quoted name holds any other character as it stands, a dot or a line
+//! break included. The quotes are only spelling: once parsed, the tree holds
+//! the table and the column apart ([`ColumnKey`]), each as the data spells
+//! it, so a dot in either is just a character, and writing a query back
+//! quotes them again (Phase 2 decision KO2-36). The reference refuses a
+//! quoted name holding a dot, and its grammar one holding a backtick or a
+//! line break; the core answers them (register, T2.18).
+
+use crate::schema::ColumnKey;
 
 const QUOTE: char = '`';
 
@@ -19,59 +27,57 @@ fn is_bare(name: &str) -> bool {
         && chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
-/// `split_fqn`: the parts of a dotted name, dots inside backticks kept and
-/// the backticks dropped.
-pub fn split_fqn(full_name: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut quoted = false;
-    for c in full_name.chars() {
-        if c == QUOTE {
-            quoted = !quoted;
-        } else if c == '.' && !quoted {
-            parts.push(std::mem::take(&mut current));
+/// The name a bare or quoted spelling stands for, and the rest of `text`
+/// after it: a quoted name's doubled backticks read as one.
+fn read_name(text: &str) -> (String, &str) {
+    let Some(quoted) = text.strip_prefix(QUOTE) else {
+        let end = text.find('.').unwrap_or(text.len());
+        return (text[..end].to_string(), &text[end..]);
+    };
+    let mut name = String::new();
+    let mut chars = quoted.char_indices().peekable();
+    while let Some((at, c)) = chars.next() {
+        if c != QUOTE {
+            name.push(c);
+        } else if chars.peek().is_some_and(|&(_, next)| next == QUOTE) {
+            name.push(QUOTE);
+            chars.next();
         } else {
-            current.push(c);
+            return (name, &quoted[at + 1..]);
         }
     }
-    parts.push(current);
-    parts
+    (name, "")
 }
 
-/// `canonical_fqn`: the name unquoted, refusing a quoted part with a dot.
-pub fn canonical_fqn(full_name: &str) -> Result<String, String> {
-    let parts = split_fqn(full_name);
-    if let Some(part) = parts.iter().find(|p| p.contains('.')) {
-        return Err(format!(
-            "Column name '{part}' contains a dot, which is not supported in a predictive \
-             query. Rename the column to reference it."
-        ));
+/// The table and the column a column token names (`FQN_COLUMN` or
+/// `WILDCARD_COLUMN`, `table.column` with either part quoted, or
+/// `table.*`), each unquoted. The lexer has matched the token, so its first
+/// name ends at the dot that separates the two.
+pub fn split_column(text: &str) -> ColumnKey {
+    let (table, rest) = read_name(text);
+    let (column, _) = read_name(rest.strip_prefix('.').unwrap_or(rest));
+    ColumnKey {
+        table_name: table,
+        col_name: column,
     }
-    Ok(parts.join("."))
 }
 
-/// `quote_name`: the name in backticks if a bare identifier cannot spell it.
-pub fn quote_name(name: &str) -> Result<String, String> {
+/// `quote_name`: the name in backticks, each backtick in it doubled, if a
+/// bare identifier cannot spell it.
+pub fn quote_name(name: &str) -> String {
     if name == "*" || is_bare(name) {
-        return Ok(name.to_string());
+        return name.to_string();
     }
-    for (c, label) in [
-        (QUOTE, "a backtick"),
-        ('\r', "a carriage return"),
-        ('\n', "a newline"),
-    ] {
-        if name.contains(c) {
-            return Err(format!(
-                "Name '{name}' contains {label}, which a predictive query cannot express."
-            ));
-        }
-    }
-    Ok(format!("{QUOTE}{name}{QUOTE}"))
+    format!("{QUOTE}{}{QUOTE}", name.replace(QUOTE, "``"))
 }
 
 /// `fqn`: `table.column`, each part quoted if it needs to be.
-pub fn fqn(table: &str, column: &str) -> Result<String, String> {
-    Ok(format!("{}.{}", quote_name(table)?, quote_name(column)?))
+pub fn fqn(column: &ColumnKey) -> String {
+    format!(
+        "{}.{}",
+        quote_name(&column.table_name),
+        quote_name(&column.col_name)
+    )
 }
 
 #[cfg(test)]
@@ -80,11 +86,22 @@ mod tests {
 
     #[test]
     fn names_are_quoted_only_when_needed() {
-        assert_eq!(canonical_fqn("`a b`.c").unwrap(), "a b.c");
-        assert!(canonical_fqn("`a.b`.c").is_err());
-        assert_eq!(fqn("a b", "*").unwrap(), "`a b`.*");
-        assert_eq!(fqn("users", "user_id").unwrap(), "users.user_id");
-        assert!(quote_name("a`b").is_err());
-        assert_eq!(split_fqn("x.`y.z`"), vec!["x", "y.z"]);
+        let key = |t: &str, c: &str| ColumnKey::new(t, c);
+        assert_eq!(split_column("`a b`.c"), key("a b", "c"));
+        assert_eq!(split_column("t.`a.b`"), key("t", "a.b"));
+        assert_eq!(split_column("`x.y`.`a.b`"), key("x.y", "a.b"));
+        assert_eq!(split_column("t.`a``b`"), key("t", "a`b"));
+        assert_eq!(split_column("t.````"), key("t", "`"));
+        assert_eq!(split_column("t.`a\nb\r`"), key("t", "a\nb\r"));
+        assert_eq!(split_column("`t`.*"), key("t", "*"));
+        assert_eq!(fqn(&key("a b", "*")), "`a b`.*");
+        assert_eq!(fqn(&key("users", "user_id")), "users.user_id");
+        assert_eq!(fqn(&key("t", "a.b")), "t.`a.b`");
+        assert_eq!(quote_name("a`b"), "`a``b`");
+        assert_eq!(quote_name("a\nb"), "`a\nb`");
+        for name in ["a.b", "a`b", "`", "``", "a\nb", "a\r\nb", "x.`y`.z"] {
+            let column = key("t", name);
+            assert_eq!(split_column(&fqn(&column)), column, "{name:?}");
+        }
     }
 }

@@ -12325,7 +12325,16 @@
      "message": "Column name 'orders.x' contains a dot, which is not supported in a predictive query. Rename the column to reference it."
     }
    ],
-   "warnings": []
+   "warnings": [],
+   "core_only": {
+    "errors": [
+     {
+      "code": "PQL_SCHEMA_UNKNOWN_TABLE",
+      "span": {"start_row": 1, "start_col": 14, "end_row": 1, "end_col": 14}
+     }
+    ],
+    "why": "KO2-36 (T2.18): the core reads a quoted name holding a dot or a line break as one name, held apart from its table, where the reference refuses its spelling; no such name is in the schema, so the core refuses it by name. The reference's answer stays as the row's evidence (register P2E-1)."
+   }
   },
   {
    "id": "backticks/keyword-name",
@@ -12375,7 +12384,16 @@
      "message": "Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 71;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 72;  Syntax Error: token recognition error at: '`a\\n'\n3. Invalid Syntax. The entity filter (FOR EACH ... WHERE) clause in this query is empty or invalid.\nSpecific error: \nLine 1, col 66; Input Mismatch, got 'users', but expected one of '(', FQN_COLUMN, WILDCARD_COLUMN, NOT, AGGR.\n4. Invalid Syntax.  Line 2, col 1;  Syntax Error: token recognition error at: '` > 3'"
     }
    ],
-   "warnings": []
+   "warnings": [],
+   "core_only": {
+    "errors": [
+     {
+      "code": "PQL_SCHEMA_UNKNOWN_COLUMN",
+      "span": {"start_row": 1, "start_col": 66, "end_row": 1, "end_col": 66}
+     }
+    ],
+    "why": "KO2-36 (T2.18): the core reads a quoted name holding a dot or a line break as one name, held apart from its table, where the reference refuses its spelling; no such name is in the schema, so the core refuses it by name. The reference's answer stays as the row's evidence (register P2E-1)."
+   }
   },
   {
    "id": "backticks/unclosed",

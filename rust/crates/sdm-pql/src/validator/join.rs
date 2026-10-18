@@ -13,8 +13,6 @@ use crate::query::ParsedQuery;
 use crate::response::{Span, ValidationError, ValidationResponse};
 use crate::schema::{ColumnKey, SchemaDefinition};
 
-use super::{col_name, table_name};
-
 /// A join could not be built: the merge of two windows overflowed, which
 /// Python raises rather than reports.
 #[derive(Debug)]
@@ -55,7 +53,7 @@ impl<'a> JoinValidator<'a> {
         &mut self,
         query: &mut ParsedQuery,
     ) -> Result<ValidationResponse, JoinFailure> {
-        let entity_table = table_name(&query.entity_column());
+        let entity_table = query.entity_table();
         let mut entity_filter_condition = None;
         self.entity_filter_tables = BTreeSet::new();
         self.entity_filter_is_row_level = false;
@@ -66,8 +64,8 @@ impl<'a> JoinValidator<'a> {
         if let Some(condition) = &entity_condition {
             entity_filter_condition = Some(ast::to_string(condition));
             self.entity_filter_tables = ast::all_query_columns(condition)
-                .iter()
-                .map(|c| table_name(c))
+                .into_iter()
+                .map(|c| c.table_name)
                 .collect();
             self.entity_filter_is_row_level = !contains_aggregation(condition);
         }
@@ -102,19 +100,21 @@ impl<'a> JoinValidator<'a> {
             _ => return None,
         };
         let target_column = match &query.target_ast.borrow().kind {
-            Kind::Aggregation { target, .. } if ast::is_column(target) => ast::fqn(target),
+            Kind::Aggregation { target, .. } => ast::column_name(target)?,
             _ => return None,
         };
         if contains_aggregation(&condition) {
             return None;
         }
         let tables: BTreeSet<String> = ast::all_query_columns(&condition)
-            .iter()
-            .map(|c| table_name(c))
+            .into_iter()
+            .map(|c| c.table_name)
             .collect();
-        if tables != BTreeSet::from([table_name(&target_column)]) {
+        if tables != BTreeSet::from([target_column.table_name.clone()]) {
             return None;
         }
+        // The column as the query's text writes it, quoted where it must be.
+        let target_column = crate::names::fqn(&target_column);
         let filtered = format!("{target_column} WHERE {}", ast::to_string(&condition));
         Some(ast::to_string(&query.target_ast).replacen(&target_column, &filtered, 1))
     }
@@ -176,10 +176,10 @@ impl<'a> JoinValidator<'a> {
         is_target_entity: bool,
         in_entity_filter: bool,
         entity_filter_condition: Option<&str>,
-    ) -> (Vec<String>, ValidationResponse) {
+    ) -> (Vec<ColumnKey>, ValidationResponse) {
         let mut response = ValidationResponse::default();
-        let mut keys: Vec<String> = Vec::new();
-        let mut reverse_keys: Vec<String> = Vec::new();
+        let mut keys: Vec<ColumnKey> = Vec::new();
+        let mut reverse_keys: Vec<ColumnKey> = Vec::new();
         let pkey_of = |t: &str| self.schema.table(t).and_then(|d| d.pkey.clone());
         let pkey_of_pkey_table = pkey_of(pkey_table);
         let pkey_of_fkey_table = pkey_of(fkey_table);
@@ -196,14 +196,14 @@ impl<'a> JoinValidator<'a> {
                 continue;
             };
             let pkey_col = pkey_of_pkey_table.clone();
-            let current: Vec<String> = group
+            let current: Vec<ColumnKey> = group
                 .columns
                 .iter()
                 .filter(|c| {
                     c.table_name == table_of_interest
                         && !(fkey_table == pkey_table && Some(&c.col_name) == pkey_col.as_ref())
                 })
-                .map(|c| format!("{}.{}", c.table_name, c.col_name))
+                .cloned()
                 .collect();
             let into = if is_keys_group {
                 &mut keys
@@ -290,7 +290,9 @@ impl<'a> JoinValidator<'a> {
                     return (keys, response);
                 }
                 if !is_aggr {
-                    let column_name = col_name(&node_fqn);
+                    let column_name = ast::column_name(node)
+                        .map(|c| c.col_name)
+                        .unwrap_or_default();
                     response.errors.push(ValidationError::new(
                         format!("Couldn't pick a unique {node_fqn} for each {fkey_table}"),
                         format!(
@@ -353,7 +355,7 @@ impl<'a> JoinValidator<'a> {
                 .map(|key| {
                     format!(
                         "schema.unlink('{fkey_table}', '{}', '{pkey_table}')",
-                        key.rsplit('.').next().unwrap_or_default()
+                        key.col_name
                     )
                 })
                 .collect();
@@ -401,7 +403,9 @@ impl<'a> JoinValidator<'a> {
         let mut response = ValidationResponse::default();
         match shape {
             Shape::Column => {
-                let col_table = table_name(&ast::fqn(node));
+                let col_table = ast::column_name(node)
+                    .map(|c| c.table_name)
+                    .unwrap_or_default();
                 if source_table != col_table {
                     let (keys, found) = self.find_keys(
                         node,
@@ -422,14 +426,16 @@ impl<'a> JoinValidator<'a> {
                     let joined = ast::join(
                         node.clone(),
                         keys[0].clone(),
-                        format!("{col_table}.{rhs_pkey}"),
+                        ColumnKey::new(&col_table, &rhs_pkey),
                     )
                     .map_err(|e| JoinFailure(e.message().to_string()))?;
                     return Ok((joined, found));
                 }
             }
             Shape::Aggregation(target) => {
-                let target_table = table_name(&ast::get_target_column_name(node));
+                let target_table = ast::get_target_column_name(node)
+                    .map(|c| c.table_name)
+                    .unwrap_or_default();
                 let (new_target, target_response) =
                     self.infer_joins(&target, &target_table, false, None)?;
                 if let Kind::Aggregation { target, .. } = &mut node.borrow_mut().kind {
@@ -452,7 +458,7 @@ impl<'a> JoinValidator<'a> {
                     .unwrap_or_default();
                 let joined = ast::join(
                     node.clone(),
-                    format!("{source_table}.{lhs_pkey}"),
+                    ColumnKey::new(source_table, &lhs_pkey),
                     keys[0].clone(),
                 )
                 .map_err(|e| JoinFailure(e.message().to_string()))?;
@@ -471,7 +477,9 @@ impl<'a> JoinValidator<'a> {
                 response = response.merge(target_response);
             }
             Shape::Filter(target, condition) => {
-                let target_table = table_name(&ast::fqn(&target));
+                let target_table = ast::column_name(&target)
+                    .map(|c| c.table_name)
+                    .unwrap_or_default();
                 let (new_target, target_response) =
                     self.infer_joins(&target, source_table, false, None)?;
                 if !ast::is_column(&new_target) {

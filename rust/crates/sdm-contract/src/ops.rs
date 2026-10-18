@@ -863,6 +863,27 @@ impl JsonSchema for Seed {
 #[serde(deny_unknown_fields)]
 pub struct Materialized {
     pub state: RequestState,
+    /// What the core resolved of the query it gathered (contract v26,
+    /// T2.18), which a host reads instead of resolving the query itself:
+    /// the core resolves a query naming any column (KO2-36), which a host's
+    /// own validator may not. Absent from a core that does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<QueryFacts>,
+}
+
+/// The facts of a resolved query a host reads: plain values, no tree. Its
+/// text, as the core writes it back, is the state's `query`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryFacts {
+    /// The table whose rows are the entities.
+    pub entity_table: String,
+    pub problem_type: Option<crate::pql::ProblemType>,
+    /// Whether the target carries a time range, so its answer moves with
+    /// the moment it is asked at.
+    pub windowed: bool,
+    /// How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.
+    pub num_forecasts: u32,
 }
 
 /// The version of [`RequestState`]'s format this build writes and reads
