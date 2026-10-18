@@ -76,16 +76,17 @@ class TransportFailed(Exception):
 
 class Refused(Exception):  # noqa: N818 - says what happened to the call
     r"""The call failed in a way the caller sees as ``raised``: the
-    endpoint's refusal, as the client's transport reports it, or another
-    failure of the transport. Raised by a :data:`Model`. The core is told
-    only that the call failed, its ``status`` where the endpoint answered
-    with one, else as a transport error, so it ends the run carrying the
-    answers of the calls before it (T2.8c); then ``raised`` is raised with
-    them, keeping its own type, code and text."""
+    endpoint's refusal, as the client's transport reports it, another
+    failure of the transport, or any other exception the transport raised
+    (the Databricks SDK's ``ValueError`` for a failed OAuth refresh, which
+    the reference's client carries the answers on too). Raised by a
+    :data:`Model`. The core is told only that the call failed, its
+    ``status`` where the endpoint answered with one, else as a transport
+    error, so it ends the run carrying the answers of the calls before it
+    (T2.8c); then ``raised`` is raised with them in its ``details``,
+    keeping its own type, code and text."""
 
-    def __init__(
-        self, raised: StructuredDataError, status: int | None = None
-    ) -> None:
+    def __init__(self, raised: Exception, status: int | None = None) -> None:
         super().__init__()
         self.raised = raised
         self.status = status
@@ -415,17 +416,19 @@ def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
 _ANSWERED_FIELDS = ('calls_answered', 'parts_answered')
 
 
-def _carried(error: StructuredDataError, raised: StructuredDataError) -> None:
+def _carried(error: StructuredDataError, raised: Exception) -> None:
     r"""Puts on ``raised`` what the core carried on ``error``: its answers
-    and how many calls or steps gave them."""
+    and how many calls or steps gave them, beside any ``details`` it holds,
+    whatever exception it is, as the reference's client does."""
     answered = getattr(error, '_answered', None)
     if answered is None:
         return
-    details = raised.details if isinstance(raised.details, dict) else {}
+    held = getattr(raised, 'details', None)
+    details = held if isinstance(held, dict) else {}
     for name in _ANSWERED_FIELDS:
         if name in error.details:
             details[name] = error.details[name]
-    raised.details = details
+    raised.details = details  # type: ignore[attr-defined]
     raised._answered = answered  # type: ignore[attr-defined]
 
 

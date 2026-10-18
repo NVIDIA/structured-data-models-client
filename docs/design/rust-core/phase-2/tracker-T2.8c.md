@@ -66,6 +66,10 @@ My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the ba
 - **Rebase onto T2.18's landing**: small conflicts resolved by keeping both sides (the Python materialize bridge, the core's imports, `test_contract_cases.py`'s case lists, the reference lines and baselines, each a union), the freeze's two shared entries declared anew for this package's change, one refusal-map citation moved, and the goldens taken from the phase head and collected again.
 - **Goldens**: see the next commit's message: `sdm-data`'s DuckDB, SQLite and Postgres goldens collected with T2.4's run check over python-core's run of the multicall and T2.18's name cases on each database (each later call's key set its own attachment id); each database's render and run checks pass with `SDM_L4_OBSERVATIONS` naming that run.
 
+## Fix rounds
+
+- Round 1 (Claude P2-1): a call failing with an exception that is neither the endpoint's refusal nor the client's own (the Databricks SDK's `ValueError` for a failed OAuth refresh) cancelled the run, so the answers already paid for were lost. Fix 1: `model_call` treats any other `Exception` as a failed call (`run.Refused`, no status), the core ends the run carrying the answers, and the original exception is raised with `details` holding `answered`, `calls_answered` and `rows_answered` (a forecast: `answered` and `parts_answered`), as `main`'s client does; an interrupt still cancels. The reviewer's probe (`ValueError` on call 2 of 3, and on step 2 of a forecast) now gives the reference's details and rows. Regressions are the test author's.
+
 ## Deviations and what is left
 
 - No new register entry; P2B-3, P2B-4 and P2B-9 retired, P1B-20's cases extended.

@@ -285,6 +285,7 @@ def predict(
         # the transport's exception, whose text the endpoint wrote, is not
         # even the context of what is raised.
         failure: StructuredDataError | None = None
+        unexpected: Exception | None = None
         transport_failed = False
         too_deep = False
         refused: NimRequestError | None = None
@@ -312,6 +313,14 @@ def predict(
                     'the transport to the model endpoint refused the call',
                     code=failed.code,
                 )
+        except Exception as other:  # noqa: BLE001 - the reference's own
+            # Any other exception the transport raised (the Databricks
+            # SDK's ValueError for a failed OAuth refresh): the call failed,
+            # and the calls before it were paid for, so the core is told,
+            # carries their answers, and this raises it with them, as the
+            # reference's client does (T2.8c fix 1). An interrupt is no
+            # Exception, and cancels the run as before.
+            unexpected = other
         if too_deep:
             return b'[' * _ENCODED_DEPTH + b']' * _ENCODED_DEPTH
         if transport_failed:
@@ -327,6 +336,8 @@ def predict(
         if failure is not None:
             failure._forecast_step = calls  # type: ignore[attr-defined]
             raise Refused(failure)
+        if unexpected is not None:
+            raise Refused(unexpected)
         return _encoded(answer)
 
     operation: dict[str, Any] = {
@@ -380,7 +391,8 @@ def predict(
             )
     try:
         finished = run(operation, attachments, model=model_call)
-    except StructuredDataError as error:
+    except Exception as error:
+        # Whatever the call raised, the answers before it are put on it.
         _carry_the_answers(error, request.parts is not None)
         raise
     answered = finished.result
@@ -435,7 +447,7 @@ def _result(
     return result
 
 
-def _carry_the_answers(error: StructuredDataError, by_step: bool) -> None:
+def _carry_the_answers(error: Exception, by_step: bool) -> None:
     r"""The answers received before a call failed, as the core carried them
     on its error (T2.8c, ``main``'s 1fc5a686), put in ``error.details`` as
     the client puts them: ``answered``, the answers received as one result,
@@ -459,7 +471,8 @@ def _carry_the_answers(error: StructuredDataError, by_step: bool) -> None:
         key.decode(): value.decode()
         for key, value in (table.schema.metadata or {}).items()
     }
-    details = error.details if isinstance(error.details, dict) else {}
+    held = getattr(error, 'details', None)
+    details = held if isinstance(held, dict) else {}
     details['answered'] = _result(
         table.to_pylist(),
         model=named.get('model', ''),
@@ -470,4 +483,4 @@ def _carry_the_answers(error: StructuredDataError, by_step: bool) -> None:
     )
     if not by_step:
         details['rows_answered'] = rows
-    error.details = details
+    error.details = details  # type: ignore[attr-defined]
