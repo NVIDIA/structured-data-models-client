@@ -1,0 +1,6242 @@
+{
+ "format": "sdm-ranking-vectors/1",
+ "recorded_by": "contract/tools/ranking_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "database": "duckdb",
+ "data_case": "rank.top-k",
+ "exits": {
+  "scores": "scores and rankings: each entity's candidates ordered by the probability of the part's positive class, ties kept in the candidates' order, put back together as one answer",
+  "top_k": "top_k: the query's RANK TOP k, or the option in its place, keeps the k best of each entity's candidates; the outputs a ranking gives",
+  "candidates": "candidates: one part per distinct candidate, a candidate whose context holds one class left out unscored, a key the query cannot say refused of its part",
+  "pd1": "PD-1: a NaN score never reaches the order; the reference refuses a non-finite probability, said of the part's candidate",
+  "parts": "a part's failure said of its candidate, the calls after it unsent",
+  "prediction_statistic": "prediction_statistic: refused for a ranking, a regression's sent as the caller gave it",
+  "response_field": "response_field for rankings: scores and rankings an answer carries given back as the reference's, or refused where it refuses",
+  "instance_id_type": "instance_id_type: a payload whose instance id is neither an integer nor text, answered as the reference's",
+  "prediction_type": "prediction_type: a classification's answer not of its target's type, given back as the reference's"
+ },
+ "vectors": [
+  {
+   "name": "scores.rank-top-2",
+   "covers": "scores",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "top-k.option-1",
+   "covers": "top_k",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "top_k": 1,
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "top-k.option-3",
+   "covers": "top_k",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "top_k": 3,
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd3333333333333"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd3333333333333"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "top-k.outputs-rankings",
+   "covers": "top_k",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {
+    "outputs": [
+     "rankings"
+    ]
+   },
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": null,
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": null,
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": null,
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "top-k.outputs-prediction",
+   "covers": "top_k",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {
+    "outputs": [
+     "prediction"
+    ]
+   },
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "top-k.outputs-probabilities",
+   "covers": "top_k",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {
+    "outputs": [
+     "probabilities"
+    ]
+   },
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] a ranking gives back prediction, rankings, and 'probabilities' is not among them. The per-candidate questions it is asked as are classifications; ask one of those directly for the fields a classification gives.",
+    "rule": null,
+    "notices": [],
+    "calls": []
+   }
+  },
+  {
+   "name": "top-k.outputs-none",
+   "covers": "top_k",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {
+    "outputs": []
+   },
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] outputs must name at least one field",
+    "rule": null,
+    "notices": [],
+    "calls": []
+   }
+  },
+  {
+   "name": "candidates.repeated",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     1,
+     1,
+     0
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.unscored-one",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     9,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": [
+      {
+       "int": "9"
+      }
+     ]
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "0"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [
+     "SDMWarning"
+    ],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.all-unscored",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     9,
+     8
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "UnsupportedRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[UNSUPPORTED_REQUEST] the contexts gathered for candidates 9 and 8 each hold one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features.",
+    "rule": null,
+    "notices": [],
+    "calls": []
+   }
+  },
+  {
+   "name": "candidates.text-key",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     "1",
+     "0"
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] 'PREDICT COUNT(buys.* WHERE buys.item_id=\"1\", 0, 30, days) > 0 FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 27: Expression buys.item_id has type int but constant \"1\" has type string. This is the question asked for candidate '1', one of 2 this ranking is asked as.",
+    "rule": null,
+    "notices": [],
+    "calls": []
+   }
+  },
+  {
+   "name": "pd1.nan-first-call",
+   "covers": "pd1",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      "NaN",
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number nan, which the contract does not permit. This is the question asked for candidate 0, one of 3 this ranking is asked as.",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.5, \"true\": NaN}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "pd1.nan-later-call",
+   "covers": "pd1",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      "NaN",
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number nan, which the contract does not permit. This is the question asked for candidate 1, one of 3 this ranking is asked as.",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.5, \"true\": NaN}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "pd1.nan-as-text",
+   "covers": "pd1",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      "\"nan\"",
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number 'nan', which the contract does not permit. This is the question asked for candidate 0, one of 3 this ranking is asked as.",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.5, \"true\": \"nan\"}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.no-probabilities",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      null,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INTERNAL_ERROR",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INTERNAL_ERROR] the endpoint answered the question about candidate 1 without saying how sure it was, and a ranking is only the order of those. It gave back no probabilities, and this client knows a positive class spelled \"true\", \"True\", \"TRUE\" or \"1\".",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\"}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.failed-call-1",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "fail_call": 1
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "NimRequestError",
+    "code": null,
+    "mro": [
+     "NimRequestError",
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[500] {\"error\": \"scripted_failure\", \"call\": 1}. This is the question asked for candidate 1, one of 3 this ranking is asked as.",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 500,
+      "answer": "{\"error\": \"scripted_failure\", \"call\": 1}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-statistic.ranking",
+   "covers": "prediction_statistic",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "prediction_statistic": "mean",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "expected": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] prediction_statistic applies only to a regression, and this question is a ranking, ordered by how likely each candidate is; ask it without prediction_statistic",
+    "rule": null,
+    "notices": [],
+    "calls": []
+   }
+  },
+  {
+   "name": "prediction-statistic.regression-mean",
+   "covers": "prediction_statistic",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ],
+    "prediction_statistic": "mean"
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "mean"
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": 1.0}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 1.0}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-statistic.edited-not-text",
+   "covers": "prediction_statistic",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": {
+    "op": "prediction_statistic",
+    "value": 7
+   },
+   "script": {
+    "kind": "rule"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": 7
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": 1.0}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 1.0}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.binary-scores",
+   "covers": "response_field",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "carried": "\"scores\": [0.25, 0.75]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "bool": false
+      },
+      "probabilities": null,
+      "scores": {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      },
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "bool": false
+      },
+      "probabilities": null,
+      "scores": {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      },
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "scores"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": false
+      },
+      {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"scores\": [0.25, 0.75]}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"scores\": [0.25, 0.75]}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.binary-rankings",
+   "covers": "response_field",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "carried": "\"rankings\": [{\"candidate\": 3, \"score\": 0.5}, {\"candidate\": 1, \"score\": 0.25}]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "bool": false
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "bool": false
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": false
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}, {\"candidate\": 1, \"score\": 0.25}]}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}, {\"candidate\": 1, \"score\": 0.25}]}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.binary-rankings-nan-score",
+   "covers": "response_field",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "carried": "\"rankings\": [{\"candidate\": 3, \"score\": NaN}, {\"candidate\": 1, \"score\": 0.25}]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "bool": false
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64": "nan"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "bool": false
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64": "nan"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": false
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64": "nan"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": false
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "3"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64": "nan"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": NaN}, {\"candidate\": 1, \"score\": 0.25}]}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": NaN}, {\"candidate\": 1, \"score\": 0.25}]}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.binary-scores-nan",
+   "covers": "response_field",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "carried": "\"scores\": [NaN]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number nan, which the contract does not permit",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"scores\": [NaN]}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"scores\": [NaN]}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.regression-scores",
+   "covers": "response_field",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "carried": "\"scores\": [0.25, 0.75]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      },
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      },
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "scores"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      },
+      {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      },
+      {
+       "list": [
+        {
+         "f64_bits": "3fd0000000000000"
+        },
+        {
+         "f64_bits": "3fe8000000000000"
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": 1.0, \"scores\": [0.25, 0.75]}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 1.0, \"scores\": [0.25, 0.75]}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.ranking-part-scores",
+   "covers": "response_field",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "carried": "\"scores\": [0.25]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"scores\": [0.25], \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "response-field.ranking-part-rankings",
+   "covers": "response_field",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "carried": "\"rankings\": [{\"candidate\": 3, \"score\": 0.5}]"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "0"
+        },
+        {
+         "int": "2"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "0"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "2"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"rankings\": [{\"candidate\": 3, \"score\": 0.5}], \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "instance-id.float",
+   "covers": "instance_id_type",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": {
+    "op": "instance_id",
+    "value": 1.5
+   },
+   "script": {
+    "kind": "rule"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "f64_bits": "3ff0000000000000"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3ff0000000000000"
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"1.5\", \"row_index\": 0, \"prediction\": 1.0}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 1.0}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "instance-id.bool",
+   "covers": "instance_id_type",
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": {
+    "op": "instance_id",
+    "value": true
+   },
+   "script": {
+    "kind": "rule"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_RESPONSE",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_RESPONSE] the response pairs row_index 0 with id 'true', and this batch asked about True there",
+    "rule": null,
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction"
+       ],
+       "prediction_statistic": "median"
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"true\", \"row_index\": 0, \"prediction\": 1.0}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 1.0}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-type.binary-float",
+   "covers": "prediction_type",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "prediction": "0.7"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "f64_bits": "3fe6666666666666"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "f64_bits": "3fe6666666666666"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "float64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "f64_bits": "3fe6666666666666"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "f64_bits": "3fe6666666666666"
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": 0.7}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 0.7}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-type.binary-text",
+   "covers": "prediction_type",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "prediction": "\"maybe\""
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "str": "maybe"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "str": "maybe"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "str"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "str": "maybe"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "str": "maybe"
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"maybe\"}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"maybe\"}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-type.binary-integer",
+   "covers": "prediction_type",
+   "query": "PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "prediction": "1"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "bool": true
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "bool": true
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": true
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": 1}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": 1}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-type.multiclass-integer",
+   "covers": "prediction_type",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "prediction": "3"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "int": "3"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "int": "3"
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "int64"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "int": "3"
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "int": "3"
+      }
+     ]
+    ],
+    "notices": [
+     "SDMWarning"
+    ],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"8\", \"row_index\": 0, \"prediction\": 3}, {\"id\": \"9\", \"row_index\": 1, \"prediction\": 3}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "prediction-type.multiclass-bool",
+   "covers": "prediction_type",
+   "query": "PREDICT users.country FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "rule",
+    "prediction": "true"
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "probabilities"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "bool": true
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "bool": true
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": null
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "bool"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "bool": true
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "bool": true
+      }
+     ]
+    ],
+    "notices": [
+     "SDMWarning"
+    ],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"8\", \"row_index\": 0, \"prediction\": true}, {\"id\": \"9\", \"row_index\": 1, \"prediction\": true}]}"
+     }
+    ]
+   }
+  }
+ ],
+ "controls": [
+  {
+   "case": "rank.top-k-zero",
+   "change": {
+    "set": {
+     "top_k": null
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] top_k is 0, and this model ranks between 1 and 20 candidates",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  },
+  {
+   "case": "rank.no-candidates",
+   "change": {
+    "set": {
+     "candidates": [
+      0,
+      1
+     ]
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] a ranking is over a set of candidates, and this model has no ranking task to choose them with, so they have to be named: materialize(..., candidates=frame['item_id']). One call is made per candidate.",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  },
+  {
+   "case": "rank.candidates-empty",
+   "change": {
+    "set": {
+     "candidates": [
+      0,
+      1
+     ]
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] candidates is empty, so there is nothing to rank",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  },
+  {
+   "case": "rank.candidates-not-a-ranking",
+   "change": {
+    "set": {
+     "candidates": null
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] candidates are the rows a ranking is over, and 'PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id' does not rank anything. Ask it without candidates, or rank with \"RANK TOP k\", which is the question they are for",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": null
+   }
+  },
+  {
+   "case": "rank.most-parts",
+   "change": {
+    "set": {
+     "candidates": [
+      0,
+      1
+     ]
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] 201 candidates means 201 calls, one for each, because the model has no task that answers them together. That is past the 200 this will do without being told to; ask about fewer, or raise sdm_client.decompose.MOST_PARTS if the wait is what you want.",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  },
+  {
+   "case": "rank.batched",
+   "change": {
+    "set": {
+     "indices": [
+      0,
+      1
+     ]
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "UNSUPPORTED_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[UNSUPPORTED_REQUEST] 10,001 entities are more than the 10,000 one call scores, and this question is asked as 2 of them, one per candidate. A part is not batched, and a candidate is reported unscored for the whole ranking, so one cold batch would drop it from every row rather than from its own. Ask about fewer entities at a time",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  },
+  {
+   "case": "forecast.top-k",
+   "change": {
+    "set": {
+     "top_k": null
+    }
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] top_k is how many candidates a ranking keeps, and a forecast ranks nothing; it gives back one value per step",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  },
+  {
+   "case": "forecast.most-parts",
+   "change": {
+    "query": [
+     "FORECAST 201 TIMEFRAMES",
+     "FORECAST 2 TIMEFRAMES"
+    ]
+   },
+   "refused": {
+    "stage": "materialize",
+    "outcome": "refused",
+    "class": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "mro": [
+     "StructuredDataError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "[INVALID_REQUEST] 201 forecast steps means 201 calls, one for each, because the model has no task that answers them together. That is past the 200 this will do without being told to; ask about fewer, or raise sdm_client.decompose.MOST_PARTS if the wait is what you want.",
+    "rule": null
+   },
+   "control": {
+    "stage": "materialize",
+    "outcome": "result",
+    "parts": 2
+   }
+  }
+ ]
+}
