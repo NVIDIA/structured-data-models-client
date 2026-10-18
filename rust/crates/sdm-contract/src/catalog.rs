@@ -72,11 +72,13 @@ pub struct CatalogColumn {
     /// lists.
     pub unique: bool,
     /// The data type the declared type fixes, where the dialect's reader
-    /// reads one from it and the values cannot say: SQLite's, whose driver
-    /// types a column by its values, so a column holding none reads as
-    /// integers whatever it declares (the reference's `_to_dtype`: `INT`
-    /// an integer, `TEXT`, `CHAR` or `CLOB` text, `REAL`, `FLOA` or `DOUB`
-    /// a float). `None` where the values' type is the column's.
+    /// reads one from it: SQLite's, which stores any value in any column,
+    /// so the reference types a column by its declaration first
+    /// (`_to_dtype`: `INT` an integer, `TEXT`, `CHAR` or `CLOB` text,
+    /// `REAL`, `FLOA` or `DOUB` a float), whatever its values, and a column
+    /// holding none reads as integers by its driver whatever it declares.
+    /// `None` where the values' type is the column's (another declaration,
+    /// an `INTERVAL` by the owner's KO2-62, every other source).
     pub dtype: Option<Dtype>,
 }
 

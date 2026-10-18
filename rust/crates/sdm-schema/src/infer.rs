@@ -442,15 +442,12 @@ pub fn preview(
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
-        // A column holding no value has the type its declared type fixes,
-        // where the catalog reads one (SQLite's driver types such a column
-        // as integers, whatever it declares); any other, its values' type.
-        let empty = batches
-            .iter()
-            .all(|b| b.column(index).null_count() == b.num_rows());
+        // The type the column's declaration fixes, where the catalog reads
+        // one (SQLite's, as the reference types a column by it first,
+        // whatever its values); any other, its values' type.
         let dtype = match declared.dtype {
-            Some(declared) if empty => declared,
-            _ => dtype_of(field.data_type())?,
+            Some(declared) => declared,
+            None => dtype_of(field.data_type())?,
         };
         if matches!(
             dtype,

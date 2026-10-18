@@ -915,11 +915,16 @@ fn lookup(
 /// The data type a SQLite column's declared type fixes, as the reference
 /// reads it (`SQLiteTable._to_dtype`, SQLite's affinity rules in their
 /// order): `INT` an integer, `TEXT`, `CHAR` or `CLOB` text, `REAL`, `FLOA`
-/// or `DOUB` a float; none for any other (numeric affinity), whose values
-/// say.
+/// or `DOUB` a float; none for any other (numeric affinity) and for an
+/// `INTERVAL` (KO2-62), whose values say.
 fn declared_dtype(declared: &str) -> Option<Dtype> {
     let declared = declared.trim().to_ascii_uppercase();
-    if declared.contains("INT") {
+    if declared.contains("INTERVAL") {
+        // The owner's KO2-62 (register P2B-14): an INTERVAL column, whose
+        // declared name the reference reads as an integer, is typed by its
+        // values.
+        None
+    } else if declared.contains("INT") {
         Some(Dtype::Int)
     } else if ["TEXT", "CHAR", "CLOB"]
         .iter()
