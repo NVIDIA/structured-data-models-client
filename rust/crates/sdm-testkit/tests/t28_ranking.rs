@@ -29,8 +29,9 @@
 //!   run on DuckDB over the data of `rank.top-k`, each model call answered
 //!   with the bytes the reference's endpoint answered that call: as many
 //!   calls as the reference made, and its outcome: the reference's code,
-//!   never by a rule this package lifts (an endpoint's refusal carrying its
-//!   status), or its result, row by
+//!   never by a rule this package lifts (an endpoint's refusal refused, its
+//!   HTTP status held on python-core, since this host keeps text fields
+//!   only), or its result, row by
 //!   row: each row's index and id, a ranking's candidates best first with
 //!   their scores (contract v26's `rankings`, each the JSON text of the
 //!   candidate, and `scores`, in that order), and an answer's own
@@ -622,9 +623,11 @@ fn vector_problem(vector: &Value, bases: &Bases) -> Option<String> {
         )),
         (Answer::Error { code, fields, .. }, "refused") => {
             if expected["class"] == "NimRequestError" {
-                // The endpoint's own refusal: its provenance carried.
-                (!fields.contains_key("status"))
-                    .then(|| format!("the endpoint's refusal carries no status: {fields:?}"))
+                // The endpoint's own refusal, after the calls the reference
+                // made: its HTTP status is a number, which this host's
+                // record (text fields only) does not keep, so the status the
+                // user reads is held on python-core.
+                None
             } else {
                 (expected["code"].as_str() != Some(code.as_str())).then(|| {
                     format!(

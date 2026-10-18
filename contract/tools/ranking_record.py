@@ -599,6 +599,10 @@ def _refusal(error: BaseException) -> dict[str, Any]:
         # subclass of the reference's class for the same code.
         'mro': [c.__name__ for c in type(error).__mro__],
         'message': str(error),
+        # The HTTP status a refusal the endpoint gave carries
+        # (NimRequestError's status_code), as the user reads it; none on a
+        # local error.
+        'status_code': getattr(error, 'status_code', None),
         # The core's rule, where a refusal names one (none on the
         # reference): for the reader, never compared.
         'rule': details.get('rule') if isinstance(details, dict) else None,

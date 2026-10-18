@@ -1955,6 +1955,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] a ranking gives back prediction, rankings, and 'probabilities' is not among them. The per-candidate questions it is asked as are classifications; ask one of those directly for the fields a classification gives.",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": []
@@ -2013,6 +2014,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] outputs must name at least one field",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": []
@@ -2915,6 +2917,7 @@
      "object"
     ],
     "message": "[UNSUPPORTED_REQUEST] the contexts gathered for candidates 9 and 8 each hold one answer only, and a classification needs at least two classes to learn from, so there is nothing to rank and nothing was sent. Gather a wider context with num_context_samples if other entities in the data answer differently, or ask over a table of (entity, candidate) pairs, which scores every candidate from its features.",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": []
@@ -2970,6 +2973,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] 'PREDICT COUNT(buys.* WHERE buys.item_id=\"1\", 0, 30, days) > 0 FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 27: Expression buys.item_id has type int but constant \"1\" has type string. This is the question asked for candidate '1', one of 2 this ranking is asked as.",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": []
@@ -3026,6 +3030,7 @@
      "object"
     ],
     "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number nan, which the contract does not permit. This is the question asked for candidate 0, one of 3 this ranking is asked as.",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": [
@@ -3093,6 +3098,7 @@
      "object"
     ],
     "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number nan, which the contract does not permit. This is the question asked for candidate 1, one of 3 this ranking is asked as.",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": [
@@ -3170,6 +3176,7 @@
      "object"
     ],
     "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number 'nan', which the contract does not permit. This is the question asked for candidate 0, one of 3 this ranking is asked as.",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": [
@@ -3237,6 +3244,7 @@
      "object"
     ],
     "message": "[INTERNAL_ERROR] the endpoint answered the question about candidate 1 without saying how sure it was, and a ranking is only the order of those. It gave back no probabilities, and this client knows a positive class spelled \"true\", \"True\", \"TRUE\" or \"1\".",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": [
@@ -3326,6 +3334,7 @@
      "object"
     ],
     "message": "[500] {\"error\": \"scripted_failure\", \"call\": 1}. This is the question asked for candidate 1, one of 3 this ranking is asked as.",
+    "status_code": 500,
     "rule": null,
     "notices": [],
     "calls": [
@@ -3404,6 +3413,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] prediction_statistic applies only to a regression, and this question is a ranking, ordered by how likely each candidate is; ask it without prediction_statistic",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": []
@@ -4296,6 +4306,7 @@
      "object"
     ],
     "message": "[INVALID_RESPONSE] kumo-relational returned a response that does not match the contract: response carries a non-finite number nan, which the contract does not permit",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": [
@@ -5457,6 +5468,7 @@
      "object"
     ],
     "message": "[INVALID_RESPONSE] the response pairs row_index 0 with id 'true', and this batch asked about True there",
+    "status_code": null,
     "rule": null,
     "notices": [],
     "calls": [
@@ -6028,6 +6040,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] top_k is 0, and this model ranks between 1 and 20 candidates",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6058,6 +6071,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] a ranking is over a set of candidates, and this model has no ranking task to choose them with, so they have to be named: materialize(..., candidates=frame['item_id']). One call is made per candidate.",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6088,6 +6102,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] candidates is empty, so there is nothing to rank",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6115,6 +6130,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] candidates are the rows a ranking is over, and 'PREDICT COUNT(buys.*, 0, 30, days) > 0 FOR EACH users.user_id' does not rank anything. Ask it without candidates, or rank with \"RANK TOP k\", which is the question they are for",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6145,6 +6161,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] 201 candidates means 201 calls, one for each, because the model has no task that answers them together. That is past the 200 this will do without being told to; ask about fewer, or raise sdm_client.decompose.MOST_PARTS if the wait is what you want.",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6175,6 +6192,7 @@
      "object"
     ],
     "message": "[UNSUPPORTED_REQUEST] 10,001 entities are more than the 10,000 one call scores, and this question is asked as 2 of them, one per candidate. A part is not batched, and a candidate is reported unscored for the whole ranking, so one cold batch would drop it from every row rather than from its own. Ask about fewer entities at a time",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6202,6 +6220,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] top_k is how many candidates a ranking keeps, and a forecast ranks nothing; it gives back one value per step",
+    "status_code": null,
     "rule": null
    },
    "control": {
@@ -6230,6 +6249,7 @@
      "object"
     ],
     "message": "[INVALID_REQUEST] 201 forecast steps means 201 calls, one for each, because the model has no task that answers them together. That is past the 200 this will do without being told to; ask about fewer, or raise sdm_client.decompose.MOST_PARTS if the wait is what you want.",
+    "status_code": null,
     "rule": null
    },
    "control": {

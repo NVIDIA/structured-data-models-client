@@ -47,8 +47,9 @@ Each test's one line says the exit it proves:
   ``prediction_type``": python-core answers each vector as python-ref
   does: the result through ``to_pandas()`` and ``.items``, its outputs, the
   candidates left unscored and the notices' classes, every call's asked
-  outputs and status, or the refusal's code, class and, for a part, the
-  sentence saying which candidate it was asked for.
+  outputs and status, or the refusal's code, class, the HTTP status an
+  endpoint's refusal carries and, for a part, the sentence saying which
+  candidate it was asked for.
 
 PD-1 ("NaN ranks last") cannot be reached from the public calls: the
 reference refuses a non-finite probability, the only score a ranking
@@ -653,6 +654,12 @@ def held_to(got: dict[str, Any], want: dict[str, Any], name: str) -> None:
     if want['outcome'] == 'refused':
         assert got['code'] == want['code'], f'{name}: {got["message"]}'
         assert want['class'] in got['mro'], f'{name}: {got["mro"]}'
+        # An endpoint's refusal carries its HTTP status to the user, a local
+        # error none.
+        assert got['status_code'] == want['status_code'], (
+            f'{name}: status {got["status_code"]!r} where the reference '
+            f'gives {want["status_code"]!r}'
+        )
         if PART in want['message']:
             said = want['message'][want['message'].index(PART) :]
             assert said in got['message'], (
