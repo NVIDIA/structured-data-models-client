@@ -247,6 +247,7 @@ WARNINGS: dict[str, type[Warning]] = {
     'TIME_VALUES_UNREAD': UserWarning,
     'DATES_READ_DAY_FIRST': UserWarning,
     'DATE_LITERAL_DAY_FIRST': UserWarning,
+    'KEY_CANDIDATES_TIED': UserWarning,
 }
 
 #: The words of a link that does not refer to its table's key, around
@@ -395,6 +396,15 @@ SAID: dict[str, dict[str | None, str]] = {
             'Parsing dates in {format} format when dayfirst=False (the '
             'default) was specified. Pass `dayfirst=True` or specify a format '
             'to silence this warning.'
+        )
+    },
+    # The engine's key inference (`infer_primary_key`) leaving a table
+    # keyless for a tie, in its words.
+    'KEY_CANDIDATES_TIED': {
+        None: (
+            "Found multiple potential primary keys in table '{table}': "
+            '{columns!T}. Please specify the primary key for this table '
+            'manually.'
         )
     },
     # A query's date literal read day first (date rule D4), in pandas' words,
@@ -600,6 +610,11 @@ GROUPED: dict[str, tuple[tuple[str, ...], str, str, str]] = {
 }
 
 
+#: The codes of warnings about a key, which name a key of several columns
+#: by ``columns`` and show its repeated value as their list.
+_KEYS_OF_SEVERAL = frozenset({'KEY_REPEATS', 'KEY_NO_VALUE'})
+
+
 class _Words(string.Formatter):
     r"""``str.format`` with the conversions :data:`SAID` uses."""
 
@@ -740,6 +755,12 @@ def said(warning: dict[str, Any]) -> str:
         name: _detail(value)
         for name, value in warning.get('fields', {}).items()
     }
+    if warning['code'] in _KEYS_OF_SEVERAL and 'columns' in fields:
+        # A key of several columns, named as the reference names one
+        # (`table.a.b`), its repeated value the tuple it shows.
+        fields.setdefault('column', '.'.join(map(str, fields['columns'])))
+        if isinstance(fields.get('example'), list):
+            fields['example'] = tuple(fields['example'])
     template = (templates or {}).get(fields.get('variant'))
     if template is None:
         return str(warning['message'])

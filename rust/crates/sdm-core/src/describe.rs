@@ -249,12 +249,13 @@ pub(crate) async fn run(
                 Err(failed) => return Err(failed),
             }
         };
-        // The engine says what it dropped as it reads each table, and the
-        // day-first formats it guessed as it typed its columns, before
-        // anything later can refuse.
+        // The engine says what it dropped as it reads each table, the
+        // day-first formats it guessed as it typed its columns, and the
+        // columns that tied for its key, before anything later can refuse.
         for warning in assemble::unread_times(&inferred)
             .into_iter()
             .chain(assemble::day_first(&inferred))
+            .chain(assemble::key_tied(&inferred))
         {
             asker.warn(warning);
         }
@@ -677,20 +678,25 @@ async fn count_keys(
 ) -> Result<keys::Held, CoreError> {
     let positions: Vec<usize> = (0..tables.len())
         .filter(|&i| {
-            tables[i]
-                .primary_key
-                .clone()
-                .is_some_and(|key| !tables[i].enforces(&[key]))
+            !tables[i].primary_key.is_empty() && !tables[i].enforces(&tables[i].primary_key)
         })
         .collect();
     if positions.is_empty() {
         return keys::hold(tables, &[], stated, infer_links);
     }
+    // Each key labelled by its table's place among the tables with a key,
+    // those the source enforces included, as the reference labels it.
     let asked: Vec<TableKey> = positions
         .iter()
         .map(|&i| TableKey {
             table: tables[i].source.clone(),
-            columns: tables[i].primary_key.clone().into_iter().collect(),
+            columns: tables[i].primary_key.clone(),
+            label: Some(
+                tables[..i]
+                    .iter()
+                    .filter(|t| !t.primary_key.is_empty())
+                    .count() as u64,
+            ),
         })
         .collect();
     let answered = ask(
@@ -701,14 +707,14 @@ async fn count_keys(
     )
     .await?;
     let mut counts = catalog::key_counts(&answered.batches)?;
-    // One row per key, each read by its position, as the reference reads
-    // each row by its label.
+    // One row per key, each read by its label, as the reference reads it.
     counts.sort_by_key(|c| c.position);
     if counts.len() != asked.len()
         || counts
             .iter()
+            .zip(&asked)
             .enumerate()
-            .any(|(at, c)| usize::try_from(c.position).ok() != Some(at))
+            .any(|(at, (c, key))| u64::try_from(c.position).ok() != Some(key.label_at(at)))
     {
         return Err(schema_mismatch(
             "expected",

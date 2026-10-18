@@ -47,7 +47,8 @@ fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> Inferre
         left_out: Vec::new(),
         unread_times: Vec::new(),
         day_first: Vec::new(),
-        primary_key: key.map(Into::into),
+        tied_keys: Vec::new(),
+        primary_key: key.map(Into::into).into_iter().collect(),
         time: TimeChoice::default(),
         time_column: None,
         unique: Vec::new(),
@@ -378,7 +379,7 @@ fn a_keyless_table_is_keyed_by_the_one_column_foreign_keys_refer_to() {
     let mut tables = vec![codes_table()];
     let declared = vec![link(("coded", "tag"), ("codes", "tag"))];
     assemble::key_by_reference(&mut tables, &declared).unwrap();
-    assert_eq!(tables[0].primary_key.as_deref(), Some("tag"));
+    assert_eq!(tables[0].primary_key, ["tag"]);
     assert_eq!(tables[0].columns[0].stype, Stype::Id);
     assert_eq!(
         tables[0].columns[0].stype_before_key,
@@ -391,7 +392,7 @@ fn a_keyless_table_is_keyed_by_the_one_column_foreign_keys_refer_to() {
         link(("other", "label"), ("codes", "label")),
     ];
     assemble::key_by_reference(&mut tables, &two).unwrap();
-    assert_eq!(tables[0].primary_key, None);
+    assert!(tables[0].primary_key.is_empty());
     // A column that cannot identify a row, or the time column, is refused.
     let mut dated = vec![table(
         "days",
@@ -560,7 +561,7 @@ fn a_warning_s_message_names_nothing_and_its_fields_name_everything() {
 /// reading and the count as the reference applies them, each refusal
 /// seeded: a table or column the schema does not hold, a key that cannot
 /// identify a row or is the time column, a time column that is the key or
-/// cannot hold a time, an empty key, and a key of two columns.
+/// cannot hold a time, an empty key; and a key of two columns taken.
 #[test]
 fn keys_and_time_columns_named_are_applied_and_checked() {
     let named = |keys: &[(&str, &[&str])], times: &[(&str, Option<&str>)]| {
@@ -587,7 +588,7 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
     };
     // A key moved: the new column an identifier, what it meant kept.
     let tables = named(&[("users", &["age"])], &[]).unwrap();
-    assert_eq!(tables[1].primary_key.as_deref(), Some("age"));
+    assert_eq!(tables[1].primary_key, ["age"]);
     assert_eq!(tables[1].columns[1].stype, Stype::Id);
     assert_eq!(
         tables[1].columns[1].stype_before_key,
@@ -649,13 +650,20 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
         rule(named(&[], &[("orders", Some("price"))])),
         invalid("time_columns")
     );
+    // A key of several columns is applied as the reference's setter takes
+    // one: each column an identifier, the key the columns in order; a
+    // column of it that is the time column, or cannot identify a row, is
+    // refused as a key of one is.
+    let tables = named(&[("orders", &["user_id", "order_id"])], &[]).unwrap();
+    assert_eq!(tables[0].primary_key, ["user_id", "order_id"]);
+    assert!(tables[0].columns[..2].iter().all(|c| c.stype == Stype::Id));
     assert_eq!(
-        rule(named(&[("orders", &["order_id", "user_id"])], &[])),
-        (
-            ErrorCode::UnsupportedRequest,
-            Some(Detail::text("composite_key"))
-        )
+        rule(named(&[("orders", &["order_id", "ts"])], &[])),
+        invalid("primary_keys")
     );
+    // A float among them is taken, as the reference's `from_source` takes
+    // one (its engine refuses it only as it folds the key).
+    assert!(named(&[("orders", &["order_id", "price"])], &[]).is_ok());
 }
 
 /// The relationships a caller gives (T1.23) are the schema's, in place of
@@ -972,6 +980,18 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     let said = assemble::day_first(&day_first);
     assert_eq!(said[0].fields["format"], Detail::text("%d/%m/%Y"));
     assert_eq!(said[0].fields["column"], Detail::text("seen"));
+    given.extend(said);
+    let mut tied = refused.clone();
+    tied.tied_keys = vec!["a_key".into(), "a_code".into()];
+    let said = assemble::key_tied(&tied);
+    assert_eq!(
+        said[0].fields["columns"],
+        Detail::List(vec![
+            Scalar::Utf8("a_key".into()),
+            Scalar::Utf8("a_code".into())
+        ])
+    );
+    assert!(assemble::key_tied(&refused).is_empty());
     given.extend(said);
     let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
     for warning in &given {

@@ -52,8 +52,9 @@ pub struct Counted {
     pub distinct: u64,
     /// The rows missing any part of it.
     pub missing: u64,
-    /// A value more than one row holds, when the source was asked for one.
-    pub example: Option<Scalar>,
+    /// A value more than one row holds, one scalar per column of the key,
+    /// when the source was asked for one.
+    pub example: Option<Vec<Scalar>>,
 }
 
 impl Counted {
@@ -74,23 +75,45 @@ pub struct Held {
     pub duplicates: Vec<u64>,
 }
 
-/// The value of the one-row answer to a `repeated_key` request: none when
-/// it holds no row, the key's value when it holds one column (a key of
-/// several columns is refused before it is counted).
-pub fn example(batches: &[RecordBatch]) -> Option<Scalar> {
+/// The value of the one-row answer to a `repeated_key` request, one scalar
+/// per column of the key, in order: none when it holds no row, a column's
+/// null where its type has no scalar form.
+pub fn example(batches: &[RecordBatch]) -> Option<Vec<Scalar>> {
     let batch = batches.iter().find(|b| b.num_rows() > 0)?;
-    if batch.num_columns() != 1 {
-        return None;
-    }
-    values::scalar(batch.column(0).as_ref(), 0)
+    Some(
+        batch
+            .columns()
+            .iter()
+            .map(|column| values::scalar(column.as_ref(), 0).unwrap_or(Scalar::Null))
+            .collect(),
+    )
 }
 
 fn number(n: u64) -> Detail {
     Detail::Scalar(Scalar::UInt64(n))
 }
 
-fn shown(example: &Option<Scalar>) -> Detail {
-    Detail::Scalar(example.clone().unwrap_or(Scalar::Null))
+/// A repeated value as a field: a key of one column's scalar, a key of
+/// several's list of them, in the key's order (the reference shows a
+/// tuple); null where none was read.
+fn shown(example: &Option<Vec<Scalar>>) -> Detail {
+    match example.as_deref() {
+        Some([one]) => Detail::Scalar(one.clone()),
+        Some(parts) if !parts.is_empty() => Detail::List(parts.to_vec()),
+        _ => Detail::Scalar(Scalar::Null),
+    }
+}
+
+/// A key's columns as fields: `column` for a key of one, `columns`, a list
+/// of them in order, for a key of several.
+fn named(key: &[String]) -> (&'static str, Detail) {
+    match key {
+        [one] => ("column", Detail::text(one)),
+        several => (
+            "columns",
+            Detail::List(several.iter().map(|c| Scalar::Utf8(c.clone())).collect()),
+        ),
+    }
 }
 
 fn warning(code: &str, message: &str, fields: Vec<(&str, Detail)>) -> CoreWarning {
@@ -124,14 +147,19 @@ pub fn hold(
     let mut declined: Vec<(usize, String, &Counted)> = Vec::new();
     for (at, count) in counted {
         let table = &mut tables[*at];
-        let Some(column) = table.primary_key.clone() else {
+        if table.primary_key.is_empty() {
             continue;
-        };
+        }
+        let key = table.primary_key.clone();
         let repeats = count.repeats();
         let is_stated = stated.contains(&table.name);
-        let declared = !is_stated && table.column(&column).is_some_and(|c| c.unique);
+        // A key of several columns is only ever named, never declared:
+        // the catalog's is read as no key (`crate::infer::preview`).
+        let declared = !is_stated
+            && matches!(key.as_slice(), [one] if table.column(one).is_some_and(|c| c.unique));
         let name = table.name.clone();
         let refused = |message: &'static str| {
+            let (field, columns) = named(&key);
             CoreError::new(
                 ErrorKind::InvalidRequest,
                 ErrorCode::InvalidRequest,
@@ -142,14 +170,14 @@ pub fn hold(
                 Detail::text(if is_stated { "primary_keys" } else { "keys" }),
             )
             .with_field("table", Detail::text(&name))
-            .with_field("column", Detail::text(&column))
+            .with_field(field, columns)
             .with_field("rows", number(count.rows))
         };
         if !is_stated && !declared {
             // Inferred: declined as inference over a frame declines it.
             if (count.distinct as f64) < count.rows as f64 * KEY_UNIQUENESS {
-                table.primary_key = None;
-                declined.push((*at, column, count));
+                table.primary_key = Vec::new();
+                declined.push((*at, key[0].clone(), count));
                 continue;
             }
         } else if count.missing > 0 && is_stated {
@@ -158,10 +186,12 @@ pub fn hold(
             )
             .with_field("missing", number(count.missing)));
         } else if repeats as f64 > count.rows as f64 * (1.0 - KEY_UNIQUENESS) {
+            // Unique where the catalog declares a key over some of its
+            // columns (the reference's `_enforces_key`).
             let enforced = table
                 .unique
                 .iter()
-                .any(|set| set.len() == 1 && set.contains(&column));
+                .any(|set| !set.is_empty() && set.iter().all(|c| key.contains(c)));
             return Err(
                 refused("a primary key is not unique enough to identify a row")
                     .with_field("repeats", number(repeats))
@@ -178,7 +208,7 @@ pub fn hold(
                 "a key has rows with no value for it",
                 vec![
                     ("table", Detail::text(&table.name)),
-                    ("column", Detail::text(&column)),
+                    named(&key),
                     ("missing", number(count.missing)),
                 ],
             ));
@@ -189,7 +219,7 @@ pub fn hold(
                 "a key identifies a row more than once",
                 vec![
                     ("table", Detail::text(&table.name)),
-                    ("column", Detail::text(&column)),
+                    named(&key),
                     ("repeats", number(repeats)),
                     ("example", shown(&count.example)),
                 ],
@@ -200,7 +230,10 @@ pub fn hold(
     if infer_links && !declined.is_empty() {
         let keyed_by: BTreeSet<&String> = tables
             .iter()
-            .filter_map(|t| t.primary_key.as_ref())
+            .filter_map(|t| match t.primary_key.as_slice() {
+                [one] => Some(one),
+                _ => None,
+            })
             .collect();
         for (at, column, count) in &declined {
             let elsewhere = tables

@@ -886,6 +886,7 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
         .zip(tables)
         .enumerate()
         .map(|(position, (key, table))| {
+            let position = key.label_at(position);
             let quoted: Vec<String> = key.columns.iter().map(|c| identifier(c)).collect();
             let missing = quoted
                 .iter()

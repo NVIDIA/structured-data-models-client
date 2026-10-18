@@ -300,6 +300,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         keys: vec![TableKey {
                             table: "orders".into(),
                             columns: vec!["order_id".into()],
+                            label: None,
                         }],
                     },
                     plan: FetchPlan::Host {

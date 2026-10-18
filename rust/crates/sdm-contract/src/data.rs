@@ -300,6 +300,19 @@ pub struct TableColumn {
 pub struct TableKey {
     pub table: Relation,
     pub columns: Vec<String>,
+    /// The number a `key_counts` row for this key is labelled with, where
+    /// not its position among the keys asked: the reference labels each by
+    /// its table's place among the tables with a key, a key it does not
+    /// count included (T2.12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<u64>,
+}
+
+impl TableKey {
+    /// The label of the key at `position` among the keys asked.
+    pub fn label_at(&self, position: usize) -> u64 {
+        self.label.unwrap_or(position as u64)
+    }
 }
 
 /// One bound of a `neighbors` window: a seed time column, compared with the
@@ -372,10 +385,10 @@ pub enum DataRequest {
         table: Relation,
         filters: Vec<Filter>,
     },
-    /// For each key, in order, one row: its position, the table's rows, the
-    /// key's distinct values among rows holding all of it, and the rows
-    /// missing any part of it, as the reference's single `UNION ALL` reads
-    /// them.
+    /// For each key, in order, one row: its label (its position, where it
+    /// gives none), the table's rows, the key's distinct values among rows
+    /// holding all of it, and the rows missing any part of it, as the
+    /// reference's single `UNION ALL` reads them.
     KeyCounts { keys: Vec<TableKey> },
     /// For each time column, in order, one row: its position and the
     /// smallest and largest `CAST(column AS TIMESTAMP)`, as the reference's

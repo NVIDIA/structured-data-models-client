@@ -609,11 +609,18 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     ]);
     let mut run = materialize(host(), &parent, QUERY, None).unwrap();
     assert_eq!(rule(&refusal(&mut run)), "parent_table");
-    // A key of several columns, of a table no link refers to.
+    // A key of several columns, of a table no link refers to: refused as
+    // the reference's SQL samplers refuse every such table (T2.12), as an
+    // invalid request naming the table and its key's columns, before
+    // anything is read.
     let mut composite = shop();
     composite.tables[0].primary_key = vec!["order_id".into(), "user_id".into()];
     let mut run = materialize(host(), &composite, QUERY, None).unwrap();
-    assert_eq!(rule(&refusal(&mut run)), "composite_key");
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("schema"));
+    assert_eq!(err.fields["table"], Detail::text("orders"));
+    assert!(!err.fields.contains_key("rule"), "{err:?}");
     // One a link refers to is the reference's refusal of a relationship
     // that cannot join, before anything is read (decision E55).
     let mut composite = shop();

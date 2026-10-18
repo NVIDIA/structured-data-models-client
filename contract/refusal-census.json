@@ -73,30 +73,6 @@
       "until": "from_source"
     },
     {
-      "site": "rule:composite_key",
-      "why": "a primary key of two columns",
-      "input": {
-        "base": "shop",
-        "from_source": {
-          "primary_keys": {
-            "orders": [
-              "order_id",
-              "user_id"
-            ]
-          }
-        },
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "from_source"
-    },
-    {
       "site": "rule:condition",
       "why": "a target compared with text",
       "input": {
@@ -277,45 +253,6 @@
       "until": "materialize"
     },
     {
-      "site": "rule:float_nan",
-      "why": "a NaN in a float column's preview",
-      "input": {
-        "base": "shop",
-        "setup": [
-          "UPDATE orders SET price = 'NaN'::DOUBLE WHERE order_id = 3"
-        ],
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "from_source"
-    },
-    {
-      "site": "rule:float_signed_zero",
-      "why": "0.0 and -0.0 in one preview",
-      "input": {
-        "base": "shop",
-        "setup": [
-          "UPDATE orders SET price = CAST('0.0' AS DOUBLE) WHERE order_id = 3",
-          "UPDATE orders SET price = CAST('-0.0' AS DOUBLE) WHERE order_id = 4"
-        ],
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "from_source"
-    },
-    {
       "site": "rule:inference_config_text",
       "why": "an inference option given as text",
       "input": {
@@ -349,44 +286,6 @@
         }
       },
       "until": "predict"
-    },
-    {
-      "site": "rule:key_name_order",
-      "why": "a table named as its key column; no probe found yet that makes another form of the name score",
-      "input": {
-        "base": "shop",
-        "setup": [
-          "CREATE TABLE user_id AS SELECT i::BIGINT AS user_id, i AS x FROM range(20) t(i)"
-        ],
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "from_source"
-    },
-    {
-      "site": "rule:key_tie",
-      "why": "two key candidates of one score",
-      "input": {
-        "base": "shop",
-        "setup": [
-          "CREATE TABLE things AS SELECT i::BIGINT AS thing_id, (i + 100)::BIGINT AS thingid FROM range(20) t(i)"
-        ],
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "from_source"
     },
     {
       "site": "rule:key_type",

@@ -114,10 +114,12 @@ fn each_catalog_request_renders_the_reference_statement() {
                 TableKey {
                     table: "orders".into(),
                     columns: vec!["order_id".into()],
+                    label: None,
                 },
                 TableKey {
                     table: "users".into(),
                     columns: vec!["user_id".into()],
+                    label: None,
                 },
             ],
         },
@@ -163,6 +165,7 @@ fn a_composite_key_counts_only_rows_holding_all_of_it() {
         keys: vec![TableKey {
             table: "t".into(),
             columns: vec!["a".into(), "b".into()],
+            label: None,
         }],
     });
     assert_eq!(
@@ -333,6 +336,7 @@ fn a_host_provider_is_held_to_the_contract_s_shapes() {
             keys: vec![TableKey {
                 table: "t".into(),
                 columns: vec!["k".into()],
+                label: None,
             }],
         },
         preview("t", &["c"]),

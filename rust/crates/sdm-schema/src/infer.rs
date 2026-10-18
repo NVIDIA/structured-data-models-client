@@ -217,7 +217,12 @@ pub struct InferredTable {
     /// The text columns whose dates the engine's reading guessed a format
     /// for that puts the day first, with the format, in table order.
     pub day_first: Vec<(String, String)>,
-    pub primary_key: Option<String>,
+    /// The columns that tied for the best score when the key was guessed,
+    /// in table order, which left the table without one (empty otherwise).
+    pub tied_keys: Vec<String>,
+    /// The key's columns, in order: none, one, or several a caller named
+    /// (`crate::assemble::apply_keys_and_times`).
+    pub primary_key: Vec<String>,
     /// How inference chose the time column, before the links settle a
     /// lone edit stamp (`crate::assemble`).
     pub time: TimeChoice,
@@ -314,7 +319,7 @@ impl Previewed {
         if (self.rows as u64) < PREVIEW_ROWS {
             return vec![];
         }
-        candidates(&self.table.columns, self.table.primary_key.as_deref())
+        candidates(&self.table.columns, &self.table.primary_key)
             .into_iter()
             .map(|i| &self.table.columns[i].name)
             .filter(|name| !names::is_load_stamp(name) && !names::is_birth_date(name))
@@ -382,7 +387,7 @@ fn choose(
             firsts: &firsts,
         },
         rows,
-        table.primary_key.as_deref(),
+        &table.primary_key,
         whole,
         failed,
     )?;
@@ -552,10 +557,14 @@ pub fn preview(
         .filter(|n| declared_unique.contains(*n))
         .filter(held)
         .collect();
-    let key = match (primary.as_slice(), unique_columns.as_slice()) {
-        ([one], _) => Some(one.clone()),
-        (_, [one]) => Some((*one).clone()),
-        _ => guess_key(name, &columns, &samples)?,
+    let (key, tied_keys) = match (primary.as_slice(), unique_columns.as_slice()) {
+        ([one], _) => (Some(one.clone()), Vec::new()),
+        (_, [one]) => (Some((*one).clone()), Vec::new()),
+        _ => match guess_key(name, &columns, &samples) {
+            Guess::Key(key) => (Some(key), Vec::new()),
+            Guess::None => (None, Vec::new()),
+            Guess::Tied(tied) => (None, tied),
+        },
     };
     if let Some(key) = &key {
         let column = columns
@@ -576,7 +585,8 @@ pub fn preview(
             left_out,
             unread_times,
             day_first,
-            primary_key: key,
+            tied_keys,
+            primary_key: key.into_iter().collect(),
             time: TimeChoice::default(),
             time_column: None,
             unique,
@@ -803,17 +813,24 @@ fn text_holds_categories(sample: &[Option<Value>]) -> bool {
     2 * values.len() > 3 * parts.len() && parts.len() <= MOST_CATEGORIES
 }
 
+/// What guessing a table's key found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Guess {
+    Key(String),
+    None,
+    /// Several columns tied for the best score, in table order: the table
+    /// gets no key, and the reference warns, naming them.
+    Tied(Vec<String>),
+}
+
 /// The table's key among its identifiers, or, with none, among the columns
-/// named as the table is, by the reference's score: a name that is the
-/// table's (in its singular, plural, snake or camel forms) followed by
-/// `id`, `hash`, `key`, `code` or `uuid`, or the table's name itself, and
-/// how distinct its values are. A score of 4 or more counts; a tie for the
-/// best is refused.
-fn guess_key(
-    table: &str,
-    columns: &[InferredColumn],
-    samples: &[Vec<Option<Value>>],
-) -> Result<Option<String>, CoreError> {
+/// named as the table is, by the reference's score (`infer_primary_key`):
+/// a name that is the table's (in its singular, plural, snake or camel
+/// forms) followed by `id`, `hash`, `key`, `code` or `uuid`, or the table's
+/// name itself, and how distinct its values are. A score of 4 or more
+/// counts; a tie for the best leaves the table without a key, the tied
+/// columns named.
+fn guess_key(table: &str, columns: &[InferredColumn], samples: &[Vec<Option<Value>>]) -> Guess {
     let mut candidates: Vec<usize> = (0..columns.len())
         .filter(|&i| columns[i].stype == Stype::Id)
         .collect();
@@ -828,7 +845,7 @@ fn guess_key(
             .collect();
     }
     if candidates.is_empty() {
-        return Ok(None);
+        return Guess::None;
     }
     let variants = table_name_variants(table);
     let mut scores: Vec<(usize, f64)> = Vec::new();
@@ -837,36 +854,16 @@ fn guess_key(
         let lowered = name.to_lowercase();
         let mut score: u32 = if lowered == "id" { 4 } else { 0 };
         let named = |variant: &str| -> u32 {
-            let mut add = 0;
-            for suffix in ["id", "hash", "key", "code", "uuid"] {
-                if !lowered.ends_with(suffix) {
-                    continue;
-                }
-                if lowered == format!("{variant}_{suffix}")
-                    || lowered == format!("{variant}{suffix}")
-                {
-                    add += 5;
-                    break;
-                }
-                if lowered.ends_with(&format!("{variant}_{suffix}")) {
-                    add += 2;
-                }
-                if lowered.ends_with(&format!("{variant}{suffix}")) {
-                    add += 2;
-                }
-            }
-            if table == "studies" && name == "nct_id" {
-                add += 1;
-            }
-            add
+            suffix_score(&lowered, variant) + u32::from(table == "studies" && name == "nct_id")
         };
         if variants.contains(&lowered) {
             // The reference stops at the form the name equals, having
             // added what the forms it met first gave, in an order that
-            // varies by run; only a name no other form scores is ported.
-            if variants.iter().any(|v| v != &lowered && named(v) > 0) {
-                return Err(not_yet("key_name_order"));
-            }
+            // varies by run. No form scores a name equal to another form:
+            // the forms differ only by their endings (`s`, `ies` for `y`,
+            // `ing`, `info`) and underscores, none of them a key's suffix,
+            // so what the forms met first add is always nothing and the
+            // order never shows (`a_name_equal_to_a_form_scores_four`).
             score += 4;
         } else {
             score += variants.iter().map(|v| named(v)).sum::<u32>();
@@ -879,11 +876,41 @@ fn guess_key(
     // Stable, so a tie keeps the columns' order.
     scores.sort_by(|a, b| b.1.total_cmp(&a.1));
     match scores.as_slice() {
-        [] => Ok(None),
-        [(i, _)] => Ok(Some(columns[*i].name.clone())),
-        [(i, best), (_, next), ..] if best != next => Ok(Some(columns[*i].name.clone())),
-        _ => Err(not_yet("key_tie")),
+        [] => Guess::None,
+        [(i, _)] => Guess::Key(columns[*i].name.clone()),
+        [(i, best), (_, next), ..] if best != next => Guess::Key(columns[*i].name.clone()),
+        [(_, best), ..] => Guess::Tied(
+            scores
+                .iter()
+                .filter(|(_, score)| score == best)
+                .map(|(i, _)| columns[*i].name.clone())
+                .collect(),
+        ),
     }
+}
+
+/// What one form of the table's name, `variant`, gives a column named
+/// `lowered` (lowercased) by its key suffix: 5 for the form followed by the
+/// suffix, with or without an underscore, and stopping there; else 2 for
+/// each way the name ends so.
+fn suffix_score(lowered: &str, variant: &str) -> u32 {
+    let mut add = 0;
+    for suffix in ["id", "hash", "key", "code", "uuid"] {
+        if !lowered.ends_with(suffix) {
+            continue;
+        }
+        if lowered == format!("{variant}_{suffix}") || lowered == format!("{variant}{suffix}") {
+            add += 5;
+            break;
+        }
+        if lowered.ends_with(&format!("{variant}_{suffix}")) {
+            add += 2;
+        }
+        if lowered.ends_with(&format!("{variant}{suffix}")) {
+            add += 2;
+        }
+    }
+    add
 }
 
 /// The table's name in the forms a key's name may take it in: as given and
@@ -1027,7 +1054,7 @@ pub fn first_values_past_the_years(
     clocks: &dyn WallClocks,
 ) -> Result<(), CoreError> {
     let table = &previewed.table;
-    for i in candidates(&table.columns, table.primary_key.as_deref()) {
+    for i in candidates(&table.columns, &table.primary_key) {
         let name = &table.columns[i].name;
         if names::is_load_stamp(name) || names::is_birth_date(name) {
             continue;
@@ -1061,9 +1088,9 @@ pub fn first_values_past_the_years(
 
 /// The timestamps a table's time column is chosen among, in table order:
 /// every column of a timestamp's meaning but the key.
-fn candidates(columns: &[InferredColumn], key: Option<&str>) -> Vec<usize> {
+fn candidates(columns: &[InferredColumn], key: &[String]) -> Vec<usize> {
     (0..columns.len())
-        .filter(|&i| columns[i].stype == Stype::Timestamp && Some(columns[i].name.as_str()) != key)
+        .filter(|&i| columns[i].stype == Stype::Timestamp && !key.contains(&columns[i].name))
         .collect()
 }
 
@@ -1201,7 +1228,7 @@ fn choose_time_column(
     columns: &[InferredColumn],
     read: &Read<'_>,
     rows: usize,
-    key: Option<&str>,
+    key: &[String],
     whole: Option<&WholeTable>,
     failed: bool,
 ) -> Result<TimeChoice, CoreError> {
@@ -1417,5 +1444,41 @@ mod tests {
         assert_eq!(snake_case("UserInfo"), "User_Info");
         assert_eq!(snake_case("HTTPRequest2Go"), "HTTP_Request2_Go");
         assert_eq!(snake_case("already_snake"), "already_snake");
+    }
+
+    /// The reference adds, for a column named as one form of the table's
+    /// name, what the forms it meets before that one give, in an order
+    /// that varies by run; no other form ever gives such a name anything,
+    /// so the core's score of 4 is the reference's in every order. Held
+    /// over every table name of up to three characters from an alphabet of
+    /// the forms' endings, the suffixes' letters, an underscore and
+    /// characters whose lowercase differs in length or kind.
+    #[test]
+    fn a_name_equal_to_a_form_scores_four() {
+        let alphabet: Vec<char> = "aisdgnfoyuehkcIDSKY_\u{130}\u{212a}\u{3a3}"
+            .chars()
+            .collect();
+        let mut names = vec![String::new()];
+        let mut checked = 0;
+        for _ in 0..3 {
+            names = names
+                .iter()
+                .flat_map(|name| alphabet.iter().map(move |c| format!("{name}{c}")))
+                .collect();
+            for table in &names {
+                let variants = table_name_variants(table);
+                for form in &variants {
+                    for other in variants.iter().filter(|v| *v != form) {
+                        assert_eq!(
+                            suffix_score(form, other),
+                            0,
+                            "{table:?}: {form:?} by {other:?}"
+                        );
+                    }
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 12_000, "{checked}");
     }
 }

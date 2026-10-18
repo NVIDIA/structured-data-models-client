@@ -45,6 +45,8 @@ pub const TIME_VALUES_UNREAD: &str = "TIME_VALUES_UNREAD";
 /// The warning that text was read as dates by a format that puts the day
 /// first.
 pub const DATES_READ_DAY_FIRST: &str = "DATES_READ_DAY_FIRST";
+/// The warning that several columns tied for a table's key, so it got none.
+pub const KEY_CANDIDATES_TIED: &str = "KEY_CANDIDATES_TIED";
 
 /// The schema's warnings, each with the variants it gives (none: one
 /// sentence), which a host words (decision E59(d)); `tests/assemble.rs`
@@ -74,6 +76,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     (COLUMNS_LEFT_OUT, &[]),
     (TIME_VALUES_UNREAD, &[]),
     (DATES_READ_DAY_FIRST, &[]),
+    (KEY_CANDIDATES_TIED, &[]),
 ];
 
 /// A schema assembled: its description and the warnings given, in order.
@@ -167,7 +170,7 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
         let Some(table) = tables.iter_mut().find(|t| t.name == name) else {
             continue;
         };
-        if table.primary_key.is_some() {
+        if !table.primary_key.is_empty() {
             continue;
         }
         let time = table.time_column.clone();
@@ -190,7 +193,7 @@ pub fn key_by_reference(tables: &mut [InferredTable], declared: &[Link]) -> Resu
             keyed.stype_before_key = Some(keyed.stype);
             keyed.stype = Stype::Id;
         }
-        table.primary_key = Some(column);
+        table.primary_key = vec![column];
     }
     Ok(())
 }
@@ -244,7 +247,7 @@ pub fn assemble(
                     declared_type: None,
                 })
                 .collect(),
-            primary_key: table.primary_key.into_iter().collect(),
+            primary_key: table.primary_key,
             time_column: table.time_column,
             time_column_inferred: None,
             duplicate_keys: duplicates.clone(),
@@ -351,17 +354,16 @@ fn named_link(refused: CoreError, link: &[ColumnRef]) -> CoreError {
 /// between the reading and the key count: each key's table and columns
 /// must be the schema's, each column able to identify a row and not the
 /// table's time column; each time column's table and column the schema's,
-/// not part of its key, and of a type that can hold a time. A key of more
-/// than one column is refused by name (`composite_key`), as composite keys
-/// are elsewhere, after a column named twice (`key_column_twice`,
-/// P1B-73). Naming a key marks its column an identifier, what it meant
-/// kept, and gives the table's other columns back what they meant;
-/// naming a time column makes it a timestamp; a time column cleared
-/// (`None`) leaves the table none, its columns meaning what they meant, as
-/// the reference's setter takes `None` (decision E61). A key or time
-/// column the host could not write as names (`unreadable`) is refused by
-/// name, after its table is found, as `edit_schema` refuses it; a key of
-/// `null` names no column and is refused as an empty key, as the
+/// not part of its key, and of a type that can hold a time. A key may name
+/// several columns (a composite key, held column by column), but not one
+/// twice (`key_column_twice`, P1B-73). Naming a key marks its columns
+/// identifiers, what each meant kept, and gives the table's other columns
+/// back what they meant; naming a time column makes it a timestamp; a time
+/// column cleared (`None`) leaves the table none, its columns meaning what
+/// they meant, as the reference's setter takes `None` (decision E61). A key
+/// or time column the host could not write as names (`unreadable`) is
+/// refused by name, after its table is found, as `edit_schema` refuses it;
+/// a key of `null` names no column and is refused as an empty key, as the
 /// reference's `_as_key_tuple` reads `None` (decision E101). Refusals are
 /// `INVALID_REQUEST`, naming the field.
 pub fn apply_keys_and_times(
@@ -389,8 +391,8 @@ pub fn apply_keys_and_times(
                 return Err(no_column(name, column, "primary_keys"));
             }
         }
-        // A column named twice is refused by name, before a key of more
-        // than one column is (P1B-73, the owner's; `describe_source` only).
+        // A column named twice is refused by name (P1B-73, the owner's;
+        // `describe_source` only).
         let mut named = BTreeSet::new();
         if let Some(twice) = key.iter().find(|column| !named.insert(column.as_str())) {
             return Err(invalid(
@@ -401,44 +403,43 @@ pub fn apply_keys_and_times(
             .with_field("column", Detail::text(twice))
             .with_field("rule", Detail::text("key_column_twice")));
         }
-        let [column] = key.as_slice() else {
-            if key.is_empty() {
-                return Err(empty_key(name, "primary_keys"));
-            }
-            return Err(crate::not_yet("composite_key"));
-        };
+        if key.is_empty() {
+            return Err(empty_key(name, "primary_keys"));
+        }
+        // Each column of the key, in order, as the reference's `_check_key`
+        // holds each: able to identify a row, and not the time column.
         let time = table.time_column.clone();
-        let keyed = table
-            .columns
-            .iter_mut()
-            .find(|c| &c.name == column)
-            .expect("the column was found");
-        if !can_identify(keyed.dtype) {
-            return Err(invalid(
-                "a column named as a primary key cannot identify a row",
-                "primary_keys",
-            )
-            .with_field("table", Detail::text(name))
-            .with_field("column", Detail::text(column)));
+        for column in key {
+            let keyed = table.column(column).expect("the column was found");
+            if !can_identify(keyed.dtype) {
+                return Err(invalid(
+                    "a column named as a primary key cannot identify a row",
+                    "primary_keys",
+                )
+                .with_field("table", Detail::text(name))
+                .with_field("column", Detail::text(column)));
+            }
+            if time.as_deref() == Some(column.as_str()) {
+                return Err(invalid(
+                    "a column named as a primary key is its table's time column",
+                    "primary_keys",
+                )
+                .with_field("table", Detail::text(name))
+                .with_field("column", Detail::text(column)));
+            }
         }
-        if time.as_deref() == Some(column.as_str()) {
-            return Err(invalid(
-                "a column named as a primary key is its table's time column",
-                "primary_keys",
-            )
-            .with_field("table", Detail::text(name))
-            .with_field("column", Detail::text(column)));
+        for keyed in table.columns.iter_mut().filter(|c| key.contains(&c.name)) {
+            if keyed.stype != Stype::Id {
+                keyed.stype_before_key = Some(keyed.stype);
+                keyed.stype = Stype::Id;
+            }
         }
-        if keyed.stype != Stype::Id {
-            keyed.stype_before_key = Some(keyed.stype);
-            keyed.stype = Stype::Id;
-        }
-        table.primary_key = Some(column.clone());
+        table.primary_key.clone_from(key);
         // The table's other columns, no longer its key, mean again what
         // they meant; one that meant a timestamp orders the table if
         // nothing does.
         for other in &mut table.columns {
-            if &other.name == column {
+            if key.contains(&other.name) {
                 continue;
             }
             let Some(before) = other.stype_before_key.take() else {
@@ -466,7 +467,7 @@ pub fn apply_keys_and_times(
         if table.column(column).is_none() {
             return Err(no_column(name, column, "time_columns"));
         }
-        if table.primary_key.as_deref() == Some(column.as_str()) {
+        if table.primary_key.contains(column) {
             return Err(invalid(
                 "a column named as a time column is its table's primary key",
                 "time_columns",
@@ -844,6 +845,23 @@ pub fn day_first(table: &InferredTable) -> Vec<CoreWarning> {
             )
         })
         .collect()
+}
+
+/// The warning that the columns of a table that tied for its key left it
+/// without one (`infer_primary_key`'s), naming the table and the tied
+/// columns (`columns`), in table order; none where no tie was met.
+pub fn key_tied(table: &InferredTable) -> Vec<CoreWarning> {
+    if table.tied_keys.is_empty() {
+        return Vec::new();
+    }
+    vec![warning(
+        KEY_CANDIDATES_TIED,
+        "several columns tied for a table's primary key, so it was given none",
+        vec![
+            ("table", Detail::text(&table.name)),
+            ("columns", texts(&table.tied_keys)),
+        ],
+    )]
 }
 
 /// A data type as the contract names it (`Dtype`'s serialized name).

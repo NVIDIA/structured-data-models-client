@@ -26,8 +26,8 @@ pub(crate) enum Value {
     /// Any integer, a decimal's unscaled value (one column has one scale),
     /// or a temporal count (one column has one unit).
     Int(i128),
-    /// A float's bits; a column holding NaN or both zeros is refused before
-    /// one is made, since how those count is not ported.
+    /// A float's bits, `-0.0` as `0.0`'s: pandas counts the two zeros as
+    /// one value. A NaN is never one: it is null, as pandas reads it.
     Float(u64),
     Text(String),
 }
@@ -81,13 +81,13 @@ pub(crate) fn column(
             DataType::Float32 => {
                 let a = array.as_primitive::<Float32Type>();
                 for i in 0..n {
-                    push(i, Value::Float(f64::from(a.value(i)).to_bits()));
+                    out.push(float(array.is_null(i), f64::from(a.value(i))));
                 }
             }
             DataType::Float64 => {
                 let a = array.as_primitive::<Float64Type>();
                 for i in 0..n {
-                    push(i, Value::Float(a.value(i).to_bits()));
+                    out.push(float(array.is_null(i), a.value(i)));
                 }
             }
             DataType::Utf8 => {
@@ -99,25 +99,18 @@ pub(crate) fn column(
             _ => return Err(not_yet("column_type")),
         }
     }
-    if out
-        .iter()
-        .flatten()
-        .any(|v| matches!(v, Value::Float(bits) if f64::from_bits(*bits).is_nan()))
-    {
-        return Err(not_yet("float_nan"));
-    }
-    let zeros = out
-        .iter()
-        .flatten()
-        .filter_map(|v| match v {
-            Value::Float(bits) if f64::from_bits(*bits) == 0.0 => Some(*bits),
-            _ => None,
-        })
-        .collect::<BTreeSet<_>>();
-    if zeros.len() > 1 {
-        return Err(not_yet("float_signed_zero"));
-    }
     Ok(out)
+}
+
+/// A float as the reference's preview holds it in pandas: a NaN is
+/// missing, as a null is (`isna`, and every count drops it), and `-0.0`
+/// equals `0.0`, so the two count as one distinct value (`nunique`).
+fn float(null: bool, value: f64) -> Option<Value> {
+    if null || value.is_nan() {
+        return None;
+    }
+    let value = if value == 0.0 { 0.0 } else { value };
+    Some(Value::Float(value.to_bits()))
 }
 
 /// How many distinct values `values` holds among those not null.

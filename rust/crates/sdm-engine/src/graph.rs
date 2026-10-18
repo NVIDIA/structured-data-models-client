@@ -11,9 +11,7 @@
 use std::collections::BTreeSet;
 
 use sdm_contract::ops::{ColumnRef, DescribedColumn, SourceDescription, Stype};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
-
-use crate::not_yet;
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 /// One table of the graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,14 +83,28 @@ impl Graph {
     /// kept once, and one whose referenced column is not its table's key is
     /// refused, as the reference's materializer refuses it; a column named
     /// with the samplers' reserved prefix is refused, as their sampler
-    /// refuses it. A key of several columns is not sampled yet.
+    /// refuses it. So is a table keyed by several columns, as the
+    /// reference's SQL samplers refuse every such table: its engine folds
+    /// the key into one column named with that prefix
+    /// (`__kumo_key_<columns>`), which their check of the schema's names
+    /// then refuses (`_reject_reserved_columns`), whatever the query.
     pub fn new(description: &SourceDescription) -> Result<Graph, CoreError> {
         let mut tables = Vec::with_capacity(description.tables.len());
         for table in &description.tables {
             let primary_key = match table.primary_key.as_slice() {
                 [] => None,
                 [one] => Some(one.clone()),
-                _ => return Err(not_yet("composite_key")),
+                several => {
+                    return Err(invalid(
+                        "a table keyed by several columns cannot be sampled: the SQL samplers fold its key into a column of the name they reserve",
+                        "schema",
+                    )
+                    .with_field("table", Detail::text(&table.name))
+                    .with_field(
+                        "columns",
+                        Detail::List(several.iter().map(|c| Scalar::Utf8(c.clone())).collect()),
+                    ));
+                }
             };
             if table
                 .columns
