@@ -63,6 +63,10 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
   The roles come from the table's keys answer, which on Postgres now also names its foreign keys (kind `foreign`, `KeyKind::Foreign`) in the same statement, as the reference's one constraints query names them: no request is added or moved, so the statement order and counts are unchanged.
   DuckDB marks no column and still reads its foreign keys' rows as another kind, so it reads as before.
   `key.numeric-unconstrained-small` and `key.numeric-unconstrained-past-2-53` pass, with all 17 regression vectors.
+- Fix 9 (the orchestrator's decision: the Postgres dialect issues the reference's own statements, as DuckDB and SQLite do, so H9's per-statement result check holds unchanged once the reference's two unused reads are not expected, KO2-58, T2.1e): the catalog through the reference's `information_schema` reads, a key lookup and a limited neighbor read with the reference's columns (`__kumo_row__`, `__kumo_matches__` last), the time bounds as plain `MIN` and `MAX` read by the core after (a `timestamptz` at its UTC instant, a date at its midnight, a text by the provider's reading), and `json`, `jsonb` and `interval` read by the driver's own loaders and converted after.
+  Judged as CI judges (effective expectations, the register, KO2-58), the full Postgres run went from 2,559 differences to 15, and DuckDB's run has none.
+  The key-set CTE keeps its form (its output is the reference's; the core has no declared type to cast a key to at plan time), and a statement's text differs from the reference's where the schema is named in place rather than bound.
+  Open: `time.text-one-bad-value@postgres` is refused UNSUPPORTED_REQUEST, as P2B-11 on SQLite (DT-15, E68), where P2C-5 (KO2-64) records PROVIDER_ERROR; rust-host's record of a `jsonb` or `interval` preview (`nested.map`, `nested.union`, `time.feature-interval`) is the provider's Arrow, which no canonical form equates with the reference's driver values; the test author's provider test holds a lookup to DuckDB's columns.
 
 ## Carry items
 
