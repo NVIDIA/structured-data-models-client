@@ -249,23 +249,21 @@ pub(crate) async fn run(
                 Err(failed) => return Err(failed),
             }
         };
-        // The engine says what it dropped as it reads each table, the
-        // day-first formats it guessed as it typed its columns, and the
-        // columns that tied for its key, before anything later can refuse.
+        // The engine says what it dropped as it reads each table, and the
+        // day-first formats it guessed as it typed its columns, before
+        // anything later can refuse.
         for warning in assemble::unread_times(&inferred)
             .into_iter()
             .chain(assemble::day_first(&inferred))
-            .chain(assemble::key_tied(&inferred))
         {
             asker.warn(warning);
         }
         tables.push(inferred);
     }
-    // The columns each table leaves out, said as the tables are described.
-    for table in &tables {
-        for warning in assemble::left_out(table) {
-            asker.warn(warning);
-        }
+    // Then, every table typed, the columns that tied for each table's key,
+    // and the columns each leaves out, as the reference says them.
+    for warning in assemble::after_reading(&tables) {
+        asker.warn(warning);
     }
 
     let foreign = describe_vec(

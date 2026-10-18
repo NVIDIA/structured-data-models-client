@@ -1024,3 +1024,57 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
         .collect();
     assert_eq!(seen, listed);
 }
+
+/// Once every table is read, the tied key candidates of each table are
+/// said, in table order, before any table's left-out columns: the
+/// reference infers every table's key after it types every table's columns
+/// (whose unread times and day-first dates `describe_source` says as it
+/// reads each table), and leaves columns out as it describes the tables
+/// (T2.12 fix 1; probed on DuckDB: `zzz`'s day-first dates, then `aaa`'s
+/// tie, then `aaa`'s list left out).
+#[test]
+fn tied_keys_are_said_after_every_table_is_read_and_before_left_out_columns() {
+    use sdm_schema::infer::LeftOut;
+    let mut aaa = table(
+        "aaa",
+        vec![
+            column("aaa_id", Dtype::Int, Stype::Id),
+            column("aaaid", Dtype::Int, Stype::Id),
+        ],
+        None,
+    );
+    aaa.tied_keys = vec!["aaa_id".into(), "aaaid".into()];
+    aaa.left_out = vec![LeftOut {
+        name: "tags".into(),
+        dtype: Dtype::Intlist,
+    }];
+    let mut zzz = table(
+        "zzz",
+        vec![column("zzz_id", Dtype::Int, Stype::Id)],
+        Some("zzz_id"),
+    );
+    zzz.tied_keys = vec!["a".into(), "b".into()];
+    zzz.left_out = vec![LeftOut {
+        name: "blob".into(),
+        dtype: Dtype::Binary,
+    }];
+    let said: Vec<(String, Detail)> = assemble::after_reading(&[aaa, zzz])
+        .into_iter()
+        .map(|w| (w.code, w.fields["table"].clone()))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (
+                assemble::KEY_CANDIDATES_TIED.to_owned(),
+                Detail::text("aaa")
+            ),
+            (
+                assemble::KEY_CANDIDATES_TIED.to_owned(),
+                Detail::text("zzz")
+            ),
+            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("aaa")),
+            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("zzz")),
+        ]
+    );
+}

@@ -864,6 +864,20 @@ pub fn key_tied(table: &InferredTable) -> Vec<CoreWarning> {
     )]
 }
 
+/// The warnings given once every table is read, in the reference's order:
+/// its engine types the columns of every table before it infers any
+/// table's key, so each table's tied candidates are said after every
+/// table's unread times and day-first dates, in table order, and the
+/// columns each table leaves out after them, as the schema describes the
+/// tables (T2.12 fix 1).
+pub fn after_reading(tables: &[InferredTable]) -> Vec<CoreWarning> {
+    tables
+        .iter()
+        .flat_map(key_tied)
+        .chain(tables.iter().flat_map(left_out))
+        .collect()
+}
+
 /// A data type as the contract names it (`Dtype`'s serialized name).
 fn dtype_name(dtype: Dtype) -> &'static str {
     match dtype {

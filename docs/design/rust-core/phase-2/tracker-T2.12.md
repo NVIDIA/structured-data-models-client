@@ -57,3 +57,7 @@ The retirement of the interim edit gate is a later landing of its own and is not
 - **Register refs**: P1B-34 (FR P3-8's two time vectors; for the owner, in a commit of its own, by the orchestrator's decision), P2B-1 (the matrix's five `DECIMAL(12, 4)` foreign vectors on DuckDB, the key sent exact, KO2-35) and P2E-4 (the matrix on Postgres): each a ref under the entry's approved meaning, so each changed entry needs approving again.
 - **Waiting**: the three `rule.key-tie-entity` tests (its case file, below) and the three Postgres tests of P2E-4.
 - **For the test author**: `rule.key-tie-entity`'s routes lack `query.validate/*` and its core block names a `materialize` the core never starts on DuckDB (compare `refuse.unknown-column`); the protected tests that hold the lifted refusals (`sdm-testkit`'s `t132h_given.rs` and `t136_pre_given_specs.rs`, the client's `test_t132h_keys_and_times.py` and `test_the_schema_route.py`, `contract/tests/test_t132h_given_vectors.py` and `contract/given-vectors.json`'s `key.composite` vectors) and the Postgres regression vectors `key.composite-primary` and `key.composite-foreign`.
+
+### Fix rounds
+
+- Round 1 (the Claude reviewer approved; P3-1): a tied key is said after every table is read, before any left-out column, in the reference's order (`assemble::after_reading`, its unit test and a DuckDB probe).
