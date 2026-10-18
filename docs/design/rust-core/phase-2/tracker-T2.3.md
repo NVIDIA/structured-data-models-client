@@ -57,13 +57,16 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
 - Fix round 2 (Codex and the Claude reviewer): a `numeric` declared past 76 digits read as the reference's Postgres table reads it, by its declaration: a scale of zero an `int64`, a whole number past it its digits; else a double (fix 6).
   The seeds' base row is `ROW(t.*)` cast to the table's row type under a column alias of its own, so a column named `x` is never read as the row (fix 7).
   The test author's vectors `type.numeric-100-0-past-2-53` and `join.domain-not-null-text-key-column-x` pass.
-  Open: an unconstrained `numeric` relational key, which the reference reads as its exact text (`key.numeric-unconstrained-small`, `key.numeric-unconstrained-past-2-53` fail).
-  The role is in the catalog's constraints, which neither the provider (decision E28: it writes no SQL) nor the dialect (a preview names its columns only) has when the column is typed, and the core reads a table's foreign keys only after every table's preview is inferred: a design decision, put to the orchestrator.
   A DateStyle other than ISO fails as PROVIDER_ERROR where the reference raises NotImplementedError: P2C-9, proposed, E66(b)'s class.
   P2C-8 stays proposed for the owner: Codex approves it, and the Claude reviewer supports it on the merits but finds it outside E66(b).
+- Fix 8 (the orchestrator's choice of the core-side route): an unconstrained or negative-scale `numeric` is handed over as its exact text, its field marked `sdm:exact_number`, and the core settles its type when the table is described (`sdm-core`'s `exact_number.rs`), as the reference's Postgres table reads it: a key (the one column of a primary, unique or foreign key) keeps its text, any other column is read as doubles, and every later fetch is held to the type described.
+  The roles come from the table's keys answer, which on Postgres now also names its foreign keys (kind `foreign`, `KeyKind::Foreign`) in the same statement, as the reference's one constraints query names them: no request is added or moved, so the statement order and counts are unchanged.
+  DuckDB marks no column and still reads its foreign keys' rows as another kind, so it reads as before.
+  `key.numeric-unconstrained-small` and `key.numeric-unconstrained-past-2-53` pass, with all 17 regression vectors.
 
 ## Carry items
 
 - The comparator's Postgres vocabulary (`compare.postgres_arrow_name`, T2.1d) names `timetz` a string, where the provider now builds it as `time64[us]`: for the next judging touch. It cannot fire in the gate today: no S1 case's base or setup, and no committed reference line, holds a `timetz` column (it appears only in DuckDB's type-set vectors and the test author's public-API regression vector `type.timetz`, which the comparator's row types do not judge).
+- A `numeric` declared past 76 digits is read by its declaration, not marked, so as a key it is an `int64` or its digits where the reference sends text (P2C-3's class), with no case or vector to hold it.
 - A `numeric(p,0)` declared past 76 digits is an `int64` where its fetch's values fit, else its digits, and answers where the reference overflows (`numeric(100,0)` holding 10**90): its type is the fetch's, not one tier held across fetches as a DuckDB big integer's (P1B-43), since Postgres's `MIN` and `MAX` drop the declaration the provider reads it by; no S1 case holds one, so P2C-3 holds no ref for a value past `int64`.
 - The comparator's static row type for a `numeric` past 38 digits (`decimal256`, T2.1d) does not follow fix 6's value-chosen type: for the next judging touch, with no case to fire it.
