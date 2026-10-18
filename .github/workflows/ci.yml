@@ -1234,11 +1234,13 @@ jobs:
         name: The Postgres service, and the contract loader on it
         run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
       # T2.3's regression and key vectors, on the service with the job's
-      # DSN, failing where it is not there (SDM_REQUIRE_POSTGRES); the
-      # provider's own test needs the test-ops build, and runs in
-      # native-test-ops. The key vectors hold each run's frame to the
-      # reference cell's recording, so they run in this cell alone.
-      - name: T2.3's Postgres regression and key vectors on the service
+      # DSN, failing where it is not there (SDM_REQUIRE_POSTGRES), in every
+      # cell: the key vectors hold a run's host fields (the frame, the
+      # warning classes) to its own cell's recording, and every core field,
+      # statement and joined row to the reference cell's. The provider's own
+      # test needs the test-ops build, and runs in native-test-ops.
+      - &contract-postgres-vectors
+        name: T2.3's Postgres regression and key vectors on the service
         run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py -q
       - *contract-database
       - if: ${{ !cancelled() }}
@@ -1289,11 +1291,7 @@ jobs:
       - *contract-wheel
       - *contract-install
       - *contract-postgres-required
-      # T2.3's regression vectors, each outcome and statement on the
-      # service, in this cell's runtime.
-      - &contract-postgres-regressions
-        name: T2.3's Postgres regression vectors on the service
-        run: python -m pytest contract/tests/test_t23_postgres_regressions.py -q
+      - *contract-postgres-vectors
       - *contract-database
 
   contract-python-floor-pandas2-2-sqlite:
@@ -1335,7 +1333,7 @@ jobs:
       - *contract-wheel
       - *contract-install
       - *contract-postgres-required
-      - *contract-postgres-regressions
+      - *contract-postgres-vectors
       - *contract-database
 
   # The two core hosts on SQLite and on Postgres (T2.4, for T2.2b and
