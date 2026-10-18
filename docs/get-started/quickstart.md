@@ -178,7 +178,9 @@ with SDMClient.in_process(relational) as client:
 
 It answers as the NIM does. The context is fitted with the NIM's seed and
 settings, `fit()` holds its session in memory, and a request the NIM refuses
-is refused with the same `NimRequestError`. This needs
+is refused with the same `NimRequestError`. The limits a deployment sets to
+protect a shared server are the exception, since none is shared here; see
+[limits](../reference/limits.md). This needs
 `pip install 'structured-data-models-client[in-process]'`, which brings
 PyTorch, on Python 3.11 or later. A relational request is still gathered by
 the relational engine, so for `KumoRelational` install both:

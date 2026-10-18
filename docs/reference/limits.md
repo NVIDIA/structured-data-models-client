@@ -32,6 +32,12 @@ Both endpoints enforce sizes, and most of these are the relational one's.
 | hops | relational | 6 | at `materialize()` |
 | tables | relational | 15 | against the graph the request carries, not the schema it was built from |
 
+A client opened with `SDMClient.in_process()` is held to this table as well,
+since this client checks it. A NIM also has limits of its own, which each
+deployment sets, such as the longest string a cell may hold or the most
+distinct values a column may have. Those protect a shared server, and are
+not applied when the model runs in your own process.
+
 A relational request for more entities than one call scores is not refused.
 `materialize()` gathers it in batches of at most that many, each with a
 context of its own, sampled around that batch's rows rather than copied from
