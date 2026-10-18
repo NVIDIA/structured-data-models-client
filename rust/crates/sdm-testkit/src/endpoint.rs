@@ -17,6 +17,13 @@
 //! the rule cannot read otherwise is `400` naming the reason; any other
 //! method or path is `404 not_found`.
 //!
+//! Told to answer probabilities ([`answer_with_probabilities`]; T2.8's
+//! ranking cases, as a model answers how sure it is), a classification
+//! call whose `output.fields` names `probabilities` is answered with them:
+//! for row `i` of call `k`, `d = (3k + 5i) mod 9 + 1`, the first class
+//! `(10 - d) / 10`, the last `d / 10` and any other `0.0`, the prediction
+//! the last class where `d > 5`, else the first.
+//!
 //! Calls are numbered from zero in the order received, and an endpoint
 //! told to fail a call answers that one `500` with `{"error":
 //! "scripted_failure", "call": <its number>}` and every other call by the
@@ -94,10 +101,20 @@ pub fn answer_call(
 
 /// The rule: the status and JSON body answering one request.
 pub fn answer(method: &str, path: &str, body: &[u8]) -> (u16, Value) {
+    answered(method, path, body, None)
+}
+
+/// The rule answering call number `call` of an endpoint told to answer
+/// probabilities: a classification asking for them is given them.
+pub fn answer_with_probabilities(method: &str, path: &str, body: &[u8], call: u64) -> (u16, Value) {
+    answered(method, path, body, Some(call))
+}
+
+fn answered(method: &str, path: &str, body: &[u8], sure: Option<u64>) -> (u16, Value) {
     if method != "POST" || path != PREDICTIONS {
         return (404, json!({"error": "not_found"}));
     }
-    match predictions(body) {
+    match predictions(body, sure) {
         Ok(predictions) => (
             200,
             json!({
@@ -112,7 +129,7 @@ pub fn answer(method: &str, path: &str, body: &[u8]) -> (u16, Value) {
     }
 }
 
-fn predictions(body: &[u8]) -> Result<Vec<Value>, &'static str> {
+fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static str> {
     // serde_json, as JSON itself, refuses NaN and Infinity.
     let payload: Value = serde_json::from_slice(body).map_err(|_| "not_json")?;
     let Value::Object(payload) = payload else {
@@ -140,6 +157,26 @@ fn predictions(body: &[u8]) -> Result<Vec<Value>, &'static str> {
         return Err("no_instance_id");
     };
     let p = prediction(payload.get("task"))?;
+    // The call's number where the endpoint answers a classification's
+    // probabilities and this call asks for them.
+    let asks = payload
+        .get("output")
+        .and_then(|o| o.get("fields"))
+        .and_then(Value::as_array)
+        .is_some_and(|fields| fields.iter().any(|f| f == "probabilities"));
+    let classes: Vec<String> = payload
+        .get("task")
+        .and_then(|t| t.get("target"))
+        .and_then(|t| t.get("classes"))
+        .and_then(Value::as_array)
+        .map(|c| {
+            c.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    let sure = sure.filter(|_| asks && p.is_string() && !classes.is_empty());
     // The rows again, each cell its text as written, so an id is answered
     // as its token; the body is JSON, so this reading cannot fail.
     let rows = raw_rows(body).ok_or("not_json")?;
@@ -151,13 +188,36 @@ fn predictions(body: &[u8]) -> Result<Vec<Value>, &'static str> {
         let Some(cell) = row.get(at) else {
             return Err("not_arrays");
         };
-        answered.push(json!({
+        let mut item = json!({
             "id": instance_id(cell.get())?,
             "row_index": index,
             "prediction": p,
-        }));
+        });
+        if let Some(call) = sure {
+            let (prediction, given) = how_sure(&classes, call, index);
+            item["prediction"] = prediction;
+            item["probabilities"] = given;
+        }
+        answered.push(item);
     }
     Ok(answered)
+}
+
+/// Row `index` of call `call`'s prediction and probabilities, as an
+/// endpoint told to answer probabilities gives them.
+fn how_sure(classes: &[String], call: u64, index: usize) -> (Value, Value) {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = u32::try_from(d).unwrap_or(1);
+    let mut given = serde_json::Map::new();
+    for class in classes {
+        given.insert(class.clone(), json!(0.0));
+    }
+    let (first, last) = (&classes[0], &classes[classes.len() - 1]);
+    given.insert(first.clone(), json!(f64::from(10 - d) / 10.0));
+    given.insert(last.clone(), json!(f64::from(d) / 10.0));
+    let prediction = if d > 5 { last } else { first };
+    (Value::String(prediction.clone()), Value::Object(given))
 }
 
 fn prediction(task: Option<&Value>) -> Result<Value, &'static str> {

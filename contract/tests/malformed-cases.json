@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, and from T2.1j input.probabilities, a boolean, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -994,6 +994,30 @@
         "fail_call"
       ],
       "value": 18446744073709551616
+    },
+    {
+      "why": "probabilities as text",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "probabilities as a number",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": 1
+    },
+    {
+      "why": "probabilities null",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": null
     }
   ],
   "accepted": [
@@ -1307,6 +1331,22 @@
         "fail_call"
       ],
       "value": 2
+    },
+    {
+      "why": "the scripted endpoint told to answer probabilities (T2.8)",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer probabilities",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": false
     }
   ],
   "omitted": [

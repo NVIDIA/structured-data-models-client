@@ -60,6 +60,10 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 18446744073709551615
+        },
+        "probabilities": {
+          "description": "Whether the scripted endpoint answers a classification call asking for probabilities with them, as a model does (contract/runners/scripted_endpoint.py; T2.8's ranking cases, whose order is their probabilities): a JSON boolean; absent, the rule answers none.",
+          "type": "boolean"
         }
       }
     },

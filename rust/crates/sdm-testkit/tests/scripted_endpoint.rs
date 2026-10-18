@@ -155,3 +155,48 @@ fn the_rule_numbers_the_call_it_is_given() {
     // A failure is the chosen call's whatever it asks, a 404 included.
     assert_eq!(answer_call("GET", "/", b"", 0, Some(0)).0, FAILED);
 }
+
+/// T2.8: an endpoint told to answer probabilities answers each of the
+/// file's `probabilities` vectors, as call number `call`, as the Python
+/// endpoint does: the status, the answer, and each item's classes in the
+/// order given.
+#[test]
+fn the_rule_answers_each_probabilities_vector() {
+    let document = vectors();
+    let vectors = document["probabilities"].as_array().unwrap();
+    // Not vacuous: probabilities given on calls past the first, of a binary
+    // and a multiclass, and a call asking for none answered by the rule.
+    assert!(vectors.len() >= 5, "{}", vectors.len());
+    let given = |v: &Value| v["answer"]["predictions"][0].get("probabilities").is_some();
+    assert!(vectors.iter().any(|v| given(v) && v["call"] != 0));
+    assert!(vectors.iter().any(|v| !given(v)));
+    for vector in vectors {
+        let name = vector["name"].as_str().unwrap();
+        let (status, answered) = sdm_testkit::endpoint::answer_with_probabilities(
+            vector["method"].as_str().unwrap(),
+            vector["path"].as_str().unwrap(),
+            vector["body"].as_str().unwrap().as_bytes(),
+            vector["call"].as_u64().unwrap(),
+        );
+        assert_eq!(
+            u64::from(status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, vector["answer"], "{name}");
+        let classes = |answer: &Value| -> Vec<Vec<String>> {
+            answer["predictions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|item| {
+                    item.get("probabilities")
+                        .and_then(Value::as_object)
+                        .map(|p| p.keys().cloned().collect())
+                        .unwrap_or_default()
+                })
+                .collect()
+        };
+        assert_eq!(classes(&answered), classes(&vector["answer"]), "{name}");
+    }
+}
