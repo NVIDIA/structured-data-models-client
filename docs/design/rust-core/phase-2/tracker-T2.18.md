@@ -1,7 +1,7 @@
 # Phase 2 tracker: T2.18
 
 The design branch owns `tracker.md`; this file holds T2.18's section until it folds in.
-Lane e, on T2.1f (f321a90b, lane d: the comparator's `core_only_columns`, a judging package landing first) over the phase head after T2.3's landing (68f9b8e4), then the test author's acceptance tests (`T2.18 tests:` commits, from `t218-tests`), then this package (`T2.18:` commits).
+Lane e, on T2.1f (23fd0b1e, lane d: the comparator's `core_only_columns`, a judging package landing first) over the phase head after T2.4's landing (8006efce), then the test author's acceptance tests (`T2.18 tests:` commits, from `t218-tests`), then this package (`T2.18:` commits).
 The filter role moved to T2.10 by the orchestrator's decision: the test author moved its three cases and vectors to `contract/deferred/t210-column-filter/`, and T2.18 covers the other four roles.
 
 ## T2.18
@@ -20,7 +20,7 @@ T2.18 is any column name (KO2-36): a column whose name holds a dot, a backtick o
   Each change to frozen bridge code is declared in `bridge_changes.json` (E50).
 - **The PQL quirk table's new readings**: its two rows whose spelling the reference refuses and the core reads (`backticks/unknown-with-dot`, `backticks/newline-inside`) are marked `core_only`, each held to the core's refusal by name (unknown table, unknown column) and to differing from the reference's recorded answer (`pql_quirks.rs`).
   The 417-query corpus holds no query the change moves.
-- **L4 goldens**: the 27 requests the `name.*` cases make naming such a column, pinned with their statements on SQLite (`sqlite_goldens.rs`) and on DuckDB and Postgres (`name_goldens.rs`).
+- **L4 goldens**: the 27 requests the `name.*` cases make naming such a column, pinned with their statements in T2.4's per-database goldens (`duckdb_goldens.rs`, `sqlite_goldens.rs`, `postgres_goldens.rs`), collected with the goldens tool (`goldens::run_is_pinned` over python-core's run of the cases on each database).
 - **Register**: P2E-1 (permanent, KO2-36), naming the twelve cases' outcome moves and, under `core_only_columns` (T2.1f), the six columns the core keeps and the reference leaves out; P2E-2 rejected, ID kept (the filter role deferred to T2.10); P2B-2 retired (rejected, citing KO2-36, ID kept); DuckDB baselines for the twelve cases on the three runners.
 
 ### Probes
