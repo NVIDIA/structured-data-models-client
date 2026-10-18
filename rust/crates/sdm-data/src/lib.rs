@@ -141,6 +141,15 @@ impl DataLayer for Data {
         }
     }
 
+    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Sql { dialect } => {
+                matches!(rendered(dialect), Ok(Rendered::Sqlite))
+            }
+        }
+    }
+
     fn read(
         &self,
         request: &DataRequest,

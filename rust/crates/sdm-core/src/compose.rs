@@ -83,6 +83,12 @@ impl DataAccess {
         self.layer.compares_stored_times(&self.provider)
     }
 
+    /// Whether the run's provider orders a seeded sample by the key's data
+    /// type, as the data layer says for it (`DataLayer::samples_by_key_dtype`).
+    pub fn samples_by_key_dtype(&self) -> bool {
+        self.layer.samples_by_key_dtype(&self.provider)
+    }
+
     /// How the run's provider answers `request`. A request whose fields
     /// contradict each other is refused with `INVALID_REQUEST`, an optional
     /// request the provider did not declare with `UNSUPPORTED_REQUEST`
