@@ -206,6 +206,13 @@ OUTCOME = ('result', 'stage', 'error', 'code')
 #: call, so it has no stage and no exception class. Every other runner
 #: observes both, and a null there is a defect, never a pass.
 UNOBSERVED_BY_RUST_HOST = ('stage', 'error')
+#: An endpoint's refusal of a call as the client raises it (decision E47):
+#: the endpoint's own text, under the client's class for it and no code of
+#: the client's. The core, told the endpoint's status, reports the same call
+#: as ``INVALID_RESPONSE`` (decision E45, ``sdm-request``'s ``bad_response``),
+#: and the two agree there (T2.1g); no other pairing of class and code does.
+ENDPOINT_REFUSAL = 'NimRequestError'
+INVALID_RESPONSE = 'INVALID_RESPONSE'
 PYTHON = ('python-ref', 'python-core', 'python-old')
 #: The runtime cell the reference is recorded in (design, "Runtime cells",
 #: H1). In another named cell the host rules compare ``python-core`` with
@@ -436,6 +443,33 @@ def _differ(
         report.fail(f'{where}: {field}: differs', rule)
 
 
+def _endpoint_refusal(outcome: dict[str, Any]) -> bool:
+    r"""Whether ``outcome`` is the endpoint's refusal of a call at
+    ``predict``, as the client raises it: :data:`ENDPOINT_REFUSAL`, no
+    code."""
+    return (
+        outcome.get('result') == 'refusal'
+        and outcome.get('stage') == 'predict'
+        and outcome.get('error') == ENDPOINT_REFUSAL
+        and outcome.get('code') is None
+    )
+
+
+def _rust_host_s_refusal(
+    who: str, field: str, wanted: dict[str, Any], seen: Any
+) -> bool:
+    r"""Whether ``rust-host``'s code ``seen`` agrees with ``wanted``, an
+    endpoint's refusal at ``predict`` (:func:`_endpoint_refusal`): the pure-Rust
+    host has no transport or client class, so its outcome is its core's
+    ``INVALID_RESPONSE`` for that call (T2.1g)."""
+    return (
+        who == 'rust-host'
+        and field == 'code'
+        and seen == INVALID_RESPONSE
+        and _endpoint_refusal(wanted)
+    )
+
+
 def _expectation(
     report: Report, case: dict[str, Any], who: str, outcome: dict[str, Any]
 ) -> None:
@@ -460,6 +494,10 @@ def _expectation(
         seen = outcome[field]
         if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
             continue
+        if _rust_host_s_refusal(
+            who, field, {'result': expect['outcome'], **wanted}, seen
+        ):
+            continue
         if seen != value:
             _differ(report, where, f'outcome.{field}', value, seen)
 
@@ -474,6 +512,8 @@ def _against_reference(
     for field in OUTCOME:
         mine, theirs = outcome[field], reference['outcome'][field]
         if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
+            continue
+        if _rust_host_s_refusal(who, field, reference['outcome'], mine):
             continue
         if mine != theirs:
             _differ(
@@ -509,10 +549,13 @@ def _effective(
         }
     )
     where = f'{case["id"]}: {who} against its effective expectation'
+    effective = {field: wanted.get(field, base[field]) for field in OUTCOME}
     for field in OUTCOME:
         if who == 'rust-host' and field in UNOBSERVED_BY_RUST_HOST:
             continue
-        value = wanted.get(field, base[field])
+        value = effective[field]
+        if _rust_host_s_refusal(who, field, effective, outcome[field]):
+            continue
         if outcome[field] != value:
             _differ(report, where, f'outcome.{field}', value, outcome[field])
 
@@ -777,7 +820,13 @@ def _core_consistent(
                 observation['outcome']['code'],
             )
             wanted = ('refusal', core['error']['code'])
-            if seen != wanted:
+            # The endpoint's refusal of the call, raised as the client
+            # raises it, is the core's INVALID_RESPONSE for it (T2.1g).
+            refused = (
+                _endpoint_refusal(observation['outcome'])
+                and core['error']['code'] == INVALID_RESPONSE
+            )
+            if seen != wanted and not refused:
                 _differ(report, where, 'outcome against core', wanted, seen)
         return
     if 'materialize' in case.get('core', {}) and core['described'] is not None:
