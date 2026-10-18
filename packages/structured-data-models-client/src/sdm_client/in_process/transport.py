@@ -33,6 +33,7 @@ from sdm_client.in_process.answers import (
     row_ids,
 )
 from sdm_client.in_process.columns import Context
+from sdm_client.in_process.inference import read_inference
 from sdm_client.in_process.refusal import in_session, refusal
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
@@ -42,9 +43,6 @@ _SEED = 42
 _ESTIMATORS = 1
 
 _SERVED = {served.model_id: served for served in (Tabular(), Relational())}
-_INFERENCE_OPTIONS = frozenset(
-    {'run_mode', 'use_prediction_time', 'inference_config'}
-)
 
 
 @dataclass
@@ -123,11 +121,12 @@ class InProcessTransport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         payload = _received(payload)
         with self._answering():
+            payload['inference'] = read_inference(payload.get('inference'))
             served, model = self._serving(payload.get('model'))
             task = payload['task']
             fields = _fields(served, task['kind'], payload.get('output'))
             _check_trained_for(served, model, task['kind'])
-            _check_inference(payload.get('inference'), task)
+            served.check_inference(payload['inference'], task)
             context = served.context(payload)
             output = _run(_fit(model, context), served.query(context, payload))
             return _response(
@@ -165,6 +164,7 @@ class InProcessTransport:
     ) -> dict[str, Any]:
         payload = _received(payload)
         with self._answering():
+            inference = read_inference(payload.get('inference'))
             session = self._sessions.get(session_id)
             if session is None:
                 raise refusal(
@@ -176,7 +176,7 @@ class InProcessTransport:
                 session.served, task['kind'], payload.get('output')
             )
             with in_session('SESSION_PREDICT_SCHEMA_MISMATCH'):
-                _check_inference(payload.get('inference'), task, settled=True)
+                session.served.check_inference(inference, task, settled=True)
                 query = session.served.query(session.context, payload)
             output = _run(session.fitted, query)
             return _response(
@@ -370,44 +370,6 @@ def _fields(
             f'{list(available)}',
         )
     return fields
-
-
-def _check_inference(
-    inference: Mapping[str, Any] | None,
-    task: Mapping[str, Any],
-    settled: bool = False,
-) -> None:
-    r"""Refuse an inference option the hosted deployments refuse.
-
-    A session's context is fitted without prediction time, since creating one
-    carries no inference options, so a prediction cannot ask for it after.
-    """
-    options = dict(inference or {})
-    unknown = sorted(set(options) - _INFERENCE_OPTIONS)
-    if unknown:
-        raise refusal(
-            'INVALID_REQUEST', f'unsupported inference options: {unknown}'
-        )
-    if options.get('inference_config'):
-        raise refusal(
-            'INVALID_REQUEST',
-            'inference_config is reserved for API compatibility and must be '
-            'omitted or empty',
-        )
-    if not options.get('use_prediction_time'):
-        return
-    if not task.get('anchor_time_column'):
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
-            'use_prediction_time needs task.anchor_time_column, which this '
-            'request does not name',
-        )
-    if settled:
-        raise refusal(
-            'INVALID_REQUEST',
-            'use_prediction_time is settled when a session is created and '
-            'cannot be changed by a prediction',
-        )
 
 
 def _fit(model: Any, context: Context) -> Any:

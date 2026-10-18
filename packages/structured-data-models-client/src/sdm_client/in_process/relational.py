@@ -28,6 +28,9 @@ INSTANCE_TABLE = 'instance_table'
 INSTANCE_ID = 'instance_id'
 
 _CLASSIFIED = ('prediction', 'probabilities')
+_INFERENCE_OPTIONS = frozenset(
+    {'run_mode', 'use_prediction_time', 'inference_config'}
+)
 
 
 class Relational:
@@ -114,6 +117,44 @@ class Relational:
             relationships=tuple(edges),
             task_links=tuple(links),
         )
+
+    @staticmethod
+    def check_inference(
+        options: Mapping[str, Any],
+        task: Mapping[str, Any],
+        settled: bool = False,
+    ) -> None:
+        r"""Refuse an inference option this model's NIM refuses.
+
+        A session's context is fitted without prediction time, since creating
+        one carries no inference options, so a prediction cannot ask for it
+        after.
+        """
+        unknown = sorted(set(options) - _INFERENCE_OPTIONS)
+        if unknown:
+            raise refusal(
+                'INVALID_REQUEST', f'unsupported inference options: {unknown}'
+            )
+        if options.get('inference_config'):
+            raise refusal(
+                'INVALID_REQUEST',
+                'inference_config is reserved for API compatibility and must '
+                'be omitted or empty',
+            )
+        if not options.get('use_prediction_time'):
+            return
+        if not task.get('anchor_time_column'):
+            raise refusal(
+                'TASK_SCHEMA_MISMATCH',
+                'use_prediction_time needs task.anchor_time_column, which '
+                'this request does not name',
+            )
+        if settled:
+            raise refusal(
+                'INVALID_REQUEST',
+                'use_prediction_time is settled when a session is compiled '
+                'and cannot be changed by a prediction',
+            )
 
     @staticmethod
     def query(context: Context, payload: Mapping[str, Any]) -> tuple[Any, Any]:

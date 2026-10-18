@@ -330,6 +330,35 @@ def test_a_task_the_model_was_not_loaded_for_is_refused(sdm):
     assert "['regression']" in error.message
 
 
+@pytest.mark.parametrize(
+    ('inference', 'refusal'),
+    [
+        ({'use_prediction_time': 'no'}, None),
+        ({'run_mode': {}}, ('VALIDATION_FAILED', 422)),
+        ({'use_prediction_time': True}, ('INVALID_REQUEST', 400)),
+    ],
+)
+def test_inference_options_are_read_as_the_nim_reads_them(
+    tabular, inference, refusal
+):
+    """Typed first, so a boolean spelled ``'no'`` asks for nothing and a
+    value of the wrong kind is invalid, then judged by the model's own NIM."""
+    frame = people()
+    request = Request(
+        context=frame.iloc[:45][['person_id', 'age', 'churn']],
+        predict=frame.iloc[45:][['person_id', 'age']],
+        target='churn',
+        task='classification',
+        inference=inference,
+    )
+    with SDMClient.in_process(tabular) as client:
+        if refusal is None:
+            assert len(client.predict(request, model=KumoTabular())) == 15
+            return
+        error = refused(lambda: client.predict(request, model=KumoTabular()))
+    assert (error.code, error.status_code) == refusal
+
+
 def test_a_model_passed_in_keeps_what_was_fitted_on_it(sdm, tabular):
     frame = people()
     features = {'age': 'numerical', 'visits': 'numerical'}

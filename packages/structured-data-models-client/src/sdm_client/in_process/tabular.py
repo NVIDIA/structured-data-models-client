@@ -83,6 +83,32 @@ class Tabular:
             labels=labels,
         )
 
+    def check_inference(
+        self,
+        options: Mapping[str, Any],
+        task: Mapping[str, Any],
+        settled: bool = False,
+    ) -> None:
+        r"""Refuse an inference option this model's NIM refuses."""
+        remaining = dict(options)
+        if remaining.pop('inference_config', {}):
+            raise refusal(
+                'INVALID_REQUEST',
+                'inference_config is reserved for API compatibility and must '
+                'be omitted or empty',
+            )
+        if remaining.pop('use_prediction_time', False):
+            raise refusal(
+                'INVALID_REQUEST',
+                f"inference option 'use_prediction_time' is not supported by "
+                f'{self.model_id}; only the neutral value False is accepted',
+            )
+        unknown = sorted(set(remaining) - {'run_mode'})
+        if unknown:
+            raise refusal(
+                'INVALID_REQUEST', f'unsupported inference options: {unknown}'
+            )
+
     @staticmethod
     def query(context: Context, payload: Mapping[str, Any]) -> tuple[Any, Any]:
         table = payload['predict']['instance_table']
