@@ -6791,3 +6791,31 @@ entries:
     beyond E66(b)'s named refusal. Found at T2.3's fix round 1 with the
     review's probe (integer[] of ARRAY[ARRAY[n, n]]) on Postgres 17, against
     python-ref at 6298913c.
+- id: P2C-9
+  title: On Postgres under a DateStyle other than ISO the core fails as the provider's error, where the reference raises NotImplementedError
+  kind: change
+  old_behavior: >-
+    Under a session DateStyle other than ISO (PGDATESTYLE 'SQL, DMY' or
+    'Postgres, MDY'), psycopg cannot load a date or timestamp the server
+    writes, and the reference fails Schema.from_source with an unnamed
+    NotImplementedError.
+  new_behavior: >-
+    The core's Postgres provider reads with the same driver, which raises
+    the same error, and the core fails Schema.from_source with the named
+    PROVIDER_ERROR.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source with a
+    date or timestamp column, on a session whose DateStyle is not ISO.
+  cases: [T2.3]
+  refs: [E66]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer: E66(b)'s class, the reference's unnamed error a
+    named code. Found by the Claude reviewer at T2.3's round 2 with
+    probe.tz-no-anchor under PGDATESTYLE 'SQL, DMY' and 'Postgres, MDY' on
+    Postgres 17, against python-ref at 6298913c, in both modes. Setting ISO
+    on the provider's reads would answer where the reference fails, which
+    E66(b) does not cover, so the provider leaves the session's DateStyle
+    as it is.
