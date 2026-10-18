@@ -292,10 +292,17 @@ def _predicted(core: dict[str, Any], paths: tuple[Any, ...]) -> Any:
     predicted = core.get('predicted')
     if not isinstance(predicted, dict) or 'body' not in predicted:
         return predicted
-    return {
+    masked = {
         **predicted,
         'body': _capture_check().masked(predicted['body'], paths),
     }
+    if isinstance(predicted.get('calls'), list):
+        # Every call's body where there were several (T2.1g), each masked
+        # as the last's is.
+        masked['calls'] = [
+            _capture_check().masked(body, paths) for body in predicted['calls']
+        ]
+    return masked
 
 
 class Report:
@@ -1904,21 +1911,28 @@ def _core_payload(
     reference: dict[str, Any] | None,
     stop: str | None = None,
 ) -> None:
-    r"""The call the core wrote (``core.predicted.body``) is the request
-    the reference sent, on ``rust-host``, and the request the endpoint
-    received, on ``python-core``: the ``payload`` rule on the core; on
-    ``rust-host``, held to the reference only where it reached ``predict``
-    when past its ``stop`` (:func:`past_stop`)."""
+    r"""The calls the core wrote are the requests the reference sent, on
+    ``rust-host``, and the requests the endpoint received, on
+    ``python-core``, call by call, in order: the ``payload`` rule on the
+    core; on ``rust-host``, held to the reference only where it reached
+    ``predict`` when past its ``stop`` (:func:`past_stop`). One call is
+    ``core.predicted.body``; several are ``core.predicted.calls``, every
+    call's body in order (T2.1g)."""
     predicted = (observation.get('core') or {}).get('predicted')
     if not predicted or predicted.get('body') is None:
         return
-    body = _payload(predicted['body'], report.paths)
+    several = isinstance(predicted.get('calls'), list)
+    named = 'core.predicted.calls' if several else 'core.predicted.body'
+    bodies = [
+        _payload(body, report.paths)
+        for body in (predicted['calls'] if several else [predicted['body']])
+    ]
     if who == 'python-core':
         sent = [
             _payload(each['parsed'], report.paths)
             for each in (observation.get('public') or {}).get('payloads', [])
         ]
-        found = _path_of([body], sent, 'core.predicted.body')
+        found = _path_of(bodies, sent, named)
         if found:
             report.fail(
                 f'{case["id"]}: python-core: the call against the request '
@@ -1935,9 +1949,9 @@ def _core_payload(
             for each in reference['public']['payloads']
         ]
         found = _path_of(
-            [body],
+            bodies,
             wanted,
-            'core.predicted.body',
+            named,
             report.more_exact.get((case['id'], who), ()),
         )
         if found:

@@ -557,7 +557,11 @@ class _Capture:
     ``predict`` with is recorded where it reaches the endpoint, in the
     call's ``metadata.request_id``, and a call that does not carry it is a
     runner failure; a forecast's later calls each carry the id the host gave
-    its step (T1.36 fix 24)."""
+    its step (T1.36 fix 24), and a request asked in several calls
+    (``RequestState.batches``) each the id the host gave that call. Where
+    predict makes more than one call, every call's body is kept in order,
+    ``core.predicted.calls``, beside ``body``, the last's (T2.1g); a request
+    of one call records ``body`` alone, as before."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
@@ -586,6 +590,7 @@ class _Capture:
         self._request_ids: list[str] = []
         self._call: int | None = None
         self._body: dict[str, Any] | None = None
+        self._bodies: list[dict[str, Any]] = []
         self._answer: dict[str, Any] | None = None
 
     def warned(self, message: bytes) -> None:
@@ -601,16 +606,24 @@ class _Capture:
         self._state = None
         self._call = None
         self._answer = None
+        self._bodies = []
         if operation['op'] == 'predict':
             state = operation['state']
             self._request_id = operation['request_id']
             # The id each call carries: one call per step with rows to
             # score, in step order, each with its own step's id (T1.36 fixes
             # 24 and 27); a step with none makes no call, as in the core.
-            steps = [(operation['request_id'], state['payload'])] + [
-                (step['request_id'], step['payload'])
-                for step in state.get('forecast') or ()
-            ]
+            steps = (
+                [(operation['request_id'], state['payload'])]
+                + [
+                    (step['request_id'], step['payload'])
+                    for step in state.get('forecast') or ()
+                ]
+                + [
+                    (batch['request_id'], batch['payload'])
+                    for batch in state.get('batches') or ()
+                ]
+            )
             self._request_ids = [
                 request_id
                 for request_id, payload in steps
@@ -757,6 +770,7 @@ class _Capture:
             self._answer = result
             self.predicted = {
                 'body': self._body,
+                **({'calls': self._bodies} if len(self._bodies) > 1 else {}),
                 'model': result['model'],
                 'request_id': result['request_id'],
                 'metadata': None,
@@ -768,6 +782,7 @@ class _Capture:
             self._body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
+            self._bodies.append(self._body)
             # The next step with rows to score's id, and no call past them.
             carried = self._body.get('metadata', {}).get('request_id')
             if not self._request_ids or carried != self._request_ids.pop(0):

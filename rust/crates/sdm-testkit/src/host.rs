@@ -31,8 +31,8 @@ use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlPa
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, Dtype, EditSchema, ForecastStep, Materialize, Operation, OperationResult,
-    Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestState, SamplerState, Seed,
-    SourceDescription, SourceSpec, ValidateQuery,
+    Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestBatch, RequestState,
+    SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -82,6 +82,11 @@ pub struct Observed {
     /// `core.edits`: apart from `inputs`, whose shape a gate's checkpoint
     /// fixes, and written by no observation yet.
     pub edits: Vec<Value>,
+    /// What a failed `predict` had answered before it failed, as the core
+    /// carried it on its error (`CoreError.answered`, T2.1g): the result's
+    /// columns and rows, as a predicted answer's, and the rows those calls
+    /// score. In process only; no observation writes it yet.
+    pub answered: Option<Value>,
 }
 
 /// The core's answer to the case's operation.
@@ -178,6 +183,28 @@ fn answer_of(error: &CoreError) -> Result<Answer> {
     })
 }
 
+/// What a failed run had answered before it failed, as its error carries
+/// it (`CoreError.answered`, T2.1g), the result taken from the run: its
+/// columns and rows, as a predicted answer's, and the rows those calls
+/// score; none where the error carries none.
+fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
+    let ControlMessage::Error { error } =
+        read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))?
+    else {
+        bail!("the host gave a message that is not an error");
+    };
+    let Some(answered) = error.answered else {
+        return Ok(None);
+    };
+    let Ok(Some(Attachment::Arrow(result))) = handle.take_attachment(answered.result) else {
+        bail!("the answers an error carries are not attached");
+    };
+    Ok(Some(json!({
+        "result": result_rows(&result)?,
+        "rows": answered.rows,
+    })))
+}
+
 /// The error an `error` control message carries.
 fn error_of(out: &Outgoing) -> Result<Answer> {
     match read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))? {
@@ -237,6 +264,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         warnings: vec![],
         driver: None,
         edits: vec![],
+        answered: None,
     })
 }
 
@@ -819,6 +847,7 @@ fn describe_on(
         warnings: Vec::new(),
         driver: None,
         edits: Vec::new(),
+        answered: None,
     };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
@@ -1120,7 +1149,14 @@ pub struct HeldState {
     /// A forecast's later steps, each its number, payload and query
     /// (T1.36 fix 21).
     pub forecast: Option<Vec<HeldStep>>,
+    /// A request asked in several calls (`RequestState.batches`, contract
+    /// v26): each later call's payload and the rows it scores, in order.
+    pub batches: Option<Vec<HeldBatch>>,
 }
+
+/// A later call of a request asked in several, as this host holds it: its
+/// payload's bytes and the rows it scores.
+pub type HeldBatch = (Vec<u8>, u64);
 
 /// A forecast's later step as this host holds it: its number, and its
 /// payload's and query's bytes.
@@ -1178,11 +1214,20 @@ fn materialize(
                 }
                 forecast = Some(later);
             }
+            let mut batches = None;
+            if let Some(calls) = &state.batches {
+                let mut later = Vec::new();
+                for call in calls {
+                    later.push((bytes(call.payload)?, call.rows));
+                }
+                batches = Some(later);
+            }
             let held = HeldState {
                 version: state.version,
                 payload: bytes(state.payload)?,
                 query: bytes(state.query)?,
                 forecast,
+                batches,
             };
             let recorded = json!({
                 "version": held.version,
@@ -1475,6 +1520,7 @@ pub fn materialize_repeatedly_holding(
             warnings: Vec::new(),
             driver: None,
             edits: Vec::new(),
+            answered: None,
         };
         materialize(
             case,
@@ -1603,7 +1649,19 @@ fn predict(
                         })
                         .collect()
                 }),
-                batches: None,
+                // Each later call after the forecast's steps' attachments
+                // (none where there are batches), with this host's one
+                // constant id, as each step's.
+                batches: state.batches.as_ref().map(|calls| {
+                    (0u32..)
+                        .zip(calls)
+                        .map(|(at, (_, rows))| RequestBatch {
+                            payload: AttachmentId(3 + at),
+                            rows: *rows,
+                            request_id: Some(REQUEST_ID.into()),
+                        })
+                        .collect()
+                }),
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
@@ -1632,6 +1690,9 @@ fn predict(
         attachments.insert(AttachmentId(3 + 2 * at), Attachment::Bytes(payload));
         attachments.insert(AttachmentId(4 + 2 * at), Attachment::Bytes(query));
     }
+    for (at, (payload, _)) in (0u32..).zip(state.batches.unwrap_or_default()) {
+        attachments.insert(AttachmentId(3 + at), Attachment::Bytes(payload));
+    }
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
@@ -1650,6 +1711,7 @@ fn predict(
         let call = match &next {
             Err(failed) => {
                 observed.answer = error_of(failed)?;
+                observed.answered = answered_of(&handle, failed)?;
                 return Ok(());
             }
             Ok(out) => match read(out).map_err(|_| anyhow!("an unreadable step"))? {
@@ -1696,7 +1758,10 @@ fn predict(
     }
     let sent = bodies.last().cloned().unwrap_or(Value::Null);
     observed.answer = match next {
-        Err(failed) => error_of(&failed)?,
+        Err(failed) => {
+            observed.answered = answered_of(&handle, &failed)?;
+            error_of(&failed)?
+        }
         Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
             ControlMessage::Step(Step::Done {
                 result: OperationResult::Predict(predicted),

@@ -266,6 +266,7 @@
           "required": ["body", "model", "request_id", "metadata", "result"],
           "properties": {
             "body": {"type": "object"},
+            "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
             "metadata": {"type": "object"},

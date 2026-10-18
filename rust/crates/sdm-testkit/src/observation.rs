@@ -102,14 +102,10 @@ pub fn write(
             (observed.accepted, Value::Null, Value::Null)
         }
         Answer::Predicted(answer) => {
-            // The answer's `calls` are this host's in-process record of
-            // every call; `core.predicted` holds python-core's shape, its
-            // `body` the last call's (T1.36 fix 22).
-            let mut predicted = answer.clone();
-            if let Value::Object(members) = &mut predicted {
-                members.remove("calls");
-            }
-            (observed.accepted, predicted, Value::Null)
+            // `core.predicted` holds python-core's shape: its `body` the
+            // last call's (T1.36 fix 22) and, where there were several
+            // calls, `calls`, every call's body in order (T2.1g).
+            (observed.accepted, answer.clone(), Value::Null)
         }
         Answer::Error { kind, code, .. } => (
             observed.accepted,
