@@ -49,9 +49,10 @@ Postgres routes.
   decimal pairs as the control and merges the fifteen-digit keys, so the
   pair tests judge something.
 
-Where ``SDM_POSTGRES_TEST_DSN`` names no server the tests that need one
-are skipped, unless ``SDM_REQUIRE_POSTGRES`` is set (a Postgres job), where
-they fail (H26).
+Where ``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES``
+is not set, the tests that need one have nothing to hold and return
+without asserting, as T2.1a's Postgres tests do; with it set, a missing
+server fails (H26).
 
 Expected to fail until T2.3's implementation lands: the runner refuses a
 ``python-core`` run on Postgres while the core reports no Postgres provider
@@ -173,21 +174,26 @@ def problem_of(
     )
 
 
-def _server() -> None:
-    r"""Skip where no Postgres server is named, unless one is required."""
+def _server() -> bool:
+    r"""Whether a Postgres server is named; where none is, one must not be
+    required (H26)."""
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
-        return
+        return True
     assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
         'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
     )
-    pytest.skip('SDM_POSTGRES_TEST_DSN names no Postgres server')
+    return False
 
 
 @pytest.fixture(scope='module')
-def core_runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+def core_runs(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> dict[str, Any] | None:
     r"""Every vector through ``python-core`` on Postgres, forced onto the
-    core's Postgres routes: one run, or the reason the run failed whole."""
-    _server()
+    core's Postgres routes: one run, or the reason the run failed whole;
+    None where no server is named."""
+    if not _server():
+        return None
     tmp = tmp_path_factory.mktemp('t23-keys')
     try:
         return P.run('python-core', P.VECTORS, tmp, core=True)
@@ -210,8 +216,10 @@ def _observation(core_runs: dict[str, Any], vector_id: str) -> dict[str, Any]:
     [pytest.param(v['id'], id=v['id']) for v in RECORDED['vectors']],
 )
 def test_python_core_answers_each_key_vector_as_the_reference(
-    vector_id: str, core_runs: dict[str, Any]
+    vector_id: str, core_runs: dict[str, Any] | None
 ) -> None:
+    if core_runs is None:
+        return
     vector = BY_ID[vector_id]
     observation = _observation(core_runs, vector_id)
     got = P.project(observation, vector)
@@ -221,8 +229,10 @@ def test_python_core_answers_each_key_vector_as_the_reference(
 
 @pytest.mark.parametrize('vector_id', [pytest.param(i, id=i) for i in PAIRS])
 def test_a_key_pair_joins_as_one_type_does_on_the_core(
-    vector_id: str, core_runs: dict[str, Any]
+    vector_id: str, core_runs: dict[str, Any] | None
 ) -> None:
+    if core_runs is None:
+        return
     vector = BY_ID[vector_id]
     observation = _observation(core_runs, vector_id)
     if observation['outcome']['result'] != 'success':

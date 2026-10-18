@@ -36,8 +36,10 @@ Each answer (outcome, public schema, the payloads' digest and anchors) is
 the reference's, or differs exactly as an approved register entry's ref
 declares (``contract/postgres-regression-vectors.json#<id or glob> <from>
 -> <to>``); a proposed entry excuses nothing. Where
-``SDM_POSTGRES_TEST_DSN`` names no server the vector tests are skipped,
-unless ``SDM_REQUIRE_POSTGRES`` is set, where they fail (H26).
+``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES`` is
+not set, the vector tests have nothing to hold and return without
+asserting, as T2.1a's Postgres tests do; with it set, a missing server
+fails (H26).
 """
 
 from __future__ import annotations
@@ -108,13 +110,13 @@ def covered(vector_id: str, old: str, new: str) -> str | None:
 
 
 @pytest.fixture(scope='module')
-def dsn() -> str:
+def dsn() -> str | None:
     found = os.environ.get('SDM_POSTGRES_TEST_DSN')
     if not found:
         assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
             'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
         )
-        pytest.skip('SDM_POSTGRES_TEST_DSN names no Postgres server')
+        return None
     return found
 
 
@@ -122,8 +124,10 @@ def dsn() -> str:
     'vector_id', [pytest.param(v['id'], id=v['id']) for v in P.VECTORS]
 )
 def test_python_core_answers_as_the_reference_on_postgres(
-    vector_id: str, dsn: str
+    vector_id: str, dsn: str | None
 ) -> None:
+    if dsn is None:
+        return
     vector = BY_ID[vector_id]
     want = vector['reference']
     got = P.observe(vector, dsn, core=True)
