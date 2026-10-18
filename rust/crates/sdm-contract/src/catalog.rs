@@ -87,6 +87,10 @@ pub struct CatalogColumn {
 pub enum KeyKind {
     Primary,
     Unique,
+    /// A unique index over only the rows its condition covers (SQLite's
+    /// partial index): the reference holds a column it keeps unique so
+    /// (`unique_keys`), but no constraint of several columns.
+    PartialUnique,
     /// A constraint of another kind, which the reader leaves alone.
     Other,
 }
