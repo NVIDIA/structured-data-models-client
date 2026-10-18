@@ -257,6 +257,7 @@ def _steps(
     driver_class: str | None = None
     refused: Refused | None = None
     while True:
+        error: StructuredDataError | None = None
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
@@ -265,11 +266,13 @@ def _steps(
                 failed.control, failed.attachments, driver_class=driver_class
             )
             _answered(handle, failed, error)
+        if error is not None:
+            # Raised outside the handler, so nothing is its context.
             if refused is not None:
                 # The call's own failure, as the caller sees it, carrying
                 # what the core carried on its end of the run.
                 _carried(error, refused.raised)
-                raise refused.raised from None
+                raise refused.raised
             raise error from None
         _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)

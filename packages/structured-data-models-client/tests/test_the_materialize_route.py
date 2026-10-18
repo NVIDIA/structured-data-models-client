@@ -1741,14 +1741,21 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     # same code, raised as UnsupportedRequestError, its subclass.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     for options in (
-        {'indices': list(range(1_001))},
+        {'indices': list(range(100_001))},
+        {'indices': list(range(101)), 'rows_per_call': 1},
         {'num_context_samples': 10_001},
         {'num_hops': 7},
     ):
         core = _refusal_of(**options)
         assert core.code == 'UNSUPPORTED_REQUEST', options
         assert type(core).__name__ == 'UnsupportedRequestError', options
-        assert 'rule' not in core.details, options
+        # The ceilings of main's 1fc5a686 name theirs (T2.8c).
+        assert core.details.get('rule') in (None, 'most_entities', 'most_calls')
+    # From T2.8c the core gathers 1,001 entities as the reference does, and
+    # refuses these (the shop has 8 users) for the reference's reason
+    # (register P2B-3, retired).
+    core = _refusal_of(indices=list(range(1_001)))
+    assert (type(core), core.code) == (StructuredDataError, 'INVALID_REQUEST')
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
@@ -1756,8 +1763,7 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     assert (type(old), old.code) == (StructuredDataError, 'UNSUPPORTED_REQUEST')
     # Since main's 1fc5a686 (the reference at 6298913c) the old route has no
     # 1,000-entity limit: it refuses these 1,001 indices for another reason
-    # (the shop has 8 users), INVALID_REQUEST, where the core's limit
-    # refuses them first (register P2B-3, until T2.8c).
+    # (the shop has 8 users), INVALID_REQUEST, as the core does from T2.8c.
     old = _refusal_of(indices=list(range(1_001)))
     assert (type(old), old.code) == (StructuredDataError, 'INVALID_REQUEST')
 

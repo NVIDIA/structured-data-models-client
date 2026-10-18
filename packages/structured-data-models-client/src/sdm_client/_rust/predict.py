@@ -246,11 +246,9 @@ def predict(
             model given as neither a model handle nor an id; and the
             endpoint's refusal, as the client's transport reports it.
     """
-    from sdm_api.generated.tfm_api import PredictionItem
 
     from sdm_client.adapters.relational import _request_id
     from sdm_client.models import spec_for
-    from sdm_client.result import PredictionResult
 
     state = getattr(request, '_core_state', None)
     if state is None:

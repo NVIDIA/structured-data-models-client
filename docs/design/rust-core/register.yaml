@@ -6042,7 +6042,7 @@ entries:
   - 1fc5a686
   - P1B-20
   - packages/structured-data-models-client/tests/t128a-payload-rules.json
-  status: approved
+  status: rejected
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
@@ -6053,6 +6053,15 @@ entries:
     (the reference's _check_entity_count) no longer holds at 6298913c; the
     re-recorded t128a vectors (base.regression.entities-1001,
     many-1001.entities-1001) carry the reference's new outcomes.
+
+    Retired by T2.8c under KO2-45's lapse (rejected; the ID is kept): the
+    core gathers up to 100,000 entities as calls of at most 10,000
+    (rows_per_call lowering it), refusing past 100,000 entities or 100
+    calls as the reference does (sdm-core materialize, refuse_entities and
+    rule most_calls); measured on DuckDB with T2.8c's multicall cases
+    (entities-per-call.10001, entities.100000, entities.100001,
+    calls.100, calls.101), every call's payload, the statements and the
+    result equal to the old route's at main's 1fc5a686.
 
 - id: P2B-4
   title: The core refuses the rows_per_call option, which the reference takes, until T2.8c
@@ -6075,7 +6084,7 @@ entries:
     rows_per_call set.
   cases: [T2.0c]
   refs: [1fc5a686]
-  status: approved
+  status: rejected
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
@@ -6084,6 +6093,13 @@ entries:
     this entry fits it. Temporary: it lapses when T2.8c
     lands, and the final gate fails while it remains. No case covers it
     yet; T2.8c's test author adds one.
+
+    Retired by T2.8c under KO2-45's lapse (rejected; the ID is kept): the
+    core reads rows_per_call with the call's values (sdm-request options,
+    rows_per_call), a whole number of at least one that only lowers the
+    10,000 a call scores, and refuses a bool, a float, text or a number
+    below 1 INVALID_REQUEST, as the reference; measured with T2.8c's
+    multicall.rows-per-call cases on DuckDB.
 
 - id: P2B-7
   title: python-old answers the four decimal cases as the reference at 6298913c, by main's eb6c68eb
@@ -6177,13 +6193,20 @@ entries:
     whose call fails at a step after the first.
   cases: [T2.0c]
   refs: [1fc5a686, P2B-3, P2B-4]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
   notes: >-
     Approver: reviewer. Not a refusal: the same error, without the answered
     steps main's client keeps on it. Found by T2.0c's round 1 review (the
     Claude subagent's P3-13). Temporary: it lapses when T2.8c lands.
+
+    Retired by T2.8c under KO2-45's lapse (rejected; the ID is kept; for
+    the reviewers): the core carries a failed step's answered steps on its
+    error (CoreError.answered, parts_answered) and the Python host puts
+    them in details['answered'] as main's client does; measured with a
+    three-step forecast failing at step 3, equal to the old route's
+    answered steps.
 
 - id: P2B-10
   title: On SQLite, an empty table is refused by name where the reference raises an unnamed RuntimeError, as on DuckDB (P1B-11)

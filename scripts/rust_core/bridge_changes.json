@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T2.18: the module gains Unresolved, a query only the core resolves, and asked, the host's reading of what the core resolved of a query (Materialized.query, contract v26)"
+      "moved": "T2.8c: main's 1fc5a686 (multi-call predict) moved into the core: rows_per_call joins the options whose values the core reads (TAKEN, VALUED), its type, bound and the batches it asks the core's (sdm-request options, sdm-core materialize); no rule added here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T2.18: the run's answer of what the core resolved of the query (Materialized.query) is kept beside the state's version for asked; the caller's forecast step limit (decompose.MOST_PARTS) is sent for a query only the core resolves, whose kind only the core knows, as for a forecast; no rule added"
+      "moved": "T2.8c: main's multi-call materialize (1fc5a686) is the core's: the bridge passes the client's MOST_ENTITIES and MOST_CALLS as the contract's most_entities and most_calls (as it passes MOST_PARTS), and takes back each later call's payload and rows from RequestState.batches; the ceilings, the batching and the per-batch walk are sdm-core materialize's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -24,13 +24,19 @@
       "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T1.36 fix 8: the module gains _id, the host's half of the entity reading moved into the core (sdm-request's predict::layout and entity, as the reference's _named_entities and as_declared): the bridge reads the id the core gives, as the JSON text of the reference's item value where the core's column cannot hold it"
+      "moved": "T2.8c: the module gains _result (the result's rows as the client's PredictionResult, split out of predict, unchanged) and _carry_the_answers (the core's answered parts, CoreError.answered, put in details as main's 1fc5a686's client puts them: answered, rows_answered); which calls answered and how they are numbered and merged are sdm-core predict's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T1.36 fix 21: a forecast's steps predicted and merged by the core in one run: each step's payload and query passed as RequestState.forecast, the endpoint's refusal noted with the call (the step) it answered, and the answer marked as naming its step; fix 24: each later step's call given its own request id, drawn with _request_id as the adapter draws one per call"
+      "moved": "T2.8c: a request asked in several calls (RequestState.batches) is predicted by the core in one run: each later call's payload and rows passed with its own request id, drawn with _request_id as the adapter draws one per call; the endpoint's refusal is told to the core by its status (run.Refused) so the core carries the answers before it, and raised with them (E47's text unchanged); main's _numbered_across_calls and _carry_the_answers_already_paid_for are sdm-core predict's"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
+      "moved": "T2.8c: the host's half of main's _carry_the_answers_already_paid_for and _carry_the_steps_already_paid_for (1fc5a686): the answers the core carried (CoreError.answered) read into details['answered'] as a PredictionResult, with rows_answered for a batched request; the core decides what was answered"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
+      "refactor": "T2.8c: the core's result rows built into the client's PredictionResult, split out of predict unchanged so the answered parts are built the same way; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
