@@ -46,3 +46,16 @@ INSERT INTO orders VALUES
     (16, NULL, 1, 6.0),
     (17, 1, 3, 0.5),
     (18, 4, 2, 7.25);
+
+-- Round 1's regressions (T2.5). zeros holds a DOUBLE key as -0.0 and 0.0,
+-- one value to every SQL engine, so its key counts one distinct value and
+-- the value repeats. wide holds ten rows of 2,048 characters, so a page of
+-- even one row is past a fallback's 1,000 bytes.
+
+CREATE TABLE zeros (k DOUBLE);
+
+INSERT INTO zeros VALUES (CAST('-0.0' AS DOUBLE)), (CAST('0.0' AS DOUBLE));
+
+CREATE TABLE wide AS
+SELECT CAST(i AS INTEGER) AS id, repeat(chr(CAST(97 + i AS INTEGER)), 2048) AS v
+FROM range(10) AS t (i);

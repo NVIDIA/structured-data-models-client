@@ -61,6 +61,11 @@ Each test's one line says the exit it proves:
   ``max_bytes``, ``UNSUPPORTED_REQUEST`` naming the request, rule
   ``fallback_limit`` and the limit, where the same request within its
   limits answers;
+- T2.6, round 1's regressions: a fallback scan past ``max_bytes`` on a
+  page stops there with the limit's error, asking no later page, even of
+  a provider that would fail it; and a float key's -0.0 and 0.0 are one
+  value through the fallback as through pushdown (``key_counts``,
+  ``repeated_key``);
 - T2.5, "a seeded truncation ... in each host's provider path ... fails
   the kit": with ``--fault truncate`` the runner exits 1 and each case the
   fault names answered short, with no error;
@@ -192,11 +197,18 @@ def withheld(case: dict[str, Any]) -> list[str]:
 
 
 def _value(value: Any) -> Any:
-    r"""A value as compared: a number by its value, anything else as it
-    is."""
+    r"""A value as compared: a number by its value, a zero of either sign
+    one value (round 1), anything else as it is."""
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
+        return float(value) + 0.0
     return value
+
+
+def fetched_problem(case: dict[str, Any], fetched: list[str]) -> str | None:
+    r"""Where ``case`` names its fetches exactly, how ``fetched`` differs."""
+    if 'fetched' in case and fetched != case['fetched']:
+        return f'fetched {fetched}, not exactly {case["fetched"]}'
+    return None
 
 
 def _key(row: list[Any]) -> str:
@@ -271,6 +283,8 @@ def judge(case: dict[str, Any], seen: dict[str, Any] | None) -> list[str]:
         problem = answer_problem(seen['answer'], wanted)
         if problem:
             return [problem]
+        if 'fetched' in case:
+            return [p for p in [fetched_problem(case, fetched)] if p]
         name = request_case(case)['request']['request']
         problems = []
         held_back = withheld(case)
@@ -295,6 +309,8 @@ def judge(case: dict[str, Any], seen: dict[str, Any] | None) -> list[str]:
     problem = error_problem(seen['error'], case['error'])
     if problem:
         return [problem]
+    if 'fetched' in case:
+        return [p for p in [fetched_problem(case, fetched)] if p]
     injected = case.get('inject')
     if injected and len(fetched) < injected['page']:
         return [f'fetched {fetched}: page {injected["page"]} was never asked']
@@ -499,6 +515,57 @@ def test_a_fallback_limit_exceeded_is_a_named_error(database: str) -> None:
         assert not {k: problems[k] for k in named if problems[k]}
 
     held(f'test_a_fallback_limit_exceeded_is_a_named_error[{database}]', check)
+
+
+# --- round 1's regressions -----------------------------------------------------
+
+
+def _cases_pass(database: str, names: tuple[str, ...]) -> None:
+    _, report = kit(database)
+    problems = judged(report)
+    assert not {k: problems[k] for k in names if problems[k]}
+
+
+@pytest.mark.parametrize('database', DATABASES)
+def test_r1_the_byte_limit_stops_at_the_page_that_passes_it(
+    database: str,
+) -> None:
+    r"""T2.6, round 1: a fallback scan past ``max_bytes`` on a page that is
+    not its last fails by name at that page, asking no later one; a
+    provider that would fail page 2 (retryable) is never asked it, so the
+    error is the limit's."""
+    if not reachable(database):
+        return
+    names = (
+        'fallback.bytes-on-the-first-page',
+        'fallback.bytes-before-a-failing-page',
+    )
+    held(
+        f'test_r1_the_byte_limit_stops_at_the_page_that_passes_it[{database}]',
+        lambda: _cases_pass(database, names),
+    )
+
+
+@pytest.mark.parametrize('database', DATABASES)
+def test_r1_a_signed_zero_through_the_fallback_is_the_pushdown_s(
+    database: str,
+) -> None:
+    r"""T2.6, round 1: over a float key holding -0.0 and 0.0, ``key_counts``
+    and ``repeated_key`` through the fallback answer as pushdown does: one
+    distinct value, and the zero repeated."""
+    if not reachable(database):
+        return
+    names = (
+        'key-counts.signed-zero',
+        'repeated-key.signed-zero',
+        'fallback.key-counts-signed-zero',
+        'fallback.repeated-key-signed-zero',
+    )
+    held(
+        'test_r1_a_signed_zero_through_the_fallback_is_the_pushdown_s'
+        f'[{database}]',
+        lambda: _cases_pass(database, names),
+    )
 
 
 # --- T2.5: the seeded faults --------------------------------------------------

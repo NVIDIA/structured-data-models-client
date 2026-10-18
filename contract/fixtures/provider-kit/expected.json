@@ -11,6 +11,8 @@
     "page_rows: the most rows the provider puts in one page of an answer, for every case.",
     "An answer is compared column by column by name (the columns listed; any other column the provider's answer holds is not compared) and value by value: numbers by value (an integer equals the same float), text as text, null as null. ordered: the rows in order; otherwise as a multiset. count with any_of: exactly that many rows, each one of any_of's, none taken twice.",
     "An error is compared by its code, kind, retryable, and each field listed, as text.",
+    "fetched, where given, is every fetch the case makes, by request name, in order, exactly; it stands in for the page counts, and for inject's page being asked (round 1: a fallback past its byte limit on one page asks for no later page).",
+    "A float's zero is one value whichever its sign, as SQL compares it: -0.0 equals 0.0 in an answer, a key and a count of distinct values (round 1).",
     "checked: 'hand' answers were worked out by hand from dataset.sql (why says how) and are also recomputed by record.py; 'recorded' answers are record.py's alone. record.py computes every answer from the dataset in plain Python, never through sdm-data's SQL."
   ],
   "page_rows": 2,
@@ -255,6 +257,51 @@
       "request_of": "neighbors.ordered",
       "capabilities": {"withhold": ["neighbors"], "fallback": {"max_rows": 4, "max_bytes": 1048576}},
       "error": {"code": "UNSUPPORTED_REQUEST", "kind": "unsupported", "retryable": false, "fields": {"request": "neighbors", "rule": "fallback_limit", "limit": "max_rows"}}
+    },
+    {
+      "id": "key-counts.signed-zero",
+      "exit": "T2.5 round 1: expected answers; a float key's zeros are one value",
+      "checked": "hand",
+      "why": "zeros.k holds -0.0 and 0.0: two rows, one distinct value, none missing.",
+      "request": {"request": "key_counts", "keys": [{"table": {"source": ["zeros"]}, "columns": ["k"]}]},
+      "answer": {"columns": ["k", "n", "d", "z"], "ordered": false, "rows": [[0, 2, 1, 0]]}
+    },
+    {
+      "id": "repeated-key.signed-zero",
+      "exit": "T2.5 round 1: expected answers; a float key's zeros repeat one value",
+      "checked": "hand",
+      "why": "-0.0 and 0.0 are one value held by two rows; either zero is that value.",
+      "request": {"request": "repeated_key", "table": {"source": ["zeros"]}, "key": ["k"]},
+      "answer": {"columns": ["k"], "ordered": false, "rows": [[0.0]]}
+    },
+    {
+      "id": "fallback.key-counts-signed-zero",
+      "exit": "T2.6 round 1: the capability undeclared gives the pushdown's answer, the zeros one value",
+      "same_as": "key-counts.signed-zero",
+      "capabilities": {"withhold": ["key_counts"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
+    },
+    {
+      "id": "fallback.repeated-key-signed-zero",
+      "exit": "T2.6 round 1: the capability undeclared gives the pushdown's answer, the zeros one value",
+      "same_as": "repeated-key.signed-zero",
+      "capabilities": {"withhold": ["repeated_key"], "fallback": {"max_rows": 1000, "max_bytes": 1048576}}
+    },
+    {
+      "id": "fallback.bytes-on-the-first-page",
+      "exit": "T2.6 round 1: a limit exceeded is a named error as soon as a page passes it: the first page of wide (2,048 bytes a row) is past the 1,000 declared, and no later page is asked",
+      "request": {"request": "preview", "table": {"source": ["wide"]}, "columns": ["v"], "limit": 10},
+      "capabilities": {"withhold": ["preview"], "fallback": {"max_rows": 1000, "max_bytes": 1000}},
+      "fetched": ["scan"],
+      "error": {"code": "UNSUPPORTED_REQUEST", "kind": "unsupported", "retryable": false, "fields": {"request": "preview", "rule": "fallback_limit", "limit": "max_bytes"}}
+    },
+    {
+      "id": "fallback.bytes-before-a-failing-page",
+      "exit": "T2.6 round 1: past the byte limit on page 1, the fallback stops there: a provider that would fail page 2 is never asked it, and the error is the limit's, not a retryable provider error",
+      "request_of": "fallback.bytes-on-the-first-page",
+      "capabilities": {"withhold": ["preview"], "fallback": {"max_rows": 1000, "max_bytes": 1000}},
+      "inject": {"page": 2, "retryable": true},
+      "fetched": ["scan"],
+      "error": {"code": "UNSUPPORTED_REQUEST", "kind": "unsupported", "retryable": false, "fields": {"request": "preview", "rule": "fallback_limit", "limit": "max_bytes"}}
     },
     {
       "id": "fallback.bytes-exceeded",

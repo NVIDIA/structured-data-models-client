@@ -45,6 +45,10 @@
 //! - T2.6, "a limit exceeded is a named error": `UNSUPPORTED_REQUEST`,
 //!   rule `fallback_limit`, naming the request and the limit, where the
 //!   same request within its limits answers;
+//! - T2.6, round 1's regressions: a fallback scan past `max_bytes` on a
+//!   page stops there with the limit's error, asking no later page, even
+//!   of a provider that would fail it; and a float key's -0.0 and 0.0 are
+//!   one value through the fallback as through pushdown;
 //! - T2.5, the seeded faults "in each host's provider path": a truncation
 //!   (each case the fault names answered short, no error) and a silent
 //!   capability failure (each neighbors case answered empty, no error,
@@ -192,10 +196,11 @@ fn fault_fails(name: &str) -> Vec<String> {
 
 // --- the judgment -------------------------------------------------------------
 
-/// A value as compared: a number by its value, anything else as it is.
+/// A value as compared: a number by its value, a zero of either sign one
+/// value (round 1), anything else as it is.
 fn value(v: &Value) -> Value {
     match v.as_f64() {
-        Some(number) if v.is_number() => json!(number),
+        Some(number) if v.is_number() => json!(number + 0.0),
         _ => v.clone(),
     }
 }
@@ -307,6 +312,17 @@ fn error_problem(got: &Value, wanted: &Value) -> Option<String> {
     None
 }
 
+/// Where a case names its fetches exactly, how `fetched` differs.
+fn fetched_problem(exact: &Value, fetched: &[&str]) -> Option<String> {
+    let exact: Vec<&str> = exact
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    (exact != fetched).then(|| format!("fetched {fetched:?}, not exactly {exact:?}"))
+}
+
 /// Why the report's `seen` does not pass `case`; empty when it does.
 fn judge(case_: &'static Value, seen: Option<&Value>) -> Vec<String> {
     let Some(seen) = seen else {
@@ -322,6 +338,9 @@ fn judge(case_: &'static Value, seen: Option<&Value>) -> Vec<String> {
         };
         if let Some(problem) = answer_problem(got, wanted) {
             return vec![problem];
+        }
+        if let Some(exact) = case_.get("fetched") {
+            return fetched_problem(exact, &fetched).into_iter().collect();
         }
         let name = request_case(case_)["request"]["request"].as_str().unwrap();
         let held_back = withheld(case_);
@@ -350,6 +369,9 @@ fn judge(case_: &'static Value, seen: Option<&Value>) -> Vec<String> {
     };
     if let Some(problem) = error_problem(got, &case_["error"]) {
         return vec![problem];
+    }
+    if let Some(exact) = case_.get("fetched") {
+        return fetched_problem(exact, &fetched).into_iter().collect();
     }
     if let Some(page) = case_.pointer("/inject/page").and_then(Value::as_u64)
         && (fetched.len() as u64) < page
@@ -592,6 +614,67 @@ fn a_fallback_limit_exceeded_is_a_named_error_on_sqlite() {
     gated(
         "a_fallback_limit_exceeded_is_a_named_error_on_sqlite",
         || limits_named("sqlite"),
+    );
+}
+
+// --- round 1's regressions -------------------------------------------------------
+
+fn cases_pass(database: &str, names: &[&str]) {
+    let (_, report) = kit(database, None).unwrap();
+    let problems = judged(&report);
+    assert!(
+        failing(&problems, names).is_empty(),
+        "{:#?}",
+        failing(&problems, names)
+    );
+}
+
+/// T2.6, round 1: a fallback scan past `max_bytes` on a page that is not
+/// its last fails by name at that page, asking no later one; a provider
+/// that would fail page 2 (retryable) is never asked it.
+const BYTES_AT_THE_PAGE: &[&str] = &[
+    "fallback.bytes-on-the-first-page",
+    "fallback.bytes-before-a-failing-page",
+];
+
+/// T2.6, round 1: over a float key holding -0.0 and 0.0, `key_counts` and
+/// `repeated_key` through the fallback answer as pushdown does.
+const SIGNED_ZERO: &[&str] = &[
+    "key-counts.signed-zero",
+    "repeated-key.signed-zero",
+    "fallback.key-counts-signed-zero",
+    "fallback.repeated-key-signed-zero",
+];
+
+#[test]
+fn r1_the_byte_limit_stops_at_the_page_that_passes_it_on_duckdb() {
+    gated(
+        "r1_the_byte_limit_stops_at_the_page_that_passes_it_on_duckdb",
+        || cases_pass("duckdb", BYTES_AT_THE_PAGE),
+    );
+}
+
+#[test]
+fn r1_the_byte_limit_stops_at_the_page_that_passes_it_on_sqlite() {
+    gated(
+        "r1_the_byte_limit_stops_at_the_page_that_passes_it_on_sqlite",
+        || cases_pass("sqlite", BYTES_AT_THE_PAGE),
+    );
+}
+
+#[test]
+fn r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_duckdb() {
+    gated(
+        "r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_duckdb",
+        || cases_pass("duckdb", SIGNED_ZERO),
+    );
+}
+
+#[test]
+fn r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_sqlite() {
+    gated(
+        "r1_a_signed_zero_through_the_fallback_is_the_pushdown_s_on_sqlite",
+        || cases_pass("sqlite", SIGNED_ZERO),
     );
 }
 
