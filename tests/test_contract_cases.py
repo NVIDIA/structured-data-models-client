@@ -294,11 +294,12 @@ T219_SHAPES = (
 #: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
 #: each of a dot, a backtick and a line break in a column's name, as a
 #: feature the query does not name, the target, the entity (users' declared
-#: primary key), a filter and an aggregation's column.
+#: primary key) and an aggregation's column. The filter role waits for
+#: T2.10 (contract/deferred/t210-column-filter/).
 T218_NAMES = tuple(
     f'name.{name}-{role}'
     for name in ('dot', 'backtick', 'line-break')
-    for role in ('feature', 'target', 'entity', 'filter', 'aggregation')
+    for role in ('feature', 'target', 'entity', 'aggregation')
 )
 
 

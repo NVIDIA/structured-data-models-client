@@ -6,10 +6,11 @@
 //! name (KO2-36). `contract/tests/test_t218_column_names.py` holds
 //! `python-core` to the same exits and to the reference's vectors.
 //!
-//! The family is the fifteen `name.*` S1 cases: a column named `a.b`, one
+//! The family is the twelve `name.*` S1 cases: a column named `a.b`, one
 //! named with a backtick and one with a line feed, each as a feature the
 //! query does not name, the target, the entity (users' declared primary
-//! key), a filter and an aggregation's column. Each test's line says what
+//! key) and an aggregation's column (the filter role waits for T2.10, in
+//! `contract/deferred/t210-column-filter/`). Each test's line says what
 //! it proves:
 //!
 //! - step 1, "the core keeps every column as data": on DuckDB and SQLite,
@@ -77,7 +78,7 @@ fn column_of(case_id: &str) -> (&'static str, &'static str) {
     } else {
         panic!("{case_id}: not a name case")
     };
-    let table = if case_id.ends_with("-filter") || case_id.ends_with("-aggregation") {
+    let table = if case_id.ends_with("-aggregation") {
         "orders"
     } else {
         "users"
@@ -94,7 +95,7 @@ fn family() -> (Vec<Case>, bases::Bases) {
         .filter(|c| c.id.starts_with("name."))
         .collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
-    assert_eq!(cases.len(), 15, "three names in five roles");
+    assert_eq!(cases.len(), 12, "three names in four roles");
     (cases, bases::load(&contract.join("bases.yaml")).unwrap())
 }
 

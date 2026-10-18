@@ -23,7 +23,8 @@ vector's (:func:`as_named`). Each test's one line says what it proves:
 
 - control: the ``name.*`` S1 cases are the design row's (``a.b``, a
   backtick and a line break, each as a feature, the target, the entity, a
-  filter and an aggregation's column, the entity users' primary key), each
+  aggregation's column, the entity users' primary key; the filter role is
+  deferred to T2.10, ``contract/deferred/t210-column-filter/``), each
   the recorder's scenario, each with python-ref's line on all three
   databases;
 - control: the vectors are the reference's, and not vacuous: the reference
@@ -241,7 +242,7 @@ def _vectors(database: str) -> list[dict[str, Any]]:
 def test_the_cases_are_the_design_row_s() -> None:
     r"""Control: the ``name.*`` cases are each of ``a.b``, a backtick and a
     line break as a feature, the target, the entity (users' declared
-    primary key), a filter and an aggregation's column; each case's data
+    primary key) and an aggregation's column; each case's data
     and query are the recorder's scenario for its name and role, through
     ``predict``, run on all three databases, with python-ref's committed
     line on each, whose outcome is the case's ``expect``."""
@@ -414,7 +415,7 @@ def test_a_query_names_any_column_in_every_role(database: str) -> None:
     r"""Step 2, "``(table, column)`` carried separately through the parsed
     query, a doubled backtick inside a quoted name, line breaks inside
     quotes": for each vector on ``database`` (each character as the
-    target, the entity, a filter and an aggregation's column, and as a
+    target, the entity and an aggregation's column, and as a
     feature no query names), python-core's ``materialize`` answers as its
     twin does on the reference: the outcome, the warnings, and the
     request's payloads, the twin's name and query read as the vector's."""
