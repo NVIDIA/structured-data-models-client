@@ -6503,6 +6503,13 @@ entries:
     the core route over a DuckDB, SQLite or Postgres source with a column
     whose name holds a dot, a backtick, a line feed or a carriage return.
   cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-target]
+  core_only_columns:
+  - users.a.b
+  - users.a`b
+  - "users.a\nb"
+  - orders.a.b
+  - orders.a`b
+  - "orders.a\nb"
   refs:
   - eb6c68eb
   - P2B-2
@@ -6521,7 +6528,12 @@ entries:
     and the from_source warning). A DuckDB row moves a first admission
     from none (E110); each SQLite and Postgres row names materialize
     under statements_differ (T2.1e): the reference's statements are held
-    only through its refusal there.
+    only through its refusal there. core_only_columns names the columns the
+    core keeps and the reference leaves out, as table and column, so the
+    comparator takes exactly those, and the key and links they make, out
+    of the core's side against the reference's, with the reference's
+    warning of leaving them out (T2.1f): users' as a feature, the target
+    or the entity, orders' as the aggregated column.
   case_outcomes:
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.backtick-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
