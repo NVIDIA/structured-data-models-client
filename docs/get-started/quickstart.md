@@ -178,11 +178,13 @@ with SDMClient.in_process(relational) as client:
 
 It answers as the NIM does. The context is fitted with the NIM's seed and
 settings, `fit()` holds its session in memory, and a request the NIM refuses
-is refused with the same `NimRequestError`. Two things differ by design. On a
-CPU it computes at full precision, so its probabilities can differ from a
-GPU-hosted NIM's in the last digits; on a GPU it uses the NIM's precision. And
-the limits a deployment sets to protect a shared server are not applied, since
-none is shared here; see [limits](../reference/limits.md).
+is refused with the same `NimRequestError`. On a GPU it computes as the NIM
+does, and on the same GPU it gives the NIM's answers exactly. Two things
+differ by design. On a CPU it computes at full precision and draws its random
+numbers there, so its answers can differ from a GPU-hosted NIM's by more than
+rounding: in one comparison a class probability moved by 0.16. And the limits
+a deployment sets to protect a shared server are not applied, since none is
+shared here; see [limits](../reference/limits.md).
 
 This needs `pip install 'structured-data-models-client[in-process]'`, which
 brings PyTorch, on Python 3.11 or later. A relational request is still

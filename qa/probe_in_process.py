@@ -5,10 +5,11 @@
 """SDMClient.in_process() against the NIMs, request for request.
 
 Each request goes to a NIM and to the model in this process, and the two
-answers are compared column by column. Against a NIM on the CPU running the
-same structured-data-models release, every number is identical. A NIM on a GPU
-computes at reduced precision, so set SDM_IN_PROCESS_TOLERANCE to the largest
-difference to accept.
+answers are compared column by column. Against a NIM running the same
+structured-data-models release on the same device, CPU or GPU, every number is
+identical. With this process on a CPU and the NIM on a GPU, the two compute at
+different precision and draw different random numbers, so set
+SDM_IN_PROCESS_TOLERANCE to the largest difference to accept.
 """
 
 from __future__ import annotations
