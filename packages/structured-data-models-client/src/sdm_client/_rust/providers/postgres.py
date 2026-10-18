@@ -21,8 +21,9 @@ cells' texts in the key set's column order (``null`` for a null), which the
 statement reads in the source's own types. Each cell's text is pyarrow's
 cast of the value to text, exact for every type a key or a seed time
 takes. psycopg writes a parameter ``%s`` and a ``%`` as ``%%``, so such a
-statement's text is given to it so written (:func:`_psycopg_text`); one
-whose ``$1`` is not its only one cannot be, and is not run. A plan this
+statement's text is given to it so written (:func:`_psycopg_text`), its
+``$1`` the one outside quotes; one holding no such ``$1``, or several, is
+not run. A plan this
 provider cannot run, one for a host provider, one with a scalar parameter
 or more than one key set in a statement, or one naming a key set it was
 not handed, raises, and the run loop hands the core a provider error.
@@ -157,16 +158,48 @@ def _own_transaction(connection: Any) -> Any:
 
 def _psycopg_text(text: str) -> str:
     r"""A statement binding its key set as ``$1``, as psycopg reads a
-    statement with a parameter: each ``%`` doubled and ``$1`` as ``%s``,
-    which psycopg sends to the server as ``$1`` again.
+    statement with a parameter: each ``%`` doubled, quoted or not (psycopg
+    reads every ``%`` as a placeholder's start), and the parameter, the one
+    ``$1`` outside a quoted identifier (``"..."``) and a text literal
+    (``'...'``, or ``E'...'`` with its backslash escapes), the only quoting
+    the dialect writes, as ``%s``, which psycopg sends to the server as
+    ``$1`` again. A ``$1`` inside quotes, a relation's name holding it
+    (``"users$1"``), is text and stays.
 
     Raises:
-        PlanNotRun: ``$1`` is not in the text exactly once (a name holding
-            it), so its parameter is not told apart.
+        PlanNotRun: The text holds no such ``$1``, or more than one, so its
+            parameter is not told apart.
     """
-    if text.count('$1') != 1:
+    out: list[str] = []
+    found = 0
+    at = 0
+    while at < len(text):
+        char = text[at]
+        if char == '"' or char == "'":
+            escaped = char == "'" and at > 0 and text[at - 1] in 'Ee'
+            end = at + 1
+            while end < len(text):
+                if escaped and text[end] == '\\':
+                    end += 2
+                    continue
+                if text[end] == char:
+                    if text[end + 1 : end + 2] == char:
+                        end += 2
+                        continue
+                    break
+                end += 1
+            out.append(text[at : end + 1].replace('%', '%%'))
+            at = end + 1
+        elif text.startswith('$1', at) and not text[at + 2 : at + 3].isdigit():
+            out.append('%s')
+            found += 1
+            at += 2
+        else:
+            out.append('%%' if char == '%' else char)
+            at += 1
+    if found != 1:
         raise PlanNotRun('a statement whose parameter is not told apart')
-    return text.replace('%', '%%').replace('$1', '%s')
+    return ''.join(out)
 
 
 def _read_as_the_server_writes(cursor: Any) -> None:
