@@ -62,6 +62,11 @@ pub struct CatalogColumn {
     pub not_null: bool,
     /// Part of the declared primary key.
     pub primary_key: bool,
+    /// Part of the primary key and still free to hold a null: SQLite's
+    /// primary key, unless it is the rowid alias or declared `NOT NULL`
+    /// (`not_null` says which), so its nullability is the catalog's; every
+    /// other source's primary key holds none.
+    pub key_nullable: bool,
     /// Kept unique by the source itself, beside any key it declares: a
     /// SQLite rowid alias (an `INTEGER PRIMARY KEY`), which no index
     /// lists.

@@ -996,6 +996,7 @@ pub(crate) fn read(
                             dtype: declared_dtype(&declared_type),
                             declared_type,
                             not_null: not_null || rowid == Some(at),
+                            key_nullable: primary_key,
                             primary_key,
                             unique: rowid == Some(at),
                         },

@@ -497,7 +497,9 @@ pub fn preview(
             stype,
             stype_before_key: None,
             received: ColumnType::from_arrow(&declared.name, field.data_type())?,
-            nullable: !is_primary && !declared.not_null,
+            // A primary key holds no null, but where the source lets one
+            // (SQLite's, not its rowid alias): its catalog says.
+            nullable: !declared.not_null && (!is_primary || declared.key_nullable),
             unique: declared_unique.contains(&declared.name),
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;

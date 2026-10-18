@@ -152,6 +152,7 @@ pub(crate) fn columns(
                     declared_type: text(declared_type, row).unwrap_or_default(),
                     not_null: flag(not_null, row),
                     primary_key: flag(primary_key, row),
+                    key_nullable: false,
                     unique: false,
                     dtype: None,
                 });
