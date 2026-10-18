@@ -122,9 +122,10 @@ structured-data-models-pql   ◄──┘           │
 
 `structured-data-models-api` depends on nothing.
 
-**Only `structured-data-models-relational-engine` is native.** Everything else installs anywhere,
-so `kumo-tabular` works on a Mac; `kumo-relational` needs Linux (x86-64 or
-aarch64).
+**Only `structured-data-models-relational-engine` is native.** Everything else installs anywhere;
+the engine installs where it has published a wheel, which is Linux (x86-64 or
+aarch64), macOS (Apple silicon or Intel) and 64-bit Windows. Both models work
+on a Mac.
 
 ```bash
 pip install structured-data-models-client                   # tabular, PQL, transport everywhere

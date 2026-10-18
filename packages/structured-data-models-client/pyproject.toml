@@ -57,12 +57,13 @@ Changelog = "https://github.com/NVIDIA/structured-data-models-client/blob/main/C
 # A model that does heavy client-side work brings its own runtime; a warehouse
 # driver is opt-in the same way, through the shared connectors package.
 #
-# `relational` is deliberately narrower than this distribution: the engine is a
-# native build that publishes wheels for 3.10-3.13, so `structured-data-models-client[relational]`
-# does not resolve on 3.14 while plain `structured-data-models-client` does. pip reports that as
-# "No matching distribution found for structured-data-models-relational-engine", which names the
-# symptom and not the reason, so it is written down here and in the
-# installation guide.
+# `relational` stays narrower than this distribution. The engine is a
+# native build, publishing CPython wheels for 3.10-3.14 on Linux, macOS and
+# Windows and no sdist, so the extra stops at 3.15 and on PyPy, while this
+# distribution is pure Python and admits each later interpreter as it
+# arrives. pip reports the gap as "No matching distribution found for
+# structured-data-models-relational-engine", which names the symptom and not
+# the reason, so it is written down here and in the installation guide.
 relational = ["structured-data-models-relational-engine==1.0.0"]
 sqlite = ["structured-data-models-connectors[sqlite]==1.0.0"]
 duckdb = ["structured-data-models-connectors[duckdb]==1.0.0"]
