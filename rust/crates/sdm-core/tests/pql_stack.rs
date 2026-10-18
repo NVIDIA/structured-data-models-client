@@ -107,8 +107,9 @@ fn the_adapter_grows_one_stack_per_call_and_the_parser_none() {
             }
         }
     }
-    // One: `on_adapter_stack`, which `validate` and `resolve` each enter
-    // once, and nothing below them enters again.
+    // One: `on_adapter_stack`, which `validate`, `resolve` and `normalized`
+    // (the query as the PQL library writes it back, T2.2) each enter once,
+    // and nothing below them enters again.
     assert_eq!(sites.len(), 1, "{sites:#?}");
     assert!(sites[0].starts_with("sdm-core/pql.rs:"), "{sites:#?}");
     assert!(
@@ -117,7 +118,7 @@ fn the_adapter_grows_one_stack_per_call_and_the_parser_none() {
     );
     let core =
         std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pql.rs")).unwrap();
-    assert_eq!(core.matches("on_adapter_stack(||").count(), 2);
+    assert_eq!(core.matches("on_adapter_stack(||").count(), 3);
     // And the stack it gives is the grown one, whatever the caller's.
     let remaining = std::thread::Builder::new()
         .stack_size(256 << 10)
