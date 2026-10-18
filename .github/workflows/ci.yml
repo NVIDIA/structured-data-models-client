@@ -308,7 +308,10 @@ jobs:
     # disk. The test profile inherits dev's; stated for both all the same.
     # The pinned PostgreSQL service, required (H26; T2.1a): sdm-testkit's
     # tests/postgres_required.rs fails, never stands down, when it is not
-    # there; the core's Postgres passes come with T2.3b.
+    # there. rust-host reads Postgres by replaying python-core's recorded
+    # fetches (KO2-20, KO2-60), which this job cannot wait for: it hands
+    # its build of sdm-contract-run to cross-host (postgres), which
+    # replays them there (T2.4, for T2.3b).
     services:
       postgres: &postgres-service
         # POSTGRES_IMAGE, by way of the landing job, pulled from ghcr.io
@@ -446,6 +449,59 @@ jobs:
           name: observations-rust-host
           path: rust-host.jsonl
           if-no-files-found: error
+      # rust-host on SQLite (T2.4, for T2.2b): each case that runs on
+      # SQLite, its tables loaded into a new SQLite file by the contract
+      # loader (the Python SDM_PYTHON names, which holds DuckDB and
+      # pyarrow), read through the dev-only rusqlite provider, every
+      # observation keyed `<case>@sqlite`; held to the staging rule
+      # (run_python.py legs: the host reports a SQLite provider, so it
+      # observes every case python-ref's committed lines hold there) and
+      # to those lines, moved by the approved entries, as the contract
+      # jobs hold python-core there (compare.py --database). Run whether
+      # or not the DuckDB gate passed, so cross-host (sqlite) reports for
+      # itself.
+      - if: ${{ !cancelled() }}
+        name: rust-host on SQLite
+        env:
+          SDM_PYTHON: python
+        run: |
+          set -o pipefail
+          out=rust-host-sqlite
+          mkdir -p "$out"
+          reference=$(ls contract/reference/*.jsonl)
+          (cd rust && cargo run -q -p sdm-testkit --bin sdm-contract-run --locked -- --providers) \
+            | python -I -c 'import json, sys; print(json.dumps({"rust-host": json.load(sys.stdin)}))' \
+            > "$out/providers.json" || exit 1
+          (cd rust && cargo run -q -p sdm-testkit --bin sdm-contract-run --locked -- \
+            --database sqlite --out "../$out/rust-host.jsonl" ../contract/cases) || exit 1
+          status=0
+          python -I contract/runners/run_python.py legs --database sqlite \
+            --providers "$out/providers.json" "$reference" "$out/rust-host.jsonl" || status=1
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out "$out/effective.json" || exit 1
+            expect=(--expect "$out/effective.json")
+          fi
+          python scripts/rust_core/compare.py --cases contract/cases --database sqlite \
+            --reference "$reference" ${expect[@]+"${expect[@]}"} "$out/rust-host.jsonl" || status=1
+          exit $status
+        working-directory: .
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-rust-host-sqlite
+          path: rust-host-sqlite/rust-host.jsonl
+          if-no-files-found: error
+      # The pure-Rust host as this job built it, for cross-host (postgres)
+      # to replay python-core's recorded Postgres fetches with: a second
+      # build there would only repeat this one.
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sdm-contract-run
+          path: rust/target/debug/sdm-contract-run
+          if-no-files-found: error
       - if: ${{ !cancelled() && env.SAVE_CACHES == 'true' && steps.duckdb-extensions.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -528,8 +584,17 @@ jobs:
     timeout-minutes: 20
     needs: landing
     if: needs.landing.outputs.skip != 'true'
+    # The pinned PostgreSQL service, required (H26), for the Postgres
+    # provider's own test (tests_test_ops/test_the_postgres_provider.py:
+    # L4 executed on Postgres, key sets bound as the dialect binds them),
+    # which needs the test-only fetch this build carries and stands down
+    # with no server named (T2.4, for T2.3b).
+    services:
+      postgres: *postgres-service
     env:
       NATIVE_ARGS: --out native-test-ops --test-ops
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -544,13 +609,14 @@ jobs:
         with:
           python-version: '3.10'
       # The connectors are for the canary test's journey over DuckDB
-      # (T1.11d), which tests_test_ops runs here at the floor.
+      # (T1.11d), which tests_test_ops runs here at the floor, and psycopg
+      # for the Postgres provider's test (their postgres extra).
       - name: The binding's tests on the test-ops build
         run: |
           python -m venv /tmp/test-ops
           /tmp/test-ops/bin/pip install --quiet pytest $BINDING_FLOOR \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
-            ./packages/structured-data-models-connectors \
+            './packages/structured-data-models-connectors[postgres]' \
             "$(ls native-test-ops/*.whl)"
           /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
             -p no:cacheprovider --native-build test-ops
@@ -1052,13 +1118,17 @@ jobs:
   # (compare.py --database), and the core's legs run there exactly when the
   # built core reports a provider for it (sdm_client._native.PROVIDERS),
   # judged against those lines: run_python.py legs holds the job to that
-  # staging rule, and fails a job whose database has no case. Until the
-  # core's SQLite and Postgres providers land, these jobs exist in the
-  # reference cell alone (the orchestrator's decision, T2.1a fix 4): the
-  # reference's lines are that cell's, and python-old, whose sampling on
-  # SQLite lacks the reference's seeding (main's f0f324ce), does not run
-  # off DuckDB. T2.2b and T2.3b add the other cells with the core legs. Only the Postgres jobs start the pinned service,
-  # required there (SDM_REQUIRE_POSTGRES, H26).
+  # staging rule, and fails a job whose database has no case. python-old,
+  # whose sampling on SQLite lacks the reference's seeding (main's
+  # f0f324ce), does not run off DuckDB (T2.1a fix 4). Every cell runs both
+  # databases (T2.4, for T2.2b and T2.3b), so a bug only the floor's
+  # pandas, pyarrow or NumPy shows fails there: the reference's lines are
+  # the reference cell's, so in another cell python-core's host fields
+  # (schema, warnings, the frame) are reported against them (H1), and
+  # every core rule gates. Only the Postgres jobs start the pinned
+  # service, required there (SDM_REQUIRE_POSTGRES, H26). The reference
+  # cell's jobs hand python-core's observations, and on Postgres the
+  # answers to its fetches, to cross-host (<database>) and l4-goldens.
   contract-python-ref-pandas3-sqlite:
     name: contract-python (ref-pandas3, sqlite)
     runs-on: ubuntu-latest
@@ -1070,7 +1140,7 @@ jobs:
       DATABASE: sqlite
     steps:
       - *contract-checkout
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - *contract-wheel
@@ -1081,7 +1151,8 @@ jobs:
       # database has no lines fails. python-old, the old route Phase 5
       # deletes, runs on DuckDB only. python-core runs on the database once
       # the built core reports a provider for it, judged against those
-      # lines.
+      # lines; on Postgres it records the server's answers to its fetches,
+      # which rust-host replays in cross-host (postgres) (KO2-20, KO2-60).
       - &contract-database
         name: the reference side, and the core legs the core has a provider for
         run: |
@@ -1092,9 +1163,11 @@ jobs:
           python -I -c 'import json, sdm_client._native as n; print(json.dumps({"python-core": list(n.PROVIDERS)}))' \
             > "$out/providers.json" || exit 1
           observed=()
+          record=()
+          if [ "$DATABASE" = postgres ]; then record=(--record-fetches "$out/fetches.jsonl"); fi
           if python -I -c 'import json, os, sys; sys.exit(os.environ["DATABASE"] not in json.load(open(sys.argv[1]))["python-core"])' "$out/providers.json"; then
             python -I contract/runners/run_python.py --mode python-core --database "$DATABASE" \
-              --out "$out/python-core.jsonl" contract/cases || exit 1
+              ${record[@]+"${record[@]}"} --out "$out/python-core.jsonl" contract/cases || exit 1
             observed+=("$out/python-core.jsonl")
           else
             echo "the core reports no $DATABASE provider: the reference side only"
@@ -1128,6 +1201,12 @@ jobs:
           print(f'every core observation in {cell}')
           EOF
           exit $status
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core-sqlite
+          path: database-observations/python-core.jsonl
+          if-no-files-found: error
 
   contract-python-ref-pandas3-postgres:
     name: contract-python (ref-pandas3, postgres)
@@ -1144,7 +1223,7 @@ jobs:
       SDM_REQUIRE_POSTGRES: '1'
     steps:
       - *contract-checkout
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - *contract-wheel
@@ -1155,15 +1234,217 @@ jobs:
         run: python -m pytest contract/tests/test_postgres_required.py contract/tests/test_contract_loader.py -q
       # T2.3's regression and key vectors, on the service with the job's
       # DSN, failing where it is not there (SDM_REQUIRE_POSTGRES); the
-      # provider's own test needs the test-ops build, which this job does
-      # not install.
+      # provider's own test needs the test-ops build, and runs in
+      # native-test-ops. The key vectors hold each run's frame to the
+      # reference cell's recording, so they run in this cell alone.
       - name: T2.3's Postgres regression and key vectors on the service
         run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py -q
       - *contract-database
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: observations-python-core-postgres
+          path: |
+            database-observations/python-core.jsonl
+            database-observations/fetches.jsonl
+          if-no-files-found: error
 
+  contract-python-dbr17-pandas2-sqlite:
+    name: contract-python (dbr17-pandas2, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: native-wheel
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-database
 
+  contract-python-dbr17-pandas2-postgres:
+    name: contract-python (dbr17-pandas2, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [landing, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: dbr17-pandas2
+      CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-postgres-required
+      # T2.3's regression vectors, each outcome and statement on the
+      # service, in this cell's runtime.
+      - &contract-postgres-regressions
+        name: T2.3's Postgres regression vectors on the service
+        run: python -m pytest contract/tests/test_t23_postgres_regressions.py -q
+      - *contract-database
 
+  contract-python-floor-pandas2-2-sqlite:
+    name: contract-python (floor-pandas2.2, sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: native-wheel
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+      - *contract-wheel
+      - *contract-install
+      - *contract-database
 
+  contract-python-floor-pandas2-2-postgres:
+    name: contract-python (floor-pandas2.2, postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [landing, native-wheel]
+    services:
+      postgres: *postgres-service
+    env:
+      CELL: floor-pandas2.2
+      CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
+      DATABASE: postgres
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.10'
+      - *contract-wheel
+      - *contract-install
+      - *contract-postgres-required
+      - *contract-postgres-regressions
+      - *contract-database
+
+  # The two core hosts on SQLite and on Postgres (T2.4, for T2.2b and
+  # T2.3b), as cross-host (duckdb) on DuckDB: python-core's observations
+  # from contract-python (ref-pandas3, <database>) and rust-host's, held to
+  # the staging rule (both hosts report the database, so each observes
+  # every case python-ref's committed lines hold there) and compared by
+  # compare.py --database in one run, each against python-ref's lines
+  # moved by the approved entries and the two by the core rule. On SQLite
+  # rust-host's observations are rust-test's (the dev-only rusqlite
+  # provider); on Postgres rust-host replays here, with rust-test's build,
+  # the answers the server gave python-core's fetches (KO2-20, KO2-60),
+  # recorded in contract-python (ref-pandas3, postgres). Like cross-host
+  # (duckdb), each fails when either side's file is missing, empty or not
+  # that runner's, and runs whether the jobs it needs passed or not, so it
+  # reports for itself.
+  cross-host-sqlite:
+    name: cross-host (sqlite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [landing, rust-test, contract-python-ref-pandas3-sqlite]
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    env:
+      DATABASE: sqlite
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: observations-python-core-sqlite
+          path: cross-host
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: observations-rust-host-sqlite
+          path: cross-host
+      - &cross-host-database
+        name: compare on the database (python-core, rust-host)
+        # DuckDB and pyarrow, at the reference cell's versions, for the
+        # comparator's read of a case's inputs as the database stores them
+        # (compare.py's stored_schema).
+        run: |
+          pip install duckdb==1.5.6 pyarrow==25.0.1 pyyaml jsonschema
+          python - <<'EOF' || exit 1
+          import json, pathlib, sys
+          for runner in ('python-core', 'rust-host'):
+              path = pathlib.Path('cross-host') / f'{runner}.jsonl'
+              lines = path.read_text().splitlines() if path.is_file() else []
+              if not lines:
+                  sys.exit(f'cross-host: no observations of {runner}')
+              try:
+                  seen = {json.loads(line)['identity']['runner'] for line in lines}
+              except (ValueError, RecursionError, KeyError, TypeError):
+                  sys.exit(f'cross-host: an observation of {runner} names no runner')
+              if seen != {runner}:
+                  sys.exit(f'cross-host: {path} holds {sorted(map(str, seen))}, not {runner}')
+          print('cross-host: python-core and rust-host observed')
+          EOF
+          reference=$(ls contract/reference/*.jsonl)
+          printf '{"python-core": ["%s"], "rust-host": ["%s"]}\n' "$DATABASE" "$DATABASE" \
+            > cross-host/providers.json
+          status=0
+          python -I contract/runners/run_python.py legs --database "$DATABASE" \
+            --providers cross-host/providers.json "$reference" \
+            cross-host/python-core.jsonl cross-host/rust-host.jsonl || status=1
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'cross-host: ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out cross-host/effective.json || exit 1
+            expect=(--expect cross-host/effective.json)
+          fi
+          python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
+            --reference "$reference" ${expect[@]+"${expect[@]}"} \
+            cross-host/python-core.jsonl cross-host/rust-host.jsonl || status=1
+          exit $status
+
+  cross-host-postgres:
+    name: cross-host (postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [landing, rust-test, contract-python-ref-pandas3-postgres]
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    env:
+      DATABASE: postgres
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: observations-python-core-postgres
+          path: cross-host
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sdm-contract-run
+          path: rust-host
+      # rust-host on Postgres: each case that runs there, its fetches
+      # answered from python-core's recording, each one held to the fetch
+      # recorded at its position, so a change to what the core asks shows
+      # as a recording to make again, never as stale rows (sdm-testkit's
+      # replay); each observation keyed `<case>@postgres`. An artifact
+      # keeps no file mode.
+      - name: rust-host on Postgres, replaying python-core's recorded fetches
+        run: |
+          chmod +x rust-host/sdm-contract-run
+          rust-host/sdm-contract-run --replay cross-host/fetches.jsonl \
+            --out cross-host/rust-host.jsonl contract/cases
+      - *cross-host-database
 
   build:
     runs-on: ubuntu-latest
