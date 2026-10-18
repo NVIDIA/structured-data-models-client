@@ -336,9 +336,19 @@ def run_case(
 
 
 def _value(value: Any) -> Any:
+    r"""A value as compared: a number by its value, a zero of either sign
+    one value, anything else as it is."""
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
+        return float(value) + 0.0
     return value
+
+
+def _fetched_problem(case: dict[str, Any], fetched: list[str]) -> list[str]:
+    r"""Where ``case`` names its fetches exactly, how ``fetched``
+    differs."""
+    if fetched != case['fetched']:
+        return [f'fetched {fetched}, not exactly {case["fetched"]}']
+    return []
 
 
 def _key(row: list[Any]) -> str:
@@ -388,6 +398,8 @@ def judge(
         problem = _answer_problem(seen['answer'], wanted)
         if problem:
             return [problem]
+        if 'fetched' in case:
+            return _fetched_problem(case, fetched)
         withheld = case.get('capabilities', {}).get('withhold', [])
         if withheld:
             if not fetched or set(fetched) & set(withheld):
@@ -411,6 +423,8 @@ def judge(
     for name, value in error['fields'].items():
         if str(got['fields'].get(name)) != str(value):
             return [f'field {name} {got["fields"].get(name)!r}, not {value!r}']
+    if 'fetched' in case:
+        return _fetched_problem(case, fetched)
     injected = case.get('inject')
     if injected and len(fetched) < injected['page']:
         return [f'fetched {fetched}: page {injected["page"]} was never asked']

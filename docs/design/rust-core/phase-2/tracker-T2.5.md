@@ -42,3 +42,11 @@ T2.5 is the provider conformance kit and the in-memory fallback: one fixture dat
 - **The fallback reads no text time** (SQLite stores times as text): a `time_bounds`, window or time order over a text column ends the run, rule `fallback`; Phase 4's frames carry typed times.
 - **rust-host Postgres** is a replay, not a provider: the Python side runs the kit there (the orchestrator agreed).
 - **M9** has no rust-host case today whose policy names a field or reason (only the Databricks serving cases do, which run on python-core), so the check holds none yet.
+
+### Fix round 1
+
+Codex's two P2s, with the test author's regressions (round 1's `T2.5 tests:` commit: the `wide` and `zeros` tables, six cases, `fetched` exact):
+- the fallback's limits are held as each page of a scan arrives (`run.rs`'s `Budget`, `Asker::fetch_within`), so a scan past `max_bytes` stops at that page, and a later page's failure no longer hides the limit;
+- floats the pushdowns hold equal (`-0.0` and `0.0`, every NaN) group, join and tie alike in the fallback (`fallback.rs`'s `compared`);
+- both runners read `fetched` and compare a zero of either sign as one value.
+The kit passes on both hosts (25 Python tests on three databases, from the test-ops build and from a shipped build through `SDM_KIT_PYTHON`; 16 Rust tests); the pending list is empty.

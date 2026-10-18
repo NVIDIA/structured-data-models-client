@@ -508,10 +508,11 @@ fn cells_of(column: &ArrayRef) -> Result<Vec<Value>> {
 
 // --- the judgment, by expected.json's rules ------------------------------------------
 
-/// A value as compared: a number by its value, anything else as it is.
+/// A value as compared: a number by its value, a zero of either sign one
+/// value, anything else as it is.
 fn compared(value: &Value) -> Value {
     match value.as_f64() {
-        Some(number) if value.is_number() => json!(number),
+        Some(number) if value.is_number() => json!(number + 0.0),
         _ => value.clone(),
     }
 }
@@ -587,6 +588,18 @@ fn text(detail: Option<&Value>) -> String {
     }
 }
 
+/// Where a case names its fetches exactly, how `fetched` differs.
+fn fetched_problem(exactly: &Value, fetched: &[&str]) -> Vec<String> {
+    let wanted: Vec<&str> = exactly
+        .as_array()
+        .map(|f| f.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    if fetched == wanted.as_slice() {
+        return vec![];
+    }
+    vec![format!("fetched {fetched:?}, not exactly {wanted:?}")]
+}
+
 /// Why `seen` does not pass `case`; empty when it does.
 fn judge(
     case: &Value,
@@ -608,6 +621,9 @@ fn judge(
         };
         if let Some(problem) = answer_problem(got, wanted) {
             return vec![problem];
+        }
+        if let Some(exactly) = case.get("fetched") {
+            return fetched_problem(exactly, &fetched);
         }
         let withheld: Vec<&str> = case
             .pointer("/capabilities/withhold")
@@ -651,6 +667,9 @@ fn judge(
         if have != text(Some(value)) {
             return vec![format!("field {name} {have}, not {value}")];
         }
+    }
+    if let Some(exactly) = case.get("fetched") {
+        return fetched_problem(exactly, &fetched);
     }
     if let Some(page) = case.pointer("/inject/page").and_then(Value::as_u64)
         && (fetched.len() as u64) < page
