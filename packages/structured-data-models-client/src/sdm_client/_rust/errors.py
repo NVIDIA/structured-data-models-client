@@ -141,7 +141,7 @@ _TOO_LARGE = (
     'neighbourhood sampled or the context gathered (num_context_samples)'
 )
 _SIZE = (
-    'Context size exceeds the 30MB limit: this call is {bytes:,} bytes and '
+    'Context size exceeds the 30MB limit. This call is {bytes:,} bytes, and '
     'the endpoint takes at most {limit:,}. '
 )
 _ASK_IN_SMALLER_CALLS = _SIZE + (
