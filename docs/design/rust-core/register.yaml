@@ -6197,15 +6197,17 @@ entries:
     under a forced core route.
   cases: [empty.fact-table]
   refs: [P1B-11]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Approver: reviewer. P1B-11's behavior on the SQLite leg of its case,
     under the same owner decision (E66(b): a reference's unnamed or
     internal error becoming a named refusal is approved as a class; KO2-11
     class (a)). Measured at T2.2 with python-core and rust-host on SQLite
-    against python-ref's committed empty.fact-table line.
+    against python-ref's committed empty.fact-table line. Approved by both
+    round 1 reviewers of T2.2 (Codex's and Claude's: APPROVE-P2B-10),
+    relayed by the orchestrator.
   case_outcomes:
   - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
   - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
@@ -6229,8 +6231,8 @@ entries:
     stored text the core's list does not read, under a forced core route.
   cases: [time.text-one-bad-value]
   refs: [DT-7, DT-15]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
   notes: >-
     Approver: owner, as DT-15 was. Both refuse the input; only the code
@@ -6239,7 +6241,13 @@ entries:
     is answered as the reference answers it since the core reads an
     empty fetch's columns, which SQLite's driver types as integers, as
     holding no time (T2.2); it is no longer a difference. Measured at T2.2
-    against python-ref's committed lines.
+    against python-ref's committed lines. Approved by the owner under E68:
+    its (a) refuses by name (text_time) a value outside the list, and
+    DT-15, which E68 approves by the owner's answer, states the refusal
+    as UNSUPPORTED_REQUEST, rule text_time, by materialize when a fetched
+    text time column holds one, this input on any database; the
+    reference's own answer here, a refusal INVALID_REQUEST rather than
+    DT-15's dropped value, is the old behavior the same new one replaces.
   case_outcomes:
   - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
   - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
@@ -6264,14 +6272,18 @@ entries:
   refs:
   - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.hugeint'
   - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.ubigint'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Approver: reviewer (KO2-11 class (a): a reference's internal error
     becoming a correct answer). The two key-pair vectors are the test
     author's register.required ones; each answers with a right join on the
-    core (every row joined to its own entity), measured at T2.2.
+    core (every row joined to its own entity), measured at T2.2. Approved
+    by both round 1 reviewers of T2.2 (Codex's and Claude's:
+    APPROVE-P2B-12; Claude's checked the answer correct, python-core's
+    context rows those of base.regression@sqlite with 2**63 taken from
+    each key), relayed by the orchestrator.
   case_outcomes:
   - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the keys joined by their stored text'}
   - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success', summary: 'the SQLite line: the keys joined by their stored text'}
@@ -6317,14 +6329,14 @@ entries:
     INTERVAL column, which the type map stores as ISO 8601 duration text,
     is described as int64, categorical.
   new_behavior: >-
-    The core takes a SQLite column's declared type only where the values
-    cannot say (a column holding no value, which the driver types as
-    integers), and otherwise the values' type: such a column is text,
-    categorical. Its rows and the request sent are the reference's; only
-    the described dtype differs.
+    The core types a column declared INTERVAL by its values, not by its
+    declared name, so the INTERVAL column's ISO 8601 text is text,
+    categorical. Every other declared type is read as the reference reads
+    it (T2.2 fix 7). Its rows and the request sent are the reference's;
+    only the described dtype differs.
   affected_inputs: >-
-    Schema.from_source over a SQLite source with a column whose declared
-    type names INT but whose values are text (INTERVAL, POINT and the like).
+    Schema.from_source over a SQLite source with a column declared
+    INTERVAL whose values are text.
   cases: [time.feature-interval]
   status: approved
   approved_by: owner
