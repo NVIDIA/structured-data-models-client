@@ -5924,6 +5924,7 @@ entries:
   - 'contract/decimal-vectors.json#target.sum.d38-38.spread success -> success'
   - 'contract/decimal-vectors.json#target.sum.d4-2.max success -> success'
   - 'contract/decimal-vectors.json#target.sum.d9-9.max success -> success'
+  - 'contract/composite-key-vectors.json#foreign.d12-4.*@duckdb differs in requests'
   more_exact:
   - case: decimal.feature-inexact-38-18
     runners: [python-core]
@@ -5977,6 +5978,10 @@ entries:
     decimal.class-target-38-18 no longer holds. The key-cast ref of
     decimal128-18-0.exponent.huge.decimal, unfinished on the reference, is
     KO2-48's outcome (approved by the owner on 2026-10-16), not KO2-35's.
+    T2.12 adds one ref, the composite key pair matrix's five vectors whose
+    users table is keyed by a DECIMAL(12, 4) on DuckDB: the key sent exact
+    where the reference sends a double, the outcome the reference's; for
+    the reviewers to hold to this approved meaning (KO2-35).
   case_outcomes:
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
   - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
@@ -6665,11 +6670,12 @@ entries:
   affected_inputs: >-
     The nine edit.* S1 cases' files; no behavior.
   cases: [edit.accepted-meaning-key-links, edit.key-missing-column, edit.key-time-column, edit.leave-out-the-key, edit.link-not-the-key, edit.meaning-not-carried, edit.meaning-unknown, edit.time-column-not-a-time, edit.time-column-text]
-  refs: [T1.24b, E67]
+  refs: [T1.24b, E67, 'docs/design/rust-core/phase-2/design.md#T2.12']
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
+    The design's T2.12 row admits the nine edit.* S1 cases as acceptance.
     For the reviewers: the ratchet's case rule needs an approved entry
     naming each case whose file changed (check_cases); each row states the
     baselined outcome as both old and new. Proposed by T2.12, never
@@ -6726,7 +6732,12 @@ entries:
     which declares a primary key or a foreign key of several columns, and
     every call after it.
   cases: [rule.composite-key-declared, rule.composite-foreign-key-declared]
-  refs: [P2C-11, E92, E66]
+  refs:
+  - P2C-11
+  - E92
+  - E66
+  - 'contract/composite-key-vectors.json#declared.*@postgres refusal UNNAMED -> success'
+  - 'contract/composite-key-vectors.json#foreign.*@postgres refusal UNNAMED -> success'
   status: proposed
   approved_by: null
   decision_ref: null
@@ -6739,6 +6750,8 @@ entries:
     through predict on Postgres, their schema, payload and result as on
     DuckDB and SQLite. Supersedes P2C-11, which stays approved for the
     behavior before T2.12. Proposed by T2.12, never self-approved.
+    Its matrix vectors: every declared and foreign form of the composite
+    key pair matrix on Postgres (contract/composite-key-vectors.json).
   case_outcomes:
   - {case: rule.composite-foreign-key-declared@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'success at predict', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
   - {case: rule.composite-foreign-key-declared@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'success', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
