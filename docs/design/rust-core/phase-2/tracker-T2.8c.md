@@ -1,6 +1,6 @@
 # T2.8c: multi-call `predict`
 
-Lane f's worktree, started on the phase head after T2.19's landing (dfdd532a), moved onto T2.4's (8006efce), T2.1f's (dfce343e) and, for landing, T2.1g's (1486a8f1).
+Lane f's worktree, started on the phase head after T2.19's landing (dfdd532a), moved onto T2.4's (8006efce), T2.1f's (dfce343e), T2.1g's (1486a8f1) and, for landing, T2.18's (f42d92ea).
 `main`'s 1fc5a686 (in the reference at 6298913c) gathers a request of more entities than one call scores as several calls and predicts them as one; this package writes it in the core (design, choice 6), never in the host.
 The acceptance cases are the test author's (`T2.8c tests:` commits on `t28c-tests`: 72521060, 217eea1b).
 
@@ -62,8 +62,9 @@ My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the ba
 ## Landing work
 
 - **Baselines**: `ratchet.py accept --checkpoint 1486a8f1` over python-core's, python-old's and rust-host's DuckDB observations of the 21 multicall cases, its lines added to the committed files, every other line kept: 21 for python-core (the three P1B-20 cases held by `case_outcomes` added to that entry, from `none`, as a first admission), 21 for python-old, 18 for rust-host.
-- **rust-host's three endpoint-refusal cases have no baseline** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`): on a first admission the ratchet expects the reference's outcome (no code) unless an approved register entry moves it, and rust-host's is its core's `INVALID_RESPONSE`, so `accept` proposes none and `check` names each "an acceptance case with no proposed baseline". T2.1g's agreement lives in the comparator only. For the orchestrator: an approved entry with rust-host `case_outcomes` from `none`, or the same pairing in the ratchet's `effective` and `accept` (a judging change).
-- **Goldens**: `sdm-data`'s DuckDB, SQLite and Postgres goldens each gain the 112 requests python-core's run of the cases on that database fetched (each later call's key set its own attachment id), as T2.4's run check printed them; each database's render and run checks pass with `SDM_L4_OBSERVATIONS` naming that run.
+- **rust-host's three endpoint-refusal cases have no baseline** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`): on a first admission the ratchet expects the reference's outcome (no code) unless an approved register entry moves it, and rust-host's is its core's `INVALID_RESPONSE`, so `accept` proposes none and `check` names each "an acceptance case with no proposed baseline". T2.1g's agreement lives in the comparator only. `sdm-testkit`'s `t22_sqlite.rs` (`rust_host_runs_every_s1_case_on_sqlite`) holds the same rule on SQLite: rust-host's outcome must be python-ref's unless an approved entry names the key, so it fails on the three `@sqlite` keys. For the orchestrator: an approved entry with rust-host `case_outcomes` (and naming the `@sqlite` keys), or the same pairing in the ratchet and that test (a judging change).
+- **Rebase onto T2.18's landing**: small conflicts resolved by keeping both sides (the Python materialize bridge, the core's imports, `test_contract_cases.py`'s case lists, the reference lines and baselines, each a union), the freeze's two shared entries declared anew for this package's change, one refusal-map citation moved, and the goldens taken from the phase head and collected again.
+- **Goldens**: see the next commit's message: `sdm-data`'s DuckDB, SQLite and Postgres goldens collected with T2.4's run check over python-core's run of the multicall and T2.18's name cases on each database (each later call's key set its own attachment id); each database's render and run checks pass with `SDM_L4_OBSERVATIONS` naming that run.
 
 ## Deviations and what is left
 
