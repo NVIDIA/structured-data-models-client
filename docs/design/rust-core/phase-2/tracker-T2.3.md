@@ -70,6 +70,9 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
   An interval column is tagged `sdm:interval = timedelta` (fix 11), which T2.1e's canonical cell reads as the `timedelta` psycopg built it from (a month 30 days).
   Judged as CI judges, the Postgres run has one difference left, `s0.boundary.deepest`'s cross-host inputs (T2.2's 06cc388a).
   DuckDB's run has none on either host.
+- Fix round 4 (Codex's and the Claude reviewer's round 3): a JSON column is a string field carrying Arrow's `arrow.json` metadata, which PyArrow 14.0.1, the floor, keeps (fix 12; `pa.json_()` does not exist there); a NaN in a wide whole `numeric` is missing, as the reference's null (fix 13); a composite primary or foreign key is refused by name at `describe_source`, `composite_key`, where the reference fails with an unnamed ValueError (fix 14, P2C-11, proposed for the reviewers under E66(b)).
+  P2C-9 is approved by both round 3 reviewers.
+  The test author's vectors `type.json`, `type.jsonb` and `type.numeric-100-0-nan` pass on the current venv and on the floor (PyArrow 14.0.1, pandas 2.2.2); `key.composite-primary` and `key.composite-foreign` pass once P2C-11 is approved.
 
 ## Carry items
 
