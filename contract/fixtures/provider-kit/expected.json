@@ -112,6 +112,14 @@
       "answer": {"columns": ["k", "n", "d", "z"], "ordered": false, "rows": [[0, 5, 5, 0], [1, 9, 3, 1]]}
     },
     {
+      "id": "key-counts.one-source-twice",
+      "exit": "T2.7: two schema tables over one source are two equal relations, each counted by its own key",
+      "checked": "hand",
+      "why": "Two schema tables read the one relation orders, one keyed by order_id and one by customer_id. order_id: nine rows, nine distinct, none missing. customer_id: nine rows, three distinct (1, 2 and 4), one missing (order 16). A provider that keys what it holds by relation, or merges equal relations, answers one row or the same counts twice.",
+      "request": {"request": "key_counts", "keys": [{"table": {"source": ["orders"]}, "columns": ["order_id"]}, {"table": {"source": ["orders"]}, "columns": ["customer_id"]}]},
+      "answer": {"columns": ["k", "n", "d", "z"], "ordered": false, "rows": [[0, 9, 9, 0], [1, 9, 3, 1]]}
+    },
+    {
       "id": "repeated-key.region",
       "exit": "T2.5: expected answers",
       "checked": "hand",
