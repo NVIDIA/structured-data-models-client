@@ -1,0 +1,579 @@
+{
+  "format": "sdm-case/1",
+  "id": "multicall.calls.100",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (i % 7)::DOUBLE AS score FROM range(110) t(i)"
+    ],
+    "pql": "PREDICT users.score FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46,
+        47,
+        48,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54,
+        55,
+        56,
+        57,
+        58,
+        59,
+        60,
+        61,
+        62,
+        63,
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75,
+        76,
+        77,
+        78,
+        79,
+        80,
+        81,
+        82,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        94,
+        95,
+        96,
+        97,
+        98,
+        99
+      ],
+      "rows_per_call": 1
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        },
+        {
+          "t": "i64",
+          "v": "3"
+        },
+        {
+          "t": "i64",
+          "v": "4"
+        },
+        {
+          "t": "i64",
+          "v": "5"
+        },
+        {
+          "t": "i64",
+          "v": "6"
+        },
+        {
+          "t": "i64",
+          "v": "7"
+        },
+        {
+          "t": "i64",
+          "v": "8"
+        },
+        {
+          "t": "i64",
+          "v": "9"
+        },
+        {
+          "t": "i64",
+          "v": "10"
+        },
+        {
+          "t": "i64",
+          "v": "11"
+        },
+        {
+          "t": "i64",
+          "v": "12"
+        },
+        {
+          "t": "i64",
+          "v": "13"
+        },
+        {
+          "t": "i64",
+          "v": "14"
+        },
+        {
+          "t": "i64",
+          "v": "15"
+        },
+        {
+          "t": "i64",
+          "v": "16"
+        },
+        {
+          "t": "i64",
+          "v": "17"
+        },
+        {
+          "t": "i64",
+          "v": "18"
+        },
+        {
+          "t": "i64",
+          "v": "19"
+        },
+        {
+          "t": "i64",
+          "v": "20"
+        },
+        {
+          "t": "i64",
+          "v": "21"
+        },
+        {
+          "t": "i64",
+          "v": "22"
+        },
+        {
+          "t": "i64",
+          "v": "23"
+        },
+        {
+          "t": "i64",
+          "v": "24"
+        },
+        {
+          "t": "i64",
+          "v": "25"
+        },
+        {
+          "t": "i64",
+          "v": "26"
+        },
+        {
+          "t": "i64",
+          "v": "27"
+        },
+        {
+          "t": "i64",
+          "v": "28"
+        },
+        {
+          "t": "i64",
+          "v": "29"
+        },
+        {
+          "t": "i64",
+          "v": "30"
+        },
+        {
+          "t": "i64",
+          "v": "31"
+        },
+        {
+          "t": "i64",
+          "v": "32"
+        },
+        {
+          "t": "i64",
+          "v": "33"
+        },
+        {
+          "t": "i64",
+          "v": "34"
+        },
+        {
+          "t": "i64",
+          "v": "35"
+        },
+        {
+          "t": "i64",
+          "v": "36"
+        },
+        {
+          "t": "i64",
+          "v": "37"
+        },
+        {
+          "t": "i64",
+          "v": "38"
+        },
+        {
+          "t": "i64",
+          "v": "39"
+        },
+        {
+          "t": "i64",
+          "v": "40"
+        },
+        {
+          "t": "i64",
+          "v": "41"
+        },
+        {
+          "t": "i64",
+          "v": "42"
+        },
+        {
+          "t": "i64",
+          "v": "43"
+        },
+        {
+          "t": "i64",
+          "v": "44"
+        },
+        {
+          "t": "i64",
+          "v": "45"
+        },
+        {
+          "t": "i64",
+          "v": "46"
+        },
+        {
+          "t": "i64",
+          "v": "47"
+        },
+        {
+          "t": "i64",
+          "v": "48"
+        },
+        {
+          "t": "i64",
+          "v": "49"
+        },
+        {
+          "t": "i64",
+          "v": "50"
+        },
+        {
+          "t": "i64",
+          "v": "51"
+        },
+        {
+          "t": "i64",
+          "v": "52"
+        },
+        {
+          "t": "i64",
+          "v": "53"
+        },
+        {
+          "t": "i64",
+          "v": "54"
+        },
+        {
+          "t": "i64",
+          "v": "55"
+        },
+        {
+          "t": "i64",
+          "v": "56"
+        },
+        {
+          "t": "i64",
+          "v": "57"
+        },
+        {
+          "t": "i64",
+          "v": "58"
+        },
+        {
+          "t": "i64",
+          "v": "59"
+        },
+        {
+          "t": "i64",
+          "v": "60"
+        },
+        {
+          "t": "i64",
+          "v": "61"
+        },
+        {
+          "t": "i64",
+          "v": "62"
+        },
+        {
+          "t": "i64",
+          "v": "63"
+        },
+        {
+          "t": "i64",
+          "v": "64"
+        },
+        {
+          "t": "i64",
+          "v": "65"
+        },
+        {
+          "t": "i64",
+          "v": "66"
+        },
+        {
+          "t": "i64",
+          "v": "67"
+        },
+        {
+          "t": "i64",
+          "v": "68"
+        },
+        {
+          "t": "i64",
+          "v": "69"
+        },
+        {
+          "t": "i64",
+          "v": "70"
+        },
+        {
+          "t": "i64",
+          "v": "71"
+        },
+        {
+          "t": "i64",
+          "v": "72"
+        },
+        {
+          "t": "i64",
+          "v": "73"
+        },
+        {
+          "t": "i64",
+          "v": "74"
+        },
+        {
+          "t": "i64",
+          "v": "75"
+        },
+        {
+          "t": "i64",
+          "v": "76"
+        },
+        {
+          "t": "i64",
+          "v": "77"
+        },
+        {
+          "t": "i64",
+          "v": "78"
+        },
+        {
+          "t": "i64",
+          "v": "79"
+        },
+        {
+          "t": "i64",
+          "v": "80"
+        },
+        {
+          "t": "i64",
+          "v": "81"
+        },
+        {
+          "t": "i64",
+          "v": "82"
+        },
+        {
+          "t": "i64",
+          "v": "83"
+        },
+        {
+          "t": "i64",
+          "v": "84"
+        },
+        {
+          "t": "i64",
+          "v": "85"
+        },
+        {
+          "t": "i64",
+          "v": "86"
+        },
+        {
+          "t": "i64",
+          "v": "87"
+        },
+        {
+          "t": "i64",
+          "v": "88"
+        },
+        {
+          "t": "i64",
+          "v": "89"
+        },
+        {
+          "t": "i64",
+          "v": "90"
+        },
+        {
+          "t": "i64",
+          "v": "91"
+        },
+        {
+          "t": "i64",
+          "v": "92"
+        },
+        {
+          "t": "i64",
+          "v": "93"
+        },
+        {
+          "t": "i64",
+          "v": "94"
+        },
+        {
+          "t": "i64",
+          "v": "95"
+        },
+        {
+          "t": "i64",
+          "v": "96"
+        },
+        {
+          "t": "i64",
+          "v": "97"
+        },
+        {
+          "t": "i64",
+          "v": "98"
+        },
+        {
+          "t": "i64",
+          "v": "99"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "rows_per_call=1 over 100 entities: 100 calls, the most one request is asked in; each call carries about 109 context rows, more than 10,000 summed, so the pre-send context check is held to each call, not to the sum",
+  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+}

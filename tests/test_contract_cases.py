@@ -290,6 +290,33 @@ T219_SHAPES = (
     'shape.two-paths.keyless',
 )
 
+#: T2.8c's multi-call predict cases (main's 1fc5a686), none in the
+#: inventory: the call's ``rows_per_call`` and the endpoint's failed call
+#: (``input.fail_call``) are inputs no inventory entry carries.
+T28C_MULTICALL = (
+    'multicall.body-30mib.one-row',
+    'multicall.body-30mib.several-rows',
+    'multicall.calls.100',
+    'multicall.calls.101',
+    'multicall.entities-per-call.10001',
+    'multicall.entities.100000',
+    'multicall.entities.100001',
+    'multicall.fail-call-0',
+    'multicall.fail-call-2',
+    'multicall.forecast.batched',
+    'multicall.forecast.fail-call-1',
+    'multicall.forecast.one-call',
+    'multicall.rows-per-call-3',
+    'multicall.rows-per-call.above-the-cap',
+    'multicall.rows-per-call.bool',
+    'multicall.rows-per-call.fraction',
+    'multicall.rows-per-call.negative',
+    'multicall.rows-per-call.past-int64',
+    'multicall.rows-per-call.text',
+    'multicall.rows-per-call.whole-float',
+    'multicall.rows-per-call.zero',
+)
+
 
 #: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
 #: each of a dot, a backtick and a line break in a column's name, as a
@@ -326,7 +353,8 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # each is an acceptance case carrying its call as far as the reference
     # goes. T2.19 adds the two-path sampling cases, acceptance cases through
     # predict, no inventory case either. T2.18 adds the column-name cases
-    # (KO2-36), each carrying its call through predict.
+    # (KO2-36), each carrying its call through predict; so does T2.8c its
+    # multi-call cases, each an acceptance case.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -334,7 +362,11 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T20C_DECIMAL,
         *T219_SHAPES,
         *T218_NAMES,
+        *T28C_MULTICALL,
     }
+    for case_id in T28C_MULTICALL:
+        assert committed[case_id]['status'] == 'acceptance', case_id
+        assert _held_to_its_input(committed[case_id]) == [], case_id
     for case_id in (*T20C_DECIMAL, *T218_NAMES):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
