@@ -592,6 +592,42 @@ def differences(want: Any, got: Any, at: str = '') -> list[str]:
     return []
 
 
+#: The public calls in order, and the call each core operation belongs to
+#: (``compare.py``'s ``STAGES`` and ``STAGE_OF``).
+STAGES = ('from_source', 'materialize', 'predict')
+STAGE_OF = {
+    'describe_source': 'from_source',
+    'validate_query': 'materialize',
+    'materialize': 'materialize',
+    'predict': 'predict',
+}
+
+
+def held_operations(
+    case: dict[str, Any], reference: dict[str, Any]
+) -> set[str]:
+    r"""The case's core operations a run on a database is held to having
+    started: every one, where the reference answers there; where it refuses,
+    each of a call before the one it refuses at (``compare.py``'s
+    ``core_held``), so a case the reference refuses at materialize on one
+    database and answers on another holds predict only where it answers."""
+    outcome = reference['outcome']
+    if outcome['result'] != 'refusal':
+        return set(case['core'])
+    stop = STAGES.index(outcome['stage'])
+    return {op for op in case['core'] if STAGES.index(STAGE_OF[op]) < stop}
+
+
+def test_the_operations_held_follow_the_reference_s_stop() -> None:
+    r"""Control: an answer holds every operation; a refusal at
+    materialize holds describe_source only."""
+    case, _ = cases()['rule.float-nan-key-double']
+    answered = {'outcome': {'result': 'success', 'stage': 'predict'}}
+    refused = {'outcome': {'result': 'refusal', 'stage': 'materialize'}}
+    assert held_operations(case, answered) == set(case['core'])
+    assert held_operations(case, refused) == {'describe_source'}
+
+
 @pytest.mark.parametrize('case_key', KEYS_ALL)
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
@@ -616,9 +652,11 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        missing = sorted(set(case['core']) - set(identity['operations']))
-        assert not missing, f'{case_key}: core operations not run: {missing}'
         want = reference_lines()[case_key]
+        missing = sorted(
+            held_operations(case, want) - set(identity['operations'])
+        )
+        assert not missing, f'{case_key}: core operations not run: {missing}'
         if _outcome(line) != _outcome(want):
             entry = registered_key(case_key)
             assert entry is not None, (

@@ -3,7 +3,21 @@
  "pending": [
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.composite-key-declared@postgres]",
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.composite-foreign-key-declared@postgres]",
-  "py:test_python_core_holds_the_composite_key_pair_matrix[postgres]"
+  "py:test_python_core_holds_the_composite_key_pair_matrix[postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-category-double]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-category-float]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-tie]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-signed-zero-key-tie]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-double]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-float]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-double@postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-float@postgres]",
+  "rust:rule.float-nan-category-double",
+  "rust:rule.float-nan-category-float",
+  "rust:rule.float-nan-key-tie",
+  "rust:rule.float-signed-zero-key-tie",
+  "rust:rule.float-nan-key-double",
+  "rust:rule.float-nan-key-float"
  ],
  "authored": [
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-feature]",
@@ -97,6 +111,24 @@
   "rust:edit.time-column-not-a-time@sqlite",
   "rust:edit.time-column-text@sqlite",
   "rust:a_bool8_tag_under_run_end_encoding_is_read_as_boolean",
-  "rust:an_untagged_run_end_int8_stays_int8"
+  "rust:an_untagged_run_end_int8_stays_int8",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-category-double]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-category-float]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-tie]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-signed-zero-key-tie]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-double]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-float]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-category-double@postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-category-float@postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-tie@postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-signed-zero-key-tie@postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-double@postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-key-float@postgres]",
+  "rust:rule.float-nan-category-double",
+  "rust:rule.float-nan-category-float",
+  "rust:rule.float-nan-key-tie",
+  "rust:rule.float-signed-zero-key-tie",
+  "rust:rule.float-nan-key-double",
+  "rust:rule.float-nan-key-float"
  ]
 }
