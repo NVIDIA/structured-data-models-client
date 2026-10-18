@@ -45,4 +45,9 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
 - rust-host's query schema off DuckDB wrote each type as described (`date`, `int64`), where the Python host writes the language's spelling (`time`, `int`), so every case validating a query on Postgres differed between the hosts: fixed in c484e1c6 (one focused test), which the orchestrator folds into T2.1d.
 - H24's common-input comparison and its control moved to T2.1c (orchestrator); the first wave's Postgres legs (T2.17, T2.18, T2.8c, T2.19) are those packages'.
 - `sdm-testkit`'s `t136_forecast` once failed its old two-second limit under a load of about 25; the base's T2.1b test now bounds it by its own run.
-- Register IDs are lane C's (P2C-1 to P2C-7), under a lane C banner.
+- Register IDs are lane C's (P2C-1 to P2C-8), under a lane C banner.
+
+## Fix rounds
+
+- Fix round 1 (Codex): a `timestamptz` column's time bounds read as its UTC wall clock, as the reference reads an aware time, whatever the session's zone (fix 1); every Postgres value in its column's Arrow form, a `uuid`, `inet` or `cidr` as its text, an unconstrained or negative-scale `numeric` and a `numeric[]`'s elements as doubles, as the reference reads them (fix 2); only the unquoted `$1` taken as the key set's parameter, so a relation named `"users$1"` is read (fix 3).
+  The test author's regression vectors (`contract/tests/test_t23_postgres_regressions.py`) pass; probing the review's other types, a negative-scale `numeric` now answers as the reference answers, and a two-dimensional array column is left out where the reference fails (P2C-8).

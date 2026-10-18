@@ -6762,3 +6762,31 @@ entries:
   - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
   - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
   - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+
+- id: P2C-8
+  title: On Postgres a multi-dimensional array column is left out, where the reference fails the source's description
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres integer[] column holding a
+    two-dimensional array (ARRAY[ARRAY[n, n]]) as nested lists and fails
+    Schema.from_source with a RuntimeError ("Could not determine semantic
+    type for column ... with data type 'intlist'"); a one-dimensional
+    array column it leaves out of the schema.
+  new_behavior: >-
+    The core's Postgres provider reads a multi-dimensional array's elements
+    in row-major order as one Arrow list, and the core leaves the list
+    column out of the schema, as it leaves out a one-dimensional one, and
+    answers.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source with a
+    multi-dimensional array column.
+  cases: [T2.3]
+  refs: [E66]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner: an answer where the reference raises an unnamed error,
+    beyond E66(b)'s named refusal. Found at T2.3's fix round 1 with the
+    review's probe (integer[] of ARRAY[ARRAY[n, n]]) on Postgres 17, against
+    python-ref at 6298913c.
