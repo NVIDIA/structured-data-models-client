@@ -48,7 +48,7 @@
         "fingerprint": "e8a27ee5705c5728f41e932b7996380ab3143f341fc1effd626e89057231ff44"
       },
       "gather": {
-        "fingerprint": "9a50381d4033c91af20111968adee1859adaf695cc572337e0819b47d769a2a0"
+        "fingerprint": "ab2992321e8b8ecbbcd074801e82c7b9537207dc84ddcc5067933d512e1b3976"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {

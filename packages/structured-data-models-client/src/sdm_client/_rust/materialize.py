@@ -290,9 +290,13 @@ def gather(
             }
         ),
     }
-    if str(getattr(query, 'problem_type', '')).endswith('FORECAST'):
+    if isinstance(query, Unresolved) or str(
+        getattr(query, 'problem_type', '')
+    ).endswith('FORECAST'):
         # How many steps the caller lets a forecast be asked as, which the
-        # core holds it to (T1.36 fix 21).
+        # core holds it to (T1.36 fix 21); for a query only the core
+        # resolves, whose kind only the core knows, always, as the core
+        # reads it of a forecast alone (T2.18).
         from sdm_client import decompose
 
         operation['most_parts'] = max(

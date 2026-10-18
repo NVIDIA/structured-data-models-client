@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T2.18: the run's answer of what the core resolved of the query (Materialized.query) is kept beside the state's version for asked; no rule added"
+      "moved": "T2.18: the run's answer of what the core resolved of the query (Materialized.query) is kept beside the state's version for asked; the caller's forecast step limit (decompose.MOST_PARTS) is sent for a query only the core resolves, whose kind only the core knows, as for a forecast; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
