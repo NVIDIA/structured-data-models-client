@@ -30,15 +30,16 @@
 //! expression named as the plan's relation ([`SEEDS`]; `P1 d:131`). The
 //! provider writes the key set's rows as a JSON array of rows, each row an
 //! array of its cells' texts in the key set's column order (null for a
-//! null), which Postgres's own input functions read ([`seed_cte`]): a
-//! number key as the Postgres type of its Arrow type, so the join compares
-//! the two keys as Postgres compares numbers of two types, exactly (an
-//! integer and a `numeric` meet when their values are equal, whatever
-//! their scales, and two `numeric` values float64 would merge stay
-//! apart; design choice 5, lesson 19, KO2-35); a text key in the joined
-//! column's own declared type, through `jsonb_populate_record` over the
-//! table's row type, so a `uuid`, an enum or a `varchar` key is compared
-//! as itself (the reference casts to the type it read from the catalog);
+//! null), which Postgres's own input functions read ([`seed_cte`]): an
+//! integer or decimal key as `bigint` or `numeric`, so the join compares
+//! the two keys by value, exactly (an integer and a `numeric` meet when
+//! their values are equal, whatever their scales, and two `numeric` values
+//! float64 would merge stay apart; design choice 5, lesson 19, KO2-35);
+//! any other key (a float, a text) in the joined column's own declared
+//! type, put in place of that column in one row of the table
+//! (`jsonb_populate_record`), so a `real` key compares as a `real` and a
+//! `uuid`, an enum or a `varchar` key as itself (the reference casts to
+//! the type it read from the catalog);
 //! the batch as `bigint`; a seed time in the window column's own type, the
 //! column compared in that type and ordered by it, as the reference does
 //! (a text time column by its text, the seed's time in the text pandas
@@ -655,11 +656,11 @@ fn conditions(request: &DataRequest, filters: &[Filter], lead: &str) -> Result<S
 /// The common table expression `name` that unpacks the key set bound as
 /// `$1` (the module's binding): one row per JSON row, each key column read
 /// as [`key_type`] says, else in the type `table` declares for the key
-/// column it joins, through `jsonb_populate_record` over the table's row
-/// type; a seed time a bound of `window` names in the type `table` declares
-/// for the window's column, the same way, as the reference casts its seeds
-/// to the column's type; the batch as `bigint`; with its trailing line
-/// break.
+/// column it joins, put in place of that column in one row of the table
+/// (`jsonb_populate_record` over it); a seed time a bound of `window` names
+/// in the type `table` declares for the window's column, the same way, as
+/// the reference casts its seeds to the column's type; the batch as
+/// `bigint`; with its trailing line break.
 fn seed_cte(
     request: &DataRequest,
     table: &Relation,
@@ -693,7 +694,7 @@ fn seed_cte(
         }) {
             let alias = format!("w{position}");
             timed.push(format!(
-                "\n  CROSS JOIN LATERAL jsonb_populate_record(NULL::{row_type}, jsonb_build_object({}, r.value->{position})) AS {alias}",
+                "\n  CROSS JOIN LATERAL jsonb_populate_record(b.x, jsonb_build_object({}, r.value->{position})) AS {alias}",
                 text(&window.column)
             ));
             format!("{alias}.{}", identifier(&window.column))
@@ -725,14 +726,22 @@ fn seed_cte(
             "the seeds do not carry every key column",
         ));
     }
-    let mut typed = if built.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "\n  CROSS JOIN LATERAL jsonb_populate_record(NULL::{row_type}, jsonb_build_object({})) AS k",
+    // A value is read in its column's own type by putting it in place of
+    // that column in one row of the table (`b`), whose other fields hold the
+    // table's own values, so a NOT NULL domain elsewhere in the row is never
+    // checked on a null; a table of no row gives no seeds, and so no rows.
+    let mut typed = String::new();
+    if !built.is_empty() || !timed.is_empty() {
+        typed.push_str(&format!(
+            "\n  CROSS JOIN (SELECT x FROM {row_type} AS x LIMIT 1) AS b"
+        ));
+    }
+    if !built.is_empty() {
+        typed.push_str(&format!(
+            "\n  CROSS JOIN LATERAL jsonb_populate_record(b.x, jsonb_build_object({})) AS k",
             built.join(", ")
-        )
-    };
+        ));
+    }
     typed.push_str(&timed.concat());
     Ok(format!(
         "WITH {name} AS (\n  SELECT {selects}\n  FROM jsonb_array_elements($1::jsonb) AS r(value){typed}\n)\n",
@@ -741,22 +750,18 @@ fn seed_cte(
     ))
 }
 
-/// The Postgres type a seed key of `column_type` is read as, for a number,
-/// a boolean, a date, a time or bytes: the type of its own values, which
-/// Postgres compares with the joined key's by value; `None` for text and
-/// any other, read in the joined column's declared type ([`seed_cte`]).
+/// The Postgres type a seed key of `column_type` is read as, for an
+/// integer or a decimal: `bigint` or `numeric`, which Postgres compares
+/// with the joined key's integers and decimals by value, so equal values
+/// of any scale join; `None` for any other (a float, a text, a time), read
+/// in the joined column's declared type ([`seed_cte`]), so a `real` key
+/// compares as a `real` and a `uuid` as a `uuid`, as the reference casts its
+/// seeds to the column's type.
 fn key_type(column_type: &sdm_contract::ColumnType) -> Option<&'static str> {
     use sdm_contract::ColumnType as T;
     Some(match column_type {
         T::Int8 | T::Int16 | T::Int32 | T::Int64 | T::Uint8 | T::Uint16 | T::Uint32 => "bigint",
         T::Uint64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "numeric",
-        T::Float32 => "real",
-        T::Float64 => "double precision",
-        T::Bool => "boolean",
-        T::Date32 => "date",
-        T::Timestamp { zone: None, .. } => "timestamp",
-        T::Timestamp { zone: Some(_), .. } => "timestamptz",
-        T::Binary => "bytea",
         _ => return None,
     })
 }
