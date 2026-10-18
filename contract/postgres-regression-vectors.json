@@ -1325,6 +1325,244 @@
      "orders.x": "integer"
     }
    }
+  },
+  {
+   "id": "key.numeric-unconstrained-small",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users (user_id numeric PRIMARY KEY, age integer)",
+    "INSERT INTO users SELECT 0 + i, 20 + i FROM generate_series(0, 7) i",
+    "CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id numeric REFERENCES users(user_id), price double precision, ts timestamp)",
+    "INSERT INTO orders SELECT i, 0 + (i % 8), 10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7) FROM generate_series(0, 79) i"
+   ],
+   "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "user_id"
+    ],
+    [
+     "orders",
+     "user_id"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "order_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "ts",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        }
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      },
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "user_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "int64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "user_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ]
+    },
+    "payloads": {
+     "digest": "8b55b635c712e32852595b5d185b7ad3c48b16bc0732607e4c955bc0d3721dfd",
+     "anchors": [
+      "2023-01-06T00:00:00.000000Z",
+      "2023-02-05T00:00:00.000000Z",
+      "2023-03-07T00:00:00.000000Z",
+      "2023-04-06T00:00:00.000000Z",
+      "2023-05-06T00:00:00.000000Z",
+      "2023-06-05T00:00:00.000000Z",
+      "2023-07-05T00:00:00.000000Z",
+      "2023-08-04T00:00:00.000000Z",
+      "2023-09-03T00:00:00.000000Z",
+      "2023-10-03T00:00:00.000000Z",
+      "2023-11-02T00:00:00.000000Z",
+      "2023-12-02T00:00:00.000000Z",
+      "2024-01-01T00:00:00.000000Z",
+      "2024-01-31T00:00:00.000000Z",
+      "2024-03-01T00:00:00.000000Z"
+     ]
+    },
+    "postgres": {
+     "users.user_id": "numeric",
+     "orders.user_id": "numeric"
+    }
+   }
+  },
+  {
+   "id": "key.numeric-unconstrained-past-2-53",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users (user_id numeric PRIMARY KEY, age integer)",
+    "INSERT INTO users SELECT 100000000000000000 + i, 20 + i FROM generate_series(0, 7) i",
+    "CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id numeric REFERENCES users(user_id), price double precision, ts timestamp)",
+    "INSERT INTO orders SELECT i, 100000000000000000 + (i % 8), 10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7) FROM generate_series(0, 79) i"
+   ],
+   "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     100000000000000000,
+     100000000000000001
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "user_id"
+    ],
+    [
+     "orders",
+     "user_id"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "order_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "ts",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        }
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      },
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "user_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "int64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "user_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ]
+    },
+    "payloads": {
+     "digest": "5cf9fdff7ffe35f6c3a70d160128804097d098c627f87a08496e1d45843f67b2",
+     "anchors": [
+      "2023-01-06T00:00:00.000000Z",
+      "2023-02-05T00:00:00.000000Z",
+      "2023-03-07T00:00:00.000000Z",
+      "2023-04-06T00:00:00.000000Z",
+      "2023-05-06T00:00:00.000000Z",
+      "2023-06-05T00:00:00.000000Z",
+      "2023-07-05T00:00:00.000000Z",
+      "2023-08-04T00:00:00.000000Z",
+      "2023-09-03T00:00:00.000000Z",
+      "2023-10-03T00:00:00.000000Z",
+      "2023-11-02T00:00:00.000000Z",
+      "2023-12-02T00:00:00.000000Z",
+      "2024-01-01T00:00:00.000000Z",
+      "2024-01-31T00:00:00.000000Z",
+      "2024-03-01T00:00:00.000000Z"
+     ]
+    },
+    "postgres": {
+     "users.user_id": "numeric",
+     "orders.user_id": "numeric"
+    }
+   }
   }
  ]
 }

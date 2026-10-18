@@ -40,7 +40,11 @@ Postgres's own types (which the contract loader does not make):
 - from Codex's second round: ``type.numeric-100-0-past-2-53``, integral
   values past 2**53 in a ``numeric(100,0)``, and
   ``join.domain-not-null-text-key-column-x``, the domain vector with a
-  column named ``x`` added to ``orders``.
+  column named ``x`` added to ``orders``;
+- from Claude's second round: ``key.numeric-unconstrained-small`` and
+  ``key.numeric-unconstrained-past-2-53``, unconstrained ``numeric``
+  primary and foreign keys holding 0 to 7, and 10**17 + i, which must
+  not merge.
 
 For each the reference's public answer is kept: the outcome (result,
 stage, exception class and ``StructuredDataError`` code), the public
@@ -267,6 +271,33 @@ VECTORS.append(
 )
 VECTORS[-1]['setup'].append('ALTER TABLE orders ADD COLUMN x integer DEFAULT 7')
 VECTORS[-1]['columns'].append(['orders', 'x'])
+# Claude's second round: unconstrained numeric keys at both ends, which the
+# reference sends as their exact text; small, and past 2**53, where a
+# double would merge the eight keys into one.
+for _name, _base in (('small', 0), ('past-2-53', 10**17)):
+    VECTORS.append(
+        {
+            'id': f'key.numeric-unconstrained-{_name}',
+            'session': [],
+            'setup': [
+                _SHOP_USERS.format('user_id numeric PRIMARY KEY, age integer'),
+                f'INSERT INTO users SELECT {_base} + i, 20 + i '
+                'FROM generate_series(0, 7) i',
+                _SHOP_ORDERS.format(
+                    'user_id numeric REFERENCES users(user_id)'
+                ),
+                f'INSERT INTO orders SELECT i, {_base} + (i % 8), '
+                f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+            ],
+            'pql': SHOP_QUESTION,
+            'materialize': {
+                'indices': [_base, _base + 1],
+                'anchor_time': '2024-03-01',
+                'random_seed': 42,
+            },
+            'columns': [['users', 'user_id'], ['orders', 'user_id']],
+        }
+    )
 
 
 def _runner() -> ModuleType:

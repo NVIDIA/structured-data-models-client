@@ -35,6 +35,9 @@ vector's own.
   ``numeric(100,0)`` stay exact (``type.numeric-100-0-past-2-53``), and a
   text-key join reads its seed rows whatever the table's columns are named,
   ``x`` included (``join.domain-not-null-text-key-column-x``).
+- From Claude's second round: unconstrained ``numeric`` keys are sent as
+  the reference sends them, small (``key.numeric-unconstrained-small``)
+  and past 2**53, never merged (``key.numeric-unconstrained-past-2-53``).
 
 Each answer (outcome, public schema, the payloads' digest and anchors) is
 the reference's, or differs exactly as an approved register entry's ref
@@ -206,6 +209,14 @@ def test_the_vectors_are_the_reference_s_on_postgres() -> None:
             'orders.n': 'qty',
         },
         'column.dollar': {'users.cost$1': 'integer'},
+        'key.numeric-unconstrained-small': {
+            'users.user_id': 'numeric',
+            'orders.user_id': 'numeric',
+        },
+        'key.numeric-unconstrained-past-2-53': {
+            'users.user_id': 'numeric',
+            'orders.user_id': 'numeric',
+        },
         'join.domain-not-null-text-key-column-x': {
             'users.user_id': 'text',
             'orders.n': 'qty',
