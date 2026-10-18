@@ -33,6 +33,12 @@ page), and its ``answer`` (the columns and rows the core admitted) or its
 judged by ``expected.json``'s rules; the runner exits 0 when every case
 passes, 1 when any fails, 2 when it cannot run.
 
+It needs a test-ops build of ``sdm_client._native``. Started on a build
+without the test-only operations (the shipped wheel, in CI's
+``contract-python`` jobs), it runs itself again under ``SDM_KIT_PYTHON``,
+an interpreter whose build has them, where that is named, and otherwise
+exits 2, naming the build.
+
 ``--load sqlite OUT`` writes the dataset into a new SQLite file at OUT
 through the contract loader: the pure-Rust host's kit loads its SQLite so
 (``sdm-contract-run --kit sqlite``).
@@ -45,6 +51,7 @@ import importlib.util
 import json
 import math
 import os
+import subprocess
 import sys
 import tempfile
 import uuid
@@ -416,10 +423,6 @@ def judge(
 def run_kit(database: str, fault: str | None) -> tuple[dict[str, Any], bool]:
     r"""The report of every case on ``database``, ``fault`` seeded, and
     whether every case passed."""
-    from sdm_client import _native
-
-    if not getattr(_native, 'TEST_OPS', False):
-        raise Unrunnable('the kit needs a test-ops build of sdm_client._native')
     kit = expected()
     by_id = {case['id']: case for case in kit['cases']}
     page_rows = kit['page_rows']
@@ -443,6 +446,35 @@ def run_kit(database: str, fault: str | None) -> tuple[dict[str, Any], bool]:
     return report, passed
 
 
+def _test_ops() -> bool:
+    r"""Whether this interpreter's ``sdm_client._native`` has the
+    test-only operations."""
+    from sdm_client import _native
+
+    return getattr(_native, 'TEST_OPS', False) is True
+
+
+def _elsewhere(argv: list[str]) -> int:
+    r"""This run, under ``SDM_KIT_PYTHON``'s interpreter, whose build has
+    the test-only operations; 2 where none is named."""
+    python = os.environ.get('SDM_KIT_PYTHON')
+    # A venv's interpreter is a link: compared as named, not resolved.
+    if not python or Path(python).absolute() == Path(sys.executable).absolute():
+        print(
+            'provider kit: it needs a test-ops build of sdm_client._native; '
+            'SDM_KIT_PYTHON names an interpreter with one',
+            file=sys.stderr,
+        )
+        return 2
+    done = subprocess.run(
+        [python, '-I', str(Path(__file__).resolve()), *argv],
+        cwd=ROOT,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+    return done.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--database', choices=DATABASES)
@@ -458,6 +490,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not arguments.database or not arguments.out:
         parser.error('--database and --out are required')
+    if not _test_ops():
+        return _elsewhere(argv if argv is not None else sys.argv[1:])
     try:
         report, passed = run_kit(arguments.database, arguments.fault)
     except Unrunnable as why:

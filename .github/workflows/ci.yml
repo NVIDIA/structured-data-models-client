@@ -914,9 +914,6 @@ jobs:
     env:
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
-      # The provider kit's tests this job runs (the last step): its
-      # controls and DuckDB's.
-      KIT_TESTS: not sqlite and not postgres
     steps:
       - &contract-checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -945,6 +942,25 @@ jobs:
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
             './packages/structured-data-models-connectors[duckdb,sqlite,postgres]' \
             ./packages/structured-data-models-relational-engine "$(ls native/*.whl)[test]"
+      # The provider conformance kit (T2.5, T2.6) asks the core one data
+      # request at a time through the test-only fetch, which only the
+      # test-ops build carries (E23): an interpreter over this job's
+      # environment holding that build alone, which the kit's runner
+      # (contract/runners/provider_kit.py) runs under (SDM_KIT_PYTHON)
+      # when the shipped build it starts on has no test-only operations;
+      # every other step runs the shipped build.
+      - &contract-kit-wheel
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops
+          path: native-test-ops
+      - &contract-kit-python
+        name: The test-ops build, for the provider kit
+        run: |
+          python -m venv --system-site-packages "$RUNNER_TEMP/kit"
+          "$RUNNER_TEMP/kit/bin/pip" install --quiet --no-deps --ignore-installed "$(ls native-test-ops/*.whl)"
+          "$RUNNER_TEMP/kit/bin/python" -I -c 'import sdm_client._native as n; assert n.TEST_OPS'
+          echo "SDM_KIT_PYTHON=$RUNNER_TEMP/kit/bin/python" >> "$GITHUB_ENV"
       # In parallel, each test file on one worker so its module fixtures are
       # built once; the results match a serial run's, test by test. The
       # files whose module fixtures hold a family run parsed share one
@@ -952,10 +968,8 @@ jobs:
       # runner's memory holds one at a time. A test past 10 minutes fails
       # with its stack, and a worker that dies ends the run rather than
       # leaving xdist waiting on it.
-      # The provider kit's file needs the test-ops build, and runs in this
-      # job's last step.
       - name: The runner's controls and the route tests
-        run: python -m pytest contract/tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0 --ignore=contract/tests/test_t25_provider_kit.py
+        run: python -m pytest contract/tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
       # Every cell gates, the floor's too (T1.18's own run alone reported
@@ -1017,25 +1031,6 @@ jobs:
           name: observations-python-core
           path: cross-host/python-core.jsonl
           if-no-files-found: error
-      # The provider conformance kit (T2.5, T2.6) on this database's Python
-      # provider, last: it asks the core one data request at a time through
-      # the test-only fetch, which only the test-ops build carries (E23),
-      # so that build replaces the shipped one here, after every step that
-      # judges the shipped one. The kit's tests for this job's database
-      # (KIT_TESTS) run its runner, contract/runners/provider_kit.py.
-      - &contract-kit-wheel
-        if: ${{ !cancelled() }}
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: native-wheel-test-ops
-          path: native-test-ops
-      - &contract-kit
-        if: ${{ !cancelled() }}
-        name: The provider kit, on the test-ops build
-        run: |
-          pip uninstall --yes structured-data-models-client
-          pip install --no-deps "$(ls native-test-ops/*.whl)"
-          python -m pytest contract/tests/test_t25_provider_kit.py -q -k "$KIT_TESTS"
 
   # The two core hosts on core fields (design, "Observations and
   # comparator"; T1.29): python-core's observations from
@@ -1163,7 +1158,6 @@ jobs:
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: sqlite
-      KIT_TESTS: sqlite
     steps:
       - *contract-checkout
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -1227,14 +1221,17 @@ jobs:
           print(f'every core observation in {cell}')
           EOF
           exit $status
+      - *contract-kit-wheel
+      - *contract-kit-python
+      - &contract-kit
+        name: The provider kit on this database's Python provider
+        run: python -m pytest contract/tests/test_t25_provider_kit.py -q -k "$DATABASE"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: observations-python-core-sqlite
           path: database-observations/python-core.jsonl
           if-no-files-found: error
-      - *contract-kit-wheel
-      - *contract-kit
 
   contract-python-ref-pandas3-postgres:
     name: contract-python (ref-pandas3, postgres)
@@ -1247,7 +1244,6 @@ jobs:
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: postgres
-      KIT_TESTS: postgres
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
       SDM_REQUIRE_POSTGRES: '1'
     steps:
@@ -1270,6 +1266,9 @@ jobs:
       - &contract-postgres-vectors
         name: T2.3's Postgres regression and key vectors on the service
         run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py -q
+      - *contract-kit-wheel
+      - *contract-kit-python
+      - *contract-kit
       - *contract-database
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -1279,8 +1278,6 @@ jobs:
             database-observations/python-core.jsonl
             database-observations/fetches.jsonl
           if-no-files-found: error
-      - *contract-kit-wheel
-      - *contract-kit
 
   contract-python-dbr17-pandas2-sqlite:
     name: contract-python (dbr17-pandas2, sqlite)

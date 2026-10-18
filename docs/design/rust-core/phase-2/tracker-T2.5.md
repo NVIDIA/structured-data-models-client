@@ -21,7 +21,8 @@ T2.5 is the provider conformance kit and the in-memory fallback: one fixture dat
 - **The kit's runners**: `contract/runners/provider_kit.py` (Python host: DuckDB, SQLite and Postgres providers through the run loop) and `sdm-contract-run --kit` (`sdm_testkit::kit`: the DuckDB and `rusqlite` providers), each writing the report the test author's tests read and judging it by `expected.json`'s rules.
   Each pages every answer in pages of `page_rows`, fails an injected page, and seeds the faults `truncate` and `silent_capability` in its provider path.
   The Rust runner reads the test-only start and result as JSON, so it builds without the test-only operations; `cargo test` builds it with them.
-- **CI** (`ci.yml`): the three `contract-python (ref-pandas3, <database>)` jobs take the test-ops wheel too and, last, after every step that judges the shipped wheel, install it in its place and run `test_t25_provider_kit.py` for their database; the DuckDB job's general `contract/tests` run leaves that file to this step.
+- **CI** (`ci.yml`): the three `contract-python (ref-pandas3, <database>)` jobs take the test-ops wheel too and install it alone in an interpreter over the job's environment (`venv --system-site-packages`), named by `SDM_KIT_PYTHON`; every step still runs the shipped build, and the kit's runner, started on it, runs itself again under that interpreter.
+  The DuckDB job runs `test_t25_provider_kit.py` in its `contract/tests` run; the SQLite and Postgres jobs run it for their database (`-k "$DATABASE"`).
 - **Carried rows**: G5, rust-host runs a case's `validate_query` before `materialize` on DuckDB too, and stops at a refusal (`host.rs`; test `validate_before_materialize.rs`); M9, rust-host holds a policy refusal's `field` and `reason` where the policy names them (`t128b_predict_result.rs`).
 - **Docs**: three rows of `phase-1/dependencies.md` (choice 9): paging, `arrow-row`, the fallback's sample.
 
@@ -33,7 +34,8 @@ T2.5 is the provider conformance kit and the in-memory fallback: one fixture dat
 
 ### Deviations and questions
 
-- **The kit's Python run needs the test-ops build** (the orchestrator's open point 2): the shipped wheel has no single-request entry point and none was added; the kit runs last in its jobs on the test-ops build. Locally, `pytest contract/tests` runs it with the test-ops build CONTRIBUTING.md installs; on a shipped build its runner exits 2, naming the build.
+- **The kit's Python run needs the test-ops build** (the orchestrator's open point 2): the shipped wheel has no single-request entry point and none was added; the runner hands itself to `SDM_KIT_PYTHON`'s interpreter (above), no test is left out of any run (`l0_scan.py` bans that), and the shipped build stays under every other step.
+  Locally, `pytest contract/tests` runs it on the test-ops build CONTRIBUTING.md installs; on a shipped build with no `SDM_KIT_PYTHON` its runner exits 2, naming the build.
 - **Left out of the kit** (the orchestrator's open point 4): `time_bounds`, `column_ranges`, `sample_entities` and the catalog reads; the fallback answers the first three, held by its own tests only.
 - **The fallback reads no text time** (SQLite stores times as text): a `time_bounds`, window or time order over a text column ends the run, rule `fallback`; Phase 4's frames carry typed times.
 - **rust-host Postgres** is a replay, not a provider: the Python side runs the kit there (the orchestrator agreed).
