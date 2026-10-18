@@ -815,12 +815,8 @@ impl Times {
         }
         Ok(Some(match array.data_type() {
             DataType::Timestamp(_, None) => return Ok(None),
-            // A column holding no value says nothing of its type: a source
-            // whose driver types a column by its values (SQLite's) gives an
-            // empty answer's columns as integers. It holds no time.
-            _ if array.null_count() == array.len() => {
-                Arc::new(TimestampNanosecondArray::from(vec![None; array.len()]))
-            }
+            // A zoned column keeps its unit, empty or not, so each of a
+            // table's answers reads it alike.
             DataType::Timestamp(ArrowUnit::Second, Some(_)) => unzoned!(TimestampSecondType),
             DataType::Timestamp(ArrowUnit::Millisecond, Some(_)) => {
                 unzoned!(TimestampMillisecondType)
@@ -830,6 +826,12 @@ impl Times {
             }
             DataType::Timestamp(ArrowUnit::Nanosecond, Some(_)) => {
                 unzoned!(TimestampNanosecondType)
+            }
+            // A column holding no value says nothing of its type: a source
+            // whose driver types a column by its values (SQLite's) gives an
+            // empty answer's columns as integers. It holds no time.
+            _ if array.null_count() == array.len() => {
+                Arc::new(TimestampNanosecondArray::from(vec![None; array.len()]))
             }
             DataType::Date32 => {
                 let days = array.as_primitive::<Date32Type>();
