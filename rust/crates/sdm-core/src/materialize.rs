@@ -70,12 +70,12 @@ use sdm_contract::data::{
     MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderChoice, SEED_STORED_TIME, TableColumn,
     TextTimes,
 };
-use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
     ColumnRef, ForecastStep, Materialized, MemoBounds, MemoStoredTime, OperationResult,
     ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestBatch,
     RequestState, SamplerMemo, Seed, SourceDescription,
 };
+use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
     ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Field, HostFacts, Scalar,
@@ -1711,6 +1711,108 @@ fn options_taken(inputs: &Inputs, unseeded: bool) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// The prefix of the column the reference's engine folds a key of several
+/// columns into (`composite_key.DERIVED_PREFIX`), and the longest name it
+/// gives one (`MAX_DERIVED_NAME`).
+const FOLDED_PREFIX: &str = "__kumo_key_";
+const FOLDED_NAME_MOST: usize = 200;
+
+/// A schema keyed by several columns somewhere, refused as the reference
+/// refuses it at materialize, after its query resolved: its engine folds
+/// each such key into one identity as the materializer keys its tables, in
+/// table order (`Table._set_composite_primary_key`), refusing a float among
+/// the key's columns (`refuse_unfoldable_dtypes`), a derived name past 200
+/// characters (`encode_identity`) or one a column holds already, and
+/// otherwise reading the source's fold of the first rows
+/// (`_assert_warehouse_folds_like_pandas`, a `folded_key` request here, of
+/// a provider that declares one); then its SQL samplers refuse every such
+/// table, whose folded column is named with the prefix they reserve
+/// (`_reject_reserved_columns`). Each
+/// refusal is `INVALID_REQUEST` naming the table and the key's columns. The
+/// reference compares the source's fold with its own of its preview, which
+/// chooses only between two refusals of that code; the core keeps no
+/// preview and compares nothing. `Ok` for a schema with no such key.
+async fn refuse_folded_keys(
+    asker: &Asker,
+    description: &SourceDescription,
+) -> Result<(), CoreError> {
+    let refused = |table: &str, key: &[String], message: &str| {
+        invalid(message, "schema")
+            .with_field("table", Detail::text(table))
+            .with_field(
+                "columns",
+                Detail::List(key.iter().map(|c| Scalar::Utf8(c.clone())).collect()),
+            )
+    };
+    // A provider that declares no such read (one that is not SQL) is asked
+    // none: the read is the SQL engines' alone.
+    let reads_folds = asker
+        .capabilities()?
+        .optional
+        .contains(&OptionalRequest::FoldedKey);
+    let mut folded = None;
+    for table in &description.tables {
+        let key = table.primary_key.as_slice();
+        if key.len() < 2 {
+            continue;
+        }
+        let float = key.iter().any(|name| {
+            table.columns.iter().any(|c| {
+                &c.name == name && matches!(c.dtype, Dtype::Float | Dtype::Float32 | Dtype::Float64)
+            })
+        });
+        if float {
+            return Err(refused(
+                &table.name,
+                key,
+                "a float cannot be part of a key of several columns: its text is not reproducible",
+            ));
+        }
+        let name = format!(
+            "{FOLDED_PREFIX}{}",
+            key.iter()
+                .map(|c| c.bytes().map(|b| format!("{b:02x}")).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("_")
+        );
+        if name.len() > FOLDED_NAME_MOST {
+            return Err(refused(
+                &table.name,
+                key,
+                "a key of several columns needs a folded column's name longer than a source takes",
+            ));
+        }
+        if table.columns.iter().any(|c| c.name == name) {
+            return Err(refused(
+                &table.name,
+                key,
+                "a column holds the name a key of several columns is folded into",
+            ));
+        }
+        if reads_folds {
+            ask(
+                asker,
+                DataRequest::FoldedKey {
+                    table: table.source.clone(),
+                    key: key.to_vec(),
+                    column: name,
+                    limit: sdm_schema::infer::PREVIEW_ROWS,
+                },
+            )
+            .await?;
+        }
+        folded.get_or_insert((table.name.clone(), key.to_vec()));
+    }
+    match folded {
+        None => Ok(()),
+        Some((table, key)) => Err(refused(
+            &table,
+            &key,
+            "a table keyed by several columns cannot be sampled: the SQL samplers fold its key into a column of the name they reserve",
+        )),
+    }
+}
+
 /// Refuses a column of the schema named as the wire names a column of its
 /// own (`instance_id`, `__kumo_anchor_time`), as the client refuses it
 /// (`_refuse_a_name_the_wire_reserves`): `INVALID_SCHEMA`, naming each
@@ -2223,6 +2325,29 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     // decision E41(k)(iii)).
     let statistic = options::statistic(prediction_statistic.as_deref())?;
     reserved(&description)?;
+    if description.tables.iter().any(|t| t.primary_key.len() > 1) {
+        // The reference resolves its query against a schema with no key of
+        // several columns (`to_schema_definition`) before its engine folds
+        // one (T2.12).
+        let resolved = crate::pql::resolve(
+            &query,
+            &query_schema(&description),
+            &Profile::resolve(&ProfileSpec {
+                name: ProfileName::Relational,
+                model: None,
+                capabilities: Default::default(),
+            }),
+            &facts,
+            &*zones,
+        )?;
+        if resolved.query.is_none() {
+            return Err(invalid(
+                "the query does not resolve against the schema",
+                "query",
+            ));
+        }
+        refuse_folded_keys(asker, &description).await?;
+    }
 
     let graph = Graph::new(&description)?;
     let profile = Profile::resolve(&ProfileSpec {

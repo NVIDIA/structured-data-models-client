@@ -228,3 +228,68 @@ fn each_request_of_the_keys_family_renders_its_pinned_statement() {
         assert_eq!(statements[0].text, *pinned, "{written}");
     }
 }
+
+/// The read of a key of several columns folded into one text (T2.12),
+/// rendered for each dialect as the reference's engine writes it
+/// (`composite_key.sql_expression` under `Table._materialize_derived_key`,
+/// recorded at 6298913c from rule.composite-key-given's driver capture on
+/// DuckDB, SQLite and Postgres); a key naming no column is refused.
+#[test]
+fn a_folded_key_is_read_as_the_reference_reads_it() {
+    use sdm_contract::data::{DataRequest, FetchPlan, ProviderChoice};
+    use sdm_data::Data;
+    let request = DataRequest::FoldedKey {
+        table: "orders".into(),
+        key: vec!["order_id".into(), "line".into()],
+        column: "__kumo_key_6f726465725f6964_6c696e65".into(),
+        limit: 1_000,
+    };
+    let fold = |text: &str, chr: &str| {
+        let part = |c: &str| {
+            format!(
+                "REPLACE(REPLACE(CAST(\"{c}\" AS {text}), {chr}(92), {chr}(92) || {chr}(92)), {chr}(31), {chr}(92) || 'u')"
+            )
+        };
+        format!(
+            "SELECT {} || {chr}(31) || {} AS \"__kumo_key_6f726465725f6964_6c696e65\"",
+            part("order_id"),
+            part("line")
+        )
+    };
+    for (dialect, wanted) in [
+        (
+            "duckdb",
+            format!("{} FROM \"orders\" LIMIT 1000", fold("VARCHAR", "CHR")),
+        ),
+        (
+            "sqlite",
+            format!(
+                "{} FROM \"orders\" ORDER BY rowid LIMIT 1000",
+                fold("TEXT", "CHAR")
+            ),
+        ),
+        // The reference names Postgres's table by its schema too; the
+        // core reads a table by its relation alone (KO2-63).
+        (
+            "postgres",
+            format!("{} FROM \"orders\" LIMIT 1000", fold("TEXT", "CHR")),
+        ),
+    ] {
+        let provider = ProviderChoice::Sql {
+            dialect: sdm_contract::data::Dialect::new(dialect),
+        };
+        let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &provider).unwrap()
+        else {
+            panic!("{dialect}: not SQL")
+        };
+        let [statement] = statements.as_slice() else {
+            panic!("{dialect}: {statements:?}")
+        };
+        assert_eq!(statement.text, wanted, "{dialect}");
+        let mut empty = request.clone();
+        if let DataRequest::FoldedKey { key, .. } = &mut empty {
+            key.clear();
+        }
+        assert!(Data::new().plan(&empty, &provider).is_err(), "{dialect}");
+    }
+}

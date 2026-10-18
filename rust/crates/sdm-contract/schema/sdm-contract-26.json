@@ -3275,6 +3275,7 @@
         "time_bounds",
         "column_ranges",
         "repeated_key",
+        "folded_key",
         "sample_entities",
         "neighbors",
         "lookup"
@@ -3914,6 +3915,41 @@
             "request",
             "table",
             "key"
+          ]
+        },
+        {
+          "description": "The first `limit` rows of `table`, as a preview reads them, one text\nper row in the one column `column` names: the columns of `key`, in\norder, each cast to the source's text, a backslash in it doubled and\nthe unit separator (U+001F) written as a backslash and `u`, joined\nby the unit separator. The reference's engine folds a key of several\ncolumns so (`composite_key.sql_expression`) and reads it before its\nSQL samplers refuse the table (T2.12).",
+          "type": "object",
+          "properties": {
+            "table": {
+              "$ref": "#/$defs/Relation"
+            },
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "column": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": {
+              "type": "string",
+              "const": "folded_key"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "request",
+            "table",
+            "key",
+            "column",
+            "limit"
           ]
         },
         {

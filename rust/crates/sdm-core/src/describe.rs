@@ -685,18 +685,22 @@ async fn count_keys(
         return keys::hold(tables, &[], stated, infer_links);
     }
     // Each key labelled by its table's place among the tables with a key,
-    // those the source enforces included, as the reference labels it.
+    // those the source enforces included, as the reference labels it; the
+    // label given only where it is not the key's position among those
+    // asked.
     let asked: Vec<TableKey> = positions
         .iter()
-        .map(|&i| TableKey {
-            table: tables[i].source.clone(),
-            columns: tables[i].primary_key.clone(),
-            label: Some(
-                tables[..i]
-                    .iter()
-                    .filter(|t| !t.primary_key.is_empty())
-                    .count() as u64,
-            ),
+        .enumerate()
+        .map(|(at, &i)| {
+            let label = tables[..i]
+                .iter()
+                .filter(|t| !t.primary_key.is_empty())
+                .count() as u64;
+            TableKey {
+                table: tables[i].source.clone(),
+                columns: tables[i].primary_key.clone(),
+                label: (label != at as u64).then_some(label),
+            }
         })
         .collect();
     let answered = ask(

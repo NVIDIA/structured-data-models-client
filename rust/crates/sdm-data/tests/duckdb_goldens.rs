@@ -1969,6 +1969,124 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
         ],
     ),
+    (
+        r##"{"columns":["order_id","user_id","region","price","ts"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_id\", \"user_id\", \"region\", \"price\", \"ts\" FROM \"orders\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","region","age"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &["SELECT \"user_id\", \"region\", \"age\" FROM \"users\" LIMIT 1000"],
+    ),
+    (
+        r##"{"keys":[{"columns":["user_id"],"label":1,"table":{"source":["users"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\"\nFROM (SELECT * FROM \"users\")\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","region","age"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"region\", t.\"age\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","region","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"region\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["order_no","line","user_id","price","ts"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_no\", \"line\", \"user_id\", \"price\", \"ts\" FROM \"orders\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns":["order_no","line","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"line","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"order_no","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"price","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"user_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_no\", t.\"line\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"line\" ASC NULLS LAST, t.\"order_no\" ASC NULLS LAST, t.\"price\" ASC NULLS LAST, t.\"user_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"line\" ASC NULLS LAST, t.\"order_no\" ASC NULLS LAST, t.\"price\" ASC NULLS LAST, t.\"user_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts","line"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_id\", \"user_id\", \"price\", \"ts\", \"line\" FROM \"orders\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"keys":[{"columns":["order_id","line"],"table":{"source":["orders"]}},{"columns":["user_id"],"table":{"source":["users"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT (\"order_id\", \"line\")) FILTER (WHERE \"order_id\" IS NOT NULL AND \"line\" IS NOT NULL) AS d, COUNT(CASE WHEN \"order_id\" IS NULL OR \"line\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"",
+        ],
+    ),
+    (
+        r##"{"column":"__kumo_key_6f726465725f6964_6c696e65","key":["order_id","line"],"limit":1000,"request":"folded_key","table":{"source":["orders"]}}"##,
+        &[
+            "SELECT REPLACE(REPLACE(CAST(\"order_id\" AS VARCHAR), CHR(92), CHR(92) || CHR(92)), CHR(31), CHR(92) || 'u') || CHR(31) || REPLACE(REPLACE(CAST(\"line\" AS VARCHAR), CHR(92), CHR(92) || CHR(92)), CHR(31), CHR(92) || 'u') AS \"__kumo_key_6f726465725f6964_6c696e65\" FROM \"orders\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","age","country","score"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &["SELECT \"user_id\", \"age\", \"country\", \"score\" FROM \"users\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns":["user_id","age","country","score"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"age\", t.\"country\", t.\"score\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user","age","country"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &["SELECT \"user\", \"age\", \"country\" FROM \"users\" LIMIT 1000"],
+    ),
+    (
+        r##"{"keys":[{"columns":["order_id"],"table":{"source":["orders"]}},{"columns":["user"],"table":{"source":["users"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user\") AS d, COUNT(CASE WHEN \"user\" IS NULL THEN 1 END) AS z\nFROM \"users\"",
+        ],
+    ),
+    (
+        r##"{"columns":["user"],"filters":[{"column":"user","filter":"not_null"}],"key":["user"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["user","age","country"],"key":["user"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user\", t.\"age\", t.\"country\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","userid","age","country"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &["SELECT \"user_id\", \"userid\", \"age\", \"country\" FROM \"users\" LIMIT 1000"],
+    ),
+    (
+        r##"{"keys":[{"columns":["order_id"],"table":{"source":["orders"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","orderid","user_id","price","ts"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_id\", \"orderid\", \"user_id\", \"price\", \"ts\" FROM \"orders\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","orderid","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"orderid","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"price","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"user_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"orderid\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST, t.\"orderid\" ASC NULLS LAST, t.\"price\" ASC NULLS LAST, t.\"user_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST, t.\"orderid\" ASC NULLS LAST, t.\"price\" ASC NULLS LAST, t.\"user_id\" ASC NULLS LAST",
+        ],
+    ),
 ];
 
 #[test]

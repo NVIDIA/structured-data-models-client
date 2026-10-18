@@ -20,7 +20,7 @@
 //! | `large_list<T>`, `fixed_size_list<T, n>`, `list_view<T>`, `large_list_view<T>` | `list<T>` |
 //! | `dictionary<K, large_utf8>`, `dictionary<K, utf8_view>` | `dictionary<K, utf8>` |
 //! | `dictionary<K, V>`, any other `V` | `V`, admitted, the dictionary decoded |
-//! | `run_end_encoded<R, V>` | `V`, admitted, the runs decoded |
+//! | `run_end_encoded<R, V>` | `V`, admitted (values tagged `arrow.bool8`, `boolean`), the runs decoded |
 //!
 //! Before anything is admitted, each batch must match the schema its
 //! attachment declares (check (a) of decision H16): the same number of
@@ -189,7 +189,16 @@ fn convert_type(column: &str, received: &DataType) -> Result<DataType, CoreError
         }
         // Any other dictionary is decoded to its values.
         D::Dictionary(_, values) => convert_type(column, values)?,
-        // A run-end array is decoded to its values (E17).
+        // A run-end array is decoded to its values (E17); values tagged
+        // `arrow.bool8` are booleans, as the same column unencoded is
+        // (admitted_field), the tag on any other storage refused (T2.12, FR
+        // P3-8).
+        D::RunEndEncoded(_, values) if values.extension_type_name() == Some(BOOL8) => {
+            if !is_bool8(values) {
+                return Err(unsupported(column, received));
+            }
+            D::Boolean
+        }
         D::RunEndEncoded(_, values) => convert_type(column, values.data_type())?,
         other => other.clone(),
     };

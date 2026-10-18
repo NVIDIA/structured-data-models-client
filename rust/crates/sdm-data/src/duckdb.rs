@@ -94,6 +94,7 @@ const RENDERED: &[OptionalRequest] = &[
     OptionalRequest::TimeBounds,
     OptionalRequest::ColumnRanges,
     OptionalRequest::RepeatedKey,
+    OptionalRequest::FoldedKey,
     OptionalRequest::SampleEntities,
     OptionalRequest::Neighbors,
     OptionalRequest::Lookup,
@@ -210,6 +211,26 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 ));
             }
             repeated_key(&table, key)
+        }
+        DataRequest::FoldedKey {
+            table,
+            key,
+            column,
+            limit,
+        } => {
+            let table = from(request, "table", table)?;
+            if key.is_empty() {
+                return Err(sdm_contract::data::refused(
+                    request,
+                    "key",
+                    "a folded key names no columns",
+                ));
+            }
+            format!(
+                "SELECT {} AS {} FROM {table} LIMIT {limit}",
+                crate::quote::folded(key, "VARCHAR", "CHR"),
+                identifier(column)
+            )
         }
         DataRequest::SampleEntities {
             table,

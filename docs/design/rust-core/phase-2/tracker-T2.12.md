@@ -1,0 +1,52 @@
+# Phase 2 tracker: T2.12
+
+The design branch owns `tracker.md`; this file holds T2.12's section until it folds in.
+Lane e, on the phase head after T2.18's landing (f42d92ea), then the test author's acceptance tests (`T2.12 tests:` commits, from `t212-tests`), then this package (`T2.12:` commits).
+
+## T2.12
+
+T2.12 lifts the five schema rules of E92's Phase 2 class it owns (`float_nan` first, `float_signed_zero`, `key_tie`, `key_name_order`, `composite_key`; `phase-1/not-yet-refusals.md` rows 2, 4, 5, 8 and 9) on DuckDB, SQLite and Postgres, and admits the nine `edit.*` S1 cases as acceptance cases.
+The retirement of the interim edit gate is a later landing of its own and is not here.
+
+### What changed
+
+- **`float_nan`, `float_signed_zero`** (`sdm-schema/src/values.rs`): a float preview is read as the reference's pandas frame holds it.
+  A NaN is missing, as a null is (pandas' `isna`, `dropna` and `nunique` drop it), and `-0.0` is one value with `0.0` (`nunique` counts them once, measured on the reference venv for float64 and float32).
+  So the category and key scores count what the reference counts.
+- **`key_tie`** (`infer.rs`): a tie for the guessed key leaves the table keyless and says so, as the reference's `infer_primary_key` warns and returns `None`.
+  The warning is `KEY_CANDIDATES_TIED` (table, tied columns in the reference's order), listed in `assemble::WARNINGS`; the Python host words it in the engine's words as its `UserWarning`.
+- **`key_name_order`** (`infer.rs`): removed as unreachable.
+  The reference adds, for a column named as one form of its table's name, what the forms it meets first give, in an order that varies by run; but no form ever gives such a name anything, since the forms differ only by endings (`s`, `ies`/`y`, `ing`, `info`) and underscores, none of them a key suffix.
+  `a_name_equal_to_a_form_scores_four` holds it over every name of up to three characters of an alphabet of those endings, the suffixes' letters and characters whose lowercase changes length; an offline search of 3.4 million names of up to five characters found none either.
+- **`composite_key`**, as the reference behaves on every engine:
+  - a key of several columns given to `Schema.from_source` is taken as the reference's setter takes one (`assemble::apply_keys_and_times`): each column held by `_check_key` (able to identify a row, not the time column) and marked an identifier, the key the columns in order;
+  - it is counted over every row and held to the key rules (`keys::hold`): a row missing any part refused, repeats warned within 1% and refused past it; a key of several columns is named by a `columns` field and its repeated value is the list of its parts, which the Python host shows as the reference's `table.a.b` and tuple;
+  - the catalog's keys of several columns are read as no key on all three databases, Postgres included (the reference's Postgres discovery fails unnamed there, so the refusal of P2C-11 is lifted; P2E-4);
+  - at materialize, after the query resolves (the reference resolves it against a schema with no key of several columns, so a query whose entity is such a table is refused by the language first), each such table is folded as the reference's engine folds it, in table order: a float among the key's columns or a derived name past 200 characters refused, else the source's fold of the first rows read (a new optional request, `folded_key`, rendered as the reference's `composite_key.sql_expression` on each dialect); then the schema is refused `INVALID_REQUEST` naming the table and the key's columns, as the reference's SQL samplers refuse every such table (their check of reserved names refuses its folded column).
+    A provider that declares no `folded_key` (one that is not SQL) is refused without the read.
+    The reference compares the source's fold with its own of its preview, which only chooses between two refusals of that code; the core keeps no preview and compares nothing.
+- **The key counts' labels** (`describe::count_keys`): each key counted is labelled by its table's place among the tables with a key, a key the source enforces included, as the reference labels it; `TableKey` gains an optional `label`.
+  Found by `rule.composite-foreign-key-declared`: an enforced key before a counted one shifted the core's labels, a gated `sql.result` difference on DuckDB.
+- **Contract v26**, regenerated (`SDM_CONTRACT_WRITE=1 cargo test -p sdm-contract --test schema_lock`): `TableKey.label` (optional) and the `folded_key` request with its optional-request name; v26 is still the phase's working version, so no bump.
+- **Census and refusal maps**: the five probes whose sites are gone leave `contract/refusal-census.json` (`refusal_census.py check` passes); three refusal-map citations follow their lines (`empty-null.json`, `nested.json`, `time.json`).
+
+### Probes
+
+- Reference against core, outside the cases, through the public calls (`Schema.from_source`, then `materialize`) on all three databases:
+  - 15 composite-key shapes (given, given without the key check, a few and many repeats, a null part, a float, timestamp, date, bool or decimal part, a key on the entity's table, a one-element list, a column named twice, a missing column, a key over a foreign key): the same outcome, class, code, schema, links and warnings on each database, but the two already registered differences (a one-element list read as the column, P1B-15; a column named twice refused, P1B-73);
+  - declared composite primary keys, unique constraints and composite foreign keys: the same on DuckDB and SQLite; on Postgres the reference fails unnamed and the core answers as on the other two (P2E-4);
+  - NaN in a feature, in the aggregated column and in a float32, a NaN key candidate, many distinct values with NaNs, signed zeros in a feature, with many distinct values and the census's own probe, ties of two and four candidates, a tie in the entity's table, a key named over a tie, a key named as the table's singular and the census's `key_name_order` probe: the same outcome, schema, links and warnings (class and words, the core's `[CODE]` prefix aside) on each database.
+- The test author's 18 cases (9 rule cases, 9 edit cases) on python-core and rust-host against python-ref recorded on this machine, through `compare.py`, on each database (rust-host's Postgres leg replaying python-core's recorded fetches): no difference but the Postgres lines of P2E-4 and the two case-file items below. Two more composite shapes beside them (a decimal part, refused before any read on DuckDB and Postgres and read on SQLite, where the loader stores a decimal as text; a text part holding a backslash): the same statements and outcome as the reference on all three databases.
+- L4: the new cases' statements pinned as goldens on each database (`sdm-data`'s `tests/<database>_goldens.rs`), held to python-core's run of the cases there.
+- `cargo test --workspace --no-fail-fast`, the census check, `register.py validate`, the refusal-map test: see the handoff report.
+
+### Deviations and questions
+
+- **P2E-4 (owner)**: on Postgres a catalog key of several columns is read as no key, where the reference fails unnamed; E66(b) approves a named refusal in place of such a failure, not an answer, so the owner decides between this answer (DuckDB's and SQLite's) and keeping P2C-11's refusal under a rule outside E92's class.
+  The two Postgres lines of `rule.composite-key-declared` and `rule.composite-foreign-key-declared` differ from the reference until it is approved.
+- **P2E-3 (reviewers)**: the nine edit cases' files changed (status and paths), which the ratchet's case rule holds to an approved entry naming each.
+- **`folded_key`**: a read the core makes to match the reference's statements (sql.count and sql.result gate them); its answer chooses nothing, since the reference's comparison of it only chooses between two refusals of one code.
+  The owner approved skipping reads whose results go unused on Postgres (KO2-58); if the owner prefers that here too, the request and the read go, and the `rule.composite-key-given` lines need the comparator to take one statement fewer.
+- **Composite keys are never sampled**: the reference cannot materialize any schema keyed by several columns on a SQL source, so neither does the core; sampling them would be a change beyond the reference, for the owner.
+- **For the test author**: `rule.key-name-form`'s `core.describe_source.source` lacks the relationships its input gives (`inputs` differs on every database); `rule.key-tie-entity`'s routes lack `query.validate/*` and its core block names a `materialize` the core never starts on DuckDB (compare `refuse.unknown-column`); the protected tests that hold the lifted refusals (`sdm-testkit`'s `t132h_given.rs` and `t136_pre_given_specs.rs`, the client's `test_t132h_keys_and_times.py` and `test_the_schema_route.py`, `contract/tests/test_t132h_given_vectors.py` and `contract/given-vectors.json`'s `key.composite` vectors) and the Postgres regression vectors `key.composite-primary` and `key.composite-foreign`.
+- FR P3-8's key-cast vectors: written by the test author; the core changes only what they show.

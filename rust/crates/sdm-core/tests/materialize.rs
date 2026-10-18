@@ -609,18 +609,63 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
     ]);
     let mut run = materialize(host(), &parent, QUERY, None).unwrap();
     assert_eq!(rule(&refusal(&mut run)), "parent_table");
-    // A key of several columns, of a table no link refers to: refused as
-    // the reference's SQL samplers refuse every such table (T2.12), as an
-    // invalid request naming the table and its key's columns, before
-    // anything is read.
+    // A key of several columns, of a table no link refers to: its fold
+    // read as the reference's engine reads it, then refused as the
+    // reference's SQL samplers refuse every such table (T2.12), an invalid
+    // request naming the table and its key's columns.
     let mut composite = shop();
     composite.tables[0].primary_key = vec!["order_id".into(), "user_id".into()];
-    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    let mut folds = host();
+    let ProviderChoice::Host { capabilities } = &mut folds else {
+        unreachable!()
+    };
+    capabilities.optional.insert(OptionalRequest::FoldedKey);
+    let mut run = materialize(folds, &composite, QUERY, None).unwrap();
+    let step = run.next();
+    let Ok(Step::Fetch { requests }) = step else {
+        panic!("the fold is read first: {step:?}")
+    };
+    let [asked] = requests.as_slice() else {
+        panic!("{requests:?}")
+    };
+    let DataRequest::FoldedKey {
+        key, column: name, ..
+    } = &asked.request
+    else {
+        panic!("{:?}", asked.request)
+    };
+    assert_eq!(key, &["order_id", "user_id"]);
+    assert_eq!(name, "__kumo_key_6f726465725f6964_757365725f6964");
+    let folded = data(vec![(
+        name.as_str(),
+        Arc::new(StringArray::from(vec!["0\u{1f}0"])) as ArrayRef,
+    )]);
+    run.submit_fetch(asked.id, folded).unwrap();
     let err = run.next().unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     assert_eq!(err.fields["field"], Detail::text("schema"));
     assert_eq!(err.fields["table"], Detail::text("orders"));
     assert!(!err.fields.contains_key("rule"), "{err:?}");
+    // A provider that declares no such read is refused at once.
+    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["table"], Detail::text("orders"));
+    // A float among the key's columns is refused before anything is read.
+    let mut composite = shop();
+    composite.tables[0].primary_key = vec!["order_id".into(), "price".into()];
+    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    // A query whose entity's table is keyed so is refused as the
+    // reference's language refuses it, with no key, before anything is
+    // read.
+    let mut composite = shop();
+    composite.tables[1].primary_key = vec!["user_id".into(), "age".into()];
+    composite.links.clear();
+    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     // One a link refers to is the reference's refusal of a relationship
     // that cannot join, before anything is read (decision E55).
     let mut composite = shop();
