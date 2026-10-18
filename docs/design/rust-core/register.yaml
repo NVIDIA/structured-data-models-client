@@ -6208,20 +6208,20 @@ entries:
   cases: [T2.0c]
   refs: [1fc5a686, P2B-3, P2B-4]
   status: rejected
-  approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  approved_by: reviewer
+  decision_ref: null
   notes: >-
     Approver: reviewer. Not a refusal: the same error, without the answered
     steps main's client keeps on it. Found by T2.0c's round 1 review (the
     Claude subagent's P3-13). Temporary: it lapses when T2.8c lands.
 
-    Retired by T2.8c under KO2-45's lapse (rejected; the ID is kept; for
-    the reviewers): the core carries a failed step's answered steps on its
-    error (CoreError.answered, parts_answered) and the Python host puts
-    them in details['answered'] as main's client does; measured with a
-    three-step forecast failing at step 3, equal to the old route's
-    answered steps.
-
+    Rejected at T2.8c (the ID is kept): the proposal lapses, as T2.8c
+    fixes the difference; the core carries a failed step's answered steps
+    on its error (CoreError.answered, parts_answered) and the Python host
+    puts them in details['answered'] as main's client does, measured with
+    a three-step forecast failing at step 3, equal to the old route's.
+    Never approved, so its rejection is the reviewers' to confirm in
+    T2.8c's round.
 - id: P2B-10
   title: On SQLite, an empty table is refused by name where the reference raises an unnamed RuntimeError, as on DuckDB (P1B-11)
   kind: change

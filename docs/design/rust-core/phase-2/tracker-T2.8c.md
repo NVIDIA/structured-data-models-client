@@ -22,7 +22,7 @@ The acceptance cases are the test author's (`T2.8c tests:` commits on `t28c-test
   The Python host tells the core of an endpoint's refusal by its status (`run.Refused`), so the core carries the answers, and raises the refusal itself (E47) with `details['answered']`, `rows_answered`, `calls_answered` or `parts_answered`, as `main`'s client does.
 - **Hosts**: the Python bridges pass `rows_per_call` and the ceilings, hold and hand back the batches, and draw an id per call; `run_python.py` expects each later call's id; `sdm-testkit`'s host holds and hands back the batches.
   The bridge freeze's six changed entries are declared (`moved`, T2.8c; `_result` a refactor).
-- **Register**: P2B-3, P2B-4 and P2B-9, KO2-45's temporary entries for T2.8c, are retired (`rejected`, IDs kept, each with what replaced it); `register.py validate` passes.
+- **Register**: P2B-3 and P2B-4, KO2-45's temporary entries for T2.8c, are retired (`rejected`, IDs kept, each with what replaced it); P2B-9, only ever proposed, is rejected with `approved_by: reviewer` as the proposal lapses, for T2.8c's reviewers to confirm; `register.py validate` passes.
 - **Older client tests** that held the core's 1,000-entity refusal (`test_t128a_payload_rules.py`, `test_the_materialize_route.py`'s P1B-20 test) now hold the reference's outcomes, and the P1B-20 test the new ceilings.
 
 ## Probes
@@ -48,8 +48,8 @@ The test author's five commits (`t28c-tests`, 72521060 to 6b86ea60) cherry-picke
 ## The judging change, T2.1g (lane h, lands first)
 
 python-core recorded one call's body, the last, and the payload rule held it against every request received, so no case of several calls could pass.
-T2.1g (0a7f6aa1, lane h, from 8006efce) records every call's body (`core.predicted.calls`) on both core runners, holds them call by call, and has the test host read `RequestState.batches` and `CoreError.answered`; single-call lines are unchanged (`contract/tests/test_t21g_calls.py`).
-This lane carries the same files byte for byte (6efcdbd0) so its cases run here; once T2.1g lands, that commit is empty on the rebase.
+T2.1g (48d3e0f8 and 08bf20aa, lane h, from dfce343e) records every call's body (`core.predicted.calls`) on both core runners, holds them call by call, and has the test host read `RequestState.batches` and `CoreError.answered`; single-call lines are unchanged (`contract/tests/test_t21g_calls.py`).
+This lane carries the same files byte for byte (20efd370 and the commit after this tracker's update) so its cases run here; once T2.1g lands, those commits are empty on the rebase.
 My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the batches held) are subsumed by T2.1g's.
 
 ## What the gate would still report
@@ -57,10 +57,7 @@ My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the ba
 `compare.py` (with T2.1g's rule) over python-core and rust-host on the committed reference lines, DuckDB:
 
 1. **The class name** on `calls.101`, `entities.100001` and `forecast.batched`: `UnsupportedRequestError` where the reference raises `StructuredDataError`, code equal; register P1B-20 (approved), whose cases now name them; the ratchet's baselines at landing hold it.
-2. **An endpoint's refusal at predict** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`), not settled here:
-   - python-core raises the reference's `NimRequestError` (code none, its text and details the reference's, the answered parts carried) while its core ends `INVALID_RESPONSE` naming the status, which the outcome rule's "outcome against core" holds equal (`_core_consistent`); before this package the host cancelled the run, and the rule's "not one prediction or one error" failed instead, so no flow passes it: no earlier case had the endpoint refuse.
-   - rust-host, which has no transport, reports the core's `INVALID_RESPONSE`, where the reference's outcome has no code.
-   Either a judging change (the predict branch of the outcome rule taking an endpoint's refusal, `NimRequestError` with no code, as agreeing with `INVALID_RESPONSE`) or register entries; for the orchestrator.
+2. **An endpoint's refusal at predict** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`): python-core raises the reference's `NimRequestError` (no code, the answered parts carried) while its core ends `INVALID_RESPONSE`; rust-host, with no transport, reports the core's code. Settled by the orchestrator as a comparator rule in T2.1g (08bf20aa): exactly that pairing agrees, on both core runners; no register entry. With it, these cases leave no difference.
 
 ## Deviations and what is left
 
@@ -68,4 +65,4 @@ My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the ba
 - Judging-path files touched on this lane: `contract/runners/run_python.py`, `scripts/rust_core/compare.py`, `contract/observation.schema.json` and `sdm-testkit`'s host (T2.1g's, mirrored); `scripts/rust_core/bridge_changes.json` and the freeze baseline; `contract/refusal-maps/` (three line citations); `docs/design/rust-core/register.yaml`.
 - At landing: the cases' baselines (`ratchet.py accept`) and the SQLite and Postgres goldens for the cases' statements, as at T2.19; `tests/test_contract_cases.py`'s `_not_synthesizable` still names the six multi-call cases the test author left out before T2.1g.
 - The local `contract/tests` run (4,462 passed) failed 132 tests, every one the recorded-environment guard of this machine's venv (pandas and pyarrow not a recorded cell: `test_t136_host2_*`, `test_gate_modes`, `test_gate_evidence_paths`, `test_t20_locked_set`), none of this package's behavior.
-- Found while probing, not this package's: the differential's 50 sources show 7 "schema after the edits" differences (`from_source` reads a column's meaning, `d`, as categorical where the reference reads numerical), the same with one call or two.
+- A pre-existing finding, not this package's (the orchestrator carries it for investigation): the old-against-core differential's 50 seeded DuckDB sources show 7 unclassified "schema after the edits" differences, `from_source` reading a column's meaning (`d`) as categorical where the reference reads numerical, before any materialize, the same with one call per source or two.
