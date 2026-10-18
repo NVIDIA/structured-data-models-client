@@ -162,9 +162,12 @@ def on_rust_host(vector: dict[str, Any]) -> bool:
     r"""Whether rust-host replays ``vector``: a call a case can make (its
     materialize arguments a case's, no edit, the default outputs), whose
     answers its JSON reader takes as Python's does (no NaN in a member it
-    gives back as written)."""
+    gives back as written), over the S1 cases' data on DuckDB (no setup
+    or database of its own: round 1's candidates are python-core's)."""
     return (
-        set(vector['materialize'])
+        'setup' not in vector
+        and 'database' not in vector
+        and set(vector['materialize'])
         <= {'indices', 'anchor_time', 'candidates', 'top_k'}
         and vector['edit'] is None
         and not vector['predict']
@@ -448,6 +451,26 @@ def test_the_vectors_are_the_reference_s_and_not_vacuous() -> None:
     assert by['instance-id.float']['outcome'] == 'result'
     assert by['prediction-type.binary-float']['dtypes'][2] == 'float64'
     assert by['prediction-type.binary-text']['rows'][0][2] == {'str': 'maybe'}
+    # Round 1: a date and its spelling are two candidates, both kept; a
+    # key past i128, as a Decimal and as an int, and one past 76 digits,
+    # each scored as itself, on all three databases.
+    for at in ('', '@sqlite', '@postgres'):
+        for name, spelled in (
+            ('date-and-text', '2023-01-01'),
+            ('timestamp-and-text', '2023-01-01 00:00:00'),
+        ):
+            both = by[f'candidates.{name}{at}']
+            assert len(both['calls']) == 3, name
+            assert both['unscored'] == {'list': []}, name
+            assert {'str': spelled} in both['rows'][0][2]['list'], name
+        for name, key in (
+            ('decimal-past-i128', {'decimal': str(10**39)}),
+            ('int-past-i128', {'int': str(10**39)}),
+            ('int-past-76-digits', {'int': str(10**77 + 123456789)}),
+        ):
+            wide = by[f'candidates.{name}{at}']
+            assert wide['unscored'] == {'list': []}, name
+            assert key in wide['rows'][0][2]['list'], name
     assert by['prediction-type.multiclass-integer']['rows'][0][2] == {
         'int': '3'
     }
@@ -665,15 +688,15 @@ def test_python_core_answers_each_case_as_the_reference_does(
     held(case_key, check)
 
 
-def _routes() -> str:
+def _routes(database: str = 'duckdb') -> str:
     from sdm_client import _routing
 
     return ','.join(
         dict.fromkeys(
             [
-                *_routing.FROM_SOURCE_DUCKDB,
-                *_routing.MATERIALIZE_DUCKDB,
-                *_routing.PREDICT_DUCKDB,
+                *_routing.FROM_SOURCE[database],
+                *_routing.MATERIALIZE[database],
+                *_routing.PREDICT[database],
             ]
         )
     )
@@ -727,12 +750,18 @@ def test_python_core_answers_each_vector_as_the_reference_does(
 ) -> None:
     r"""T2.8b's exits, "scores, rankings, ``prediction_statistic``, PD-1,
     reassembly; ``response_field`` for rankings; ``instance_id_type``,
-    ``prediction_type``": python-core, on the core route over DuckDB,
-    answers the vector as python-ref does: its result and ``.items``, or
-    its refusal, and the calls it made."""
+    ``prediction_type``": python-core, on the core route over the vector's
+    database (DuckDB unless it names another), answers the vector as
+    python-ref does: its result and ``.items``, or its refusal, and the
+    calls it made. Round 1's candidates (a date or a timestamp beside its
+    spelling, a key past i128 as a Decimal and an int, one past 76 digits)
+    run on all three databases."""
     spec = next(v for v in vectors()['vectors'] if v['name'] == name)
     inputs = {k: v for k, v in spec.items() if k != 'expected'}
-    monkeypatch.setenv('SDM_CORE_ROUTES', _routes())
+    database = spec.get('database', 'duckdb')
+    if database == 'postgres' and not _server():
+        return
+    monkeypatch.setenv('SDM_CORE_ROUTES', _routes(database))
 
     def check() -> None:
         held_to(recorder().observe(inputs), spec['expected'], name)

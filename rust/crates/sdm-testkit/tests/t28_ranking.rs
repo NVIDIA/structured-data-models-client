@@ -339,15 +339,17 @@ fn rust_host_answers_each_case_as_the_reference_does_on_sqlite() {
 // --- the vectors ------------------------------------------------------------------
 
 /// Whether rust-host replays `vector`, as `test_t28_ranking.py`'s
-/// `on_rust_host` says: a call a case can make, whose answers its JSON
-/// reader takes as Python's does.
+/// `on_rust_host` says: a call a case can make over the S1 cases' data on
+/// DuckDB, whose answers its JSON reader takes as Python's does.
 fn on_rust_host(vector: &Value) -> bool {
     let allowed = ["indices", "anchor_time", "candidates", "top_k"];
-    vector["materialize"]
-        .as_object()
-        .unwrap()
-        .keys()
-        .all(|k| allowed.contains(&k.as_str()))
+    vector.get("setup").is_none()
+        && vector.get("database").is_none()
+        && vector["materialize"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .all(|k| allowed.contains(&k.as_str()))
         && vector["edit"].is_null()
         && vector["predict"].as_object().unwrap().is_empty()
         && !vector["name"].as_str().unwrap().contains("nan-score")
