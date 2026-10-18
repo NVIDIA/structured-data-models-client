@@ -1,0 +1,801 @@
+{
+ "format": "sdm-column-name-regression-vectors/1",
+ "recorded_by": "contract/tools/column_name_regressions_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13"
+ },
+ "twin": "a_b",
+ "vectors": [
+  {
+   "id": "twin.task@duckdb",
+   "database": "duckdb",
+   "kind": "task",
+   "character": null,
+   "name": "a_b",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a_b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.a_b, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] task='regression' settles what a single-table question is asking, which is the only route that has to decide. A relational query resolves to its own kind, so state it in the query rather than beside it"
+   }
+  },
+  {
+   "id": "dot.task@duckdb",
+   "database": "duckdb",
+   "kind": "task",
+   "character": "dot",
+   "name": "a.b",
+   "twin": "twin.task@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a.b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a.b`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a.b`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Column name 'a.b' contains a dot, which is not supported in a predictive query. Rename the column to reference it."
+   }
+  },
+  {
+   "id": "backtick.task@duckdb",
+   "database": "duckdb",
+   "kind": "task",
+   "character": "backtick",
+   "name": "a`b",
+   "twin": "twin.task@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a`b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a``b`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a``b`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"`b`\"; in line 1 and col 22; Encountered the following error: \"no viable alternative at input 'SUM(orders.`a``b`'\"; "
+   }
+  },
+  {
+   "id": "line-feed.task@duckdb",
+   "database": "duckdb",
+   "kind": "task",
+   "character": "line-feed",
+   "name": "a\nb",
+   "twin": "twin.task@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\nb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a\nb`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a\\nb`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 18;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 19;  Syntax Error: token recognition error at: '`a\\n'\n3. Invalid Syntax.  Line 2, col 1;  Syntax Error: token recognition error at: '`, 0, 30, days) FOR EACH users.user_id'\n4. Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"orders\"; in line 1 and col 12; Encountered the following error: \"no viable alternative at input 'SUM(orders'\"; "
+   }
+  },
+  {
+   "id": "carriage-return.task@duckdb",
+   "database": "duckdb",
+   "kind": "task",
+   "character": "carriage-return",
+   "name": "a\rb",
+   "twin": "twin.task@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\rb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a\rb`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a\\rb`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 18;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 19;  Syntax Error: token recognition error at: '`a\\r'\n3. Invalid Syntax.  Line 1, col 23;  Syntax Error: token recognition error at: '`, 0, 30, days) FOR EACH users.user_id'\n4. Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"orders\"; in line 1 and col 12; Encountered the following error: \"no viable alternative at input 'SUM(orders'\"; "
+   }
+  },
+  {
+   "id": "twin.typo@duckdb",
+   "database": "duckdb",
+   "kind": "typo",
+   "character": null,
+   "name": "a_b",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a_b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "dot.typo@duckdb",
+   "database": "duckdb",
+   "kind": "typo",
+   "character": "dot",
+   "name": "a.b",
+   "twin": "twin.typo@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a.b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "backtick.typo@duckdb",
+   "database": "duckdb",
+   "kind": "typo",
+   "character": "backtick",
+   "name": "a`b",
+   "twin": "twin.typo@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a`b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "line-feed.typo@duckdb",
+   "database": "duckdb",
+   "kind": "typo",
+   "character": "line-feed",
+   "name": "a\nb",
+   "twin": "twin.typo@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\nb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "carriage-return.typo@duckdb",
+   "database": "duckdb",
+   "kind": "typo",
+   "character": "carriage-return",
+   "name": "a\rb",
+   "twin": "twin.typo@duckdb",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\rb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "twin.task@sqlite",
+   "database": "sqlite",
+   "kind": "task",
+   "character": null,
+   "name": "a_b",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a_b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.a_b, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] task='regression' settles what a single-table question is asking, which is the only route that has to decide. A relational query resolves to its own kind, so state it in the query rather than beside it"
+   }
+  },
+  {
+   "id": "dot.task@sqlite",
+   "database": "sqlite",
+   "kind": "task",
+   "character": "dot",
+   "name": "a.b",
+   "twin": "twin.task@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a.b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a.b`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a.b`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Column name 'a.b' contains a dot, which is not supported in a predictive query. Rename the column to reference it."
+   }
+  },
+  {
+   "id": "backtick.task@sqlite",
+   "database": "sqlite",
+   "kind": "task",
+   "character": "backtick",
+   "name": "a`b",
+   "twin": "twin.task@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a`b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a``b`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a``b`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"`b`\"; in line 1 and col 22; Encountered the following error: \"no viable alternative at input 'SUM(orders.`a``b`'\"; "
+   }
+  },
+  {
+   "id": "line-feed.task@sqlite",
+   "database": "sqlite",
+   "kind": "task",
+   "character": "line-feed",
+   "name": "a\nb",
+   "twin": "twin.task@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\nb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a\nb`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a\\nb`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 18;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 19;  Syntax Error: token recognition error at: '`a\\n'\n3. Invalid Syntax.  Line 2, col 1;  Syntax Error: token recognition error at: '`, 0, 30, days) FOR EACH users.user_id'\n4. Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"orders\"; in line 1 and col 12; Encountered the following error: \"no viable alternative at input 'SUM(orders'\"; "
+   }
+  },
+  {
+   "id": "carriage-return.task@sqlite",
+   "database": "sqlite",
+   "kind": "task",
+   "character": "carriage-return",
+   "name": "a\rb",
+   "twin": "twin.task@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\rb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a\rb`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a\\rb`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 18;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 19;  Syntax Error: token recognition error at: '`a\\r'\n3. Invalid Syntax.  Line 1, col 23;  Syntax Error: token recognition error at: '`, 0, 30, days) FOR EACH users.user_id'\n4. Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"orders\"; in line 1 and col 12; Encountered the following error: \"no viable alternative at input 'SUM(orders'\"; "
+   }
+  },
+  {
+   "id": "twin.typo@sqlite",
+   "database": "sqlite",
+   "kind": "typo",
+   "character": null,
+   "name": "a_b",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a_b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "dot.typo@sqlite",
+   "database": "sqlite",
+   "kind": "typo",
+   "character": "dot",
+   "name": "a.b",
+   "twin": "twin.typo@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a.b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "backtick.typo@sqlite",
+   "database": "sqlite",
+   "kind": "typo",
+   "character": "backtick",
+   "name": "a`b",
+   "twin": "twin.typo@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a`b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "line-feed.typo@sqlite",
+   "database": "sqlite",
+   "kind": "typo",
+   "character": "line-feed",
+   "name": "a\nb",
+   "twin": "twin.typo@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\nb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "carriage-return.typo@sqlite",
+   "database": "sqlite",
+   "kind": "typo",
+   "character": "carriage-return",
+   "name": "a\rb",
+   "twin": "twin.typo@sqlite",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\rb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "twin.task@postgres",
+   "database": "postgres",
+   "kind": "task",
+   "character": null,
+   "name": "a_b",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a_b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.a_b, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] task='regression' settles what a single-table question is asking, which is the only route that has to decide. A relational query resolves to its own kind, so state it in the query rather than beside it"
+   }
+  },
+  {
+   "id": "dot.task@postgres",
+   "database": "postgres",
+   "kind": "task",
+   "character": "dot",
+   "name": "a.b",
+   "twin": "twin.task@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a.b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a.b`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a.b`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Column name 'a.b' contains a dot, which is not supported in a predictive query. Rename the column to reference it."
+   }
+  },
+  {
+   "id": "backtick.task@postgres",
+   "database": "postgres",
+   "kind": "task",
+   "character": "backtick",
+   "name": "a`b",
+   "twin": "twin.task@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a`b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a``b`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a``b`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"`b`\"; in line 1 and col 22; Encountered the following error: \"no viable alternative at input 'SUM(orders.`a``b`'\"; "
+   }
+  },
+  {
+   "id": "line-feed.task@postgres",
+   "database": "postgres",
+   "kind": "task",
+   "character": "line-feed",
+   "name": "a\nb",
+   "twin": "twin.task@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\nb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a\nb`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a\\nb`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 18;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 19;  Syntax Error: token recognition error at: '`a\\n'\n3. Invalid Syntax.  Line 2, col 1;  Syntax Error: token recognition error at: '`, 0, 30, days) FOR EACH users.user_id'\n4. Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"orders\"; in line 1 and col 12; Encountered the following error: \"no viable alternative at input 'SUM(orders'\"; "
+   }
+  },
+  {
+   "id": "carriage-return.task@postgres",
+   "database": "postgres",
+   "kind": "task",
+   "character": "carriage-return",
+   "name": "a\rb",
+   "twin": "twin.task@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\rb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.`a\rb`, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "task": "regression",
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.`a\\rb`, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: Encountered the following issues during parsing: 1. Invalid Syntax.  Line 1, col 18;  Syntax Error: token recognition error at: '.'\n2. Invalid Syntax.  Line 1, col 19;  Syntax Error: token recognition error at: '`a\\r'\n3. Invalid Syntax.  Line 1, col 23;  Syntax Error: token recognition error at: '`, 0, 30, days) FOR EACH users.user_id'\n4. Invalid Syntax. The target (PREDICT) clause in this query is empty or invalid.\nSpecific error: \nCould not process the text: \"orders\"; in line 1 and col 12; Encountered the following error: \"no viable alternative at input 'SUM(orders'\"; "
+   }
+  },
+  {
+   "id": "twin.typo@postgres",
+   "database": "postgres",
+   "kind": "typo",
+   "character": null,
+   "name": "a_b",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a_b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "dot.typo@postgres",
+   "database": "postgres",
+   "kind": "typo",
+   "character": "dot",
+   "name": "a.b",
+   "twin": "twin.typo@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a.b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "backtick.typo@postgres",
+   "database": "postgres",
+   "kind": "typo",
+   "character": "backtick",
+   "name": "a`b",
+   "twin": "twin.typo@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a`b\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "line-feed.typo@postgres",
+   "database": "postgres",
+   "kind": "typo",
+   "character": "line-feed",
+   "name": "a\nb",
+   "twin": "twin.typo@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\nb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  },
+  {
+   "id": "carriage-return.typo@postgres",
+   "database": "postgres",
+   "kind": "typo",
+   "character": "carriage-return",
+   "name": "a\rb",
+   "twin": "twin.typo@postgres",
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT *, (price * 2)::DOUBLE AS \"a\rb\" FROM orders"
+   ],
+   "pql": "PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: row 1, column 12: Column 'pricee' does not exist in table 'orders'. Please be mindful of case sensitivity and ensure that the name is spelled correctly."
+   }
+  }
+ ]
+}
