@@ -25,7 +25,7 @@
     "client.predict/forecast/duckdb"
   ],
   "cells": [
-    "utf8/target"
+    "utf8/feature"
   ],
   "input": {
     "base": "shop",

@@ -25,10 +25,7 @@
     "client.predict/ranking/duckdb",
     "client.predict/forecast/duckdb"
   ],
-  "cells": [
-    "int64/primary-key",
-    "int64/foreign-key"
-  ],
+  "cells": [],
   "input": {
     "base": "shop",
     "setup": [
