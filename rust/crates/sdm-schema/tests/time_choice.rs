@@ -127,6 +127,7 @@ fn of(columns: Vec<(&str, ArrayRef)>) -> Result<infer::InferredTable, String> {
             declared_type: String::new(),
             not_null: false,
             primary_key: false,
+            key_nullable: false,
             unique: false,
             dtype: None,
         })
@@ -181,6 +182,7 @@ fn things(stamps: &[&str], rows: i64, constant: bool) -> Result<infer::InferredT
             declared_type: String::new(),
             not_null: false,
             primary_key: false,
+            key_nullable: false,
             unique: false,
             dtype: None,
         })
@@ -542,6 +544,7 @@ fn previewed(stamps: &[&str], rows: i64, constant: bool) -> infer::Previewed {
             declared_type: String::new(),
             not_null: false,
             primary_key: false,
+            key_nullable: false,
             unique: false,
             dtype: None,
         })
@@ -1063,6 +1066,7 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
             declared_type: String::new(),
             not_null: false,
             primary_key: false,
+            key_nullable: false,
             unique: false,
             dtype: None,
         })
