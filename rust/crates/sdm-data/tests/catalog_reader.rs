@@ -398,13 +398,13 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
         .read(
             &columns,
             &ProviderChoice::Sql {
-                dialect: Dialect::new("postgres"),
+                dialect: Dialect::new("snowflake"),
             },
             &[],
         )
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(err.fields["dialect"], Detail::text("postgres"));
+    assert_eq!(err.fields["dialect"], Detail::text("snowflake"));
 }
 
 /// The plan's expected shape is what the reader reads: an answer in the
