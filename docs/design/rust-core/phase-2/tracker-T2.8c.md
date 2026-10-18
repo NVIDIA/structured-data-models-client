@@ -1,6 +1,6 @@
 # T2.8c: multi-call `predict`
 
-Lane f's worktree, started on the phase head after T2.19's landing (dfdd532a) and moved onto T2.4's landing (8006efce) before the first hand-off.
+Lane f's worktree, started on the phase head after T2.19's landing (dfdd532a), moved onto T2.4's (8006efce), T2.1f's (dfce343e) and, for landing, T2.1g's (1486a8f1).
 `main`'s 1fc5a686 (in the reference at 6298913c) gathers a request of more entities than one call scores as several calls and predicts them as one; this package writes it in the core (design, choice 6), never in the host.
 The acceptance cases are the test author's (`T2.8c tests:` commits on `t28c-tests`: 72521060, 217eea1b).
 
@@ -49,7 +49,7 @@ The test author's five commits (`t28c-tests`, 72521060 to 6b86ea60) cherry-picke
 
 python-core recorded one call's body, the last, and the payload rule held it against every request received, so no case of several calls could pass.
 T2.1g (48d3e0f8 and 08bf20aa, lane h, from dfce343e) records every call's body (`core.predicted.calls`) on both core runners, holds them call by call, and has the test host read `RequestState.batches` and `CoreError.answered`; single-call lines are unchanged (`contract/tests/test_t21g_calls.py`).
-This lane carries the same files byte for byte (20efd370 and the commit after this tracker's update) so its cases run here; once T2.1g lands, those commits are empty on the rebase.
+T2.1g landed first (1486a8f1); on the rebase onto it the two commits that carried its files byte for byte dropped out as empty, and the rebased tree equals the one before but for T2.1g's own tracker.
 My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the batches held) are subsumed by T2.1g's.
 
 ## What the gate would still report
@@ -58,6 +58,12 @@ My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the ba
 
 1. **The class name** on `calls.101`, `entities.100001` and `forecast.batched`: `UnsupportedRequestError` where the reference raises `StructuredDataError`, code equal; register P1B-20 (approved), whose cases now name them; the ratchet's baselines at landing hold it.
 2. **An endpoint's refusal at predict** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`): python-core raises the reference's `NimRequestError` (no code, the answered parts carried) while its core ends `INVALID_RESPONSE`; rust-host, with no transport, reports the core's code. Settled by the orchestrator as a comparator rule in T2.1g (08bf20aa): exactly that pairing agrees, on both core runners; no register entry. With it, these cases leave no difference.
+
+## Landing work
+
+- **Baselines**: `ratchet.py accept --checkpoint 1486a8f1` over python-core's, python-old's and rust-host's DuckDB observations of the 21 multicall cases, its lines added to the committed files, every other line kept: 21 for python-core (the three P1B-20 cases held by `case_outcomes` added to that entry, from `none`, as a first admission), 21 for python-old, 18 for rust-host.
+- **rust-host's three endpoint-refusal cases have no baseline** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`): on a first admission the ratchet expects the reference's outcome (no code) unless an approved register entry moves it, and rust-host's is its core's `INVALID_RESPONSE`, so `accept` proposes none and `check` names each "an acceptance case with no proposed baseline". T2.1g's agreement lives in the comparator only. For the orchestrator: an approved entry with rust-host `case_outcomes` from `none`, or the same pairing in the ratchet's `effective` and `accept` (a judging change).
+- **Goldens**: `sdm-data`'s DuckDB, SQLite and Postgres goldens each gain the 112 requests python-core's run of the cases on that database fetched (each later call's key set its own attachment id), as T2.4's run check printed them; each database's render and run checks pass with `SDM_L4_OBSERVATIONS` naming that run.
 
 ## Deviations and what is left
 
