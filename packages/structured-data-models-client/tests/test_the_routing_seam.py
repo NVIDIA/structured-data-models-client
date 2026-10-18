@@ -173,10 +173,10 @@ def test_the_route_is_read_at_every_call(
         # A host path is never routed.
         ('source.open/explicit/duckdb', 'source.open/explicit/duckdb'),
         # A core path with no core route in this build (SQLite's has one
-        # from T2.2).
+        # from T2.2, Postgres's from T2.3).
         (
-            'client.predict/regression/postgres',
-            'client.predict/regression/postgres',
+            'client.predict/regression/snowflake',
+            'client.predict/regression/snowflake',
         ),
     ],
 )
