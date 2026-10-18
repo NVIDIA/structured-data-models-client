@@ -126,7 +126,13 @@ unchanged past the stop. Where that move is to a success and the owner-
 approved entry's ``case_outcomes`` row for the line names the stopping
 call under ``statements_differ`` (T2.1e), the call answers where the
 reference refused: its ``sql.count`` and ``sql.result`` against the
-reference's are reported as diagnostic, nothing else. And a row read's DuckDB types name the Arrow
+reference's are reported as diagnostic, nothing else. A SQLite or
+Postgres line is held, by the ``route``, ``inputs`` and core-consistency
+rules, to the case's core operations of the calls before the one it stops
+at (its effective expectation's refusal, else the reference line's), and
+to any of that call or a later one the runner ran (T2.1e): the case's
+core block is DuckDB's run.
+And a row read's DuckDB types name the Arrow
 types DuckDB reads them as with ``arrow_large_buffer_size`` where the
 case's own setup sets it (``large_string``, ``large_binary``,
 ``large_list``).
@@ -521,6 +527,48 @@ def past_stop(
     return None
 
 
+def line_stop(
+    wanted: dict[str, Any] | None, reference: dict[str, Any] | None
+) -> str | None:
+    r"""The call a database line stops at: the refusal of this runner's
+    effective expectation (an approved move's), or else of the reference's
+    line; None where the line answers or names no call (T2.1e)."""
+    theirs = (reference or {}).get('outcome') or {}
+    if wanted is not None:
+        if wanted.get('result') != 'refusal':
+            return None
+        stage = wanted.get('stage') or theirs.get('stage')
+    elif theirs.get('result') == 'refusal':
+        stage = theirs.get('stage')
+    else:
+        return None
+    return str(stage) if stage in STAGES else None
+
+
+def core_held(
+    case: dict[str, Any], observation: dict[str, Any], stop: str | None
+) -> dict[str, Any]:
+    r"""``case`` with the core operations a database line is held to (T2.1e):
+    the case's core block is DuckDB's run, and off DuckDB the reference's
+    line may stop at an earlier call (SQLite stores a decimal as text,
+    which the reference refuses as a number, KO2-47's types), and a
+    refusal there may come before the core's operation of that call runs
+    (the client's query check, as the reference's), so an operation of
+    the call at ``stop`` or after it is held only where the runner ran it;
+    every operation of a call before the stop, and every one it ran, as
+    before."""
+    if stop is None:
+        return case
+    ran = set(observation['identity'].get('operations') or [])
+    limit = STAGES.index(stop)
+    held = {
+        op: spec
+        for op, spec in case.get('core', {}).items()
+        if op in ran or op not in STAGE_OF or STAGES.index(STAGE_OF[op]) < limit
+    }
+    return {**case, 'core': held}
+
+
 def _route(
     report: Report, case: dict[str, Any], who: str, observation: dict[str, Any]
 ) -> None:
@@ -706,6 +754,11 @@ def _core_consistent(
         # beside the description (decision E67).
         edits = core.get('edits') or []
         edited = bool(edits) and edits[-1].get('op') == 'edit_schema'
+        if 'edits' not in core:
+            # rust-host records no edits: its operations say the last call
+            # was an edit (T2.1e, a line held to the calls it makes).
+            operations = observation['identity'].get('operations') or []
+            edited = operations[-1:] == ['edit_schema']
         if (core['described'] is None) == (core['error'] is None) and not (
             edited and core['described'] is not None
         ):
@@ -2205,8 +2258,14 @@ def compare(
                 continue
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
-            _core_consistent(report, case, who, observation, database)
             wanted = effective.get(case['id'], {}).get(who)
+            # Off DuckDB the line is held to the calls it makes (T2.1e).
+            held = (
+                case
+                if on_duckdb
+                else core_held(case, observation, line_stop(wanted, ref))
+            )
+            _core_consistent(report, held, who, observation, database)
             stop = past_stop(
                 who,
                 wanted,
@@ -2225,8 +2284,8 @@ def compare(
                     _against_reference(
                         report, case, who, observation['outcome'], ref
                     )
-            _route(report, case, who, observation)
-            _case_inputs(report, case, who, observation, database, bases)
+            _route(report, held, who, observation)
+            _case_inputs(report, held, who, observation, database, bases)
             if reach is not None:
                 _reach(report, case, who, observation, reach)
             found = counts(observation)
