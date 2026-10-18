@@ -67,7 +67,8 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
   Judged as CI judges (effective expectations, the register, KO2-58), the full Postgres run went from 2,559 differences to 15, and DuckDB's run has none.
   The key-set CTE keeps its form (its output is the reference's; the core has no declared type to cast a key to at plan time), and a statement's text differs from the reference's where the schema is named in place rather than bound.
 - Fix round 3 (the orchestrator's decisions): P2C-7's rows opt the reference's materialize statements out (`statements_differ`, as P2B-16 on SQLite); `time.text-one-bad-value@postgres` is P2C-10 (DT-15 under E68, as P2B-11), and P2C-5 (KO2-64) keeps the census probe, now refused UNSUPPORTED_REQUEST rule `text_time` (the census's 25 departing sites unchanged); a `json` or `jsonb` column is marked `arrow.json` (fix 10), which T2.1e's canonical cell reads as the value it holds, so rust-host's record of it is the reference's; the test author's provider test takes the reference's lookup layout.
-  Judged as CI judges, the Postgres run has 3 differences left: `s0.boundary.deepest`'s cross-host inputs (T2.2's 06cc388a), and rust-host's record of `time.feature-interval`'s preview, a `MonthDayNano` where the reference's driver holds a `timedelta` (months folded into days), which no exact canonical cell equates without changing DuckDB's committed interval cells.
+  An interval column is tagged `sdm:interval = timedelta` (fix 11), which T2.1e's canonical cell reads as the `timedelta` psycopg built it from (a month 30 days).
+  Judged as CI judges, the Postgres run has one difference left, `s0.boundary.deepest`'s cross-host inputs (T2.2's 06cc388a).
   DuckDB's run has none on either host.
 
 ## Carry items
