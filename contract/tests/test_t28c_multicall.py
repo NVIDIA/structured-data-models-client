@@ -193,6 +193,14 @@ def key(case_id: str, database: str) -> str:
 
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
+#: The case keys observed with a call raising an error that is not the
+#: client's own (``multicall_record.RAISED``): what each call answered
+#: before it, kept on it, by case.
+RAISED = {
+    'multicall.rows-per-call-3': {'calls_answered': 2, 'rows_answered': 6},
+    'multicall.forecast.one-call': {'parts_answered': 1},
+}
+RAISED_KEYS = tuple(key(c, d) for d in DATABASES for c in RAISED)
 
 
 def held(name: str, check: Any) -> None:
@@ -216,13 +224,15 @@ def test_the_pending_list_only_shrinks() -> None:
     ``authored`` is every case's key on each database on python-core, line
     and vectors, and on DuckDB and SQLite on rust-host (its Postgres pass
     replays python-core's fetches, which ``cross-host (postgres)``
-    holds)."""
+    holds), and each raising case's key on python-core
+    (``py-raised:``)."""
     gating = json.loads(PENDING.read_text(encoding='utf-8'))
     assert set(gating['pending']) <= set(gating['authored'])
     assert set(gating['authored']) == (
         {f'py:{k}' for k in KEYS_ALL}
         | {f'py-carried:{k}' for k in KEYS_ALL}
         | {f'rust:{k}' for k in KEYS_ALL if not k.endswith('@postgres')}
+        | {f'py-raised:{k}' for k in RAISED_KEYS}
     )
 
 
@@ -716,3 +726,88 @@ def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
             )
 
     held(f'py-carried:{case_key}', check)
+
+
+# --- a call raising an error that is not the client's own ---------------------------
+
+
+@pytest.mark.parametrize('case_key', RAISED_KEYS)
+def test_the_reference_keeps_the_answers_when_a_call_raises(
+    case_key: str,
+) -> None:
+    r"""Exit "answered parts on a failed call", for a failure that is not
+    the client's own (T2.8c round 1): with the client's transport raising
+    ``ValueError`` on the third call of ``rows_per_call=3`` over 8, or on
+    the second step's call of the two-step forecast, as the Databricks SDK
+    raises one on a failed OAuth refresh, the reference raises that
+    ``ValueError`` as it was, the calls before it answered and kept on it:
+    6 rows over 2 calls, or the first step's 3 rows."""
+    case_id = case_key.split('@')[0]
+    case, digest = cases()[case_id]
+    vector = vectors()['raised'].get(case_key)
+    assert vector is not None, f'{case_key}: no vector'
+    call = recorder().RAISED[case_id]
+    assert vector['case'] == digest and vector['call'] == call
+    assert 'fail_call' not in case['input']
+    assert _outcome({'outcome': vector['outcome']}) == (
+        'refusal',
+        'predict',
+        'ValueError',
+        None,
+    )
+    assert vector['calls'] == CALLS[case_id][:call]
+    assert vector['details'] == RAISED[case_id]
+    answered = vector['answered']
+    assert answered['count'] == sum(vector['calls'])
+    assert [row[0] for row in answered['rows']] == list(
+        range(answered['count'])
+    )
+    if 'forecast_step' in answered['columns']:
+        step = answered['columns'].index('forecast_step')
+        assert {row[step] for row in answered['rows']} == {1}
+
+
+@pytest.mark.parametrize('case_key', RAISED_KEYS)
+def test_python_core_keeps_the_answers_when_a_call_raises(
+    case_key: str,
+) -> None:
+    r"""Exit "answered parts on a failed call", for a failure that is not
+    the client's own (T2.8c round 1): python-core, on the core route, its
+    transport raising the same ``ValueError`` on the same call, raises it
+    as the reference does, with the reference's answers kept on it
+    (``details['answered']`` row by row, and ``calls_answered`` and
+    ``rows_answered``, or a forecast's ``parts_answered``)."""
+    case_id, _, database = case_key.partition('@')
+    if database == 'postgres' and not _server():
+        return
+
+    def check() -> None:
+        want = vectors()['raised'][case_key]
+        case, _ = cases()[case_id]
+        got = recorder().observe(
+            case,
+            database or 'duckdb',
+            core=True,
+            raise_on_call=recorder().RAISED[case_id],
+        )
+        outcome = (
+            _outcome({'outcome': want['outcome']}),
+            _outcome({'outcome': got['outcome']}),
+        )
+        assert outcome[0] == outcome[1], (
+            f'{case_key}: {outcome[1]} where python-ref has {outcome[0]}'
+        )
+        assert got['calls'] == want['calls'], (
+            f'{case_key}: calls of {got["calls"]} rows where python-ref '
+            f'sends {want["calls"]}'
+        )
+        details = got['details'] or {}
+        for name, value in want['details'].items():
+            assert details.get(name) == value, (
+                f'{case_key}: details[{name!r}] is {details.get(name)!r} '
+                f'where python-ref has {value!r}'
+            )
+        found = differences(want['answered'], got['answered'], '/answered')
+        assert not found, f'{case_key}: ' + '; '.join(found)
+
+    held(f'py-raised:{case_key}', check)
