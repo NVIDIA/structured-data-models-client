@@ -291,6 +291,15 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
     fields = []
     for at, column in enumerate(description):
         kind = _arrow_type(column, connection)
+        if isinstance(kind, _Numeric) and kind.whole and not kind.exact:
+            # A NaN in a whole number's column is missing, as the
+            # reference's integer column holds it (a null).
+            rows = [
+                (*row[:at], None, *row[at + 1 :])
+                if isinstance(row[at], Decimal) and row[at].is_nan()
+                else row
+                for row in rows
+            ]
         fields.append(
             kind.field(column.name, (row[at] for row in rows))
             if isinstance(kind, _Numeric)
@@ -323,7 +332,8 @@ class _Numeric:
     column's double. Declared past the 76 digits Arrow's widest decimal
     holds, it is read by its declaration (the reference's ``_to_dtype``): of
     a scale of zero as an integer, a whole number past ``int64`` as its
-    digits (where the reference overflows); else as a double."""
+    digits (where the reference overflows), a NaN missing (:func:`_result`);
+    else as a double."""
 
     def __init__(self, *, exact: bool, whole: bool) -> None:
         self.exact = exact
