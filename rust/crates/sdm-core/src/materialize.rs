@@ -2266,7 +2266,13 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
                     seed: seed_value,
                     columns: entity.ordered(&entity_columns),
                     filters,
-                    key_dtype: None,
+                    // The schema's type of the key, for a provider that
+                    // orders the draw by it (SQLite's, which reads the
+                    // type the key's declaration fixes first).
+                    key_dtype: asker
+                        .samples_by_key_dtype()
+                        .then(|| entity.column(&key).map(|c| c.dtype))
+                        .flatten(),
                 },
             )
             .await?,

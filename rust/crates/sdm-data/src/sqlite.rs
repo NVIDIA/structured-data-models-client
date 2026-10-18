@@ -251,10 +251,11 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             seed,
             columns,
             filters,
-            ..
+            key_dtype,
         } => {
+            let order = draw_order(table, key, *key_dtype);
             let table = from(request, "table", table)?;
-            sample_entities(request, &table, key, *n, seed, columns, filters)?
+            sample_entities(request, &table, key, *n, seed, columns, filters, &order)?
         }
         DataRequest::Neighbors {
             table,
@@ -519,17 +520,53 @@ fn seeded_hash(seed: u128, reference: &str) -> String {
     format!("(((({c3} * {x} + {c2}) % {p}) * {x} + {c1}) % {p} * {x} + {c0}) % {p}")
 }
 
+/// Whether the seeded draw hashes a key of one column rather than the
+/// `rowid`, as the reference's `_seeded_order_by` decides it: by the type
+/// the key's declaration fixes (`_to_dtype`: one holding `INT` an integer,
+/// `TEXT`, `CHAR` or `CLOB` text, `REAL`, `FLOA` or `DOUB` a float, case
+/// aside), read from the table's `pragma_table_info` in the statement,
+/// once for the column; and where it fixes none, by `key_dtype`, the
+/// schema's type the core names (an integer type hashes the key). Without
+/// `key_dtype` (a request that leaves it out), each row decides by its
+/// value's storage class. `None` for a key of several columns, which
+/// hashes the `rowid`.
+enum DrawOrder {
+    Key(String),
+    Rowid,
+}
+
+fn draw_order(table: &Relation, key: &[String], key_dtype: Option<Dtype>) -> DrawOrder {
+    let [one] = key else {
+        return DrawOrder::Rowid;
+    };
+    let column = identifier(one);
+    let Some(dtype) = key_dtype else {
+        return DrawOrder::Key(format!("typeof({column}) = 'integer'"));
+    };
+    let integer = matches!(
+        dtype,
+        Dtype::Int | Dtype::Byte | Dtype::Int16 | Dtype::Int32 | Dtype::Int64
+    );
+    let arguments = match table.source.as_slice() {
+        [schema, name] => format!("{}, {}", text(name), text(schema)),
+        parts => text(parts.last().map(String::as_str).unwrap_or_default()),
+    };
+    DrawOrder::Key(format!(
+        "COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info({arguments}) WHERE name = {})), {}) = 1",
+        text(one),
+        u8::from(integer),
+    ))
+}
+
 /// The reference's seeded entity draw on SQLite (`_sample_entity_table`
 /// with a seed, register DF-2 and RS-2): the columns asked for, from the
 /// rows that meet each not-null filter, the `n` rows that hash lowest. The
 /// reference hashes an integer key, its rows sharing a key then in `rowid`
-/// order, and the `rowid` of a table with another kind of key; it decides
-/// by the key's declared type, which a typed request does not carry, so
-/// the rendering decides row by row by the value's own storage class, the
-/// same for a column holding the integers its type declares (a key of
-/// several columns hashes the `rowid`). A seed past the range the dialect
-/// declares never reaches here: the core refuses it first (register entry
-/// RS-7).
+/// order, and the `rowid` of a table with another kind of key, which
+/// `order` decides ([`draw_order`]); a key of several columns hashes the
+/// `rowid`. A seed past the range the dialect declares never reaches here:
+/// the core refuses it first (register entry RS-7).
+#[allow(clippy::too_many_arguments)]
 fn sample_entities(
     request: &DataRequest,
     table: &str,
@@ -538,6 +575,7 @@ fn sample_entities(
     seed: &Scalar,
     columns: &[String],
     filters: &[Filter],
+    order: &DrawOrder,
 ) -> Result<String, CoreError> {
     if columns.is_empty() {
         return Err(sdm_contract::data::refused(
@@ -569,10 +607,9 @@ fn sample_entities(
         text.push('\n');
         text.push_str(filtered.trim_start());
     }
-    let order = match key {
-        [one] => {
+    let order = match (key, order) {
+        ([one], DrawOrder::Key(integer)) => {
             let key = identifier(one);
-            let integer = format!("typeof({key}) = 'integer'");
             format!(
                 "CASE WHEN {integer} THEN {} ELSE {} END, CASE WHEN {integer} THEN {key} END, rowid",
                 seeded_hash(seed, &key),

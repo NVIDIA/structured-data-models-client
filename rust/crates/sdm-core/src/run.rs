@@ -196,6 +196,15 @@ impl Asker {
             .is_some_and(DataAccess::compares_stored_times)
     }
 
+    /// Whether the run's provider orders a seeded sample by the key's data
+    /// type (`DataLayer::samples_by_key_dtype`); `false` for an operation
+    /// that names no provider.
+    pub fn samples_by_key_dtype(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(DataAccess::samples_by_key_dtype)
+    }
+
     /// The catalog answer `data` holds, the admitted answer to `request`,
     /// a `describe`: read by the run's data layer into the contract's
     /// dialect-neutral shape (decision E54), so the operation reads no

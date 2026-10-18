@@ -868,6 +868,16 @@ pub trait DataLayer: Send + Sync {
         let _ = provider;
         false
     }
+
+    /// Whether the run's provider orders a seeded sample by the key's data
+    /// type, as SQLite's does (it hashes an integer key and the `rowid`
+    /// otherwise): the core then names the schema's type of a key of one
+    /// column on each `sample_entities` (`key_dtype`). `false`, the default
+    /// and a host provider's: the request leaves it out.
+    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
 }
 
 /// The columns of the answers whose shape the contract fixes (decision
