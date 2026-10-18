@@ -490,20 +490,33 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
 /// One `SELECT` per time column, in order, labelled by its position: the
 /// smallest and largest values as the reference takes them, `MIN` and `MAX`
 /// of the column in its own type (a text column's by its text), each then
-/// read as the zone-less timestamp the request takes back, `CAST(... AS
-/// timestamp)` (a `timestamptz` in the session's zone, a date at its
-/// midnight, a text by the source's reading of it), where the reference
-/// reads them in the host.
+/// read as the zone-less timestamp the request takes back ([`zone_less`]),
+/// where the reference reads them in the host.
 fn time_bounds(request: &DataRequest, columns: &[TableColumn]) -> Result<String, CoreError> {
     let mut selects = Vec::with_capacity(columns.len());
     for (position, at) in columns.iter().enumerate() {
         let table = from(request, "columns", &at.table)?;
         let time = identifier(&at.column);
         selects.push(format!(
-            "SELECT {position} AS table_index, CAST(MIN({time}) AS timestamp) AS min_date, CAST(MAX({time}) AS timestamp) AS max_date\nFROM {table}"
+            "SELECT {position} AS table_index, {} AS min_date, {} AS max_date\nFROM {table}",
+            zone_less(&format!("MIN({time})")),
+            zone_less(&format!("MAX({time})")),
         ));
     }
     Ok(selects.join("\nUNION ALL\n"))
+}
+
+/// `value`, a time column's value of any type, as the zone-less timestamp
+/// the reference's host reads it as: a `timestamptz` its UTC wall clock
+/// (`AT TIME ZONE 'UTC'`), as pandas converts an aware time, whatever the
+/// session's zone; a timestamp itself, a date its midnight, a text the
+/// source's reading of it. The column's type is the value's own
+/// (`pg_typeof`), and each branch reads the value through its text, so
+/// the expression is typed alike for a column of any type.
+fn zone_less(value: &str) -> String {
+    format!(
+        "CASE WHEN pg_typeof({value}) = 'timestamp with time zone'::regtype THEN CAST(CAST({value} AS text) AS timestamptz) AT TIME ZONE 'UTC' ELSE CAST(CAST({value} AS text) AS timestamp) END"
+    )
 }
 
 /// The reference's one query over every row of a table for its time
