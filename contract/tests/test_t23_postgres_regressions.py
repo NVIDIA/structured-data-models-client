@@ -31,6 +31,10 @@ vector's own.
   column is joined on a text key (``join.domain-not-null-text-key``); a
   column named ``cost$1`` is read by a keyed lookup (``column.dollar``); a
   ``timetz`` column is read by ``Schema.from_source`` (``type.timetz``).
+- From Codex's second round: integral values past 2**53 in a
+  ``numeric(100,0)`` stay exact (``type.numeric-100-0-past-2-53``), and a
+  text-key join reads its seed rows whatever the table's columns are named,
+  ``x`` included (``join.domain-not-null-text-key-column-x``).
 
 Each answer (outcome, public schema, the payloads' digest and anchors) is
 the reference's, or differs exactly as an approved register entry's ref
@@ -202,6 +206,11 @@ def test_the_vectors_are_the_reference_s_on_postgres() -> None:
             'orders.n': 'qty',
         },
         'column.dollar': {'users.cost$1': 'integer'},
+        'join.domain-not-null-text-key-column-x': {
+            'users.user_id': 'text',
+            'orders.n': 'qty',
+            'orders.x': 'integer',
+        },
         'type.timetz': {'users.x': 'time with time zone'},
     }.items():
         assert BY_ID[vector_id]['reference']['postgres'] == held, vector_id

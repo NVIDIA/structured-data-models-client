@@ -430,6 +430,71 @@
    }
   },
   {
+   "id": "type.numeric-100-0-past-2-53",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature numeric(100,0))",
+    "INSERT INTO users SELECT n, n * 10, 9007199254740992 + n FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "int64",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "a78a62a54b6349001b228c343221019e855416599444e42a4828352f7e754774",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "numeric(100,0)"
+    }
+   }
+  },
+  {
    "id": "relation.dollar",
    "session": [],
    "setup": [
@@ -1122,6 +1187,142 @@
     },
     "postgres": {
      "users.x": "time with time zone"
+    }
+   }
+  },
+  {
+   "id": "join.domain-not-null-text-key-column-x",
+   "session": [],
+   "setup": [
+    "CREATE DOMAIN qty AS integer NOT NULL",
+    "CREATE TABLE users (user_id text PRIMARY KEY, age integer)",
+    "INSERT INTO users SELECT 'u' || i, 20 + i FROM generate_series(0, 7) i",
+    "CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id text REFERENCES users(user_id), n qty, price double precision, ts timestamp)",
+    "INSERT INTO orders SELECT i, 'u' || (i % 8), i, 10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7) FROM generate_series(0, 79) i",
+    "ALTER TABLE orders ADD COLUMN x integer DEFAULT 7"
+   ],
+   "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     "u0",
+     "u1"
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "user_id"
+    ],
+    [
+     "orders",
+     "n"
+    ],
+    [
+     "orders",
+     "x"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "order_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "n",
+         "dtype": "int64",
+         "stype": "numerical"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "ts",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        },
+        {
+         "name": "x",
+         "dtype": "int64",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      },
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "user_id",
+         "dtype": "string",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "int64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "user_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ]
+    },
+    "payloads": {
+     "digest": "adaef0759849bda1db1e3a494a5f7bab9b0708dce8917269f87238cf74761f6c",
+     "anchors": [
+      "2023-01-06T00:00:00.000000Z",
+      "2023-02-05T00:00:00.000000Z",
+      "2023-03-07T00:00:00.000000Z",
+      "2023-04-06T00:00:00.000000Z",
+      "2023-05-06T00:00:00.000000Z",
+      "2023-06-05T00:00:00.000000Z",
+      "2023-07-05T00:00:00.000000Z",
+      "2023-08-04T00:00:00.000000Z",
+      "2023-09-03T00:00:00.000000Z",
+      "2023-10-03T00:00:00.000000Z",
+      "2023-11-02T00:00:00.000000Z",
+      "2023-12-02T00:00:00.000000Z",
+      "2024-01-01T00:00:00.000000Z",
+      "2024-01-31T00:00:00.000000Z",
+      "2024-03-01T00:00:00.000000Z"
+     ]
+    },
+    "postgres": {
+     "users.user_id": "text",
+     "orders.n": "qty",
+     "orders.x": "integer"
     }
    }
   }

@@ -36,7 +36,11 @@ Postgres's own types (which the contract loader does not make):
   ``join.domain-not-null-text-key``, ``orders`` holding a ``NOT NULL``
   domain column and joined on a text key; ``column.dollar``, an entity
   column named ``cost$1``, read by the keyed lookup of ``users``; and
-  ``type.timetz``, a ``timetz`` column read by ``Schema.from_source``.
+  ``type.timetz``, a ``timetz`` column read by ``Schema.from_source``;
+- from Codex's second round: ``type.numeric-100-0-past-2-53``, integral
+  values past 2**53 in a ``numeric(100,0)``, and
+  ``join.domain-not-null-text-key-column-x``, the domain vector with a
+  column named ``x`` added to ``orders``.
 
 For each the reference's public answer is kept: the outcome (result,
 stage, exception class and ``StructuredDataError`` code), the public
@@ -80,6 +84,9 @@ FEATURES = {
     'numeric': ('numeric', 'n + 0.25'),
     'numeric-array': ('numeric[]', 'ARRAY[n::numeric]'),
     'uuid-array': ('uuid[]', f'ARRAY[{_UUID}]'),
+    # Codex round 2: integral values past 2**53, within int64, in a numeric
+    # wider than Arrow's decimals; the reference keeps them exact.
+    'numeric-100-0-past-2-53': ('numeric(100,0)', '9007199254740992 + n'),
 }
 #: The second review's shape: ``users``, and ``orders`` whose columns
 #: before ``price`` and ``ts`` each vector names, and its question.
@@ -246,6 +253,20 @@ VECTORS: list[dict[str, Any]] = [
         ]
     ],
 ]
+# Codex round 2: the domain vector's orders also holding a column named x,
+# which a seed key's row must not be read as.
+VECTORS.append(
+    {
+        **copy.deepcopy(
+            next(
+                v for v in VECTORS if v['id'] == 'join.domain-not-null-text-key'
+            )
+        ),
+        'id': 'join.domain-not-null-text-key-column-x',
+    }
+)
+VECTORS[-1]['setup'].append('ALTER TABLE orders ADD COLUMN x integer DEFAULT 7')
+VECTORS[-1]['columns'].append(['orders', 'x'])
 
 
 def _runner() -> ModuleType:
