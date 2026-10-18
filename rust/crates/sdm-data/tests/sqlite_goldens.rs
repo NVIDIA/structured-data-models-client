@@ -2,21 +2,23 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L4 on SQLite (T2.2): every statement the SQLite dialect rendered for the
-//! contract cases and the key-pair vectors on SQLite, on both core hosts,
-//! pinned verbatim beside the request it answers. Each request is planned
-//! here and must render exactly its statements, so a change of the SQL
-//! without a golden update fails; the case runs (python-core and rust-host
-//! on SQLite) execute them, each result held to the reference's by the
-//! comparator (`sql.result`). Collected from those runs' recorded fetches
-//! (`core.fetches`) when the dialect changes, and reviewed as any golden.
+//! L4 on SQLite (T2.2; checked against the run since T2.4): every statement
+//! the SQLite dialect rendered for the contract cases and the key-pair
+//! vectors on SQLite, on both core hosts, pinned verbatim beside the
+//! request it answers. Each request is planned here and must render exactly
+//! its statements, so a change of the SQL without a golden update fails;
+//! and every fetch python-core's run of the cases on SQLite made in CI
+//! (`contract-python (ref-pandas3, sqlite)`, which executed each statement
+//! on SQLite, its result held to the reference's by the comparator) is a
+//! golden, checked in `l4-goldens (sqlite)` ([`goldens`]). Collected from
+//! those runs' recorded fetches (`core.fetches`) when the dialect changes,
+//! and reviewed as any golden.
 
-use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
-use sdm_data::Data;
+mod goldens;
 
 /// Each request, as the contract writes it, and the statements its plan
 /// carries on SQLite, in order.
-const GOLDENS: &[(&str, &[&str])] = &[
+const GOLDENS: goldens::Goldens = &[
     (
         r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
         &["PRAGMA foreign_key_list(\"addresses\")"],
@@ -188,6 +190,30 @@ const GOLDENS: &[(&str, &[&str])] = &[
     (
         r##"{"part": "tables", "request": "describe", "tables": []}"##,
         &["SELECT name FROM sqlite_master WHERE type='table'"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["adventureworks_customers"]}]}"##,
+        &["PRAGMA index_list(\"adventureworks_customers\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["adventureworks_products"]}]}"##,
+        &["PRAGMA index_list(\"adventureworks_products\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["adventureworks_sales_order_details"]}]}"##,
+        &["PRAGMA index_list(\"adventureworks_sales_order_details\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["adventureworks_sales_order_headers"]}]}"##,
+        &["PRAGMA index_list(\"adventureworks_sales_order_headers\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["orders"]}]}"##,
+        &["PRAGMA index_list(\"orders\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["users"]}]}"##,
+        &["PRAGMA index_list(\"users\")"],
     ),
     (
         r##"{"keys": [{"columns": ["CustomerID"], "table": {"source": ["adventureworks_customers"]}}, {"columns": ["ProductID"], "table": {"source": ["adventureworks_products"]}}, {"columns": ["SalesOrderDetailID"], "table": {"source": ["adventureworks_sales_order_details"]}}], "request": "key_counts"}"##,
@@ -1065,20 +1091,15 @@ const GOLDENS: &[(&str, &[&str])] = &[
 
 #[test]
 fn every_golden_request_renders_its_statements_on_sqlite() {
-    let sqlite = ProviderChoice::Sql {
-        dialect: Dialect::new("sqlite"),
-    };
-    assert!(!GOLDENS.is_empty());
-    for (request, statements) in GOLDENS {
-        let request: DataRequest = serde_json::from_str(request).unwrap();
-        let FetchPlan::Sql {
-            statements: planned,
-            ..
-        } = Data::new().plan(&request, &sqlite).unwrap()
-        else {
-            panic!("{request:?}: not SQL");
-        };
-        let texts: Vec<&str> = planned.iter().map(|s| s.text.as_str()).collect();
-        assert_eq!(&texts, statements, "{request:?}");
-    }
+    goldens::render("sqlite", GOLDENS);
+}
+
+#[test]
+fn every_fetch_the_sqlite_run_made_is_a_golden() {
+    goldens::run_is_pinned("sqlite", GOLDENS);
+}
+
+#[test]
+fn a_seeded_sql_change_without_a_golden_update_fails_on_sqlite() {
+    goldens::seeded_faults("sqlite", GOLDENS);
 }

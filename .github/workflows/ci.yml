@@ -1446,6 +1446,57 @@ jobs:
             --out cross-host/rust-host.jsonl contract/cases
       - *cross-host-database
 
+  # L4 (design, locked check 3; T2.4): each database's SQL goldens,
+  # sdm-data's tests/<database>_goldens.rs, every statement the dialect
+  # renders for the contract cases pinned verbatim beside its request. Each
+  # golden must be what the dialect renders, so a SQL change without a
+  # golden update fails; and every fetch python-core's run of the cases on
+  # that database made here (from contract-python (ref-pandas3,
+  # <database>), which executed each statement on the database, the
+  # pinned Postgres service on Postgres, and held its result to the
+  # reference's) must be a golden with its statements, so the goldens are
+  # the SQL the run executed. A run named here but missing, empty or
+  # holding no fetch on the database fails (tests/goldens/mod.rs). Only
+  # sdm-data's tests are built: no DuckDB, no Python.
+  l4-goldens:
+    name: l4-goldens (${{ matrix.database }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs:
+      - landing
+      - contract-python-ref-pandas3
+      - contract-python-ref-pandas3-sqlite
+      - contract-python-ref-pandas3-postgres
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database: duckdb
+            observations: observations-python-core
+          - database: sqlite
+            observations: observations-python-core-sqlite
+          - database: postgres
+            observations: observations-python-core-postgres
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ matrix.observations }}
+          path: l4
+      - name: The goldens, and the run held to them
+        env:
+          SDM_L4_OBSERVATIONS: ${{ github.workspace }}/l4/python-core.jsonl
+        run: cargo test -p sdm-data --locked --test ${{ matrix.database }}_goldens
+
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
