@@ -1,0 +1,7595 @@
+{
+ "format": "sdm-composite-key-vectors/1",
+ "recorded_by": "contract/tools/schema_rules_record.py composite",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+ "anchor_time": "2024-03-01",
+ "register_ref": "contract/composite-key-vectors.json#",
+ "types": [
+  [
+   "i32",
+   "INTEGER"
+  ],
+  [
+   "i64",
+   "BIGINT"
+  ],
+  [
+   "d12-4",
+   "DECIMAL(12, 4)"
+  ],
+  [
+   "f64",
+   "DOUBLE"
+  ],
+  [
+   "text",
+   "VARCHAR"
+  ]
+ ],
+ "vectors": [
+  {
+   "id": "given.i32.i32",
+   "form": "given",
+   "types": [
+    "i32",
+    "i32"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS INTEGER) AS order_id, user_id, price, ts, CAST(order_id % 3 AS INTEGER) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "a577bdbc950d8a33dd12c249ea9225cc7791113282692c5317a652d6f9380936",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i32.i64",
+   "form": "given",
+   "types": [
+    "i32",
+    "i64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS INTEGER) AS order_id, user_id, price, ts, CAST(order_id % 3 AS BIGINT) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "a577bdbc950d8a33dd12c249ea9225cc7791113282692c5317a652d6f9380936",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i32.d12-4",
+   "form": "given",
+   "types": [
+    "i32",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS INTEGER) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DECIMAL(12, 4)) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "9cbcbfe7918a97c40f7fb07c8bea25c0fca5ad9fd87c68e2a318ade279e6900b",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i32.f64",
+   "form": "given",
+   "types": [
+    "i32",
+    "f64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS INTEGER) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DOUBLE) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "5bcb6f2dbf18103a726c59a1e9e212d0bbf9d98d9b89f6d8edc498713c19241b",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i32.text",
+   "form": "given",
+   "types": [
+    "i32",
+    "text"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS INTEGER) AS order_id, user_id, price, ts, CAST(order_id % 3 AS VARCHAR) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "6afdace9a50539de746f39377dc1a68deadd78a598493e568dd92ec2d630bfab",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "9cbcbfe7918a97c40f7fb07c8bea25c0fca5ad9fd87c68e2a318ade279e6900b",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "6afdace9a50539de746f39377dc1a68deadd78a598493e568dd92ec2d630bfab",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i64.i32",
+   "form": "given",
+   "types": [
+    "i64",
+    "i32"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS BIGINT) AS order_id, user_id, price, ts, CAST(order_id % 3 AS INTEGER) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "a577bdbc950d8a33dd12c249ea9225cc7791113282692c5317a652d6f9380936",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i64.i64",
+   "form": "given",
+   "types": [
+    "i64",
+    "i64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS BIGINT) AS order_id, user_id, price, ts, CAST(order_id % 3 AS BIGINT) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "a577bdbc950d8a33dd12c249ea9225cc7791113282692c5317a652d6f9380936",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "c345a825e85f4bec239e170b10b31afbed2d2596061f25adb1d29421a351e309",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i64.d12-4",
+   "form": "given",
+   "types": [
+    "i64",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS BIGINT) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DECIMAL(12, 4)) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "9cbcbfe7918a97c40f7fb07c8bea25c0fca5ad9fd87c68e2a318ade279e6900b",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i64.f64",
+   "form": "given",
+   "types": [
+    "i64",
+    "f64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS BIGINT) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DOUBLE) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "5bcb6f2dbf18103a726c59a1e9e212d0bbf9d98d9b89f6d8edc498713c19241b",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "0b7465f9bc6411f19682025179ac8c58600593534ebc3f420c0b016dcc54803c",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.i64.text",
+   "form": "given",
+   "types": [
+    "i64",
+    "text"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS BIGINT) AS order_id, user_id, price, ts, CAST(order_id % 3 AS VARCHAR) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "6afdace9a50539de746f39377dc1a68deadd78a598493e568dd92ec2d630bfab",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "9cbcbfe7918a97c40f7fb07c8bea25c0fca5ad9fd87c68e2a318ade279e6900b",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "6afdace9a50539de746f39377dc1a68deadd78a598493e568dd92ec2d630bfab",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.d12-4.i32",
+   "form": "given",
+   "types": [
+    "d12-4",
+    "i32"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DECIMAL(12, 4)) AS order_id, user_id, price, ts, CAST(order_id % 3 AS INTEGER) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "0fdd42280b2e73cd84050360420b0a4090b94c795ba8a189064de2bc1e62dee1",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.d12-4.i64",
+   "form": "given",
+   "types": [
+    "d12-4",
+    "i64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DECIMAL(12, 4)) AS order_id, user_id, price, ts, CAST(order_id % 3 AS BIGINT) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "0fdd42280b2e73cd84050360420b0a4090b94c795ba8a189064de2bc1e62dee1",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.d12-4.d12-4",
+   "form": "given",
+   "types": [
+    "d12-4",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DECIMAL(12, 4)) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DECIMAL(12, 4)) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "f32e18fe23f2197fee324140959fb9eb3d32e8384595c1528106385d3f7d1004",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.d12-4.f64",
+   "form": "given",
+   "types": [
+    "d12-4",
+    "f64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DECIMAL(12, 4)) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DOUBLE) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "9f7c777638ec4d1e57c2b38e5414cd056f974d5a223a7c5be95a6d0a928b69de",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.d12-4.text",
+   "form": "given",
+   "types": [
+    "d12-4",
+    "text"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DECIMAL(12, 4)) AS order_id, user_id, price, ts, CAST(order_id % 3 AS VARCHAR) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "37ac54bf810605326809a926160c5945ba7ad5d224b864079ecbffa1e889fbe7",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "f32e18fe23f2197fee324140959fb9eb3d32e8384595c1528106385d3f7d1004",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "37ac54bf810605326809a926160c5945ba7ad5d224b864079ecbffa1e889fbe7",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.f64.i32",
+   "form": "given",
+   "types": [
+    "f64",
+    "i32"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DOUBLE) AS order_id, user_id, price, ts, CAST(order_id % 3 AS INTEGER) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "605d14945aae19d8210d1b1f2821b06e773d8f5aa80898a83537924c37586bcf",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.f64.i64",
+   "form": "given",
+   "types": [
+    "f64",
+    "i64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DOUBLE) AS order_id, user_id, price, ts, CAST(order_id % 3 AS BIGINT) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "605d14945aae19d8210d1b1f2821b06e773d8f5aa80898a83537924c37586bcf",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "8b824bc5874b4787ab879631424e7f1b2eaebb981f1c4ddb3ca72748db9b4ebe",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.f64.d12-4",
+   "form": "given",
+   "types": [
+    "f64",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DOUBLE) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DECIMAL(12, 4)) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "a86d3cb3457f2a25915ddf7c4b55f240bf9d1a42f03f97fafa835350e61771bc",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.f64.f64",
+   "form": "given",
+   "types": [
+    "f64",
+    "f64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DOUBLE) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DOUBLE) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "211190f55aa86532c5a90774400d051ac32cdd254dce7129cb66fdfabdec71cc",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "03a604729da8be57ac8093f60869eb721d600674c6cb41efd249ab1a2df5626e",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.f64.text",
+   "form": "given",
+   "types": [
+    "f64",
+    "text"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS DOUBLE) AS order_id, user_id, price, ts, CAST(order_id % 3 AS VARCHAR) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "37ac54bf810605326809a926160c5945ba7ad5d224b864079ecbffa1e889fbe7",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "a86d3cb3457f2a25915ddf7c4b55f240bf9d1a42f03f97fafa835350e61771bc",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "float64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "37ac54bf810605326809a926160c5945ba7ad5d224b864079ecbffa1e889fbe7",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.text.i32",
+   "form": "given",
+   "types": [
+    "text",
+    "i32"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS VARCHAR) AS order_id, user_id, price, ts, CAST(order_id % 3 AS INTEGER) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "98ef8e81e4554c803fe9fdf306806f3067d612ca12cf1b8747349abb10881dc2",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "0fdd42280b2e73cd84050360420b0a4090b94c795ba8a189064de2bc1e62dee1",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "98ef8e81e4554c803fe9fdf306806f3067d612ca12cf1b8747349abb10881dc2",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.text.i64",
+   "form": "given",
+   "types": [
+    "text",
+    "i64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS VARCHAR) AS order_id, user_id, price, ts, CAST(order_id % 3 AS BIGINT) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "98ef8e81e4554c803fe9fdf306806f3067d612ca12cf1b8747349abb10881dc2",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "0fdd42280b2e73cd84050360420b0a4090b94c795ba8a189064de2bc1e62dee1",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "98ef8e81e4554c803fe9fdf306806f3067d612ca12cf1b8747349abb10881dc2",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.text.d12-4",
+   "form": "given",
+   "types": [
+    "text",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS VARCHAR) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DECIMAL(12, 4)) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "4b77ae66c70187104f10ec9971bd36371232cbf7b4497276111c2702381a2dcd",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "f32e18fe23f2197fee324140959fb9eb3d32e8384595c1528106385d3f7d1004",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "4b77ae66c70187104f10ec9971bd36371232cbf7b4497276111c2702381a2dcd",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.text.f64",
+   "form": "given",
+   "types": [
+    "text",
+    "f64"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS VARCHAR) AS order_id, user_id, price, ts, CAST(order_id % 3 AS DOUBLE) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "4b77ae66c70187104f10ec9971bd36371232cbf7b4497276111c2702381a2dcd",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "9f7c777638ec4d1e57c2b38e5414cd056f974d5a223a7c5be95a6d0a928b69de",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "ID"
+      ]
+     },
+     "schema": "4b77ae66c70187104f10ec9971bd36371232cbf7b4497276111c2702381a2dcd",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "given.text.text",
+   "form": "given",
+   "types": [
+    "text",
+    "text"
+   ],
+   "setup": [
+    "CREATE OR REPLACE TABLE orders AS SELECT CAST(order_id AS VARCHAR) AS order_id, user_id, price, ts, CAST(order_id % 3 AS VARCHAR) AS line FROM orders"
+   ],
+   "from_source": {
+    "primary_keys": {
+     "orders": [
+      "order_id",
+      "line"
+     ]
+    }
+   },
+   "key": [
+    "orders",
+    [
+     "order_id",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "117e7aa1958335ed862e120ed06508bf263d7def9461885effa4ffd01e4bcddd",
+     "requests": 0,
+     "payloads": null
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "f32e18fe23f2197fee324140959fb9eb3d32e8384595c1528106385d3f7d1004",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "orders": [
+       "order_id",
+       "line"
+      ],
+      "users": "user_id"
+     },
+     "columns": {
+      "order_id": [
+       "string",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "ID"
+      ]
+     },
+     "schema": "117e7aa1958335ed862e120ed06508bf263d7def9461885effa4ffd01e4bcddd",
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i32.i32",
+   "form": "declared",
+   "types": [
+    "i32",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no INTEGER, line INTEGER, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS INTEGER), CAST(order_id % 3 AS INTEGER), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cbf1bc24aaeb4ad29d7301c120f5699833809a8991964b7a996b62007ac2e042",
+     "requests": 1,
+     "payloads": "521ca123ce56a9ed2aa44f89ca9be3b33eeae85e4276a15441a2608ebc4b4459"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "54de8704960e3106b2aa1cd621960daf52d65186c806a0dfba3521ae3c6f18ba",
+     "requests": 1,
+     "payloads": "dc0c42f890d9bd052198151582f2837cf6d518ba5b7b1a257d68f85a4acc0a9f"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i32.i64",
+   "form": "declared",
+   "types": [
+    "i32",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no INTEGER, line BIGINT, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS INTEGER), CAST(order_id % 3 AS BIGINT), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cbf1bc24aaeb4ad29d7301c120f5699833809a8991964b7a996b62007ac2e042",
+     "requests": 1,
+     "payloads": "521ca123ce56a9ed2aa44f89ca9be3b33eeae85e4276a15441a2608ebc4b4459"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "54de8704960e3106b2aa1cd621960daf52d65186c806a0dfba3521ae3c6f18ba",
+     "requests": 1,
+     "payloads": "dc0c42f890d9bd052198151582f2837cf6d518ba5b7b1a257d68f85a4acc0a9f"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i32.d12-4",
+   "form": "declared",
+   "types": [
+    "i32",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no INTEGER, line DECIMAL(12, 4), user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS INTEGER), CAST(order_id % 3 AS DECIMAL(12, 4)), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "7d31e6e857336249d4b3b17d8b7f422e6da649ab41175dfb8148f94c4cb7d549",
+     "requests": 1,
+     "payloads": "3f665514afe6b84a1772dd066832fff407f0d34812a2654a1b33b1c55399e9b6"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_no",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "3c82abd9e3f87d4182bdc1f1fc11472ae1f6a8a0f488936d87f540fa587faeb5",
+     "requests": 1,
+     "payloads": "aa6d90c86e1ee6b12504865d6bef0e97b248bb22441f9fd4d19b33e48dce057c"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i32.f64",
+   "form": "declared",
+   "types": [
+    "i32",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no INTEGER, line DOUBLE, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS INTEGER), CAST(order_id % 3 AS DOUBLE), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "7d31e6e857336249d4b3b17d8b7f422e6da649ab41175dfb8148f94c4cb7d549",
+     "requests": 1,
+     "payloads": "3f665514afe6b84a1772dd066832fff407f0d34812a2654a1b33b1c55399e9b6"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_no",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "d840695a96840f27ecfa95df38deabe127536966840d5bf3539d089a33a3e08b",
+     "requests": 1,
+     "payloads": "b70db1dfaf37d7825d42fc9ab90da2b3e7e166e42a95fb1c2b6bd68dfadd7c7b"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i32.text",
+   "form": "declared",
+   "types": [
+    "i32",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no INTEGER, line VARCHAR, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS INTEGER), CAST(order_id % 3 AS VARCHAR), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "0e2a145e60d7120c8d6ed9376f69b345bb97af1f1935bf951168e8f09012fb3c",
+     "requests": 1,
+     "payloads": "d42605b0f90e3b226e81ddd23a821acddea55205c155725a7139f4b2f497632f"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_no",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "3c82abd9e3f87d4182bdc1f1fc11472ae1f6a8a0f488936d87f540fa587faeb5",
+     "requests": 1,
+     "payloads": "aa6d90c86e1ee6b12504865d6bef0e97b248bb22441f9fd4d19b33e48dce057c"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i64.i32",
+   "form": "declared",
+   "types": [
+    "i64",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no BIGINT, line INTEGER, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS BIGINT), CAST(order_id % 3 AS INTEGER), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cbf1bc24aaeb4ad29d7301c120f5699833809a8991964b7a996b62007ac2e042",
+     "requests": 1,
+     "payloads": "521ca123ce56a9ed2aa44f89ca9be3b33eeae85e4276a15441a2608ebc4b4459"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "54de8704960e3106b2aa1cd621960daf52d65186c806a0dfba3521ae3c6f18ba",
+     "requests": 1,
+     "payloads": "dc0c42f890d9bd052198151582f2837cf6d518ba5b7b1a257d68f85a4acc0a9f"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i64.i64",
+   "form": "declared",
+   "types": [
+    "i64",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no BIGINT, line BIGINT, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS BIGINT), CAST(order_id % 3 AS BIGINT), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cbf1bc24aaeb4ad29d7301c120f5699833809a8991964b7a996b62007ac2e042",
+     "requests": 1,
+     "payloads": "521ca123ce56a9ed2aa44f89ca9be3b33eeae85e4276a15441a2608ebc4b4459"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "54de8704960e3106b2aa1cd621960daf52d65186c806a0dfba3521ae3c6f18ba",
+     "requests": 1,
+     "payloads": "dc0c42f890d9bd052198151582f2837cf6d518ba5b7b1a257d68f85a4acc0a9f"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i64.d12-4",
+   "form": "declared",
+   "types": [
+    "i64",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no BIGINT, line DECIMAL(12, 4), user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS BIGINT), CAST(order_id % 3 AS DECIMAL(12, 4)), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "7d31e6e857336249d4b3b17d8b7f422e6da649ab41175dfb8148f94c4cb7d549",
+     "requests": 1,
+     "payloads": "3f665514afe6b84a1772dd066832fff407f0d34812a2654a1b33b1c55399e9b6"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_no",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "3c82abd9e3f87d4182bdc1f1fc11472ae1f6a8a0f488936d87f540fa587faeb5",
+     "requests": 1,
+     "payloads": "aa6d90c86e1ee6b12504865d6bef0e97b248bb22441f9fd4d19b33e48dce057c"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i64.f64",
+   "form": "declared",
+   "types": [
+    "i64",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no BIGINT, line DOUBLE, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS BIGINT), CAST(order_id % 3 AS DOUBLE), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "7d31e6e857336249d4b3b17d8b7f422e6da649ab41175dfb8148f94c4cb7d549",
+     "requests": 1,
+     "payloads": "3f665514afe6b84a1772dd066832fff407f0d34812a2654a1b33b1c55399e9b6"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_no",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "d840695a96840f27ecfa95df38deabe127536966840d5bf3539d089a33a3e08b",
+     "requests": 1,
+     "payloads": "b70db1dfaf37d7825d42fc9ab90da2b3e7e166e42a95fb1c2b6bd68dfadd7c7b"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.i64.text",
+   "form": "declared",
+   "types": [
+    "i64",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no BIGINT, line VARCHAR, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS BIGINT), CAST(order_id % 3 AS VARCHAR), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "numerical"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "0e2a145e60d7120c8d6ed9376f69b345bb97af1f1935bf951168e8f09012fb3c",
+     "requests": 1,
+     "payloads": "d42605b0f90e3b226e81ddd23a821acddea55205c155725a7139f4b2f497632f"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_no",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "int64",
+       "ID"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "3c82abd9e3f87d4182bdc1f1fc11472ae1f6a8a0f488936d87f540fa587faeb5",
+     "requests": 1,
+     "payloads": "aa6d90c86e1ee6b12504865d6bef0e97b248bb22441f9fd4d19b33e48dce057c"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.d12-4.i32",
+   "form": "declared",
+   "types": [
+    "d12-4",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DECIMAL(12, 4), line INTEGER, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DECIMAL(12, 4)), CAST(order_id % 3 AS INTEGER), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cfe3639fef91b856c033b0d5ae44b0cac5e26b3a93a6d2f49a7930a862ad24de",
+     "requests": 1,
+     "payloads": "4d827dea6dc98c31f7f6185efd659ab1a8c89ab203bcc7a0de45ab05ea5b0beb"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "line",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "26489287a273b61308a5f734850f77ec9654b5cc22e3c34976fdbbad4f4425e4",
+     "requests": 1,
+     "payloads": "baee02ed5d6d4282dc0eb8e8a80e68d25eedbe15c81dbfa8f4a2832f6f8ddce0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.d12-4.i64",
+   "form": "declared",
+   "types": [
+    "d12-4",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DECIMAL(12, 4), line BIGINT, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DECIMAL(12, 4)), CAST(order_id % 3 AS BIGINT), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cfe3639fef91b856c033b0d5ae44b0cac5e26b3a93a6d2f49a7930a862ad24de",
+     "requests": 1,
+     "payloads": "4d827dea6dc98c31f7f6185efd659ab1a8c89ab203bcc7a0de45ab05ea5b0beb"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "line",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "26489287a273b61308a5f734850f77ec9654b5cc22e3c34976fdbbad4f4425e4",
+     "requests": 1,
+     "payloads": "baee02ed5d6d4282dc0eb8e8a80e68d25eedbe15c81dbfa8f4a2832f6f8ddce0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.d12-4.d12-4",
+   "form": "declared",
+   "types": [
+    "d12-4",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DECIMAL(12, 4), line DECIMAL(12, 4), user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DECIMAL(12, 4)), CAST(order_id % 3 AS DECIMAL(12, 4)), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "dd75c4a47f7a33022b3baaafe144f38439d7716f59a4583e520612a29b9d13df",
+     "requests": 1,
+     "payloads": "80a8cde10f50d58007a8fa2f8fa86f1a62ce3ec055704f2075c499ea7c7c925c"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "ca7d5826ecf414d25f890c18cf3a220604f1f4224f731c4e71085063a4793836",
+     "requests": 1,
+     "payloads": "62eadfd9fd47cb85ae220aa7c734806ebf170c8f9468c348c59751c28cebcba0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.d12-4.f64",
+   "form": "declared",
+   "types": [
+    "d12-4",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DECIMAL(12, 4), line DOUBLE, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DECIMAL(12, 4)), CAST(order_id % 3 AS DOUBLE), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "dd75c4a47f7a33022b3baaafe144f38439d7716f59a4583e520612a29b9d13df",
+     "requests": 1,
+     "payloads": "80a8cde10f50d58007a8fa2f8fa86f1a62ce3ec055704f2075c499ea7c7c925c"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "35938f4d969488d7c177a4ae31d7825f1f49151d405efff6f658791c6789baba",
+     "requests": 1,
+     "payloads": "b9b6018dd4d37b238263e6a5bd5bcef68d07a94d87f6fd49706f8d2f4bb56af2"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.d12-4.text",
+   "form": "declared",
+   "types": [
+    "d12-4",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DECIMAL(12, 4), line VARCHAR, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DECIMAL(12, 4)), CAST(order_id % 3 AS VARCHAR), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "20feeb82c0a6ece9770b31cdbdf2eb1585da878488bbee9c747d532d982ff138",
+     "requests": 1,
+     "payloads": "03073e05917699d06cd47f718704f44d39270654f513f8bafd76a65a3debbf20"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "ca7d5826ecf414d25f890c18cf3a220604f1f4224f731c4e71085063a4793836",
+     "requests": 1,
+     "payloads": "62eadfd9fd47cb85ae220aa7c734806ebf170c8f9468c348c59751c28cebcba0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.f64.i32",
+   "form": "declared",
+   "types": [
+    "f64",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DOUBLE, line INTEGER, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DOUBLE), CAST(order_id % 3 AS INTEGER), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cfe3639fef91b856c033b0d5ae44b0cac5e26b3a93a6d2f49a7930a862ad24de",
+     "requests": 1,
+     "payloads": "4d827dea6dc98c31f7f6185efd659ab1a8c89ab203bcc7a0de45ab05ea5b0beb"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "line",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "bc447028b120d75d6ea63dacb91091ae335294f00070642ef9b3420e3e103a9e",
+     "requests": 1,
+     "payloads": "62eeca4a16ad2d39c31980cc2c265518a9909da40eb1b429f1edfdf53246526d"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.f64.i64",
+   "form": "declared",
+   "types": [
+    "f64",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DOUBLE, line BIGINT, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DOUBLE), CAST(order_id % 3 AS BIGINT), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "cfe3639fef91b856c033b0d5ae44b0cac5e26b3a93a6d2f49a7930a862ad24de",
+     "requests": 1,
+     "payloads": "4d827dea6dc98c31f7f6185efd659ab1a8c89ab203bcc7a0de45ab05ea5b0beb"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "line",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "bc447028b120d75d6ea63dacb91091ae335294f00070642ef9b3420e3e103a9e",
+     "requests": 1,
+     "payloads": "62eeca4a16ad2d39c31980cc2c265518a9909da40eb1b429f1edfdf53246526d"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.f64.d12-4",
+   "form": "declared",
+   "types": [
+    "f64",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DOUBLE, line DECIMAL(12, 4), user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DOUBLE), CAST(order_id % 3 AS DECIMAL(12, 4)), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "dd75c4a47f7a33022b3baaafe144f38439d7716f59a4583e520612a29b9d13df",
+     "requests": 1,
+     "payloads": "80a8cde10f50d58007a8fa2f8fa86f1a62ce3ec055704f2075c499ea7c7c925c"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "fdb08b59e169bd5038487ef287c346f85145a46b1cdb5ff2c2d7ddad9b3b6655",
+     "requests": 1,
+     "payloads": "5413d7af67c1446b683efbb2307d9b5f2d01280e319ab02cc4d94306e7939e94"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.f64.f64",
+   "form": "declared",
+   "types": [
+    "f64",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DOUBLE, line DOUBLE, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DOUBLE), CAST(order_id % 3 AS DOUBLE), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "dd75c4a47f7a33022b3baaafe144f38439d7716f59a4583e520612a29b9d13df",
+     "requests": 1,
+     "payloads": "80a8cde10f50d58007a8fa2f8fa86f1a62ce3ec055704f2075c499ea7c7c925c"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "171238f2eeadb9240390788a05283b31e00707085e93b8ead634cda601373977",
+     "requests": 1,
+     "payloads": "49dc07dad99d21bd04ad06676d185267fe4cc36cedc0dbd72d9012558697e7d9"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.f64.text",
+   "form": "declared",
+   "types": [
+    "f64",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no DOUBLE, line VARCHAR, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS DOUBLE), CAST(order_id % 3 AS VARCHAR), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "20feeb82c0a6ece9770b31cdbdf2eb1585da878488bbee9c747d532d982ff138",
+     "requests": 1,
+     "payloads": "03073e05917699d06cd47f718704f44d39270654f513f8bafd76a65a3debbf20"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "float64",
+       "numerical"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "fdb08b59e169bd5038487ef287c346f85145a46b1cdb5ff2c2d7ddad9b3b6655",
+     "requests": 1,
+     "payloads": "5413d7af67c1446b683efbb2307d9b5f2d01280e319ab02cc4d94306e7939e94"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.text.i32",
+   "form": "declared",
+   "types": [
+    "text",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no VARCHAR, line INTEGER, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS VARCHAR), CAST(order_id % 3 AS INTEGER), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "bdd8944a2305cebea47aacd819a43f4b1e6c3bef45b90070e25982ab54e06c0a",
+     "requests": 1,
+     "payloads": "f3dee89959aece09fde5ff07aab23874757a6a114e1e327bd32824f6d04a1f68"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "line",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "26489287a273b61308a5f734850f77ec9654b5cc22e3c34976fdbbad4f4425e4",
+     "requests": 1,
+     "payloads": "baee02ed5d6d4282dc0eb8e8a80e68d25eedbe15c81dbfa8f4a2832f6f8ddce0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.text.i64",
+   "form": "declared",
+   "types": [
+    "text",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no VARCHAR, line BIGINT, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS VARCHAR), CAST(order_id % 3 AS BIGINT), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "bdd8944a2305cebea47aacd819a43f4b1e6c3bef45b90070e25982ab54e06c0a",
+     "requests": 1,
+     "payloads": "f3dee89959aece09fde5ff07aab23874757a6a114e1e327bd32824f6d04a1f68"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "line",
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "26489287a273b61308a5f734850f77ec9654b5cc22e3c34976fdbbad4f4425e4",
+     "requests": 1,
+     "payloads": "baee02ed5d6d4282dc0eb8e8a80e68d25eedbe15c81dbfa8f4a2832f6f8ddce0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.text.d12-4",
+   "form": "declared",
+   "types": [
+    "text",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no VARCHAR, line DECIMAL(12, 4), user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS VARCHAR), CAST(order_id % 3 AS DECIMAL(12, 4)), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "2a62a5972867d00813954473d99cd1e1501d962f5207a0591a3cd7b183b96c56",
+     "requests": 1,
+     "payloads": "90f0489c239deb569bca7ae8a2f8a4f2c08938848ae3b2989ccbc19c27e157b7"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "ca7d5826ecf414d25f890c18cf3a220604f1f4224f731c4e71085063a4793836",
+     "requests": 1,
+     "payloads": "62eadfd9fd47cb85ae220aa7c734806ebf170c8f9468c348c59751c28cebcba0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.text.f64",
+   "form": "declared",
+   "types": [
+    "text",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no VARCHAR, line DOUBLE, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS VARCHAR), CAST(order_id % 3 AS DOUBLE), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "2a62a5972867d00813954473d99cd1e1501d962f5207a0591a3cd7b183b96c56",
+     "requests": 1,
+     "payloads": "90f0489c239deb569bca7ae8a2f8a4f2c08938848ae3b2989ccbc19c27e157b7"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "35938f4d969488d7c177a4ae31d7825f1f49151d405efff6f658791c6789baba",
+     "requests": 1,
+     "payloads": "b9b6018dd4d37b238263e6a5bd5bcef68d07a94d87f6fd49706f8d2f4bb56af2"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "declared.text.text",
+   "form": "declared",
+   "types": [
+    "text",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE lines (order_no VARCHAR, line VARCHAR, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+    "INSERT INTO lines SELECT CAST(order_id AS VARCHAR), CAST(order_id % 3 AS VARCHAR), user_id, price, ts FROM orders",
+    "DROP TABLE orders",
+    "ALTER TABLE lines RENAME TO orders"
+   ],
+   "key": [
+    "orders",
+    [
+     "order_no",
+     "line"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "6876b0740a1d81a080a98dbea76eec10e8b86100fed1f4797de52350056bd3ff",
+     "requests": 1,
+     "payloads": "cac7da2b7566b5bea27f3cce13c42bda05e6ed4912b6f5caf28c835e9a7cc10c"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": null,
+      "users": "user_id"
+     },
+     "columns": {
+      "order_no": [
+       "string",
+       "text"
+      ],
+      "line": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "ca7d5826ecf414d25f890c18cf3a220604f1f4224f731c4e71085063a4793836",
+     "requests": 1,
+     "payloads": "62eadfd9fd47cb85ae220aa7c734806ebf170c8f9468c348c59751c28cebcba0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i32.i32",
+   "form": "foreign",
+   "types": [
+    "i32",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id INTEGER, region INTEGER, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS INTEGER), CAST(user_id % 3 AS INTEGER), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id INTEGER, region INTEGER, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS INTEGER), CAST(user_id % 3 AS INTEGER), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "a82b917f2d18bd10ba74a35b0e71cf0685b9c3a456caeefb5736e505dc0d4210",
+     "requests": 1,
+     "payloads": "681ed3d6432804874d1ffd96b3e4ca5605921d541a4222f076b11807947ebf17"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "776d3e271e16ae17b7ab4a683d9d61bc4a9c9c7f5a46bef35671996cf2fdb801",
+     "requests": 1,
+     "payloads": "e9515c5dd3c87a10e045ebb7d1c3a869a05cca516f3fc3beeb4f220b4ca673c6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i32.i64",
+   "form": "foreign",
+   "types": [
+    "i32",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id INTEGER, region BIGINT, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS INTEGER), CAST(user_id % 3 AS BIGINT), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id INTEGER, region BIGINT, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS INTEGER), CAST(user_id % 3 AS BIGINT), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "a82b917f2d18bd10ba74a35b0e71cf0685b9c3a456caeefb5736e505dc0d4210",
+     "requests": 1,
+     "payloads": "681ed3d6432804874d1ffd96b3e4ca5605921d541a4222f076b11807947ebf17"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "776d3e271e16ae17b7ab4a683d9d61bc4a9c9c7f5a46bef35671996cf2fdb801",
+     "requests": 1,
+     "payloads": "e9515c5dd3c87a10e045ebb7d1c3a869a05cca516f3fc3beeb4f220b4ca673c6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i32.d12-4",
+   "form": "foreign",
+   "types": [
+    "i32",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id INTEGER, region DECIMAL(12, 4), age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS INTEGER), CAST(user_id % 3 AS DECIMAL(12, 4)), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id INTEGER, region DECIMAL(12, 4), price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS INTEGER), CAST(user_id % 3 AS DECIMAL(12, 4)), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "8d1c808799a33cc30b44c90791d6ff6c12c9bf9fa8b82afd1f99c711fbff7758",
+     "requests": 1,
+     "payloads": "9b7698c6d70fb6cc5f8c216b55ae30abf190141641c08069578cc5f5526969d3"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "552edd7f8c51317b8c43c847b74bf3b4cef57be2563431f8fe2527b2879debce",
+     "requests": 1,
+     "payloads": "b165dfb1d690d054c059a8394efb53be11ede32913aa953d8b9a9d32c6c127c0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i32.f64",
+   "form": "foreign",
+   "types": [
+    "i32",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id INTEGER, region DOUBLE, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS INTEGER), CAST(user_id % 3 AS DOUBLE), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id INTEGER, region DOUBLE, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS INTEGER), CAST(user_id % 3 AS DOUBLE), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "8d1c808799a33cc30b44c90791d6ff6c12c9bf9fa8b82afd1f99c711fbff7758",
+     "requests": 1,
+     "payloads": "9b7698c6d70fb6cc5f8c216b55ae30abf190141641c08069578cc5f5526969d3"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "ca394ed3cb057c506c98e44d7753edd740ff5b4fcff3c839b00dc64e085eebf8",
+     "requests": 1,
+     "payloads": "17aa9d193296c8e8653d5216a3b4601e9faaf9fa0fbc035ee683d35db6ae13f1"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i32.text",
+   "form": "foreign",
+   "types": [
+    "i32",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id INTEGER, region VARCHAR, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS INTEGER), CAST(user_id % 3 AS VARCHAR), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id INTEGER, region VARCHAR, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS INTEGER), CAST(user_id % 3 AS VARCHAR), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "00905d90ee6fbfffe5a825133e4ab8d393edc76e0ac9cef727074cc5bf72101e",
+     "requests": 1,
+     "payloads": "692a53a77b6d642f21dcd0be0a16303ea0bee88a1c4369a53c26e8e635280b5f"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "552edd7f8c51317b8c43c847b74bf3b4cef57be2563431f8fe2527b2879debce",
+     "requests": 1,
+     "payloads": "b165dfb1d690d054c059a8394efb53be11ede32913aa953d8b9a9d32c6c127c0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i64.i32",
+   "form": "foreign",
+   "types": [
+    "i64",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id BIGINT, region INTEGER, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS BIGINT), CAST(user_id % 3 AS INTEGER), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, region INTEGER, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS BIGINT), CAST(user_id % 3 AS INTEGER), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "a82b917f2d18bd10ba74a35b0e71cf0685b9c3a456caeefb5736e505dc0d4210",
+     "requests": 1,
+     "payloads": "681ed3d6432804874d1ffd96b3e4ca5605921d541a4222f076b11807947ebf17"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "776d3e271e16ae17b7ab4a683d9d61bc4a9c9c7f5a46bef35671996cf2fdb801",
+     "requests": 1,
+     "payloads": "e9515c5dd3c87a10e045ebb7d1c3a869a05cca516f3fc3beeb4f220b4ca673c6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i64.i64",
+   "form": "foreign",
+   "types": [
+    "i64",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id BIGINT, region BIGINT, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS BIGINT), CAST(user_id % 3 AS BIGINT), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, region BIGINT, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS BIGINT), CAST(user_id % 3 AS BIGINT), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "a82b917f2d18bd10ba74a35b0e71cf0685b9c3a456caeefb5736e505dc0d4210",
+     "requests": 1,
+     "payloads": "681ed3d6432804874d1ffd96b3e4ca5605921d541a4222f076b11807947ebf17"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "776d3e271e16ae17b7ab4a683d9d61bc4a9c9c7f5a46bef35671996cf2fdb801",
+     "requests": 1,
+     "payloads": "e9515c5dd3c87a10e045ebb7d1c3a869a05cca516f3fc3beeb4f220b4ca673c6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i64.d12-4",
+   "form": "foreign",
+   "types": [
+    "i64",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id BIGINT, region DECIMAL(12, 4), age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS BIGINT), CAST(user_id % 3 AS DECIMAL(12, 4)), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, region DECIMAL(12, 4), price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS BIGINT), CAST(user_id % 3 AS DECIMAL(12, 4)), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "8d1c808799a33cc30b44c90791d6ff6c12c9bf9fa8b82afd1f99c711fbff7758",
+     "requests": 1,
+     "payloads": "9b7698c6d70fb6cc5f8c216b55ae30abf190141641c08069578cc5f5526969d3"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "552edd7f8c51317b8c43c847b74bf3b4cef57be2563431f8fe2527b2879debce",
+     "requests": 1,
+     "payloads": "b165dfb1d690d054c059a8394efb53be11ede32913aa953d8b9a9d32c6c127c0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i64.f64",
+   "form": "foreign",
+   "types": [
+    "i64",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id BIGINT, region DOUBLE, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS BIGINT), CAST(user_id % 3 AS DOUBLE), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, region DOUBLE, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS BIGINT), CAST(user_id % 3 AS DOUBLE), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "8d1c808799a33cc30b44c90791d6ff6c12c9bf9fa8b82afd1f99c711fbff7758",
+     "requests": 1,
+     "payloads": "9b7698c6d70fb6cc5f8c216b55ae30abf190141641c08069578cc5f5526969d3"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "ca394ed3cb057c506c98e44d7753edd740ff5b4fcff3c839b00dc64e085eebf8",
+     "requests": 1,
+     "payloads": "17aa9d193296c8e8653d5216a3b4601e9faaf9fa0fbc035ee683d35db6ae13f1"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.i64.text",
+   "form": "foreign",
+   "types": [
+    "i64",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id BIGINT, region VARCHAR, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS BIGINT), CAST(user_id % 3 AS VARCHAR), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT, region VARCHAR, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS BIGINT), CAST(user_id % 3 AS VARCHAR), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "00905d90ee6fbfffe5a825133e4ab8d393edc76e0ac9cef727074cc5bf72101e",
+     "requests": 1,
+     "payloads": "692a53a77b6d642f21dcd0be0a16303ea0bee88a1c4369a53c26e8e635280b5f"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "int64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "552edd7f8c51317b8c43c847b74bf3b4cef57be2563431f8fe2527b2879debce",
+     "requests": 1,
+     "payloads": "b165dfb1d690d054c059a8394efb53be11ede32913aa953d8b9a9d32c6c127c0"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.d12-4.i32",
+   "form": "foreign",
+   "types": [
+    "d12-4",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DECIMAL(12, 4), region INTEGER, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS INTEGER), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DECIMAL(12, 4), region INTEGER, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS INTEGER), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "indices_as": "decimal",
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "9c4e9cec73b047ada860703a6ae674e44c73b9b4acc2007bd626ff3f03b9da5c",
+     "requests": 1,
+     "payloads": "03be3d98e5e483c7496d3327d58c51a11fe77b22f416cd9f5b271c7f7ce5c6c7"
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "users": "region",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "5088de20e451103889ad011a89f91c5af2ad3a0e93121e8dd3f8b24f77d5907a",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.d12-4.i64",
+   "form": "foreign",
+   "types": [
+    "d12-4",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DECIMAL(12, 4), region BIGINT, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS BIGINT), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DECIMAL(12, 4), region BIGINT, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS BIGINT), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "indices_as": "decimal",
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "9c4e9cec73b047ada860703a6ae674e44c73b9b4acc2007bd626ff3f03b9da5c",
+     "requests": 1,
+     "payloads": "03be3d98e5e483c7496d3327d58c51a11fe77b22f416cd9f5b271c7f7ce5c6c7"
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "users": "region",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "5088de20e451103889ad011a89f91c5af2ad3a0e93121e8dd3f8b24f77d5907a",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.d12-4.d12-4",
+   "form": "foreign",
+   "types": [
+    "d12-4",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DECIMAL(12, 4), region DECIMAL(12, 4), age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS DECIMAL(12, 4)), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DECIMAL(12, 4), region DECIMAL(12, 4), price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS DECIMAL(12, 4)), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "indices_as": "decimal",
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "fdcb19a92de0ce8decc635a4fbff1acd2c5ca11cbf056dadbb3014afe766a5d4",
+     "requests": 1,
+     "payloads": "26061bf302135c17fb15e47b14b375a4ee14928f3c223cbd6ec9dc7d3c1d9f3b"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "2bf5359389b1b72a46ffd2282f33af44950c8a8c3fe78d3a514bac5d81cf6609",
+     "requests": 1,
+     "payloads": "194b0cb7ab86e8a11f7206dee25f34c90bde9a4361f532609ee42a2d95f1d8a6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.d12-4.f64",
+   "form": "foreign",
+   "types": [
+    "d12-4",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DECIMAL(12, 4), region DOUBLE, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS DOUBLE), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DECIMAL(12, 4), region DOUBLE, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS DOUBLE), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "indices_as": "decimal",
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "fdcb19a92de0ce8decc635a4fbff1acd2c5ca11cbf056dadbb3014afe766a5d4",
+     "requests": 1,
+     "payloads": "26061bf302135c17fb15e47b14b375a4ee14928f3c223cbd6ec9dc7d3c1d9f3b"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "6efbe6c38bbb2c55e7dc29a51830ad30f5962ae43aea9ffa1b5dd01a238f82bd",
+     "requests": 1,
+     "payloads": "b7cdf214f09372a10866a062b26fb106c12541f6d5a208e33541d976b0e2107f"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.d12-4.text",
+   "form": "foreign",
+   "types": [
+    "d12-4",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DECIMAL(12, 4), region VARCHAR, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS VARCHAR), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DECIMAL(12, 4), region VARCHAR, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DECIMAL(12, 4)), CAST(user_id % 3 AS VARCHAR), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "indices_as": "decimal",
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "b543fd4fb5dbef2674aa09ea5b487d280bbe5497f60c51640b1b590365ed1e69",
+     "requests": 1,
+     "payloads": "415aab027a5396840c30cbc1d0f0eb3984854722dde3d39104ec01b27dea5b02"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "2bf5359389b1b72a46ffd2282f33af44950c8a8c3fe78d3a514bac5d81cf6609",
+     "requests": 1,
+     "payloads": "194b0cb7ab86e8a11f7206dee25f34c90bde9a4361f532609ee42a2d95f1d8a6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.f64.i32",
+   "form": "foreign",
+   "types": [
+    "f64",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DOUBLE, region INTEGER, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DOUBLE), CAST(user_id % 3 AS INTEGER), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DOUBLE, region INTEGER, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DOUBLE), CAST(user_id % 3 AS INTEGER), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "9c4e9cec73b047ada860703a6ae674e44c73b9b4acc2007bd626ff3f03b9da5c",
+     "requests": 1,
+     "payloads": "03be3d98e5e483c7496d3327d58c51a11fe77b22f416cd9f5b271c7f7ce5c6c7"
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "users": "region",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "dbe3a98554abc56259934dd1645964db21171a2802c0422dff8e7585864f6219",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.f64.i64",
+   "form": "foreign",
+   "types": [
+    "f64",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DOUBLE, region BIGINT, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DOUBLE), CAST(user_id % 3 AS BIGINT), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DOUBLE, region BIGINT, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DOUBLE), CAST(user_id % 3 AS BIGINT), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "9c4e9cec73b047ada860703a6ae674e44c73b9b4acc2007bd626ff3f03b9da5c",
+     "requests": 1,
+     "payloads": "03be3d98e5e483c7496d3327d58c51a11fe77b22f416cd9f5b271c7f7ce5c6c7"
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "users": "region",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "dbe3a98554abc56259934dd1645964db21171a2802c0422dff8e7585864f6219",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.f64.d12-4",
+   "form": "foreign",
+   "types": [
+    "f64",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DOUBLE, region DECIMAL(12, 4), age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DOUBLE), CAST(user_id % 3 AS DECIMAL(12, 4)), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DOUBLE, region DECIMAL(12, 4), price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DOUBLE), CAST(user_id % 3 AS DECIMAL(12, 4)), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "fdcb19a92de0ce8decc635a4fbff1acd2c5ca11cbf056dadbb3014afe766a5d4",
+     "requests": 1,
+     "payloads": "26061bf302135c17fb15e47b14b375a4ee14928f3c223cbd6ec9dc7d3c1d9f3b"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "ed3834b99eb0e74dcf85c5298756bfa8c80ee4dcff16062fd7a0cdb3bd7c4d5c",
+     "requests": 1,
+     "payloads": "4b93b3ddd9a755985645bd9ac5dbc2fadc009a71582c2f69392fc3d5ecec5287"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.f64.f64",
+   "form": "foreign",
+   "types": [
+    "f64",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DOUBLE, region DOUBLE, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DOUBLE), CAST(user_id % 3 AS DOUBLE), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DOUBLE, region DOUBLE, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DOUBLE), CAST(user_id % 3 AS DOUBLE), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "fdcb19a92de0ce8decc635a4fbff1acd2c5ca11cbf056dadbb3014afe766a5d4",
+     "requests": 1,
+     "payloads": "26061bf302135c17fb15e47b14b375a4ee14928f3c223cbd6ec9dc7d3c1d9f3b"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "59e492651716238e3df933f2cf888f7bbf68dabce369d7a8d51b6fb424ad972f",
+     "requests": 1,
+     "payloads": "4ddd2c69af69e23e087ab0679e347c24614ca3b2b0df1af6728c3678e5f0d469"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.f64.text",
+   "form": "foreign",
+   "types": [
+    "f64",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id DOUBLE, region VARCHAR, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS DOUBLE), CAST(user_id % 3 AS VARCHAR), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DOUBLE, region VARCHAR, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS DOUBLE), CAST(user_id % 3 AS VARCHAR), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    0,
+    1
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "b543fd4fb5dbef2674aa09ea5b487d280bbe5497f60c51640b1b590365ed1e69",
+     "requests": 1,
+     "payloads": "415aab027a5396840c30cbc1d0f0eb3984854722dde3d39104ec01b27dea5b02"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "float64",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "ed3834b99eb0e74dcf85c5298756bfa8c80ee4dcff16062fd7a0cdb3bd7c4d5c",
+     "requests": 1,
+     "payloads": "4b93b3ddd9a755985645bd9ac5dbc2fadc009a71582c2f69392fc3d5ecec5287"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.text.i32",
+   "form": "foreign",
+   "types": [
+    "text",
+    "i32"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id VARCHAR, region INTEGER, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS VARCHAR), CAST(user_id % 3 AS INTEGER), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id VARCHAR, region INTEGER, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS VARCHAR), CAST(user_id % 3 AS INTEGER), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "02b22382d9111d6da1745bef05bdd00b70154c2ba782983fa5f7ee123ecbc1e1",
+     "requests": 1,
+     "payloads": "76bc350ae38aa1036fd9adc56b7e8b423b6f332f0e6a1e37fe39cd0706b1e18f"
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "users": "region",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "5088de20e451103889ad011a89f91c5af2ad3a0e93121e8dd3f8b24f77d5907a",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.text.i64",
+   "form": "foreign",
+   "types": [
+    "text",
+    "i64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id VARCHAR, region BIGINT, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS VARCHAR), CAST(user_id % 3 AS BIGINT), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id VARCHAR, region BIGINT, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS VARCHAR), CAST(user_id % 3 AS BIGINT), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "categorical"
+      ]
+     },
+     "schema": "02b22382d9111d6da1745bef05bdd00b70154c2ba782983fa5f7ee123ecbc1e1",
+     "requests": 1,
+     "payloads": "76bc350ae38aa1036fd9adc56b7e8b423b6f332f0e6a1e37fe39cd0706b1e18f"
+    },
+    "sqlite": {
+     "outcome": [
+      "refusal",
+      "materialize",
+      "StructuredDataError",
+      "INVALID_REQUEST"
+     ],
+     "keys": {
+      "users": "region",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "int64",
+       "ID"
+      ]
+     },
+     "schema": "5088de20e451103889ad011a89f91c5af2ad3a0e93121e8dd3f8b24f77d5907a",
+     "requests": 0,
+     "payloads": null
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.text.d12-4",
+   "form": "foreign",
+   "types": [
+    "text",
+    "d12-4"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id VARCHAR, region DECIMAL(12, 4), age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS VARCHAR), CAST(user_id % 3 AS DECIMAL(12, 4)), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id VARCHAR, region DECIMAL(12, 4), price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS VARCHAR), CAST(user_id % 3 AS DECIMAL(12, 4)), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "c4ff5e6932a883c58faca482e123f00d92a85c1518f4ce4ce000e3846d85480c",
+     "requests": 1,
+     "payloads": "020de577ad97710115b14f747f691c1cf5e5baa866f4587ebfd8b9b98692614a"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "2bf5359389b1b72a46ffd2282f33af44950c8a8c3fe78d3a514bac5d81cf6609",
+     "requests": 1,
+     "payloads": "194b0cb7ab86e8a11f7206dee25f34c90bde9a4361f532609ee42a2d95f1d8a6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.text.f64",
+   "form": "foreign",
+   "types": [
+    "text",
+    "f64"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id VARCHAR, region DOUBLE, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS VARCHAR), CAST(user_id % 3 AS DOUBLE), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id VARCHAR, region DOUBLE, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS VARCHAR), CAST(user_id % 3 AS DOUBLE), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "c4ff5e6932a883c58faca482e123f00d92a85c1518f4ce4ce000e3846d85480c",
+     "requests": 1,
+     "payloads": "020de577ad97710115b14f747f691c1cf5e5baa866f4587ebfd8b9b98692614a"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "float64",
+       "categorical"
+      ]
+     },
+     "schema": "6efbe6c38bbb2c55e7dc29a51830ad30f5962ae43aea9ffa1b5dd01a238f82bd",
+     "requests": 1,
+     "payloads": "b7cdf214f09372a10866a062b26fb106c12541f6d5a208e33541d976b0e2107f"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  },
+  {
+   "id": "foreign.text.text",
+   "form": "foreign",
+   "types": [
+    "text",
+    "text"
+   ],
+   "setup": [
+    "CREATE TABLE u0 AS SELECT * FROM users",
+    "CREATE TABLE o0 AS SELECT * FROM orders",
+    "DROP TABLE orders",
+    "DROP TABLE users",
+    "CREATE TABLE users (user_id VARCHAR, region VARCHAR, age INTEGER, country VARCHAR, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT CAST(user_id AS VARCHAR), CAST(user_id % 3 AS VARCHAR), age, country FROM u0",
+    "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id VARCHAR, region VARCHAR, price DOUBLE, ts TIMESTAMP, FOREIGN KEY (user_id, region) REFERENCES users (user_id, region))",
+    "INSERT INTO orders SELECT order_id, CAST(user_id AS VARCHAR), CAST(user_id % 3 AS VARCHAR), price, ts FROM o0 ORDER BY order_id",
+    "DROP TABLE o0",
+    "DROP TABLE u0"
+   ],
+   "key": [
+    "users",
+    [
+     "user_id",
+     "region"
+    ]
+   ],
+   "indices": [
+    "0",
+    "1"
+   ],
+   "reference": {
+    "duckdb": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "orders": "order_id",
+      "users": "user_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "7256d60855c4c3a1019103a2ec7d24263e3699f60b06a700976a41d4155a7d1a",
+     "requests": 1,
+     "payloads": "610634fea4ae4d105517306ee7ce98e81380026df84350c1416c5448ffc1f9d3"
+    },
+    "sqlite": {
+     "outcome": [
+      "success",
+      "predict",
+      null,
+      null
+     ],
+     "keys": {
+      "users": "user_id",
+      "orders": "order_id"
+     },
+     "columns": {
+      "user_id": [
+       "string",
+       "ID"
+      ],
+      "region": [
+       "string",
+       "categorical"
+      ]
+     },
+     "schema": "2bf5359389b1b72a46ffd2282f33af44950c8a8c3fe78d3a514bac5d81cf6609",
+     "requests": 1,
+     "payloads": "194b0cb7ab86e8a11f7206dee25f34c90bde9a4361f532609ee42a2d95f1d8a6"
+    },
+    "postgres": {
+     "outcome": [
+      "refusal",
+      "from_source",
+      "ValueError",
+      null
+     ],
+     "keys": null,
+     "columns": null,
+     "schema": null,
+     "requests": 0,
+     "payloads": null
+    }
+   }
+  }
+ ]
+}
