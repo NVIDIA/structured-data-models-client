@@ -1,9 +1,12 @@
 {
   "format": "sdm-case/1",
   "id": "edit.accepted-meaning-key-links",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
   "routes": [
     "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb",
@@ -104,5 +107,5 @@
     "stage": "materialize"
   },
   "why": "Edits the reference takes (a meaning, a key, a time column, the relationships) are made by the core as the reference makes them, and the request is the one the edited schema gives",
-  "source": "T1.24b: the schema's edit semantics, accepted edits' parity across the hosts (decision E67)"
+  "source": "T1.24b: the schema's edit semantics, accepted edits' parity across the hosts (decision E67); admitted as an acceptance case by T2.12 (the design row: the nine edit.* S1 cases, reached on both core hosts, admitted as acceptance)"
 }
