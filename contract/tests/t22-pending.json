@@ -1,9 +1,6 @@
 {
  "about": "T2.2's acceptance tests that failed when the test author wrote them, before the implementation (contract/tests/test_t22_sqlite.py as py:<test>, sdm-testkit's tests/t22_sqlite.rs as rust:<test>). Each listed test must still fail (strict); the implementer takes a name out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [
-  "py:test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does",
-  "rust:rust_host_runs_every_s1_case_on_sqlite"
- ],
+ "pending": [],
  "authored": [
   "py:test_the_core_reports_a_sqlite_provider",
   "py:test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does",

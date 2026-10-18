@@ -14,7 +14,9 @@
 //!   tables loaded by the contract loader, `contract/runners/databases.py`,
 //!   into a new SQLite file, read through the dev-only `rusqlite`
 //!   provider, and its observation keyed `<case>@sqlite`), observes every
-//!   S1 case on SQLite with its core operations, each outcome (result and
+//!   S1 case on SQLite with its core operations (those of the calls before
+//!   the reference line's stop, as `compare.py`'s `core_held` holds a
+//!   database line, T2.1e), each outcome (result and
 //!   code) python-ref's committed `<case>@sqlite` line's or an approved
 //!   register entry naming that key; `compare.py --database sqlite` holds
 //!   the other fields, and `cross-host (sqlite)` the core fields against
@@ -245,6 +247,54 @@ fn outcome(observation: &Value) -> (Value, Value) {
     )
 }
 
+/// The calls of the public route, in order, and the call each core
+/// operation belongs to (`compare.py`'s `STAGES` and `STAGE_OF`).
+const STAGES: [&str; 3] = ["from_source", "materialize", "predict"];
+
+fn stage_of(op: &str) -> Option<&'static str> {
+    match op {
+        "describe_source" => Some("from_source"),
+        "materialize" => Some("materialize"),
+        "predict" => Some("predict"),
+        _ => None,
+    }
+}
+
+/// The call a reference line stops at: its refusal's, or none where it
+/// answers (`compare.py`'s `line_stop` with no approved move).
+fn line_stop(reference: &Value) -> Option<&'static str> {
+    let outcome = &reference["outcome"];
+    if outcome["result"] != "refusal" {
+        return None;
+    }
+    STAGES
+        .into_iter()
+        .find(|stage| outcome["stage"].as_str() == Some(stage))
+}
+
+/// The case's core operations a database line is held to
+/// (`compare.py`'s `core_held`, T2.1e): every one the runner ran, every
+/// one of no call, and every one of a call before `stop`.
+fn core_held(
+    operations: &BTreeSet<String>,
+    ran: &BTreeSet<String>,
+    stop: Option<&str>,
+) -> BTreeSet<String> {
+    let Some(stop) = stop else {
+        return operations.clone();
+    };
+    let limit = STAGES.iter().position(|s| *s == stop).unwrap();
+    operations
+        .iter()
+        .filter(|op| {
+            ran.contains(*op)
+                || stage_of(op)
+                    .is_none_or(|call| STAGES.iter().position(|s| *s == call).unwrap() < limit)
+        })
+        .cloned()
+        .collect()
+}
+
 #[test]
 fn rust_host_runs_every_s1_case_on_sqlite() {
     gated("rust_host_runs_every_s1_case_on_sqlite", || {
@@ -265,7 +315,8 @@ fn rust_host_runs_every_s1_case_on_sqlite() {
                 .iter()
                 .map(|o| o.as_str().unwrap().to_owned())
                 .collect();
-            if !operations.is_subset(&ran) || line["core"].is_null() {
+            let held = core_held(&operations, &ran, line_stop(&reference[&key]));
+            if !held.is_subset(&ran) || (!held.is_empty() && line["core"].is_null()) {
                 problems.push(format!("{key}: its core operations did not run"));
             }
             if line["identity"]["runner"] != "rust-host" {

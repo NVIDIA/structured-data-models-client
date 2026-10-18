@@ -71,6 +71,7 @@ def _module(name: str, path: Path) -> ModuleType:
     return sys.modules[name]
 
 
+COMPARE = _module('t22_compare', ROOT / 'scripts/rust_core/compare.py')
 M = _module(
     'sqlite_key_pairs_record',
     ROOT / 'contract/tools/sqlite_key_pairs_record.py',
@@ -228,7 +229,9 @@ def test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does() -> (
 ):
     r"""Exit "every S1 case on SQLite": python-core observes every S1 case
     on SQLite, keyed ``<case>@sqlite``, on the core route (the native module
-    loaded, the case's core operations run), and its outcome (result,
+    loaded, and the case's core operations run as ``compare.py`` holds a
+    database line to them: ``line_stop`` and ``core_held``, those of the
+    calls before the reference line's stop), and its outcome (result,
     stage, class, code) is python-ref's committed line's there, or an
     approved register entry names the key."""
 
@@ -245,8 +248,18 @@ def test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does() -> (
                 problems.append(f'{key}: not observed')
                 continue
             identity = line['identity']
-            missing = sorted(set(case['core']) - set(identity['operations']))
-            if not identity['native_loaded'] or missing or not line['core']:
+            # The core operations the line is held to, as the comparator
+            # holds them (T2.1e): those of the calls before the reference
+            # line's stop, and every one the runner ran.
+            held_ops = COMPARE.core_held(
+                case, line, COMPARE.line_stop(None, reference[key])
+            )['core']
+            missing = sorted(set(held_ops) - set(identity['operations']))
+            if (
+                not identity['native_loaded']
+                or missing
+                or (held_ops and not line['core'])
+            ):
                 problems.append(f'{key}: not on the core route ({missing})')
             if _outcome(line) != _outcome(reference[key]) and not (
                 registered_key(key)
