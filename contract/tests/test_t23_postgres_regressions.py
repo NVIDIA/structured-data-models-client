@@ -25,6 +25,12 @@ vector's own.
   reference's.
 - ``relation.dollar``: a keyed materialize over the relation ``users$1``
   succeeds with the reference's request.
+- From the second review: a ``real`` key holding fractional values joins
+  its linked table (``key.real-fractional-linked``) and finds its entities
+  (``key.real-fractional-entity``); a table with a ``NOT NULL`` domain
+  column is joined on a text key (``join.domain-not-null-text-key``); a
+  column named ``cost$1`` is read by a keyed lookup (``column.dollar``); a
+  ``timetz`` column is read by ``Schema.from_source`` (``type.timetz``).
 
 Each answer (outcome, public schema, the payloads' digest and anchors) is
 the reference's, or differs exactly as an approved register entry's ref
@@ -177,3 +183,21 @@ def test_the_vectors_are_the_reference_s_on_postgres() -> None:
     assert BY_ID['relation.dollar']['reference']['postgres'] == {
         'users$1.id': 'integer'
     }
+    # The second review's: each column the type its finding names.
+    for vector_id, held in {
+        'key.real-fractional-linked': {
+            'items.item_id': 'real',
+            'orders.item_id': 'real',
+        },
+        'key.real-fractional-entity': {
+            'users.user_id': 'real',
+            'orders.user_id': 'real',
+        },
+        'join.domain-not-null-text-key': {
+            'users.user_id': 'text',
+            'orders.n': 'qty',
+        },
+        'column.dollar': {'users.cost$1': 'integer'},
+        'type.timetz': {'users.x': 'time with time zone'},
+    }.items():
+        assert BY_ID[vector_id]['reference']['postgres'] == held, vector_id

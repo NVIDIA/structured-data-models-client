@@ -27,7 +27,16 @@ Postgres's own types (which the contract loader does not make):
   ``numeric``, ``numeric[]`` or ``uuid[]`` beside the key and target;
 - ``relation.dollar``: the entity table named ``users$1``, a legal
   quoted identifier holding what a bind marker looks like, read through
-  ``tables={'users': 'users$1'}`` and asked a keyed question.
+  ``tables={'users': 'users$1'}`` and asked a keyed question;
+- from the second review, over the shop's shape (``users``, ``orders``),
+  asked ``SHOP_QUESTION``: ``key.real-fractional-linked``, a ``real`` key
+  of ``items`` holding fractional values (``i + 0.1``) that ``orders``
+  links to; ``key.real-fractional-entity``, the entity table's ``real``
+  key holding them, its entities given as those floats;
+  ``join.domain-not-null-text-key``, ``orders`` holding a ``NOT NULL``
+  domain column and joined on a text key; ``column.dollar``, an entity
+  column named ``cost$1``, read by the keyed lookup of ``users``; and
+  ``type.timetz``, a ``timetz`` column read by ``Schema.from_source``.
 
 For each the reference's public answer is kept: the outcome (result,
 stage, exception class and ``StructuredDataError`` code), the public
@@ -72,6 +81,17 @@ FEATURES = {
     'numeric-array': ('numeric[]', 'ARRAY[n::numeric]'),
     'uuid-array': ('uuid[]', f'ARRAY[{_UUID}]'),
 }
+#: The second review's shape: ``users``, and ``orders`` whose columns
+#: before ``price`` and ``ts`` each vector names, and its question.
+_SHOP_USERS = 'CREATE TABLE users ({})'
+_SHOP_ORDERS = (
+    'CREATE TABLE orders (order_id bigint PRIMARY KEY, {}, '
+    'price double precision, ts timestamp)'
+)
+_SHOP_FACTS = (
+    "10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7)"
+)
+SHOP_QUESTION = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 #: The keyed question and its entities, as the review's probe asks it.
 KEYED = {
     'pql': 'PREDICT users.age FOR EACH users.id',
@@ -121,6 +141,110 @@ VECTORS: list[dict[str, Any]] = [
         **copy.deepcopy(KEYED),
         'columns': [['users$1', 'id']],
     },
+    *[
+        {
+            'id': name,
+            'session': [],
+            'setup': setup,
+            'pql': SHOP_QUESTION,
+            'materialize': {
+                'indices': indices,
+                'anchor_time': '2024-03-01',
+                'random_seed': 42,
+            },
+            'columns': columns,
+        }
+        for name, setup, indices, columns in [
+            (
+                'key.real-fractional-linked',
+                [
+                    _SHOP_USERS.format(
+                        'user_id bigint PRIMARY KEY, age integer'
+                    ),
+                    'INSERT INTO users SELECT i, 20 + i '
+                    'FROM generate_series(0, 7) i',
+                    'CREATE TABLE items (item_id real PRIMARY KEY, cat text)',
+                    'INSERT INTO items SELECT i + 0.1, '
+                    "(ARRAY['a', 'b', 'c'])[1 + i % 3] "
+                    'FROM generate_series(0, 4) i',
+                    _SHOP_ORDERS.format(
+                        'user_id bigint REFERENCES users(user_id), '
+                        'item_id real REFERENCES items(item_id)'
+                    ),
+                    'INSERT INTO orders SELECT i, i % 8, (i % 5) + 0.1, '
+                    f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+                ],
+                [0, 1],
+                [['items', 'item_id'], ['orders', 'item_id']],
+            ),
+            (
+                'key.real-fractional-entity',
+                [
+                    _SHOP_USERS.format('user_id real PRIMARY KEY, age integer'),
+                    'INSERT INTO users SELECT i + 0.1, 20 + i '
+                    'FROM generate_series(0, 7) i',
+                    _SHOP_ORDERS.format(
+                        'user_id real REFERENCES users(user_id)'
+                    ),
+                    'INSERT INTO orders SELECT i, (i % 8) + 0.1, '
+                    f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+                ],
+                [0.1, 1.1],
+                [['users', 'user_id'], ['orders', 'user_id']],
+            ),
+            (
+                'join.domain-not-null-text-key',
+                [
+                    'CREATE DOMAIN qty AS integer NOT NULL',
+                    _SHOP_USERS.format('user_id text PRIMARY KEY, age integer'),
+                    "INSERT INTO users SELECT 'u' || i, 20 + i "
+                    'FROM generate_series(0, 7) i',
+                    _SHOP_ORDERS.format(
+                        'user_id text REFERENCES users(user_id), n qty'
+                    ),
+                    "INSERT INTO orders SELECT i, 'u' || (i % 8), i, "
+                    f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+                ],
+                ['u0', 'u1'],
+                [['users', 'user_id'], ['orders', 'n']],
+            ),
+            (
+                'column.dollar',
+                [
+                    _SHOP_USERS.format(
+                        'user_id bigint PRIMARY KEY, "cost$1" integer'
+                    ),
+                    'INSERT INTO users SELECT i, 20 + i '
+                    'FROM generate_series(0, 7) i',
+                    _SHOP_ORDERS.format(
+                        'user_id bigint REFERENCES users(user_id)'
+                    ),
+                    'INSERT INTO orders SELECT i, i % 8, '
+                    f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+                ],
+                [0, 1],
+                [['users', 'cost$1']],
+            ),
+            (
+                'type.timetz',
+                [
+                    _SHOP_USERS.format(
+                        'user_id bigint PRIMARY KEY, x timetz, age integer'
+                    ),
+                    "INSERT INTO users SELECT i, TIME WITH TIME ZONE '12:00+02' "
+                    '+ make_interval(mins => i), 20 + i '
+                    'FROM generate_series(0, 7) i',
+                    _SHOP_ORDERS.format(
+                        'user_id bigint REFERENCES users(user_id)'
+                    ),
+                    'INSERT INTO orders SELECT i, i % 8, '
+                    f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+                ],
+                [0, 1],
+                [['users', 'x']],
+            ),
+        ]
+    ],
 ]
 
 
@@ -232,9 +356,16 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
                     )
                     answer['schema'] = _runner()._schema_projection(schema)
                     stage = 'materialize'
+                    arguments = dict(vector['materialize'])
+                    if 'anchor_time' in arguments:
+                        import pandas as pd
+
+                        arguments['anchor_time'] = pd.Timestamp(
+                            arguments['anchor_time']
+                        )
                     request = PredictiveQuery(
                         vector['pql'], schema
-                    ).materialize(**vector['materialize'])
+                    ).materialize(**arguments)
                 answer['payloads'] = payloads_projection(request.payloads)
             except Exception as error:  # noqa: BLE001 - the answer observed
                 answer['outcome'] = {
