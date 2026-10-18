@@ -15,7 +15,9 @@ By the orchestrator's scope change the first wave's SQLite legs (T2.17, T2.18, T
 - **The SQLite dialect** (`sdm-data/src/sqlite.rs`): each request rendered as the reference's SQLite backend runs it, so each answer is that statement's result (H9).
   The table list from `sqlite_master`; `PRAGMA table_info`, `index_list`, `index_info` and `foreign_key_list`, one table or index at a time; the preview in `rowid` order; the key counts' and time bounds' `UNION ALL`, the bounds over the stored text; the seeded draw of RS-2; the neighbor reads by `rowid`, windowed by the stored text; the key lookup by a plain join for a key the source keeps unique, by the first row's `rowid` otherwise, counting where the core reads the count.
   Relations of one or two parts, the first naming `main`, `temp` or an attached database, quoted alone; none or three refused by name (rule `relation`).
-  A key set is bound as ADBC's ingest binds Arrow, a temporary table of its own name in the run (`__sdm_seeds_<attachment>__`), so the source's database is left as it was (the reference leaves its key tables in it).
+  A key set is bound as ADBC's ingest binds Arrow, a temporary table named by a digest of its request (`__sdm_seeds_<16 hex>__`, fix 13), so the source's database is left as it was (the reference leaves its key tables in it).
+  The digest is 64-bit FNV-1a over the request as the contract writes it, not SHA-256 as first agreed, so the shipped data layer takes no digest crate (serde_json, which writes the request, already ships with `sdm-contract`).
+  It deviates from the reference's unpredictable `id(tmp)` name: it is deterministic, so both hosts and the goldens render one text, and a caller who computed it would make the provider's create fail, leaving the caller's table as it was.
   Each provider creates the table, and replaces it only where it made that name on the connection before, so a relation the caller made is never replaced or dropped (fix 1).
   The seeded draw hashes the key or the `rowid` once per column, by the type the key's declaration fixes, read in the statement from `pragma_table_info`, else by the schema's type the request names (fix 2b).
 - **RS-2's stream**: numpy's legacy MT19937 and `randint`'s masked draw ported (`sdm-data/src/mt19937.rs`), held to `tests/rs2.json`, 24 seeds recorded from the reference's numpy from 0 past 2**126, both seedings.
@@ -51,14 +53,15 @@ By the orchestrator's scope change the first wave's SQLite legs (T2.17, T2.18, T
 - P2B-14: `time.feature-interval` on SQLite describes its INTERVAL text as text where the reference takes `INT` from the declared name; approved by the owner, KO2-62, its wording narrowed to an `INTERVAL` column.
 - P2B-15: a SQLite seed past 2**64 - 1 refused (RS-7's refusal), the contract's `max_seed` a `u64`; approved by the owner, KO2-59.
 - P2B-16 (temporary, KO2-56): on SQLite four S0 cases now reach the core's materialize (T2.1d) and are refused by E92-class rules, `target_filter` (`s0.boundary.deepest`, `digits-4300`, `start-past-64kb`) and `condition` (`escapes`), where the reference answers; T2.10 retires it.
-- P2B-17 (proposed): the stored time's spelling is read once per call, where the reference keeps it for a materializer's life; one statement more on a second materialize of one query, the same answers; matching it needs host-held state across calls.
+- P2B-17 (rejected as fixed, fix 14): the stored time's spelling is kept in the sampler's memo (decision E52) across a materializer's runs, so a second materialize reads none, as the reference.
 - P2B-10 to P2B-13 name their `<case>@sqlite` lines in `case_outcomes`, which the acceptance tests read.
 
-### Round 1's measured differences, now the reference's
+### Round 1's and round 2's measured differences, now the reference's
 
 - A primary key that is not the rowid alias keeps its catalog nullability, so a null key is warned of, counted and filtered as on the reference (fix 3).
 - A column declared `INTEGER` holding fractions is described int64 (fix 7); a composite key's one `INTEGER` column is the rowid alias (fix 8); a partial unique index keeps its column unique, and its two extra statements are gone (fix 9).
 - The seeded draw chooses its hash once per column by the key's type (fix 2b).
+- A caller's temporary table of any name a caller would write is left alone, and the materialize answers (fix 13); the key-count label (`k`) difference below is in the carry list for the next contract package, no entry, as the orchestrator decided.
 - Still differing, not registered, for the orchestrator: the key counts' label (`k`) is each counted key's position in the request, where the reference numbers every keyed table, an enforced one skipped too; on a source whose enforced key comes first (a SQLite rowid alias, a DuckDB primary key) the later labels differ by the skipped ones, the counts equal. Matching it needs each key's label in the request (`TableKey`), a contract field; it predates T2.2 (DuckDB's rendering is the same).
 
 ### For the test author and the orchestrator
