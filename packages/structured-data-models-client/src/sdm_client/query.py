@@ -604,14 +604,12 @@ class PredictiveQuery:
         old, response = validate(self.text, definition, profile)
         if old is not None and response.ok:
             return old
-        refusal = self._refusal(
-            [error.message for error in response.errors], profile
-        )
+        reasons = [error.message for error in response.errors]
         if alone:
             from sdm_client._rust.materialize import Unresolved
 
-            return Unresolved(self.text, refusal)
-        raise refusal
+            return Unresolved(self.text, self._refusal(reasons, profile))
+        raise self._refusal(reasons, profile)
 
     def _refusal(
         self, messages: list[str], profile: Profile

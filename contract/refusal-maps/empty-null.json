@@ -42,7 +42,7 @@
       "owner": "T1.32d",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-core/src/materialize.rs:2100",
+      "where": "rust/crates/sdm-core/src/materialize.rs:2110",
       "holds": "the entities to predict for are none",
       "why": "The reference's own refusal, which the core makes from T1.28a (the ledger's row moved into the core: python-core hands the empty indices to it), INVALID_REQUEST as the reference's; rust-host cannot carry the call (gap), owned by the package that admits the case",
       "observed": {
