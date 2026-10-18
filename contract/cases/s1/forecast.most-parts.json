@@ -34,7 +34,7 @@
       "CREATE TABLE items AS SELECT i::BIGINT AS item_id, ['a', 'b', 'c', 'd'][1 + i] AS kind FROM range(4) t(i)",
       "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
     ],
-    "pql": "PREDICT SUM(buys.buy_id, 0, 30, days) FORECAST 201 TIMEFRAMES FOR EACH users.user_id",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FORECAST 201 TIMEFRAMES FOR EACH users.user_id",
     "materialize": {
       "indices": [
         0,
