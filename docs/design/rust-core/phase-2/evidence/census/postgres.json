@@ -1,7 +1,7 @@
 {
   "commit": {
     "clean": false,
-    "sha": "6b935d3e70373ecf335c7adaef8fd79fb5b66197"
+    "sha": "034c8bd039f24778399d697173179e4f8c33ef65"
   },
   "database": "postgres",
   "departs": [
@@ -1072,19 +1072,18 @@
       "departs": true,
       "outcomes": {
         "python-core": {
-          "code": "PROVIDER_ERROR",
+          "code": "UNSUPPORTED_REQUEST",
           "detail_keys": [
-            "driver_class",
             "kind",
-            "request",
+            "operation",
             "retryable",
-            "sqlstate"
+            "rule"
           ],
-          "error": "StructuredDataError",
+          "error": "UnsupportedRequestError",
           "field": null,
-          "operation": null,
+          "operation": "materialize",
           "result": "refusal",
-          "rule": null,
+          "rule": "text_time",
           "stage": "materialize"
         },
         "reference": {
@@ -1367,18 +1366,7 @@
       "departs": false,
       "outcomes": {
         "python-core": {
-          "code": "PROVIDER_ERROR",
-          "detail_keys": [
-            "driver_class",
-            "kind",
-            "request",
-            "retryable"
-          ],
-          "error": "StructuredDataError",
-          "field": null,
-          "operation": null,
-          "result": "refusal",
-          "rule": null,
+          "result": "success",
           "stage": "from_source"
         },
         "reference": {

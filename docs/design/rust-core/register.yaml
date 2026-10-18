@@ -6655,42 +6655,38 @@ entries:
   - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
 
 - id: P2C-5
-  title: On Postgres a text time value the source cannot read as a timestamp fails its time bounds as the provider's error
+  title: On Postgres a text time value pandas reads and the core's list does not is refused by name at materialize
   kind: change
   old_behavior: >-
     The reference's Postgres sampler takes a time column's bounds as MIN
     and MAX of the column in its own type, a text column's by its text, and
-    reads them in the host (pandas): a value Postgres cannot read as a
-    timestamp but pandas can ('March 3rd 2023') is answered, and one
-    neither reads ('not a date') is refused INVALID_REQUEST at materialize.
+    reads them in the host (pandas): a value pandas reads ('March 3rd
+    2023', the refusal census's rule:text_time probe) is answered.
   new_behavior: >-
-    The core takes the same MIN and MAX, by the text for a text column, as
-    it windows and orders such a column by its text, as the reference
-    does (time.text-us-date answers as the reference answers), but the
-    request's bounds are timestamps, so the source reads them (CAST to
-    timestamp): a text Postgres cannot read fails the source's statement,
-    PROVIDER_ERROR at materialize, whether or not pandas reads it.
+    The core takes the same MIN and MAX and reads each bound and each
+    fetched value itself, by its fixed list of formats: a value outside the
+    list is refused at materialize, UNSUPPORTED_REQUEST rule text_time.
+    Until T2.3's fix 9 the core asked the source for its bounds as
+    timestamps (CAST to timestamp), and such a value failed the source's
+    statement, PROVIDER_ERROR at materialize.
   affected_inputs: >-
     PredictiveQuery.materialize on the core route over a Postgres source
-    whose text time column's smallest or largest text Postgres cannot read
-    as a timestamp.
-  cases: [time.text-one-bad-value@postgres]
-  refs: [DT-12, DT-7, 'contract/refusal-census.json rule:text_time']
+    whose text time column holds a value pandas reads and the core's list
+    does not.
+  cases: [T2.3]
+  refs: [DT-12, DT-7, DT-15, 'contract/refusal-census.json rule:text_time']
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-64}
   notes: >-
     Approved by the owner on 2026-10-17 as KO2-64, relayed by the
-    orchestrator. time.text-one-bad-value, where the reference refuses by
-    name too, is a named refusal for a named refusal (as DT-12 on DuckDB,
-    E66); the refusal census's rule:text_time probe ('March 3rd 2023'),
-    where the reference answers, is refused by name. Matching it needs the
-    bounds as text, read by the core's own text reader, which the
-    contract's time_bounds answer (timestamps) does not carry. Measured at
-    T2.3 on Postgres 17, python-core and rust-host alike.
-  case_outcomes:
-  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal PROVIDER_ERROR at materialize (StructuredDataError)', summary: 'T2.3: the source reads the bounds, a named refusal where the reference names its own (E66)'}
-  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal PROVIDER_ERROR', summary: 'T2.3: the source reads the bounds, a named refusal where the reference names its own (E66)'}
+    orchestrator, a named refusal where the reference answers; for the
+    census case only from T2.3's fix round 3, time.text-one-bad-value,
+    which it listed too, being P2C-10's (DT-15 under E68), by the
+    orchestrator's decision. Fix 9's census run (Postgres 17, against
+    python-ref at 6298913c) refuses the probe UNSUPPORTED_REQUEST rule
+    text_time, where it was PROVIDER_ERROR; the same 25 sites depart as
+    before.
 
 - id: P2C-6
   title: On Postgres a seed past 2**64 - 1 is refused by name, where the reference hashes any integer
@@ -6823,3 +6819,36 @@ entries:
     on the provider's reads would answer where the reference fails, which
     E66(b) does not cover, so the provider leaves the session's DateStyle
     as it is.
+
+- id: P2C-10
+  title: On Postgres, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler reads a text time column's bounds with
+    pandas, and refuses time.text-one-bad-value's unreadable value at
+    materialize, INVALID_REQUEST.
+  new_behavior: >-
+    The core takes the reference's MIN and MAX of the text column and reads
+    each bound by its fixed list of formats (DT-7's capability, DT-15's
+    reading): the value outside the list is refused at materialize,
+    UNSUPPORTED_REQUEST rule text_time; python-core and rust-host alike. Over DuckDB the
+    reference fails on its own CAST (DT-12); over SQLite the same refusal
+    is P2B-11.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a Postgres source whose text time
+    column holds a value the core's list does not read, on the core route.
+  cases: [time.text-one-bad-value@postgres]
+  refs: [DT-7, DT-15, P2B-11]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
+  notes: >-
+    Approver: owner, as DT-15 was. Both refuse the input; only the code
+    differs, the core's DT-15's, owner-approved under E68, applied to the
+    Postgres leg of its case as P2B-11 applies it to the SQLite leg (T2.2),
+    by the orchestrator's decision at T2.3's fix round 3: P2B-11's class,
+    not KO2-64's. Measured at T2.3's fix 9 on Postgres 17 against
+    python-ref's committed lines.
+  case_outcomes:
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
