@@ -32,12 +32,14 @@ Each result column's Arrow type is read from the column's Postgres type,
 by the type's name in the driver's registry, never by its number (a type
 the registry does not name, a user's composite or enum, is read as text,
 which is how the driver reads it); the values are the driver's, converted
-by pyarrow. Where the driver's value would lose what the server holds, the
-column is read another way: ``json`` and ``jsonb`` as the reference's text
-of the value (compact JSON), and an ``interval`` from its text, months, days and
-microseconds kept apart (``month_day_nano_interval``, each value pyarrow's
-``MonthDayNano``). A ``timestamptz`` is built as the instant in UTC,
-whatever the session's zone.
+by pyarrow. The driver reads each value as it reads the reference's (its
+own loaders, so the statements' results are the reference's), and a value
+is converted after the read where the core takes it another way: a
+``json`` or ``jsonb`` value as the reference's text of it (compact JSON),
+an ``interval`` (the driver's ``timedelta``, a month counted as 30 days as
+the reference's driver counts it) as pyarrow's ``MonthDayNano``. A
+``timestamptz`` is built as the instant in UTC, whatever the session's
+zone.
 """
 
 from __future__ import annotations
@@ -142,7 +144,6 @@ class PostgresProvider:
             bound.append(key_set_json(_arrow_table(keys[attachment])))
         connection = self._connection
         with _own_transaction(connection), connection.cursor() as cursor:
-            _read_as_the_server_writes(cursor)
             for statement, text in zip(statements, bound, strict=True):
                 if text is None:
                     cursor.execute(statement['text'])
@@ -206,29 +207,6 @@ def _psycopg_text(text: str) -> str:
     return ''.join(out)
 
 
-def _read_as_the_server_writes(cursor: Any) -> None:
-    r"""The cursor's loaders for the types read as the reference reads them,
-    on this cursor alone: ``json`` and ``jsonb`` as the reference's text of
-    the value (:func:`json_text`), and ``interval`` as its months, days and
-    nanoseconds (:func:`interval`)."""
-    from psycopg.adapt import Loader
-
-    class _Json(Loader):
-        def load(self, data: Any) -> Any:
-            return json_text(json.loads(bytes(data)))
-
-    class _Interval(Loader):
-        def load(self, data: Any) -> Any:
-            import pyarrow as pa
-
-            return pa.MonthDayNano(interval(bytes(data).decode()))
-
-    adapters = cursor.adapters
-    for name in _JSON:
-        adapters.register_loader(name, _Json)
-    adapters.register_loader('interval', _Interval)
-
-
 def json_text(value: Any) -> str | None:
     r"""A ``json`` or ``jsonb`` value as the reference writes it
     (``_sanitize_postgres_frame``'s ``stringify``): an object or array as
@@ -241,52 +219,41 @@ def json_text(value: Any) -> str | None:
     return str(value)
 
 
-#: The units of an interval's text in Postgres's default style, as months
-#: or days.
-_INTERVAL_UNITS = {
-    'year': ('months', 12),
-    'years': ('months', 12),
-    'mon': ('months', 1),
-    'mons': ('months', 1),
-    'day': ('days', 1),
-    'days': ('days', 1),
-}
+def _interval(value: Any) -> Any:
+    r"""An ``interval`` the driver read (a ``timedelta``) as pyarrow's
+    ``MonthDayNano``: its days, and the rest in nanoseconds."""
+    import pyarrow as pa
+
+    nanos = (value.seconds * 10**6 + value.microseconds) * 1000
+    return pa.MonthDayNano((0, value.days, nanos))
 
 
-def interval(text: str) -> tuple[int, int, int]:
-    r"""An interval as Postgres writes it in its default style
-    (``IntervalStyle`` ``postgres``: ``1 year 2 mons -3 days +04:05:06.5``),
-    as months, days and nanoseconds, kept apart as the server keeps them.
+def _after_read(column: Any, connection: Any) -> Any:
+    r"""How a result column's driver values are converted after the read
+    (:func:`json_text`, :func:`_interval`), an array's each element; None
+    for a column taken as the driver reads it."""
+    info = connection.adapters.types.get(column.type_code)
+    if info is None:
+        return None
+    array = info.array_oid == column.type_code and info.oid != column.type_code
+    one = (
+        json_text
+        if info.name in _JSON
+        else _interval
+        if info.name == 'interval'
+        else None
+    )
+    if one is None:
+        return None
+    if not array:
+        return one
 
-    Raises:
-        PlanNotRun: The text is in another style, which the session chose.
-    """
-    months = days = nanos = 0
-    words = text.split()
-    at = 0
-    while at < len(words):
-        word = words[at]
-        if ':' in word:
-            sign = -1 if word.startswith('-') else 1
-            clock = word.lstrip('+-').split(':')
-            if len(clock) != 3:
-                raise PlanNotRun('an interval in a style other than postgres')
-            whole, _, fraction = clock[2].partition('.')
-            seconds = int(clock[0]) * 3600 + int(clock[1]) * 60 + int(whole)
-            nanos += sign * (
-                seconds * 10**9 + int((fraction + '000000000')[:9])
-            )
-            at += 1
-            continue
-        if at + 1 >= len(words) or words[at + 1] not in _INTERVAL_UNITS:
-            raise PlanNotRun('an interval in a style other than postgres')
-        part, scale = _INTERVAL_UNITS[words[at + 1]]
-        if part == 'months':
-            months += int(word) * scale
-        else:
-            days += int(word) * scale
-        at += 2
-    return months, days, nanos
+    def each(value: Any) -> Any:
+        if isinstance(value, list):
+            return [each(item) for item in value]
+        return None if value is None else one(value)
+
+    return each
 
 
 def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
@@ -300,6 +267,15 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
     # One read of every row, as the reference reads a result
     # (``fetchall``), built into batches of at most ``batch_rows``.
     rows = cursor.fetchall()
+    converts = [_after_read(column, connection) for column in description]
+    if any(converts):
+        rows = [
+            tuple(
+                value if convert is None or value is None else convert(value)
+                for convert, value in zip(converts, row, strict=True)
+            )
+            for row in rows
+        ]
     fields = []
     for at, column in enumerate(description):
         kind = _arrow_type(column, connection)

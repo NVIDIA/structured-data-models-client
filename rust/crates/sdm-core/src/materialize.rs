@@ -736,21 +736,51 @@ impl Times {
         Ok(request)
     }
 
-    /// A time bound of the time bounds in nanoseconds (`earliest` for the
-    /// smallest, [`times_ns_from`]): a zone-less timestamp as it is; a column
-    /// holding no time, of whatever type the source's driver gave it, as
-    /// none; text, as a source with no time type answers its stored values
-    /// (SQLite's), read by the reading the provider declares, as the
-    /// reference reads each bound (`Timestamp(value)`), a value no reading
-    /// takes refused by name ([`text_unread`]).
+    /// A bound of the time bounds in nanoseconds (`earliest` for the
+    /// smallest, [`times_ns_from`]), read as the reference reads each bound
+    /// its source returns (`Timestamp(value)`), whatever the column's type:
+    /// a zone-less timestamp as it is; a timestamp with a zone at its UTC
+    /// instant, the zone dropped, as the reference's engine reads an aware
+    /// time; a date at its midnight; a column holding no time, of whatever
+    /// type the source's driver gave it, as none; text, as a source with no
+    /// time type answers its stored values (SQLite's) or a text column's
+    /// (Postgres's), read by the reading the provider declares, a value no
+    /// reading takes refused by name ([`text_unread`]).
     fn bounds(
         &self,
         array: &ArrayRef,
         column: &str,
         earliest: bool,
     ) -> Result<Vec<Option<i64>>, CoreError> {
+        macro_rules! unzoned {
+            ($t:ty) => {
+                Arc::new(
+                    array
+                        .as_primitive::<$t>()
+                        .clone()
+                        .with_timezone_opt::<Arc<str>>(None),
+                ) as ArrayRef
+            };
+        }
         match array.data_type() {
             DataType::Timestamp(_, None) => times_ns_from(array, column, earliest),
+            DataType::Timestamp(unit, Some(_)) => {
+                let unzoned = match unit {
+                    ArrowUnit::Second => unzoned!(TimestampSecondType),
+                    ArrowUnit::Millisecond => unzoned!(TimestampMillisecondType),
+                    ArrowUnit::Microsecond => unzoned!(TimestampMicrosecondType),
+                    ArrowUnit::Nanosecond => unzoned!(TimestampNanosecondType),
+                };
+                times_ns_from(&unzoned, column, earliest)
+            }
+            DataType::Date32 => array
+                .as_primitive::<Date32Type>()
+                .iter()
+                .map(|d| {
+                    d.map(|d| Instant::from_days(d).to_count(ArrowUnit::Nanosecond, column))
+                        .transpose()
+                })
+                .collect(),
             _ if array.null_count() == array.len() => Ok(vec![None; array.len()]),
             DataType::Utf8 => {
                 let values: Vec<Option<&str>> = array.as_string::<i32>().iter().collect();

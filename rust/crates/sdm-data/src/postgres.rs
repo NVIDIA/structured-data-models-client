@@ -6,24 +6,30 @@
 //! it has a rendering for, every one the core asks, so none falls back.
 //!
 //! Each rendering is the statement the reference's Postgres engine runs for
-//! the same step where one exists (`rfm/backend/postgres`), written the same
-//! way but for its relation, which is the core's (design choice 12): the
-//! preview, the key counts, the column ranges, the repeated key and the
-//! entity sample text for text but for the `FROM`, which the reference
-//! qualifies with the schema it read the table from. What each returns is
-//! that statement's result (decision H9 gates on results, not text).
+//! the same step (`rfm/backend/postgres`), so each statement's result is
+//! that statement's (decision H9 gates on results, not text): the table
+//! list, a table's columns, keys and foreign keys (`information_schema`, as
+//! `PostgresTable` reads them), the preview, the key counts, the column
+//! ranges, the repeated key, the time bounds (`MIN` and `MAX` in the
+//! column's own type, which the core reads after) and the entity sample are
+//! the reference's text but for the relation, which is the core's (design
+//! choice 12): the reference binds the schema it read with
+//! `current_schema()`, a read whose result the core never needs (KO2-58),
+//! and qualifies its `FROM` with it, where the core names the schema in
+//! place. A key lookup and a neighbor read return the reference's columns
+//! (the seed's batch position, the row's columns, its number among its
+//! seed's, `__kumo_row__`, and for a lookup the count of rows holding the
+//! key), their seeds unpacked as below.
 //!
-//! The catalog is read from `pg_catalog`, each answer in the contract's own
-//! shape (`catalog_columns`), so the data layer reads it as it reads a host
-//! provider's ([`crate::read::host`]). A relation is found as the
-//! reference finds a table ([`regclass`]): a one-part name in
-//! `current_schema()` alone, two parts by schema and table, a view
-//! included; a name the source does not hold there answers no columns,
-//! which the core refuses as the reference refuses a table it cannot find.
-//! A one-part `FROM` reads that table unless the search path finds a
-//! temporary or `pg_catalog` relation of the name first; such a name also
-//! answers no columns, so every statement of a run reads the relation the
-//! reference reads, or none.
+//! The catalog answers are the reference's, read by [`read`] into the
+//! contract's catalog answer. A relation is found as the reference finds a
+//! table: a one-part name in `current_schema()` alone, two parts by schema
+//! and table, a view included; a name the source does not hold there
+//! answers no columns, which the core refuses as the reference refuses a
+//! table it cannot find. A one-part `FROM` reads that table unless the
+//! search path finds a temporary or `pg_catalog` relation of the name
+//! first; such a name also answers no columns ([`regclass`]), so every
+//! statement of a run reads the relation the reference reads, or none.
 //!
 //! A key set is bound as the reference's Postgres sampler binds one: JSON
 //! text in the statement's one parameter, `$1`, unpacked by a common table
@@ -45,15 +51,19 @@
 //! (a text time column by its text, the seed's time in the text pandas
 //! writes it, which the provider writes).
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
-use sdm_contract::catalog::CatalogAnswer;
+use arrow_array::cast::AsArray;
+use arrow_array::types::Int32Type;
+use arrow_array::{Array, Int32Array, StringArray};
+use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, FetchPlan, Filter, KeySet,
-    MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities, Relation, SEED_BATCH,
-    SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm, Window,
-    catalog_columns as c, seed_key_columns,
+    BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
+    Filter, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities, Relation,
+    SEED_BATCH, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm,
+    Window, catalog_columns as c, field, seed_key_columns,
 };
+use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 use arrow_array::RecordBatch;
@@ -81,6 +91,11 @@ const RENDERED: &[OptionalRequest] = &[
 /// here; [`seeds_for`] still steps past a one-part relation of that name,
 /// which would otherwise read the seeds.
 pub(crate) const SEEDS: &str = "__sdm_seeds__";
+
+/// The column of a neighbor read with a limit per seed, and of a key
+/// lookup, numbering each row among its seed's: the reference's own name
+/// (`__KUMO_ROW__`, which Postgres folds to lower case).
+const ROW_COLUMN: &str = "__kumo_row__";
 
 /// The CTE a statement joining `table` reads its seeds by: [`SEEDS`],
 /// lengthened by underscores until it is not `table`'s one part, so a
@@ -132,6 +147,25 @@ fn regclass(request: &DataRequest, field: &str, relation: &Relation) -> Result<S
     Ok(format!(
         "(SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = {schema} AND c.relname = {table}\n           AND c.oid = to_regclass({read}))"
     ))
+}
+
+/// The schema and table a relation names, each a literal for a catalog
+/// read by name, as the reference binds them: a one-part name's schema
+/// `current_schema()`, which the reference reads and binds (KO2-58).
+fn schema_and_name(
+    request: &DataRequest,
+    relation: &Relation,
+) -> Result<(String, String), CoreError> {
+    from(request, "tables", relation)?;
+    match relation.source.as_slice() {
+        [table] => Ok(("current_schema()".to_owned(), text(table))),
+        [schema, table] => Ok((text(schema), text(table))),
+        _ => Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a relation past the parts the dialect takes reached its catalog read",
+        )),
+    }
 }
 
 /// What a Postgres source answers through this layer.
@@ -314,17 +348,204 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
     statements.push(statement(text, params));
     Ok(FetchPlan::Sql {
         statements,
-        expect: request.expected(),
+        expect: expected(request),
     })
 }
 
-/// A Postgres answer to a `describe` of `part`, which is in the contract's
-/// own shape (`catalog_columns`), read as a host provider's is.
+/// The reference's catalog answers' columns, by name.
+mod catalog {
+    pub const TABLE_NAME: &str = "table_name";
+    pub const COLUMN_NAME: &str = "column_name";
+    pub const DATA_TYPE: &str = "data_type";
+    pub const UDT_NAME: &str = "udt_name";
+    pub const NUMERIC_SCALE: &str = "numeric_scale";
+    pub const IS_NULLABLE: &str = "is_nullable";
+    pub const TABLE_SCHEMA: &str = "table_schema";
+    pub const FORMAT_TYPE: &str = "format_type";
+    pub const CONSTRAINT_TYPE: &str = "constraint_type";
+    pub const CONSTRAINT_NAME: &str = "constraint_name";
+    pub const ORDINAL_POSITION: &str = "ordinal_position";
+}
+
+/// The schema a Postgres answer to `request` has: the reference's catalog
+/// reads' own for the table list, a table's columns, keys and foreign keys
+/// ([`describe`]), what the contract fixes for every other request
+/// (`DataRequest::expected`).
+pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
+    use ColumnType::{Int32, Utf8};
+    use catalog as k;
+    let part = match request {
+        DataRequest::Describe { part, .. } => part,
+        // The bounds in the column's own type (time_bounds).
+        DataRequest::TimeBounds { .. } => return ExpectedSchema::Discover {},
+        _ => return request.expected(),
+    };
+    let fields = match part {
+        DescribePart::Tables => vec![field(k::TABLE_NAME, Utf8, false)],
+        DescribePart::Columns => vec![
+            field(k::COLUMN_NAME, Utf8, false),
+            field(k::DATA_TYPE, Utf8, false),
+            field(k::UDT_NAME, Utf8, false),
+            field(k::NUMERIC_SCALE, Int32, true),
+            field(k::IS_NULLABLE, Utf8, false),
+            field(k::TABLE_SCHEMA, Utf8, false),
+            field(k::TABLE_NAME, Utf8, false),
+            field(k::FORMAT_TYPE, Utf8, false),
+        ],
+        DescribePart::Keys => vec![
+            field(k::CONSTRAINT_TYPE, Utf8, false),
+            field(k::CONSTRAINT_NAME, Utf8, false),
+            field(k::COLUMN_NAME, Utf8, false),
+            field(k::ORDINAL_POSITION, Int32, false),
+        ],
+        DescribePart::ForeignKeys => vec![
+            field(k::CONSTRAINT_NAME, Utf8, false),
+            field(k::COLUMN_NAME, Utf8, false),
+            field(k::TABLE_SCHEMA, Utf8, false),
+            field(k::TABLE_NAME, Utf8, false),
+            field(k::COLUMN_NAME, Utf8, false),
+            field(k::ORDINAL_POSITION, Int32, false),
+        ],
+        DescribePart::Indexes | DescribePart::IndexColumns => return request.expected(),
+    };
+    ExpectedSchema::Schema { fields }
+}
+
+/// A Postgres answer to a `describe` of `part`, which holds [`expected`]'s
+/// schema, read into the contract's catalog answer as the reference reads
+/// its own (`PostgresTable`): a column's declared type its `format_type`,
+/// declared `NOT NULL` where `is_nullable` is `NO`; a key's columns by
+/// their position in it, each constraint once, by its name; a foreign key's
+/// columns and the columns it refers to the same way, numbered by name.
+/// The indexes, which the reference never reads, are in the contract's own
+/// shape ([`crate::read::host`]).
 pub(crate) fn read(
     part: DescribePart,
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
-    crate::read::host(part, batches)
+    use catalog as k;
+    match part {
+        DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
+        DescribePart::Columns => {
+            let mut found = Vec::new();
+            for batch in batches {
+                let names = crate::read::strings(batch, k::COLUMN_NAME)?;
+                let nullable = crate::read::strings(batch, k::IS_NULLABLE)?;
+                let declared = crate::read::strings(batch, k::FORMAT_TYPE)?;
+                for row in 0..batch.num_rows() {
+                    found.push(CatalogColumn {
+                        name: crate::read::text(names, row).unwrap_or_default(),
+                        declared_type: crate::read::text(declared, row).unwrap_or_default(),
+                        not_null: crate::read::text(nullable, row).as_deref() == Some("NO"),
+                        primary_key: false,
+                    });
+                }
+            }
+            Ok(CatalogAnswer::Columns(found))
+        }
+        DescribePart::Keys => {
+            let mut keys: BTreeMap<(String, String), Vec<(i32, String)>> = BTreeMap::new();
+            for batch in batches {
+                let kinds = crate::read::strings(batch, k::CONSTRAINT_TYPE)?;
+                let names = crate::read::strings(batch, k::CONSTRAINT_NAME)?;
+                let columns = crate::read::strings(batch, k::COLUMN_NAME)?;
+                let positions = int32s(batch, 3)?;
+                for row in 0..batch.num_rows() {
+                    keys.entry((
+                        crate::read::text(names, row).unwrap_or_default(),
+                        crate::read::text(kinds, row).unwrap_or_default(),
+                    ))
+                    .or_default()
+                    .push((
+                        positions.value(row),
+                        crate::read::text(columns, row).unwrap_or_default(),
+                    ));
+                }
+            }
+            Ok(CatalogAnswer::Keys(
+                keys.into_iter()
+                    .map(|((_, kind), mut columns)| {
+                        columns.sort();
+                        CatalogKey {
+                            kind: match kind.as_str() {
+                                "PRIMARY KEY" => KeyKind::Primary,
+                                "UNIQUE" => KeyKind::Unique,
+                                "FOREIGN KEY" => KeyKind::Foreign,
+                                _ => KeyKind::Other,
+                            },
+                            columns: columns.into_iter().map(|(_, c)| c).collect(),
+                        }
+                    })
+                    .collect(),
+            ))
+        }
+        DescribePart::ForeignKeys => {
+            // By position: the answer names two columns `column_name`.
+            let mut keys: BTreeMap<String, (String, Vec<ColumnPair>)> = BTreeMap::new();
+            for batch in batches {
+                let names = strings_at(batch, 0)?;
+                let columns = strings_at(batch, 1)?;
+                let tables = strings_at(batch, 3)?;
+                let referenced = strings_at(batch, 4)?;
+                let positions = int32s(batch, 5)?;
+                for row in 0..batch.num_rows() {
+                    let entry = keys
+                        .entry(crate::read::text(names, row).unwrap_or_default())
+                        .or_insert_with(|| {
+                            (crate::read::text(tables, row).unwrap_or_default(), vec![])
+                        });
+                    entry.1.push((
+                        positions.value(row),
+                        crate::read::text(columns, row).unwrap_or_default(),
+                        crate::read::text(referenced, row).unwrap_or_default(),
+                    ));
+                }
+            }
+            Ok(CatalogAnswer::ForeignKeys(
+                keys.into_values()
+                    .zip(0_i64..)
+                    .map(|((table, mut pairs), key)| {
+                        pairs.sort();
+                        CatalogForeignKey {
+                            key,
+                            referenced_table: table,
+                            columns: pairs.iter().map(|(_, c, _)| c.clone()).collect(),
+                            referenced_columns: pairs.into_iter().map(|(_, _, r)| r).collect(),
+                        }
+                    })
+                    .collect(),
+            ))
+        }
+        DescribePart::Indexes | DescribePart::IndexColumns => crate::read::host(part, batches),
+    }
+}
+
+/// One column pair of a foreign key: its position, its column and the
+/// column it refers to.
+type ColumnPair = (i32, String, String);
+
+fn unread(at: usize, message: &str) -> CoreError {
+    CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
+        .with_field("position", Detail::text(at.to_string()))
+}
+
+/// The text column at `at` of `batch`.
+fn strings_at(batch: &RecordBatch, at: usize) -> Result<&StringArray, CoreError> {
+    batch
+        .columns()
+        .get(at)
+        .and_then(|c| c.as_string_opt::<i32>())
+        .ok_or_else(|| unread(at, "a catalog answer's column is not of its checked type"))
+}
+
+/// The `int32` column at `at` of `batch`, holding no null.
+fn int32s(batch: &RecordBatch, at: usize) -> Result<&Int32Array, CoreError> {
+    batch
+        .columns()
+        .get(at)
+        .and_then(|c| c.as_primitive_opt::<Int32Type>())
+        .filter(|c| c.null_count() == 0)
+        .ok_or_else(|| unread(at, "a catalog answer's column is not of its checked type"))
 }
 
 /// A request field this rendering does not take, refused by name.
@@ -367,52 +588,62 @@ fn describe(
         )),
     };
     Ok(match part {
-        // The reference's listing (`information_schema.tables`, the base
-        // tables of the current schema, by name in the catalog's own
-        // order), the name as text.
-        DescribePart::Tables if tables.is_empty() => format!(
-            "SELECT table_name::text AS {}\nFROM information_schema.tables\nWHERE table_schema = current_schema()\n  AND table_type = 'BASE TABLE'\nORDER BY table_name",
-            identifier(c::TABLE)
-        ),
+        // The reference's listing (`PostgresTable`'s, `information_schema`
+        // the base tables of the current schema, by name), as it writes it
+        // but for the schema, which it binds after reading
+        // `current_schema()` and the core names in place (KO2-58).
+        DescribePart::Tables if tables.is_empty() => {
+            "SELECT table_name\nFROM information_schema.tables\nWHERE table_schema = current_schema()\n  AND table_type = 'BASE TABLE'\nORDER BY table_name".to_owned()
+        }
         DescribePart::Tables => {
             let mut selects = Vec::with_capacity(tables.len());
             for table in tables {
                 let found = regclass(request, "tables", table)?;
                 selects.push(format!(
-                    "SELECT relname::text AS {}\nFROM pg_catalog.pg_class\nWHERE oid = {found}",
-                    identifier(c::TABLE)
+                    "SELECT relname AS table_name\nFROM pg_catalog.pg_class\nWHERE oid = {found}"
                 ));
             }
             selects.join("\nUNION ALL\n")
         }
-        DescribePart::Columns => format!(
-            "SELECT a.attname::text AS {name},\n       pg_catalog.format_type(a.atttypid, a.atttypmod) AS {kind},\n       a.attnotnull AS {not_null},\n       COALESCE(a.attnum = ANY (p.conkey), false) AS {primary}\nFROM pg_catalog.pg_attribute a\nLEFT JOIN pg_catalog.pg_constraint p\n  ON p.conrelid = a.attrelid AND p.contype = 'p'\nWHERE a.attrelid = {table}\n  AND a.attnum > 0 AND NOT a.attisdropped\nORDER BY a.attnum",
-            name = identifier(c::NAME),
-            kind = identifier(c::TYPE),
-            not_null = identifier(c::NOT_NULL),
-            primary = identifier(c::PRIMARY_KEY),
-            table = one()?,
-        ),
-        DescribePart::Keys => format!(
-            "SELECT CASE k.contype WHEN 'p' THEN {primary} WHEN 'u' THEN {unique} ELSE {foreign} END AS {kind},\n       {columns} AS {names}\nFROM pg_catalog.pg_constraint k\nWHERE k.conrelid = {table}\n  AND k.contype IN ('p', 'u', 'f')\nORDER BY k.conname",
-            primary = text(c::KIND_PRIMARY),
-            unique = text(c::KIND_UNIQUE),
-            foreign = text(c::KIND_FOREIGN),
-            kind = identifier(c::KIND),
-            columns = attribute_names("k.conrelid", "k.conkey"),
-            names = identifier(c::COLUMNS),
-            table = one()?,
-        ),
-        DescribePart::ForeignKeys => format!(
-            "SELECT f.oid::bigint AS {key},\n       r.relname::text AS {referenced},\n       {columns} AS {names},\n       {referenced_columns} AS {referenced_names}\nFROM pg_catalog.pg_constraint f\nJOIN pg_catalog.pg_class r ON r.oid = f.confrelid\nWHERE f.conrelid = {table}\n  AND f.contype = 'f'\nORDER BY f.conname",
-            key = identifier(c::KEY),
-            referenced = identifier(c::REFERENCED_TABLE),
-            columns = attribute_names("f.conrelid", "f.conkey"),
-            names = identifier(c::COLUMNS),
-            referenced_columns = attribute_names("f.confrelid", "f.confkey"),
-            referenced_names = identifier(c::REFERENCED_COLUMNS),
-            table = one()?,
-        ),
+        // The reference's three reads of one table (`_get_source_columns`
+        // and `_get_source_foreign_keys`), as it writes them but for the
+        // schema and table, which it binds and the core writes in place;
+        // the columns read only where the name reads the relation so found
+        // in a `FROM` ([`regclass`]), so a shadowed name answers none.
+        DescribePart::Columns => {
+            let [table] = tables else {
+                return Err(refused(
+                    "this part of the catalog is read for one table at a time",
+                ));
+            };
+            let (schema, name) = schema_and_name(request, table)?;
+            format!(
+                "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = {schema} AND c.table_name = {name}\n  AND rel.oid = {found}\nORDER BY c.ordinal_position",
+                found = one()?,
+            )
+        }
+        DescribePart::Keys => {
+            let [table] = tables else {
+                return Err(refused(
+                    "this part of the catalog is read for one table at a time",
+                ));
+            };
+            let (schema, name) = schema_and_name(request, table)?;
+            format!(
+                "SELECT tc.constraint_type, tc.constraint_name,\n       kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nWHERE tc.table_schema = {schema} AND tc.table_name = {name}\n  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE', 'FOREIGN KEY')"
+            )
+        }
+        DescribePart::ForeignKeys => {
+            let [table] = tables else {
+                return Err(refused(
+                    "this part of the catalog is read for one table at a time",
+                ));
+            };
+            let (schema, name) = schema_and_name(request, table)?;
+            format!(
+                "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = {schema} AND tc.table_name = {name}\nORDER BY tc.constraint_name, kcu.ordinal_position"
+            )
+        }
         // Never asked (no index advice is declared), and rendered: the
         // index's columns in order, an expression's position a null name.
         DescribePart::IndexColumns => {
@@ -490,35 +721,22 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
 }
 
 /// One `SELECT` per time column, in order, labelled by its position: the
-/// smallest and largest values as the reference takes them, `MIN` and `MAX`
-/// of the column in its own type (a text column's by its text), each then
-/// read as the zone-less timestamp the request takes back ([`zone_less`]),
-/// where the reference reads them in the host.
+/// smallest and largest values, `MIN` and `MAX` of the column in its own
+/// type, as the reference's `_get_min_max_time_dict` writes them; the core
+/// reads each bound of whatever time type as the reference's host reads it
+/// (a `timestamptz` at its UTC instant, a date at its midnight, a text by
+/// the provider's reading), so the plan expects whatever schema the source
+/// answers ([`expected`]).
 fn time_bounds(request: &DataRequest, columns: &[TableColumn]) -> Result<String, CoreError> {
     let mut selects = Vec::with_capacity(columns.len());
     for (position, at) in columns.iter().enumerate() {
         let table = from(request, "columns", &at.table)?;
         let time = identifier(&at.column);
         selects.push(format!(
-            "SELECT {position} AS table_index, {} AS min_date, {} AS max_date\nFROM {table}",
-            zone_less(&format!("MIN({time})")),
-            zone_less(&format!("MAX({time})")),
+            "SELECT {position} AS table_index, MIN({time}) AS min_date, MAX({time}) AS max_date\nFROM {table}"
         ));
     }
     Ok(selects.join("\nUNION ALL\n"))
-}
-
-/// `value`, a time column's value of any type, as the zone-less timestamp
-/// the reference's host reads it as: a `timestamptz` its UTC wall clock
-/// (`AT TIME ZONE 'UTC'`), as pandas converts an aware time, whatever the
-/// session's zone; a timestamp itself, a date its midnight, a text the
-/// source's reading of it. The column's type is the value's own
-/// (`pg_typeof`), and each branch reads the value through its text, so
-/// the expression is typed alike for a column of any type.
-fn zone_less(value: &str) -> String {
-    format!(
-        "CASE WHEN pg_typeof({value}) = 'timestamp with time zone'::regtype THEN CAST(CAST({value} AS text) AS timestamptz) AT TIME ZONE 'UTC' ELSE CAST(CAST({value} AS text) AS timestamp) END"
-    )
 }
 
 /// The reference's one query over every row of a table for its time
@@ -869,9 +1087,10 @@ fn neighbors(
                 .collect::<Vec<_>>()
                 .join(", ");
             Ok(format!(
-                "SELECT {batch}, {outer}\nFROM {seeds} s\nCROSS JOIN LATERAL (\n  SELECT {inner}, ROW_NUMBER() OVER (ORDER BY {order}) AS r\n  FROM {table} t\n  WHERE {within}\n  ORDER BY {order}\n  LIMIT {limit}\n) AS n\nORDER BY s.{batch_column}, n.r",
+                "SELECT {batch}, {outer}, n.r AS {row}\nFROM {seeds} s\nCROSS JOIN LATERAL (\n  SELECT {inner}, ROW_NUMBER() OVER (ORDER BY {order}) AS r\n  FROM {table} t\n  WHERE {within}\n  ORDER BY {order}\n  LIMIT {limit}\n) AS n\nORDER BY s.{batch_column}, n.r",
                 within = within.join("\n    AND "),
                 batch_column = identifier(SEED_BATCH),
+                row = identifier(ROW_COLUMN),
             ))
         }
         (None, None) => {
@@ -894,8 +1113,9 @@ fn neighbors(
 }
 
 /// The reference's key lookup (`_by_pkey` on Postgres): one row of `table`
-/// per seed whose key it holds, with the count of rows holding that key,
-/// the result in batch order.
+/// per seed whose key it holds, its columns as the reference's result has
+/// them, the seed's batch position, the row's columns, its number among the
+/// rows holding the key (1) and their count, the result in batch order.
 fn lookup(
     request: &DataRequest,
     table: &str,
@@ -916,9 +1136,15 @@ fn lookup(
         .collect::<Vec<_>>()
         .join(", ");
     Ok(format!(
-        "SELECT l.b AS {helper}, l.m AS {matches}, {outer}\nFROM (\n  SELECT s.{batch} AS b, COUNT(*) OVER (PARTITION BY s.{batch}) AS m, {inner},\n         ROW_NUMBER() OVER (PARTITION BY s.{batch}) AS r\n  FROM {seeds} s\n  JOIN {table} t\n    ON {on}\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        "SELECT l.b AS {helper}, {outer}, l.r AS {row}, l.m AS {matches}\nFROM (\n  SELECT s.{batch} AS b, {inner},\n         ROW_NUMBER() OVER (PARTITION BY s.{batch}\n           ORDER BY {keyed}) AS r,\n         COUNT(*) OVER (PARTITION BY s.{batch}) AS m\n  FROM {seeds} s\n  JOIN {table} t\n    ON {on}\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
         helper = identifier(BATCH_COLUMN),
         matches = identifier(MATCHES_COLUMN),
+        row = identifier(ROW_COLUMN),
+        keyed = key
+            .iter()
+            .map(|k| format!("t.{}", identifier(k)))
+            .collect::<Vec<_>>()
+            .join(", "),
         seeds = identifier(seeds),
         on = seed_join(key),
     ))
