@@ -27,7 +27,9 @@
 //!
 //! Ordering, grouping and distinct counts use Arrow's row format
 //! (`arrow-row`), whose byte order is a defined total order of the values,
-//! each term's direction and null placement its own: a `neighbors` limit
+//! each term's direction and null placement its own; a key, a join and an
+//! order term first write the floats SQL holds equal alike (`-0.0` and
+//! `0.0`, every NaN), so they group, count and tie as SQL's do: a `neighbors` limit
 //! per seed keeps the first rows in the request's order, the scan's order
 //! breaking ties. A sample is the core's own draw over a defined ordering
 //! of the same data (plan section 3, "Data access"): the scanned rows in
@@ -257,7 +259,7 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             let scanned = held.scan(table, unique(key), vec![], None).await?;
             let arrays = scanned.columns(key)?;
             let present = all_valid(&arrays);
-            let rows = ordered_rows(request, "key", &arrays)?;
+            let rows = equal_rows(request, "key", &arrays)?;
             let mut seen = BTreeSet::new();
             let repeated = (0..scanned.batch.num_rows())
                 .filter(|&row| holds(&present, row))
@@ -275,7 +277,7 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                     .await?;
                 let arrays = scanned.columns(&key.columns)?;
                 let present = all_valid(&arrays);
-                let rows = ordered_rows(request, "keys", &arrays)?;
+                let rows = equal_rows(request, "keys", &arrays)?;
                 let total = scanned.batch.num_rows();
                 let distinct: BTreeSet<_> = (0..total)
                     .filter(|&row| holds(&present, row))
@@ -525,6 +527,8 @@ fn joined(
         *t = widened_t;
         *s = widened_s;
     }
+    let table: Vec<ArrayRef> = table.iter().map(compared).collect();
+    let seed: Vec<ArrayRef> = seed.iter().map(compared).collect();
     let converter = converter(request, "key", &table)?;
     let table_rows = convert(request, "key", &converter, &table)?;
     let seed_rows = convert(request, "key", &converter, &seed)?;
@@ -657,7 +661,7 @@ fn first_per_seed(
             let times: ArrayRef = Arc::new(TimestampMicrosecondArray::from(times));
             taken(&times, &row_at)?
         } else {
-            taken(column, &row_at)?
+            taken(&compared(column), &row_at)?
         };
         fields.push(SortField::new_with_options(
             values.data_type().clone(),
@@ -949,6 +953,39 @@ fn convert(
     converter
         .convert_columns(arrays)
         .map_err(|_| not_kept(request, field, NOT_ORDERED))
+}
+
+/// `arrays`' rows in the row format, each value as SQL compares it
+/// ([`compared`]): to group, count distinct and find repeats by.
+fn equal_rows(request: &DataRequest, field: &str, arrays: &[ArrayRef]) -> Result<Rows, CoreError> {
+    let equal: Vec<ArrayRef> = arrays.iter().map(compared).collect();
+    ordered_rows(request, field, &equal)
+}
+
+/// `array` with the values SQL holds equal written alike: a float's `-0.0`
+/// as `0.0`, and every NaN as one NaN, as DuckDB and Postgres compare them
+/// (SQLite stores a NaN as null). Arrow's row format orders by the bits,
+/// telling them apart. Any other array is as it is.
+fn compared(array: &ArrayRef) -> ArrayRef {
+    use arrow_array::types::{Float32Type, Float64Type};
+    macro_rules! alike {
+        ($t:ty, $f:ty) => {
+            Arc::new(array.as_primitive::<$t>().unary::<_, $t>(|v: $f| {
+                if v == 0.0 {
+                    0.0
+                } else if v.is_nan() {
+                    <$f>::NAN
+                } else {
+                    v
+                }
+            })) as ArrayRef
+        };
+    }
+    match array.data_type() {
+        DataType::Float32 => alike!(Float32Type, f32),
+        DataType::Float64 => alike!(Float64Type, f64),
+        _ => Arc::clone(array),
+    }
 }
 
 /// `arrays`' rows in the row format, ascending, nulls first.
