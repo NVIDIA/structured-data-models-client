@@ -48,7 +48,8 @@
         1,
         2
       ]
-    }
+    },
+    "probabilities": true
   },
   "until": "predict",
   "core": {
@@ -96,12 +97,10 @@
     }
   },
   "expect": {
-    "outcome": "refusal",
+    "outcome": "success",
     "stage": "predict",
-    "error": "StructuredDataError",
-    "code": "INTERNAL_ERROR",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: asked as one binary classification per candidate (COUNT(buys.* WHERE buys.item_id=<c>, 0, 30, days) > 0), one call each, three calls; the scripted endpoint answers no probabilities, so the ranking has no score to order by and is refused INTERNAL_ERROR at predict, naming candidate 0"
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: asked as one binary classification per candidate (COUNT(buys.* WHERE buys.item_id=<c>, 0, 30, days) > 0), one call each, three calls; the scripted endpoint answers each with probabilities (input.probabilities), and each user ranks the two candidates likeliest first (RANK TOP 2): prediction and rankings"
   },
-  "why": "A ranking over named candidates (RANK TOP 2, candidates=): its decomposition into one binary question per candidate, each payload compared, and the refusal of an answer without probabilities; top_k from the query",
+  "why": "A ranking over named candidates (RANK TOP 2, candidates=): its decomposition into one binary question per candidate, each payload compared, and the answers put back together, the query's top_k keeping two of three",
   "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"
 }

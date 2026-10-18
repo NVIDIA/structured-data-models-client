@@ -273,6 +273,21 @@ def test_the_cases_are_the_design_rows() -> None:
     assert len(spec_of('rank.batched')['indices']) == 10_001
     assert spec_of('rank.unscored-candidate')['candidates'] == [0, 9, 1]
     assert spec_of('rank.all-unscored')['candidates'] == [9, 8]
+    # The cases answered at predict are answered with probabilities, as a
+    # model answers a ranking's parts (the scripted endpoint's
+    # probabilities, input.probabilities), so their order is judged: by
+    # the endpoint's rule, the users of rank.top-k do not rank the
+    # candidates in the order given.
+    answered = {c for c, n in CALLS.items() if n}
+    for case_id, (case, _) in cases().items():
+        assert case['input'].get('probabilities', False) == (
+            case_id in answered
+        ), case_id
+    by_rule = [
+        sorted(range(3), key=lambda k: -((3 * k + 5 * row) % 9 + 1))[:2]
+        for row in range(3)
+    ]
+    assert any(top != [0, 1] for top in by_rule), by_rule
     assert spec_of('forecast.top-k')['top_k'] == 2
     assert 'FORECAST 201 ' in cases()['forecast.most-parts'][0]['input']['pql']
     # The candidates 9 and 8 name no item, so no user buys them: a context
@@ -591,6 +606,16 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert not found, f'{case_key}: the payload differs: ' + '; '.join(
             found
         )
+        if want['outcome']['result'] == 'success':
+            # The ranking put back together: its columns and rows' digest.
+            assert line['public']['result'] == want['public']['result'], (
+                f'{case_key}: the result differs: '
+                + '; '.join(
+                    differences(
+                        want['public']['result'], line['public']['result']
+                    )
+                )
+            )
         ran = line['identity']['operations']
         asked = [
             each

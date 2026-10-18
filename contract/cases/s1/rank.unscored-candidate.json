@@ -48,7 +48,8 @@
         9,
         1
       ]
-    }
+    },
+    "probabilities": true
   },
   "until": "predict",
   "core": {
@@ -96,11 +97,9 @@
     }
   },
   "expect": {
-    "outcome": "refusal",
+    "outcome": "success",
     "stage": "predict",
-    "error": "StructuredDataError",
-    "code": "INTERNAL_ERROR",
-    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: candidate 9, which no buy names, has a context of one class: left out unscored with an SDMWarning and no call sent for it, two calls for 0 and 1; then refused INTERNAL_ERROR at predict as rank.top-k"
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: candidate 9, which no buy names, has a context of one class: left out unscored with an SDMWarning and no call sent for it, two calls for 0 and 1, answered with probabilities; each user ranks 0 and 1"
   },
   "why": "A candidate whose context holds one class is left out of the ranking unscored, before any call",
   "source": "T2.8 ranking end to end (the design rows T2.8a and T2.8b), the reference at 6298913c"

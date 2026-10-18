@@ -171,17 +171,22 @@ fn differences(want: &Value, got: &Value, at: &str, out: &mut Vec<String>) {
 }
 
 /// Runs `run` with each model call answered by the scripted endpoint's
-/// rule, keeping each call's body as the runners record a payload (each
+/// rule (a classification's probabilities given where the case asks for
+/// them, `input.probabilities`), keeping each call's body as the runners record a payload (each
 /// number as its text): the run's result and the bodies, in order.
-fn with_the_rule<T>(run: impl FnOnce() -> T) -> (T, Vec<Value>) {
+fn with_the_rule<T>(probabilities: bool, run: impl FnOnce() -> T) -> (T, Vec<Value>) {
     let bodies: Rc<RefCell<Vec<Value>>> = Rc::default();
     let kept = Rc::clone(&bodies);
     let out = endpoint::answered_by(
-        move |_, body| {
+        move |call, body| {
             kept.borrow_mut().push(host::numbers_as_text(
                 serde_json::from_slice(body).unwrap_or(Value::Null),
             ));
-            let (status, answer) = endpoint::answer("POST", endpoint::PREDICTIONS, body);
+            let (status, answer) = if probabilities {
+                endpoint::answer_with_probabilities("POST", endpoint::PREDICTIONS, body, call)
+            } else {
+                endpoint::answer("POST", endpoint::PREDICTIONS, body)
+            };
             (status, serde_json::to_vec(&answer).unwrap())
         },
         run,
@@ -299,7 +304,8 @@ fn answers_as_the_reference(database: &str) {
     for id in ids {
         let key = key(&id, database);
         let case = load_case(&id);
-        let (ran, bodies) = with_the_rule(|| match database {
+        let probabilities = case.input.probabilities == Some(true);
+        let (ran, bodies) = with_the_rule(probabilities, || match database {
             "sqlite" => host::run_sqlite(&case, &bases, &root()),
             _ => host::run(&case, &bases),
         });
