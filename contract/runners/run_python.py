@@ -1717,6 +1717,35 @@ def _chosen_odd(cell: Any, odd: list[str]) -> None:
 _INTERVAL_TAG = (b'sdm:interval', b'timedelta')
 
 
+def _is_json_field(field: Any) -> bool:
+    r"""Whether ``field`` holds JSON text, Arrow's ``arrow.json`` over a
+    string: as the extension type a newer pyarrow builds, or as a string
+    field carrying the extension's metadata, as pyarrow before the type
+    (the 14 floor) keeps it."""
+    import pyarrow as pa
+    import pyarrow.types as is_
+
+    kind = field.type
+    if isinstance(kind, pa.BaseExtensionType):
+        return kind.extension_name == 'arrow.json' and is_.is_string(
+            kind.storage_type
+        )
+    return (
+        is_.is_string(kind)
+        and (field.metadata or {}).get(b'ARROW:extension:name') == b'arrow.json'
+    )
+
+
+def _json_texts(array: Any, odd: list[str]) -> list[Any]:
+    r"""The cells of a JSON column (:func:`_is_json_field`), each the value
+    its text holds (:func:`_json_cell`)."""
+    import pyarrow as pa
+
+    if isinstance(array.type, pa.BaseExtensionType):
+        array = array.storage
+    return [_json_cell(text, odd) for text in array.to_pylist()]
+
+
 def _is_folded_interval(field: Any) -> bool:
     r"""Whether ``field`` is a month-day-nano interval column built from
     ``timedelta``s (:data:`_INTERVAL_TAG`)."""
@@ -1756,7 +1785,13 @@ def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
 
     odd: list[str] = []
     columns = [
-        (_folded_intervals if _is_folded_interval(field) else _arrow_cells)(
+        (
+            _json_texts
+            if _is_json_field(field)
+            else _folded_intervals
+            if _is_folded_interval(field)
+            else _arrow_cells
+        )(
             column.combine_chunks()
             if column.num_chunks
             else pa.array([], type=column.type),

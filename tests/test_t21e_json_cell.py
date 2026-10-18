@@ -47,6 +47,35 @@ def _rust_literal(name: str) -> str:
     return found.group(1)
 
 
+#: The field metadata Arrow's ``arrow.json`` extension sets.
+JSON_TAG = {
+    b'ARROW:extension:name': b'arrow.json',
+    b'ARROW:extension:metadata': b'',
+}
+
+
+def _ipc(table: pa.Table) -> pa.Table:
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, table.schema) as writer:
+        writer.write_table(table)
+    return pa.ipc.open_stream(sink.getvalue()).read_all()
+
+
+def _json_tables(texts: list[str]) -> dict[str, pa.Table]:
+    r"""``texts`` in each way an Arrow reading marks them as JSON: a string
+    field carrying the extension's metadata, as built and after an IPC round
+    trip (which a newer pyarrow reads back as the extension type, and
+    pyarrow 14, the floor, as the metadata), and, where the pyarrow has it,
+    the extension type itself."""
+    field = pa.field('f', pa.string(), metadata=JSON_TAG)
+    tagged = pa.Table.from_arrays([pa.array(texts)], schema=pa.schema([field]))
+    tables = {'metadata': tagged, 'metadata after IPC': _ipc(tagged)}
+    if hasattr(pa, 'json_'):
+        tables['extension'] = pa.table({'f': pa.array(texts, type=pa.json_())})
+        tables['extension after IPC'] = _ipc(tables['extension'])
+    return tables
+
+
 def test_a_json_row_value_is_its_arrow_json_cell() -> None:
     rp = _run_python()
     text, row = _rust_literal('TEXT'), _rust_literal('ROW')
@@ -56,18 +85,22 @@ def test_a_json_row_value_is_its_arrow_json_cell() -> None:
     as_rows = rp.result_values(
         ['f'], None, [[json.loads(text)]], duckdb_types=False
     )
-    as_arrow = rp.arrow_values(
-        pa.table({'f': pa.array([text], type=pa.json_())})
-    )
-    assert as_rows['ordered'] == as_arrow['ordered']
-    assert as_arrow['unencodable'] == []
-    # Another JSON value differs, read either way.
-    other = rp.arrow_values(
-        pa.table({'f': pa.array(['{"a": 2}'], type=pa.json_())})
-    )
-    assert other['ordered'] != as_rows['ordered']
-    # Unmarked text stays text; text that is no JSON is unencodable.
-    plain = rp.arrow_values(pa.table({'f': pa.array([text])}))
-    assert plain['ordered'] != as_rows['ordered']
-    broken = rp.arrow_values(pa.table({'f': pa.array(['{'], type=pa.json_())}))
-    assert broken['unencodable'] == ['arrow:json']
+    for way, table in _json_tables([text]).items():
+        as_arrow = rp.arrow_values(table)
+        assert as_arrow['ordered'] == as_rows['ordered'], way
+        assert as_arrow['unencodable'] == [], way
+    for way, table in _json_tables(['{"a": 2}']).items():
+        # Another JSON value differs, read either way.
+        assert rp.arrow_values(table)['ordered'] != as_rows['ordered'], way
+    for way, table in _json_tables(['{']).items():
+        # Text that is no JSON is unencodable.
+        assert rp.arrow_values(table)['unencodable'] == ['arrow:json'], way
+    # Unmarked text stays text, as built and after IPC.
+    plain = pa.table({'f': pa.array([text])})
+    for table in (plain, _ipc(plain)):
+        assert (
+            rp.arrow_values(table)['ordered']
+            == rp.result_values(['f'], None, [[text]], duckdb_types=False)[
+                'ordered'
+            ]
+        )
