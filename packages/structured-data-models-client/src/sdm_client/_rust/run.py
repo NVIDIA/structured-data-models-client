@@ -74,6 +74,23 @@ class TransportFailed(Exception):
     the core as a transport error. It carries no text."""
 
 
+class Refused(Exception):  # noqa: N818 - says what happened to the call
+    r"""The call failed in a way the caller sees as ``raised``: the
+    endpoint's refusal, as the client's transport reports it, or another
+    failure of the transport. Raised by a :data:`Model`. The core is told
+    only that the call failed, its ``status`` where the endpoint answered
+    with one, else as a transport error, so it ends the run carrying the
+    answers of the calls before it (T2.8c); then ``raised`` is raised with
+    them, keeping its own type, code and text."""
+
+    def __init__(
+        self, raised: StructuredDataError, status: int | None = None
+    ) -> None:
+        super().__init__()
+        self.raised = raised
+        self.status = status
+
+
 def native() -> ModuleType:
     r"""``sdm_client._native``, imported here and nowhere else.
 
@@ -238,14 +255,22 @@ def _steps(
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
+    refused: Refused | None = None
     while True:
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
             _warn(handle, quiet, given, kept)
-            errors.raise_from_core(
+            error = errors.error_from_core(
                 failed.control, failed.attachments, driver_class=driver_class
             )
+            _answered(handle, failed, error)
+            if refused is not None:
+                # The call's own failure, as the caller sees it, carrying
+                # what the core carried on its end of the run.
+                _carried(error, refused.raised)
+                raise refused.raised from None
+            raise error from None
         _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
         if step['message'] != 'step':
@@ -256,7 +281,7 @@ def _steps(
         if step['step'] == 'done':
             return Finished(step['result'], handle)
         if step['step'] == 'call_model' and model is not None:
-            _call(core, handle, step, model)
+            refused = _call(core, handle, step, model)
             continue
         if step['step'] != 'fetch' or provider is None:
             handle.cancel()
@@ -311,20 +336,39 @@ def _steps(
                 )
 
 
-def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
+def _call(
+    core: Any, handle: Any, step: dict[str, Any], model: Model
+) -> Refused | None:
     r"""Answers one model call with ``model``: its answer as a 200, or, when
-    the transport failed, the contract's transport error."""
+    the transport failed, the contract's transport error; a refused call
+    (:class:`Refused`) as its status, or as a transport error where it has
+    none, and returned, for the run's end to raise."""
     body = handle.take_attachment(step['body'])
     attached: dict[int, Any] = {}
+    refused: Refused | None = None
+    transport_error: dict[str, Any] = {
+        'outcome': 'transport_error',
+        'kind': 'model_endpoint',
+        # The client's transport has already retried what it retries.
+        'retryable': False,
+    }
     try:
         answer = model(body)
     except TransportFailed:
-        outcome: dict[str, Any] = {
-            'outcome': 'transport_error',
-            'kind': 'model_endpoint',
-            # The client's transport has already retried what it retries.
-            'retryable': False,
-        }
+        outcome: dict[str, Any] = transport_error
+    except Refused as failed:
+        refused = failed
+        status = failed.status
+        if isinstance(status, int) and 300 <= status <= 599:
+            attached[1] = b'{}'
+            outcome = {
+                'outcome': 'response',
+                'status': status,
+                'content_type': 'application/json',
+                'body': 1,
+            }
+        else:
+            outcome = transport_error
     except BaseException:
         # The endpoint's refusal, made safe to show by the caller, or an
         # interrupt: the run ends here, and the caller sees it as is.
@@ -343,8 +387,43 @@ def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
     )
     try:
         handle.reply(reply, attached)
-    except core.CoreError as refused:
-        errors.raise_from_core(refused.control, refused.attachments)
+    except core.CoreError as failed:
+        errors.raise_from_core(failed.control, failed.attachments)
+    return refused
+
+
+def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
+    r"""The answers the core carried on its error (``answered``, T2.8c),
+    taken from the run and kept on ``error`` as ``_answered``: the Arrow
+    result and the rows it scores, which the predict bridge reads."""
+    try:
+        message = codec.read(failed.control, failed.attachments)
+        answered = message['error'].get('answered')
+    except (codec.CodecError, KeyError, TypeError, AttributeError):
+        return
+    if not isinstance(answered, dict):
+        return
+    stream = handle.take_attachment(answered['result'])
+    if stream is not None:
+        error._answered = (stream, answered['rows'])  # type: ignore[attr-defined]
+
+
+#: The core's fields that say what a failed request had answered (T2.8c).
+_ANSWERED_FIELDS = ('calls_answered', 'parts_answered')
+
+
+def _carried(error: StructuredDataError, raised: StructuredDataError) -> None:
+    r"""Puts on ``raised`` what the core carried on ``error``: its answers
+    and how many calls or steps gave them."""
+    answered = getattr(error, '_answered', None)
+    if answered is None:
+        return
+    details = raised.details if isinstance(raised.details, dict) else {}
+    for name in _ANSWERED_FIELDS:
+        if name in error.details:
+            details[name] = error.details[name]
+    raised.details = details
+    raised._answered = answered  # type: ignore[attr-defined]
 
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:

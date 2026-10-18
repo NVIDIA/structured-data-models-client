@@ -279,6 +279,56 @@ fn rows_of(payload: &Value, half: &str) -> usize {
     instance_table(payload, half).map_or(0, |(_, rows)| rows.len())
 }
 
+/// The rows one call scores (`_envelope_rows(payload, 'predict')`): its
+/// predict half's rows, none where the half cannot be read.
+pub fn predict_rows(payload: &Value) -> Option<usize> {
+    instance_table(payload, "predict").map(|(_, rows)| rows.len())
+}
+
+/// Where each call's rows are numbered from, for a request sent in several
+/// calls (`_numbered_across_calls`, `main`'s 1fc5a686): the endpoint numbers
+/// every call's rows from zero, so each call's are numbered on from where
+/// the previous call's ended, each call counted before the first is sent.
+/// A call before the last whose rows cannot be counted leaves the calls
+/// after it unnumberable, `INTERNAL_ERROR`, as the client refuses it.
+pub fn call_starts(payloads: &[Value]) -> Result<Vec<usize>, CoreError> {
+    let counted: Vec<Option<usize>> = payloads.iter().map(predict_rows).collect();
+    if counted
+        .iter()
+        .take(counted.len().saturating_sub(1))
+        .any(Option::is_none)
+    {
+        return Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a call of a request sent in several calls has rows that cannot be counted",
+        ));
+    }
+    let mut starts = Vec::with_capacity(counted.len());
+    let mut start = 0usize;
+    for rows in counted {
+        starts.push(start);
+        start = start.saturating_add(rows.unwrap_or(0));
+    }
+    Ok(starts)
+}
+
+/// `part` with each row numbered `start` places further on
+/// (`_numbered_from`).
+pub fn numbered_from(mut part: Part, start: usize) -> Result<Part, CoreError> {
+    let start =
+        i64::try_from(start).map_err(|_| bad_response("prediction.row_index", "out_of_range"))?;
+    if start != 0 {
+        for row in &mut part.rows {
+            row.row_index = row
+                .row_index
+                .checked_add(start)
+                .ok_or_else(|| bad_response("prediction.row_index", "out_of_range"))?;
+        }
+    }
+    Ok(part)
+}
+
 /// The outputs asked of `payload` sent to `model`, as the client's
 /// `_prepare` resolves and checks them: the model the contract carries
 /// (`UNKNOWN_MODEL` otherwise), the outputs the caller named or, when it
@@ -287,12 +337,25 @@ fn rows_of(payload: &Value, half: &str) -> usize {
 /// in its order: the shapes the model's profile does not take, a task kind
 /// it does not serve, an output it does not produce and a context past what
 /// it reads, each `UNSUPPORTED_REQUEST` naming the model.
+///
+/// A request sent in several calls (`main`'s multi-call `predict`) is
+/// checked as one: its kind and shapes are its first call's, as the
+/// client's request takes its task from its first payload, and its context
+/// is held to the most rows any one call sends (`_context_rows_per_call`),
+/// since the endpoint's cap is per call.
 pub fn prepare(
-    payload: &Value,
+    payloads: &[Value],
     model: &str,
     asked: &[String],
     defaulted: bool,
 ) -> Result<Vec<String>, CoreError> {
+    let Some(payload) = payloads.first() else {
+        return Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a request of no call",
+        ));
+    };
     let spec = match model {
         RELATIONAL => &KUMO_RELATIONAL,
         TABULAR => &KUMO_TABULAR,
@@ -378,7 +441,11 @@ pub fn prepare(
                 .with_field("supported_outputs", texts(spec.outputs.iter().copied())),
         );
     }
-    let rows = rows_of(payload, "context");
+    let rows = payloads
+        .iter()
+        .map(|p| rows_of(p, "context"))
+        .max()
+        .unwrap_or(0);
     if spec.id == RELATIONAL && rows > CONTEXT_ROWS_MAX {
         return Err(unsupported(
             spec.id,

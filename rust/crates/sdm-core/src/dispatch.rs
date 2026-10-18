@@ -118,17 +118,6 @@ pub fn start(
                     Detail::Scalar(Scalar::UInt32(request.state.version)),
                 ));
             }
-            // A request asked in several model calls (contract v26's
-            // `batches`, `main`'s multi-call predict) is T2.8c's: refused by
-            // name until then, never predicted as its first call alone.
-            if request.state.batches.is_some() {
-                return Err(CoreError::new(
-                    ErrorKind::Unsupported,
-                    ErrorCode::UnsupportedRequest,
-                    "a request asked in several model calls is not predicted by this core yet",
-                )
-                .with_field("field", Detail::text("state.batches")));
-            }
             let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
             else {
                 return Err(internal("the payload is not the bytes named"));
@@ -162,6 +151,43 @@ pub fn start(
                     Some(later)
                 }
             };
+            // A request asked in several model calls (`main`'s multi-call
+            // `predict`): each later call's payload, the rows it scores and
+            // the id it carries, which the host draws for each call as for
+            // a forecast's step.
+            let batches = match &request.state.batches {
+                None => None,
+                Some(batches) => {
+                    if request.state.forecast.is_some() {
+                        return Err(CoreError::new(
+                            ErrorKind::InvalidRequest,
+                            ErrorCode::InvalidRequest,
+                            "a forecast's request is one call per step, never batched",
+                        )
+                        .with_field("field", Detail::text("state.batches")));
+                    }
+                    let mut later = Vec::with_capacity(batches.len());
+                    for batch in batches {
+                        let Some(Attachment::Bytes(payload)) = attachments.remove(&batch.payload)
+                        else {
+                            return Err(internal("the payload is not the bytes named"));
+                        };
+                        let Some(request_id) = batch.request_id.clone() else {
+                            return Err(CoreError::new(
+                                ErrorKind::InvalidRequest,
+                                ErrorCode::InvalidRequest,
+                                "a later call of a request names no request id",
+                            )
+                            .with_field("field", Detail::text("state.batches.request_id")));
+                        };
+                        later.push(crate::predict::LaterCall {
+                            payload,
+                            request_id,
+                        });
+                    }
+                    Some(later)
+                }
+            };
             let inputs = crate::predict::Inputs {
                 payload,
                 query,
@@ -171,6 +197,7 @@ pub fn start(
                 default_outputs: request.default_outputs,
                 inference_asked: request.inference_asked,
                 forecast,
+                batches,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }
@@ -286,6 +313,8 @@ pub(crate) fn materialize(
                 values,
                 options: request.options,
                 most_parts: request.most_parts,
+                most_entities: request.most_entities,
+                most_calls: request.most_calls,
                 facts,
                 zones: Arc::clone(&zones),
                 #[cfg(feature = "test-ops")]

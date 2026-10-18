@@ -73,8 +73,8 @@ use sdm_contract::data::{
 use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
     ColumnRef, ForecastStep, Materialized, MemoBounds, MemoStoredTime, OperationResult,
-    ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestState,
-    SamplerMemo, Seed, SourceDescription,
+    ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestBatch,
+    RequestState, SamplerMemo, Seed, SourceDescription,
 };
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
@@ -158,8 +158,14 @@ const DEFAULT_SEED: u128 = 42;
 const ITERATIONS: usize = 10;
 /// The most tables a request's subgraph carries (`_MAX_SUBGRAPH_TABLES`).
 const SUBGRAPH_TABLES: usize = 15;
-/// The most entities one request predicts for.
-const PREDICT_ROWS: usize = 1_000;
+/// The most entities one `materialize` gathers where the host names no
+/// limit (`main`'s `MOST_ENTITIES`): every call's payload is built, with
+/// its own context, before any is sent, so the whole population is held at
+/// once.
+pub const MOST_ENTITIES: u64 = 100_000;
+/// The most model calls one request is gathered as where the host names no
+/// limit (`main`'s `MOST_CALLS`): a context is gathered for every call.
+pub const MOST_CALLS: u32 = 100;
 /// The most rows an instance table may hold (`MAX_TABLE_ROWS`).
 const TABLE_ROWS: usize = 10_000;
 /// How many examples the reference labels at once, stopping once it has
@@ -190,6 +196,12 @@ pub(crate) struct Inputs {
     pub options: Vec<String>,
     /// The most steps a forecast is asked as (`Materialize.most_parts`).
     pub most_parts: Option<u32>,
+    /// The most entities one `materialize` gathers
+    /// (`Materialize.most_entities`).
+    pub most_entities: Option<u64>,
+    /// The most calls one request is gathered as
+    /// (`Materialize.most_calls`).
+    pub most_calls: Option<u32>,
     pub facts: HostFacts,
     /// The zones the run resolves names with: the host's local zone, which
     /// places a date literal's two-digit year (`pql::local_year`).
@@ -1866,10 +1878,14 @@ fn notices(
 /// the client's `decompose.MOST_PARTS` as it ships (T1.36 fix 21).
 pub const MOST_PARTS: u32 = 200;
 
-/// What one question's run gathered: its payload's bytes and its query's
+/// One call's payload as gathered: its bytes, and the rows it scores.
+type Call = (Vec<u8>, u64);
+
+/// What one question's run gathered: each call's payload, in order (one
+/// for a request of no more rows than one call scores), and its query's
 /// text; or, for the test-only `labels` operation, its result.
 enum Gathered {
-    Request(Vec<u8>, String),
+    Request(Vec<Call>, String),
     #[cfg_attr(not(feature = "test-ops"), allow(dead_code))]
     Done(OperationResult),
 }
@@ -1879,15 +1895,30 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let Some(steps) = steps else {
         return match one(&asker, inputs).await? {
             Gathered::Done(result) => Ok(result),
-            Gathered::Request(payload, query) => {
-                let (payload, query) = attach_request(&asker, payload, &query)?;
+            Gathered::Request(calls, query) => {
+                // The first call's payload is the state's, and each later
+                // call's a batch of it, in order (`main`'s multi-call
+                // `predict`): `predict` sends them one after another.
+                let mut calls = calls.into_iter();
+                let (first, _) = calls
+                    .next()
+                    .ok_or_else(|| internal("a request gathered as no call"))?;
+                let (payload, query) = attach_request(&asker, first, &query)?;
+                let mut batches = Vec::new();
+                for (later, rows) in calls {
+                    batches.push(RequestBatch {
+                        payload: asker.attach(Attachment::Bytes(later))?,
+                        rows,
+                        request_id: None,
+                    });
+                }
                 Ok(OperationResult::Materialize(Materialized {
                     state: RequestState {
                         version: REQUEST_STATE_VERSION,
                         payload,
                         query,
                         forecast: None,
-                        batches: None,
+                        batches: (!batches.is_empty()).then_some(batches),
                     },
                     query: facts,
                 }))
@@ -1926,6 +1957,33 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .with_field("steps", Detail::Scalar(Scalar::UInt64(steps.count)))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
     }
+    // Then, before anything is gathered, as the client's `_in_parts`
+    // refuses them (`main`'s 1fc5a686): the batch size asked for, a step
+    // being one call (a forecast over more entities than one call scores
+    // would make the steps times the batches), and the population each step
+    // gathers, counted across the steps.
+    let per_call = options::rows_one_call_scores(asked_rows_per_call(inputs.values.as_ref())?);
+    let entities = inputs.indices.as_ref().map_or(0, |data| {
+        data.batches
+            .iter()
+            .map(RecordBatch::num_rows)
+            .sum::<usize>()
+    });
+    let entities = u64::try_from(entities).unwrap_or(u64::MAX);
+    if entities > per_call {
+        return Err(CoreError::new(
+            ErrorKind::Unsupported,
+            ErrorCode::UnsupportedRequest,
+            "a forecast over more entities than one call scores would batch each step",
+        )
+        .with_field("field", Detail::text("indices"))
+        .with_field("rule", Detail::text("batched_part"))
+        .with_field("kind", Detail::text("forecast"))
+        .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
+        .with_field("parts", Detail::Scalar(Scalar::UInt64(steps.count)))
+        .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
+    }
+    refuse_entities(entities, steps.count, inputs.most_entities)?;
     let handed = inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
         source: inputs.source.clone(),
         ..SamplerMemo::default()
@@ -1943,7 +2001,12 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         asker.keep(handed.clone());
         match done.map_err(tagged)? {
             Gathered::Done(result) => return Ok(result),
-            Gathered::Request(payload, query) => gathered.push((step, payload, query)),
+            // A step scores no more rows than one call (refused above), so
+            // it is gathered as one call.
+            Gathered::Request(calls, query) => match <[Call; 1]>::try_from(calls) {
+                Ok([(payload, _)]) => gathered.push((step, payload, query)),
+                Err(_) => return Err(internal("a forecast's step gathered as several calls")),
+            },
         }
     }
     let mut attached = Vec::with_capacity(gathered.len());
@@ -1967,6 +2030,40 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         },
         query: facts,
     }))
+}
+
+/// The batch size the call's values ask for (`rows_per_call`), read alone,
+/// as the client's `_in_parts` reads it before a part is gathered: none
+/// where the values name none.
+fn asked_rows_per_call(values: Option<&sdm_wire::json::Value>) -> Result<Option<u64>, CoreError> {
+    match values.and_then(|v| v.get("rows_per_call")) {
+        None => Ok(None),
+        Some(given) => options::rows_per_call(given),
+    }
+}
+
+/// Refuses a population too large to hold (`main`'s
+/// `refuse_more_entities_than_fit_in_memory`), from the count alone, before
+/// anything is read: `entities` gathered `times` over (a forecast's steps
+/// each gather it whole), past the host's limit, 100,000 where it names
+/// none, `UNSUPPORTED_REQUEST`, rule `most_entities`.
+fn refuse_entities(entities: u64, times: u64, most: Option<u64>) -> Result<(), CoreError> {
+    let most = most.unwrap_or(MOST_ENTITIES);
+    let total = entities.saturating_mul(times);
+    if total <= most {
+        return Ok(());
+    }
+    Err(CoreError::new(
+        ErrorKind::Unsupported,
+        ErrorCode::UnsupportedRequest,
+        "more entities were asked for than one materialize holds at once",
+    )
+    .with_field("field", Detail::text("indices"))
+    .with_field("rule", Detail::text("most_entities"))
+    .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
+    .with_field("gathered_times", Detail::Scalar(Scalar::UInt64(times)))
+    .with_field("total", Detail::Scalar(Scalar::UInt64(total)))
+    .with_field("limit", Detail::Scalar(Scalar::UInt64(most))))
 }
 
 /// A request's payload and query, attached.
@@ -2067,12 +2164,15 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
         anchor_time,
         facts,
         zones,
+        most_entities,
+        most_calls,
         ..
     } = inputs;
     let options::Asked {
         num_context_samples,
         prediction_statistic,
         inference_config,
+        rows_per_call,
         ..
     } = asked_values;
     // The most context examples asked for, which narrows the context the
@@ -2109,14 +2209,14 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     if indices.is_empty() {
         return Err(invalid("the entities to predict for are none", "indices"));
     }
-    if indices.len() > PREDICT_ROWS {
-        return Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
-            "more entities were asked for than one request predicts for",
-        )
-        .with_field("field", Detail::text("indices")));
-    }
+    // More entities than one call scores are gathered as several calls
+    // (`main`'s 1fc5a686), up to a population the host's limit holds,
+    // refused from the count alone before anything is read.
+    refuse_entities(
+        u64::try_from(indices.len()).unwrap_or(u64::MAX),
+        1,
+        most_entities,
+    )?;
     // The statistic the caller chose, one the endpoint reports, and no
     // column named as the wire names its own (the client's checks before
     // it gathers; their order among the checks above is not the client's,
@@ -2485,6 +2585,30 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     if labels_only {
         return labels_result(asker, &train_keys, &anchors, &labels).map(Gathered::Done);
     }
+    // How many entities one call scores: the endpoint's 10,000, or fewer
+    // where the caller asked (`rows_per_call`); a request of more is
+    // gathered as several calls, each with a context of its own, at most as
+    // many as the host's limit, 100 where it names none, refused once the
+    // context is gathered, as the client refuses it after its engine's task
+    // table (`_refuse_more_entities_than_fit_in_memory`, `main`'s 1fc5a686).
+    let per_call = usize::try_from(options::rows_one_call_scores(rows_per_call))
+        .map_err(|_| internal("a call's rows past usize"))?;
+    let num_test = indices.len();
+    let calls = num_test.div_ceil(per_call);
+    let most = most_calls.unwrap_or(MOST_CALLS);
+    if calls > most as usize {
+        return Err(CoreError::new(
+            ErrorKind::Unsupported,
+            ErrorCode::UnsupportedRequest,
+            "the entities asked for are gathered as more calls than one materialize holds at once",
+        )
+        .with_field("field", Detail::text("indices"))
+        .with_field("rule", Detail::text("most_calls"))
+        .with_field("entities", count(num_test))
+        .with_field("calls", count(calls))
+        .with_field("rows_per_call", count(per_call))
+        .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
+    }
     // The inference options, read for the task's config class, as the
     // engine reads them before it lays out any request.
     let options = options::options(asked.task, inference_config.as_ref())?;
@@ -2505,144 +2629,168 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
             ));
         }
     }
-    let num_test = indices.len();
-    let examples_total = num_train + num_test;
     if num_train > TABLE_ROWS {
         return Err(invalid(
             "the context holds more rows than a request takes",
             "query",
         ));
     }
-    let all_keys = arrow_select::concat::concat(&[train_keys.as_ref(), indices.as_ref()])
-        .map_err(|_| internal("the examples' keys do not concatenate"))?;
-    anchors.extend(std::iter::repeat_n(anchor, num_test));
-
-    // The subgraph: each example's entity row.
+    // The rows the largest call scores (`_the_largest_batch`), which a
+    // payload past the endpoint's body names as the size to come down from.
+    let largest = per_call.min(num_test);
+    let train_anchors = anchors.len();
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
-    let looked_up = read_times.read(
-        asker,
-        entity,
-        one_batch(
-            &ask(
-                asker,
-                sample::by_pkey(
-                    entity,
-                    entity_names.clone(),
-                    key_set(asker, sample::seeds(all_keys, vec![])?)?,
-                    true,
-                )?,
-            )
-            .await?,
-        )?,
-    )?;
-    let positions = batches(&looked_up, examples_total)?;
-    // A key the source enforces unique is held by one row each: a dialect
-    // may leave its count out (`SEED_KEY_UNIQUE`), and any other count is
-    // read.
-    let unique = entity.column(&key).is_some_and(|c| c.unique);
-    let matches = match looked_up.column_by_name(MATCHES_COLUMN) {
-        None if unique => None,
-        _ => Some(
-            named(&looked_up, MATCHES_COLUMN)?
-                .as_primitive_opt::<Int64Type>()
-                .ok_or_else(|| {
-                    crate::run::schema_mismatch("expected", Some(MATCHES_COLUMN), "not int64")
-                })?,
-        ),
-    };
-    for (row, &at) in positions.iter().enumerate() {
-        if at >= num_train && matches.is_some_and(|m| m.value(row) > 1) {
+    let mut gathered = Vec::with_capacity(calls);
+    let mut sent = BTreeSet::new();
+    let mut answering = 0;
+    // Each call's payload, in order: the context's examples and labels, the
+    // same for every call, with the call's own entities, and the subgraph
+    // walked from both, as the reference's engine builds each batch
+    // (`_iter_task_requests`: `narrow_prediction`, then `_get_context`),
+    // every one before any is sent.
+    for start in (0..num_test).step_by(per_call) {
+        let scored = indices.slice(start, per_call.min(num_test - start));
+        let num_test = scored.len();
+        let examples_total = num_train + num_test;
+        let all_keys = arrow_select::concat::concat(&[train_keys.as_ref(), scored.as_ref()])
+            .map_err(|_| internal("the examples' keys do not concatenate"))?;
+        anchors.truncate(train_anchors);
+        anchors.extend(std::iter::repeat_n(anchor, num_test));
+
+        // The subgraph: each example's entity row.
+        let looked_up = read_times.read(
+            asker,
+            entity,
+            one_batch(
+                &ask(
+                    asker,
+                    sample::by_pkey(
+                        entity,
+                        entity_names.clone(),
+                        key_set(asker, sample::seeds(all_keys, vec![])?)?,
+                        true,
+                    )?,
+                )
+                .await?,
+            )?,
+        )?;
+        let positions = batches(&looked_up, examples_total)?;
+        // A key the source enforces unique is held by one row each: a
+        // dialect may leave its count out (`SEED_KEY_UNIQUE`), and any
+        // other count is read.
+        let unique = entity.column(&key).is_some_and(|c| c.unique);
+        let matches = match looked_up.column_by_name(MATCHES_COLUMN) {
+            None if unique => None,
+            _ => Some(
+                named(&looked_up, MATCHES_COLUMN)?
+                    .as_primitive_opt::<Int64Type>()
+                    .ok_or_else(|| {
+                        crate::run::schema_mismatch("expected", Some(MATCHES_COLUMN), "not int64")
+                    })?,
+            ),
+        };
+        for (row, &at) in positions.iter().enumerate() {
+            if at >= num_train && matches.is_some_and(|m| m.value(row) > 1) {
+                return Err(invalid(
+                    "an entity to predict for is held by more than one row, so which is meant \
+                     would be a guess",
+                    "indices",
+                ));
+            }
+        }
+        if positions.len() != examples_total {
             return Err(invalid(
-                "an entity to predict for is held by more than one row, so which is meant \
-                 would be a guess",
+                "an entity to predict for is not in the entity table",
                 "indices",
             ));
         }
-    }
-    if positions.len() != examples_total {
-        return Err(invalid(
-            "an entity to predict for is not in the entity table",
-            "indices",
-        ));
-    }
-    let mut order: Vec<usize> = (0..positions.len()).collect();
-    order.sort_by_key(|&row| positions[row]);
-    let entity_rows = take_batch(&looked_up, &order)?;
-    let entity_rows = RecordBatch::try_new(
-        Arc::new(arrow_schema::Schema::new(
+        let mut order: Vec<usize> = (0..positions.len()).collect();
+        order.sort_by_key(|&row| positions[row]);
+        let entity_rows = take_batch(&looked_up, &order)?;
+        let entity_rows = RecordBatch::try_new(
+            Arc::new(arrow_schema::Schema::new(
+                entity_names
+                    .iter()
+                    .map(|name| {
+                        Ok(arrow_schema::Field::new(
+                            name,
+                            named(&entity_rows, name)?.data_type().clone(),
+                            true,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, CoreError>>()?,
+            )),
             entity_names
                 .iter()
-                .map(|name| {
-                    Ok(arrow_schema::Field::new(
-                        name,
-                        named(&entity_rows, name)?.data_type().clone(),
-                        true,
-                    ))
-                })
-                .collect::<Result<Vec<_>, CoreError>>()?,
-        )),
-        entity_names
-            .iter()
-            .map(|name| named(&entity_rows, name).map(Arc::clone))
-            .collect::<Result<Vec<_>, _>>()?,
-    )
-    .map_err(|_| internal("the entity rows do not make one batch"))?;
-
-    // The neighbors of each example's entity, hop by hop.
-    let walked = crate::subgraph::Walk {
-        asker,
-        graph: &graph,
-        times: &read_times,
-        anchors: &anchors,
-        nulls,
-        entity,
-        neighbors: mode.neighbors(),
-        excluded: &excluded,
-    }
-    .run(entity_rows)
-    .await?;
-    keep_stored_times(&mut memo, &read_times);
-    // The subgraph carries at most as many tables as the endpoint reads,
-    // refused as the reference's engine refuses it (`_get_context`).
-    if walked.tables.len() > SUBGRAPH_TABLES {
-        return Err(invalid(
-            "the request's subgraph carries more tables than the endpoint reads",
-            "tables",
+                .map(|name| named(&entity_rows, name).map(Arc::clone))
+                .collect::<Result<Vec<_>, _>>()?,
         )
-        .with_field("tables", count(walked.tables.len()))
-        .with_field("limit", count(SUBGRAPH_TABLES)));
-    }
-    let sent: BTreeSet<String> = walked.tables.iter().map(|t| t.name.clone()).collect();
+        .map_err(|_| internal("the entity rows do not make one batch"))?;
 
-    let built = payload::build(&Sampled {
-        num_train,
-        num_test,
-        anchors,
-        kind: asked.task,
-        labels,
-        windowed: aggregated.is_some(),
-        tables: walked.tables,
-        links: walked.links,
-        entity_table: entity.name.clone(),
-        source_query: source_query.clone(),
-        run_mode: mode,
-        options,
-        statistic,
-        float_text: crate::pql::float_text,
-    })?;
-    // What the request leaves out, said as the client says it, in its
-    // order: the tables, the columns the model does not read, and the
-    // context that answers the question.
+        // The neighbors of each example's entity, hop by hop.
+        let walked = crate::subgraph::Walk {
+            asker,
+            graph: &graph,
+            times: &read_times,
+            anchors: &anchors,
+            nulls,
+            entity,
+            neighbors: mode.neighbors(),
+            excluded: &excluded,
+        }
+        .run(entity_rows)
+        .await?;
+        keep_stored_times(&mut memo, &read_times);
+        // The subgraph carries at most as many tables as the endpoint
+        // reads, refused as the reference's engine refuses it
+        // (`_get_context`).
+        if walked.tables.len() > SUBGRAPH_TABLES {
+            return Err(invalid(
+                "the request's subgraph carries more tables than the endpoint reads",
+                "tables",
+            )
+            .with_field("tables", count(walked.tables.len()))
+            .with_field("limit", count(SUBGRAPH_TABLES)));
+        }
+        sent.extend(walked.tables.iter().map(|t| t.name.clone()));
+
+        let built = payload::build(&Sampled {
+            num_train,
+            num_test,
+            anchors: anchors.clone(),
+            kind: asked.task,
+            labels: labels.clone(),
+            windowed: aggregated.is_some(),
+            tables: walked.tables,
+            links: walked.links,
+            entity_table: entity.name.clone(),
+            source_query: source_query.clone(),
+            run_mode: mode,
+            options: options.clone(),
+            statistic: statistic.clone(),
+            rows_per_call: largest,
+            float_text: crate::pql::float_text,
+        })?;
+        answering += built.answering;
+        gathered.push((
+            built.bytes,
+            u64::try_from(num_test).map_err(|_| internal("a call's rows past u64"))?,
+        ));
+    }
+    // What the request leaves out, said once as the client says it of all
+    // its calls, in its order: the tables no call carries, the columns the
+    // model does not read, and the context that answers the question,
+    // counted across the calls.
     notices(
         asker,
         &description,
         &asked,
         &sent,
         &excluded,
-        built.answering,
+        answering,
         aggregated.is_some(),
     );
-    Ok(Gathered::Request(built.bytes, source_query))
+    Ok(Gathered::Request(gathered, source_query))
 }
 
 /// `at + offset` in nanoseconds: a fixed span added without bound, as the

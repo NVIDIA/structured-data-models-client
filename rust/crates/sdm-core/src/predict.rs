@@ -26,12 +26,14 @@
 //! retryability the host gave. No error carries a value of the request or
 //! the answer (decision H17).
 
+use sdm_contract::error::AnsweredParts;
 use sdm_contract::ops::{OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_request::predict::{
-    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, empty, layout,
-    merge, nothing_to_score, preflight, prepare, refused, table,
+    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, call_starts,
+    empty, layout, merge, nothing_to_score, numbered_from, predict_rows, preflight, prepare,
+    refused, table,
 };
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
@@ -53,6 +55,14 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
 /// A forecast's later step: its number, payload, query and request id.
 pub(crate) type LaterStep = (u32, Vec<u8>, String, String);
 
+/// A later call of a request asked in several (`main`'s multi-call
+/// `predict`): its payload, and the request id the host drew for it.
+#[derive(Clone)]
+pub(crate) struct LaterCall {
+    pub payload: Vec<u8>,
+    pub request_id: String,
+}
+
 /// What a `predict` start gives its body.
 #[derive(Clone)]
 pub(crate) struct Inputs {
@@ -73,6 +83,10 @@ pub(crate) struct Inputs {
     /// forecast of one step, and `None` for any other request (T1.36 fix
     /// 21).
     pub forecast: Option<Vec<LaterStep>>,
+    /// The later calls of a request asked in several, in order, each
+    /// scoring the rows after the last (`RequestState::batches`); `None`
+    /// for a request of one call.
+    pub batches: Option<Vec<LaterCall>>,
 }
 
 /// The JSON a request state's payload holds, or a refusal naming where in
@@ -106,13 +120,21 @@ fn warn(asker: &Asker, notice: Notice) {
 
 pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationResult, CoreError> {
     let Some(later) = inputs.forecast.take() else {
-        let (merged, outputs) = one(&asker, &inputs).await?;
+        // The request's calls: the state's payload, then each later call's
+        // (`main`'s multi-call `predict`), each with the id drawn for it.
+        let mut calls = vec![LaterCall {
+            payload: inputs.payload.clone(),
+            request_id: inputs.request_id.clone(),
+        }];
+        calls.extend(inputs.batches.take().unwrap_or_default());
+        let (merged, outputs, _) = one(&asker, &inputs, calls).await?;
         return finish(&asker, merged, outputs);
     };
     // A forecast: each step's regression predicted as the client predicts
     // each part (`_answer_in_parts`), in order, a refusal naming the step
-    // it happened in (`forecast_step`), and the answers put together as
-    // its `_by_step` puts them.
+    // it happened in (`forecast_step`) and carrying the steps answered
+    // before it (`_carry_the_steps_already_paid_for`, `main`'s 1fc5a686),
+    // and the answers put together as its `_by_step` puts them.
     let mut steps = vec![(
         1,
         inputs.payload.clone(),
@@ -122,23 +144,125 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
     steps.extend(later);
     let mut answers = Vec::with_capacity(steps.len());
     let mut outputs = Vec::new();
+    let mut rows = 0usize;
     for (step, payload, query, request_id) in steps {
         let asked = Inputs {
-            payload,
             query,
-            request_id,
             forecast: None,
+            batches: None,
             ..inputs.clone()
         };
-        let (answer, named) = one(&asker, &asked)
-            .await
-            .map_err(|e| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step))))?;
+        let done = one(
+            &asker,
+            &asked,
+            vec![LaterCall {
+                payload,
+                request_id,
+            }],
+        )
+        .await
+        .map_err(|e| e.with_field("forecast_step", Detail::Scalar(Scalar::UInt32(step))));
+        let (answer, named, scored) = match done {
+            Ok(done) => done,
+            Err(error) => return Err(carry_steps(&asker, error, answers, &outputs, rows)),
+        };
         if answers.is_empty() {
             outputs = named;
         }
+        rows = rows.saturating_add(scored);
         answers.push((step, answer));
     }
     finish(&asker, by_step(answers)?, outputs)
+}
+
+/// `error`, carrying the answers a request asked in several calls had
+/// received before it (`_carry_the_answers_already_paid_for`, `main`'s
+/// 1fc5a686): put together as the request's answer would have been, laid
+/// out as `Predicted.result` and attached, with the rows those calls score
+/// and how many calls answered (`calls_answered`); the error keeps its
+/// code. None answered, the error as it is.
+fn carry_calls(
+    asker: &Asker,
+    error: CoreError,
+    answers: Vec<Part>,
+    outputs: &[String],
+    rows: usize,
+) -> CoreError {
+    let calls = answers.len();
+    if calls == 0 {
+        return error;
+    }
+    let carried = merge(answers).and_then(|merged| carried(asker, &merged, outputs, rows));
+    match carried {
+        Ok(answered) => error
+            .answering(answered)
+            .with_field("calls_answered", count(calls)),
+        Err(failed) => failed,
+    }
+}
+
+/// `error`, carrying the steps a forecast had answered before it
+/// (`_carry_the_steps_already_paid_for`): put together by step, as the
+/// forecast's answer would have been, with how many steps answered
+/// (`parts_answered`).
+fn carry_steps(
+    asker: &Asker,
+    error: CoreError,
+    answers: Vec<(u32, Part)>,
+    outputs: &[String],
+    rows: usize,
+) -> CoreError {
+    let steps = answers.len();
+    if steps == 0 {
+        return error;
+    }
+    let carried = by_step(answers).and_then(|merged| carried(asker, &merged, outputs, rows));
+    match carried {
+        Ok(answered) => error
+            .answering(answered)
+            .with_field("parts_answered", count(steps)),
+        Err(failed) => failed,
+    }
+}
+
+/// Answers received, laid out as a result and attached, with the rows
+/// they score. What `Predicted` names beside its result travels on the
+/// result's schema, as text: `model` and `request_id` as the endpoint
+/// named them, `metadata` as the JSON of the answers' metadata, and
+/// `outputs` as the JSON list of the outputs asked for.
+fn carried(
+    asker: &Asker,
+    merged: &Part,
+    outputs: &[String],
+    rows: usize,
+) -> Result<AnsweredParts, CoreError> {
+    let laid = table(merged)?;
+    let named = std::collections::HashMap::from([
+        ("model".to_owned(), merged.model.clone()),
+        ("request_id".to_owned(), merged.request_id.clone()),
+        (
+            "metadata".to_owned(),
+            String::from_utf8(merged.metadata.to_bytes())
+                .map_err(|_| internal("an answer's metadata is not text"))?,
+        ),
+        (
+            "outputs".to_owned(),
+            String::from_utf8(Value::texts(outputs.iter().map(String::as_str)).to_bytes())
+                .map_err(|_| internal("the outputs are not text"))?,
+        ),
+    ]);
+    let schema = std::sync::Arc::new(laid.schema().as_ref().clone().with_metadata(named));
+    let laid = laid
+        .with_schema(std::sync::Arc::clone(&schema))
+        .map_err(|_| internal("a result does not take its own schema"))?;
+    Ok(AnsweredParts {
+        result: asker.attach(Attachment::Arrow(ArrowData::new(schema, vec![laid])))?,
+        rows: u64::try_from(rows).unwrap_or(u64::MAX),
+    })
+}
+
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
 
 /// The result of a request's answer, attached.
@@ -155,28 +279,65 @@ fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<Operation
     }))
 }
 
-/// One request's answer, and the outputs it asked for: the body of
-/// `predict` before T1.36 fix 21.
-async fn one(asker: &Asker, inputs: &Inputs) -> Result<(Part, Vec<String>), CoreError> {
-    let payload = payload(&inputs.payload)?;
+/// One request's answer, the outputs it asked for and the rows it scores:
+/// the body of `predict` before T1.36 fix 21, of a request sent in one call
+/// or, from `main`'s multi-call `predict`, in several (`calls`, in order).
+/// As the client's `predict`, every call is checked and written before the
+/// first is sent (`prepare`, `preflight`, then each call's body), each
+/// call's rows numbered on from where the previous call's ended
+/// (`_numbered_across_calls`), the answers merged as one; a call that fails
+/// ends the request, carrying the answers received before it.
+async fn one(
+    asker: &Asker,
+    inputs: &Inputs,
+    calls: Vec<LaterCall>,
+) -> Result<(Part, Vec<String>, usize), CoreError> {
+    let mut payloads = Vec::with_capacity(calls.len());
+    let mut ids = Vec::with_capacity(calls.len());
+    for call in calls {
+        payloads.push(payload(&call.payload)?);
+        ids.push(call.request_id);
+    }
     let outputs = prepare(
-        &payload,
+        &payloads,
         &inputs.model,
         &inputs.outputs,
         inputs.default_outputs,
     )?;
-    // The parts of the request: the request state holds one payload, which
-    // `materialize` writes; the merge holds for several (its own tests).
-    let payloads = vec![payload];
+    let scored = payloads
+        .iter()
+        .map(|p| predict_rows(p).unwrap_or(0))
+        .fold(0usize, usize::saturating_add);
     let merged = if payloads.iter().all(nothing_to_score) {
         empty(&inputs.model, &payloads[0])
     } else {
         for notice in preflight(&payloads, &outputs, &inputs.query, &inputs.model)? {
             warn(asker, notice);
         }
+        // Every call written before the first is sent, as the client's
+        // plan is listed whole (`_numbered_across_calls`), then each call's
+        // rows counted.
+        let mut bodies = Vec::with_capacity(payloads.len());
+        for (payload, request_id) in payloads.iter().zip(&ids) {
+            bodies.push(call_bytes(&body(
+                payload,
+                &inputs.model,
+                request_id,
+                &outputs,
+                &inputs.inference_asked,
+            )?)?);
+        }
+        let starts = call_starts(&payloads)?;
         let mut parts = Vec::with_capacity(payloads.len());
-        for payload in &payloads {
-            parts.push(call(asker, inputs, payload, &outputs).await?);
+        for ((payload, bytes), start) in payloads.iter().zip(bodies).zip(starts) {
+            let answered = match call(asker, payload, bytes).await {
+                Ok(part) => numbered_from(part, start),
+                Err(error) => Err(error),
+            };
+            match answered {
+                Ok(part) => parts.push(part),
+                Err(error) => return Err(carry_calls(asker, error, parts, &outputs, start)),
+            }
         }
         merge(parts)?
     };
@@ -186,29 +347,13 @@ async fn one(asker: &Asker, inputs: &Inputs) -> Result<(Part, Vec<String>), Core
             warn(asker, absent_notice(&inputs.model, &left_out));
         }
     }
-    Ok((merged, outputs))
+    Ok((merged, outputs, scored))
 }
 
-/// One payload's call, sent and its answer laid out.
-async fn call(
-    asker: &Asker,
-    inputs: &Inputs,
-    payload: &Value,
-    outputs: &[String],
-) -> Result<Part, CoreError> {
-    let call = body(
-        payload,
-        &inputs.model,
-        &inputs.request_id,
-        outputs,
-        &inputs.inference_asked,
-    )?;
+/// One payload's call, its body as written, sent and its answer laid out.
+async fn call(asker: &Asker, payload: &Value, bytes: Vec<u8>) -> Result<Part, CoreError> {
     let reply = asker
-        .call_model(
-            Endpoint::Predict,
-            "application/json".to_owned(),
-            call_bytes(&call)?,
-        )
+        .call_model(Endpoint::Predict, "application/json".to_owned(), bytes)
         .await;
     let answer = match reply {
         Reply::Model(ModelResult::Response { status, body, .. }) => {

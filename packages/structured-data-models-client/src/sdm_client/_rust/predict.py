@@ -66,7 +66,7 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
-from sdm_client._rust.run import TransportFailed, run
+from sdm_client._rust.run import Refused, TransportFailed, run
 from sdm_client.errors import NimRequestError, StructuredDataError
 
 if TYPE_CHECKING:
@@ -258,14 +258,17 @@ def predict(
             'predict on the core needs a request materialize built on the core'
         )
     # A forecast the core gathered is held as one request per step (T1.36
-    # fix 21), which the core predicts in one run, step by step.
+    # fix 21), which the core predicts in one run, step by step; a request
+    # of more rows than one call scores, as each call's payload (T2.8c),
+    # which the core predicts in one run, call by call.
     steps = request.parts if request.parts is not None else (request,)
+    batched = state.get('batches')
     held = []
     for step in steps:
         payloads = step.payloads
-        if payloads is None or len(payloads) != 1:
+        if payloads is None or len(payloads) != 1 + len(batched or ()):
             raise RouteError(
-                'predict on the core takes the one payload materialize wrote'
+                'predict on the core takes the payloads materialize wrote'
             )
         held.append((payloads[0], step.query))
     [(payload, query), *later] = held
@@ -317,13 +320,15 @@ def predict(
             raise TransportFailed
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is
-            # chained to the transport's exception.
+            # chained to the transport's exception. The core is told the
+            # endpoint's status, so it ends the run carrying the answers of
+            # the calls before this one (T2.8c), which this raises on.
             raised = _refusal(refused)
             raised._forecast_step = calls  # type: ignore[attr-defined]
-            raise raised
+            raise Refused(raised, refused.status_code)
         if failure is not None:
             failure._forecast_step = calls  # type: ignore[attr-defined]
-            raise failure
+            raise Refused(failure)
         return _encoded(answer)
 
     operation: dict[str, Any] = {
@@ -347,6 +352,18 @@ def predict(
         1: _payload(payload),
         2: codec.attachment(query),
     }
+    if batched is not None:
+        # Each later call's payload, the rows the core gathered it to score,
+        # and its own id, drawn as the adapter draws one for every call, in
+        # call order (T2.8c).
+        operation['state']['batches'] = []
+        for at, (more, rows) in enumerate(
+            zip(request.payloads[1:], batched, strict=True), start=3
+        ):
+            attachments[at] = _payload(more)
+            operation['state']['batches'].append(
+                {'payload': at, 'rows': rows, 'request_id': _request_id()}
+            )
     if request.parts is not None:
         operation['state']['forecast'] = []
         for number, (more, asked) in enumerate(later, start=2):
@@ -363,18 +380,43 @@ def predict(
                     'request_id': _request_id(),
                 }
             )
-    finished = run(operation, attachments, model=model_call)
+    try:
+        finished = run(operation, attachments, model=model_call)
+    except StructuredDataError as error:
+        _carry_the_answers(error, request.parts is not None)
+        raise
     answered = finished.result
-    # The core's rows are ordered by row_index, as the result's frame is;
-    # its items keep the endpoint's order, as the old route's do.
-    rows = sorted(
-        _rows(finished.take(answered['result'])),
-        key=lambda row: row['answer_index'],
-    )
     metadata = json.loads(finished.take(answered['metadata']))
-    result = PredictionResult(
+    return _result(
+        _rows(finished.take(answered['result'])),
         model=answered['model'],
         request_id=answered['request_id'],
+        metadata=metadata,
+        outputs=tuple(answered['outputs']),
+        by_step=request.parts is not None,
+    )
+
+
+def _result(
+    rows: list[dict[str, Any]],
+    *,
+    model: str,
+    request_id: str,
+    metadata: dict[str, Any],
+    outputs: tuple[str, ...],
+    by_step: bool,
+) -> PredictionResult:
+    r"""The core's result rows as this client's result."""
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.result import PredictionResult
+
+    # The core's rows are ordered by row_index, as the result's frame is;
+    # its items keep the endpoint's order, as the old route's do.
+    rows = sorted(rows, key=lambda row: row['answer_index'])
+    result = PredictionResult(
+        model=model,
+        request_id=request_id,
         items=[
             PredictionItem(
                 row_index=row['row_index'],
@@ -388,8 +430,46 @@ def predict(
             for row in rows
         ],
         metadata=metadata,
-        outputs=tuple(answered['outputs']),
+        outputs=outputs,
     )
     # A forecast's answer names its step, rows or none (`_by_step`).
-    result._names_its_step = request.parts is not None
+    result._names_its_step = by_step
     return result
+
+
+def _carry_the_answers(error: StructuredDataError, by_step: bool) -> None:
+    r"""The answers received before a call failed, as the core carried them
+    on its error (T2.8c, ``main``'s 1fc5a686), put in ``error.details`` as
+    the client puts them: ``answered``, the answers received as one result,
+    and, for a request asked in several calls, ``rows_answered``, the rows
+    those calls score, beside the core's ``calls_answered``; for a
+    forecast, its steps' answers, beside the core's ``parts_answered``. The
+    error keeps its own type and code."""
+    import pyarrow as pa
+
+    carried = getattr(error, '_answered', None)
+    if carried is None:
+        return
+    del error._answered
+    stream, rows = carried
+    table = pa.RecordBatchReader._import_from_c_capsule(
+        stream.__arrow_c_stream__()
+    ).read_all()
+    # What the result names beside its rows travels on its schema, as text
+    # (``sdm_core::predict``'s ``carried``).
+    named = {
+        key.decode(): value.decode()
+        for key, value in (table.schema.metadata or {}).items()
+    }
+    details = error.details if isinstance(error.details, dict) else {}
+    details['answered'] = _result(
+        table.to_pylist(),
+        model=named.get('model', ''),
+        request_id=named.get('request_id', ''),
+        metadata=json.loads(named.get('metadata', '{}')),
+        outputs=tuple(json.loads(named.get('outputs', '[]'))),
+        by_step=by_step,
+    )
+    if not by_step:
+        details['rows_answered'] = rows
+    error.details = details

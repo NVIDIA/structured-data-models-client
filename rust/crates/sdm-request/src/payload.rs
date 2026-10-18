@@ -158,6 +158,11 @@ pub struct Sampled {
     pub options: Options,
     /// The regression's statistic the caller chose.
     pub statistic: Option<String>,
+    /// The most rows any call of the request this payload is one call of
+    /// scores (`_the_largest_batch`, `main`'s multi-call `predict`): the
+    /// size a refusal of a payload past the endpoint's limit names as the
+    /// one to ask below.
+    pub rows_per_call: usize,
     /// The text a float's class is spelled in: the shortest digits that
     /// read back to the double, laid out as the reference's `str` lays them
     /// out (`_class_label`). The parser crate holds it; the caller passes
@@ -1054,21 +1059,36 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         .to_bytes()
     };
     // The limit counts the bytes the request sends, as written (PD-2).
+    // The refusal names what to change, as the reference's client words
+    // its engine's (`_said_in_this_client_s_terms`, `main`'s 1fc5a686): a
+    // call scoring several rows can be asked as smaller calls, below the
+    // most rows a call of the request scores (`smaller_calls`); a call of
+    // one row cannot, and only a narrower context helps
+    // (`no_smaller_call`).
     if bytes.len() > PAYLOAD_BYTES {
+        let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
             ErrorCode::InvalidRequest,
             "the request is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("payload"))
+        .with_field("bytes", count(bytes.len()))
+        .with_field("limit", count(PAYLOAD_BYTES))
         .with_field(
-            "bytes",
-            Detail::Scalar(sdm_contract::Scalar::UInt64(bytes.len() as u64)),
+            "batch_too_large_to_send",
+            Detail::Scalar(sdm_contract::Scalar::Bool(true)),
         )
         .with_field(
-            "limit",
-            Detail::Scalar(sdm_contract::Scalar::UInt64(PAYLOAD_BYTES as u64)),
-        ));
+            "remedy",
+            Detail::text(if sampled.num_test > 1 {
+                "smaller_calls"
+            } else {
+                "no_smaller_call"
+            }),
+        )
+        .with_field("rows", count(sampled.num_test))
+        .with_field("rows_per_call", count(sampled.rows_per_call)));
     }
     Ok(Built {
         bytes,

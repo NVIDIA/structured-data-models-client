@@ -46,6 +46,11 @@ pub struct Asked {
     pub prediction_statistic: Option<String>,
     pub inference_config: Option<Value>,
     pub seed: AskedSeed,
+    /// The most rows one model call scores, as the caller lowered it
+    /// (`rows_per_call`, `main`'s multi-call `predict`): a whole number of
+    /// at least one, `u64::MAX` standing for any larger one, which lowers
+    /// nothing ([`rows_per_call`]).
+    pub rows_per_call: Option<u64>,
 }
 
 /// A value of the wrong type for its option, refused as the client
@@ -125,6 +130,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         prediction_statistic: None,
         inference_config: None,
         seed: AskedSeed::Absent,
+        rows_per_call: None,
     };
     let Some(given) = given else {
         return Ok(asked);
@@ -152,6 +158,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
             ("inference_config", Value::Null) => {}
             ("inference_config", v @ Value::Object(_)) => asked.inference_config = Some(v.clone()),
             ("inference_config", _) => return Err(mistyped(name, "not_a_mapping")),
+            ("rows_per_call", v) => asked.rows_per_call = rows_per_call(v)?,
             ("random_seed", Value::Null) => asked.seed = AskedSeed::Unseeded,
             ("random_seed", v) => {
                 let (negative, digits) = integer(name, v)?;
@@ -162,6 +169,42 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         }
     }
     Ok(asked)
+}
+
+/// The batch size the caller chose (`rows_per_call_asked_for`): none for a
+/// value of none, which chooses no size; a whole number of at least one,
+/// any past `u64` read as `u64::MAX`, since the size only ever lowers the
+/// endpoint's own (`rows_one_call_scores`); anything else
+/// `INVALID_REQUEST` naming the field, a boolean, a float or text as
+/// mistyped (`not_a_whole_number`) and a whole number below one as
+/// `below_one`.
+pub fn rows_per_call(given: &Value) -> Result<Option<u64>, CoreError> {
+    if matches!(given, Value::Null) {
+        return Ok(None);
+    }
+    let Integer {
+        negative,
+        magnitude,
+    } = magnitude("rows_per_call", given)?;
+    match magnitude {
+        _ if negative => Err(invalid("rows_per_call", "below_one")),
+        Some(0) => Err(invalid("rows_per_call", "below_one")),
+        Some(n) => Ok(Some(u64::try_from(n).unwrap_or(u64::MAX))),
+        None => Ok(Some(u64::MAX)),
+    }
+}
+
+/// The most rows one model call scores (`predict_rows_max`, the serving
+/// layer's `TFM_MAX_TEST_ROWS`, which the reference's client and engine
+/// hold at 10,000 from `main`'s 1fc5a686). A temporal link prediction,
+/// which scores 200, is not a task this core gathers.
+pub const PREDICT_ROWS: u64 = 10_000;
+
+/// How many entities one call scores, as the caller asked or as the
+/// endpoint allows (`rows_one_call_scores`): the caller's size only ever
+/// lowers the endpoint's.
+pub fn rows_one_call_scores(asked: Option<u64>) -> u64 {
+    asked.map_or(PREDICT_ROWS, |n| n.min(PREDICT_ROWS))
 }
 
 /// A task's kind, as the engine names it.

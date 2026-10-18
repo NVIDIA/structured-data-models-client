@@ -79,6 +79,7 @@ TAKEN = frozenset(
         'random_seed',
         'prediction_statistic',
         'inference_config',
+        'rows_per_call',
     }
 )
 
@@ -91,6 +92,7 @@ VALUED = frozenset(
         'num_neighbors',
         'prediction_statistic',
         'inference_config',
+        'rows_per_call',
     }
 )
 
@@ -245,6 +247,13 @@ def gather(
     r"""The payloads of the request, gathered on the core, and the request
     state's version, which the request keeps for predict on the core.
 
+    A request of more entities than one call scores is gathered by the core
+    as several calls (``main``'s 1fc5a686, T2.8c): its payloads are each
+    call's, in order, and the state keeps how many rows each later call
+    scores. The most entities and calls one ``materialize`` holds are this
+    client's (``MOST_ENTITIES``, ``MOST_CALLS``), which the core holds the
+    call to.
+
     Raises:
         StructuredDataError: The core's refusal, as :mod:`.errors` maps it,
             ``UNSUPPORTED_REQUEST`` naming the rule for what it does not
@@ -290,6 +299,14 @@ def gather(
             }
         ),
     }
+    # The ceilings on what one materialize holds, which the caller may set
+    # as it sets the most steps of a forecast (T2.8c).
+    from sdm_client.materializers import relational
+
+    operation['most_entities'] = max(
+        0, min(int(relational.MOST_ENTITIES), 2**64 - 1)
+    )
+    operation['most_calls'] = max(0, min(int(relational.MOST_CALLS), 2**32 - 1))
     if isinstance(query, Unresolved) or str(
         getattr(query, 'problem_type', '')
     ).endswith('FORECAST'):
@@ -320,6 +337,14 @@ def gather(
         'version': state['version'],
         'facts': finished.result.get('query'),
     }
+    payloads = [payload]
+    if state.get('batches') is not None:
+        # A request asked in several calls (T2.8c): each later call's
+        # payload, in order, and the rows the core gathered it to score.
+        kept['batches'] = []
+        for batch in state['batches']:
+            payloads.append(json.loads(finished.take(batch['payload'])))
+            kept['batches'].append(batch['rows'])
     if state.get('forecast') is not None:
         # A forecast, which the core asked as one regression per step (T1.36
         # fix 21): step 1's query, and each later step's number, payload
@@ -333,7 +358,7 @@ def gather(
             )
             for step in state['forecast']
         ]
-    return (payload,), kept
+    return tuple(payloads), kept
 
 
 class Unresolved:

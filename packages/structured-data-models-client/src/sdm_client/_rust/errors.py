@@ -125,20 +125,85 @@ ERRORS: dict[str, tuple[type[StructuredDataError], str]] = {
 
 
 #: Refusals this client words beyond their code's sentence, by code and
-#: the ``field`` the error names: a request or call past the endpoint's
-#: size says the size and the limit, as the old route's refusal does
-#: (T1.28b, carried from T1.28a's review). A template is ``str.format``'s
-#: over the error's fields; one its fields cannot fill gives the code's
-#: sentence.
+#: the ``field`` the error names, and, where one field says several
+#: things, by its ``rule`` or ``remedy`` too: a request or call past the
+#: endpoint's size says the size and the limit, as the old route's refusal
+#: does (T1.28b, carried from T1.28a's review), and from T2.8c what to
+#: change, in the reference's words (``main``'s 1fc5a686,
+#: ``_said_in_this_client_s_terms``); the ceilings on what one
+#: ``materialize`` gathers, and a forecast over more entities than one call
+#: scores, say the counts, as the reference does. A template is
+#: ``str.format``'s over the error's fields; one its fields cannot fill
+#: gives the code's sentence.
 _TOO_LARGE = (
     'the request is {bytes:,} bytes and the endpoint takes at most {limit:,} '
     'bytes; reduce the number of tables in the graph, their columns, the '
     'neighbourhood sampled or the context gathered (num_context_samples)'
 )
-WORDED: dict[tuple[str, str], str] = {
+_SIZE = (
+    'Context size exceeds the 30MB limit: this call is {bytes:,} bytes and '
+    'the endpoint takes at most {limit:,}. '
+)
+_ASK_IN_SMALLER_CALLS = _SIZE + (
+    'What comes down is one of three. For an ordinary question it is the '
+    'call: materialize(rows_per_call=N) below the {rows_per_call:,} this one '
+    'holds asks for the same entities in more and smaller calls. Where the '
+    'context is itself over the limit, no call is small enough, and it is '
+    'num_context_samples, num_neighbors or the columns the graph carries. '
+    'For a ranking or a forecast, which is one call per candidate or step '
+    'and is never batched, it is the entities.'
+)
+_NO_CALL_IS_SMALLER = _SIZE + (
+    'A call already scores one row, so there is no smaller one to ask for: '
+    'what comes down is num_context_samples, num_neighbors or the columns '
+    'the graph carries.'
+)
+_ONE_MATERIALIZE_HOLDS = (
+    'is past the {limit:,} one materialize() will hold at once, since every '
+    'batch is built, with its own context, before any is sent; ask about '
+    'fewer entities at a time'
+)
+WORDED: dict[tuple[str, ...], str] = {
     ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
+    ('INVALID_REQUEST', 'payload', 'smaller_calls'): _ASK_IN_SMALLER_CALLS,
+    ('INVALID_REQUEST', 'payload', 'no_smaller_call'): _NO_CALL_IS_SMALLER,
     ('INVALID_REQUEST', 'call'): _TOO_LARGE,
+    ('INVALID_REQUEST', 'rows_per_call'): (
+        'rows_per_call is not a whole number of at least one, and a call '
+        'scores a whole number of rows, at least one'
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'most_entities'): (
+        '{entities:,} entities ' + _ONE_MATERIALIZE_HOLDS
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'most_entities_parts'): (
+        '{entities:,} entities gathered {gathered_times:,} times over, '
+        '{total:,} in all, ' + _ONE_MATERIALIZE_HOLDS
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'most_calls'): (
+        '{entities:,} entities are gathered as {calls:,} calls of '
+        '{rows_per_call:,}, and every one is built, with its own context, '
+        'before any is sent. That is past the {limit:,} calls this will hold '
+        'at once; ask about fewer entities at a time'
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'batched_part'): (
+        '{entities:,} entities are more than the {rows_per_call:,} one call '
+        'scores, and this question is asked as {parts:,} of them, one per '
+        'step. A part is not batched, and the calls would be the batches '
+        'times the steps rather than the steps that were counted. Ask about '
+        'fewer entities at a time'
+    ),
 }
+
+
+def _worded(code: str, details: dict[str, Any]) -> str | None:
+    r"""The template :data:`WORDED` holds for an error of ``code`` with
+    ``details``: by its field and rule or remedy where one is held, else by
+    its field."""
+    field = str(details.get('field'))
+    said = details.get('rule', details.get('remedy'))
+    if said == 'most_entities' and details.get('gathered_times', 1) != 1:
+        said = 'most_entities_parts'
+    return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
 
 
 class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
@@ -709,7 +774,7 @@ def error_from_core(
     details['retryable'] = bool(error.get('retryable', False))
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
-    template = WORDED.get((code, str(details.get('field'))))
+    template = _worded(code, details)
     if template is not None:
         # Fields its template cannot fill give the code's sentence.
         with contextlib.suppress(KeyError, IndexError, TypeError, ValueError):
