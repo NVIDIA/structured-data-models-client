@@ -1102,8 +1102,18 @@ jobs:
           status=0
           python -I contract/runners/run_python.py legs --database "$DATABASE" \
             --providers "$out/providers.json" "$reference" "${observed[@]+"${observed[@]}"}" || status=1
+          # The effective expectations on the phase branches, their lanes
+          # and the epic branch, as the gate's and cross-host's: each line
+          # of this database python-ref's committed line, moved by the
+          # approved entries (T2.1e).
+          where=$(python scripts/rust_core/ratchet.py where) || { echo 'ratchet.py where failed'; exit 1; }
+          expect=()
+          if [ -n "$where" ]; then
+            python scripts/rust_core/ratchet.py effective $where --out "$out/effective.json" || exit 1
+            expect=(--expect "$out/effective.json")
+          fi
           python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
-            --reference "$reference" "${observed[@]+"${observed[@]}"}" || status=1
+            --reference "$reference" ${expect[@]+"${expect[@]}"} "${observed[@]+"${observed[@]}"}" || status=1
           python - "${observed[@]+"${observed[@]}"}" <<'EOF' || status=1
           import json, os, sys
           cell = os.environ['CELL']

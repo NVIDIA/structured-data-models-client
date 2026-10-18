@@ -232,6 +232,9 @@ KNOWN_DIFFERING = 'rust/crates/sdm-core/tests/pql/known-differing.json'
 #: is held to them.
 CELL = 'ref-pandas3'
 RUNNERS = ('python-ref', 'python-core', 'python-old', 'rust-host')
+#: The runners a SQLite or Postgres line is observed on: the core's
+#: (python-old, the old route, runs on DuckDB only; T2.1a fix 4).
+DATABASE_RUNNERS = ('python-core', 'rust-host')
 PYTHON = ('python-ref', 'python-core', 'python-old')
 #: The core operations that read data, whose case has a driver record on
 #: rust-host.
@@ -1064,7 +1067,11 @@ def effective(
     ``INTERNAL_ERROR``; and on a first admission, a runner no baseline holds
     the case for, the reference's outcome (``reference``, the committed
     python-ref lines) moved the same way by an entry from ``none`` (E110),
-    with no expectation where none does, so the reference holds it. The
+    with no expectation where none does, so the reference holds it. A
+    SQLite or Postgres line (``<case>@<database>``), which no baseline
+    holds, has python-ref's committed line of that key as its baseline for
+    each core runner, moved the same way by an entry from that line's
+    outcome (T2.1e); a DuckDB line's is the held baseline as before. The
     reference plus approved deviations (design, "Reference observations
     and the gate"), for the comparator's outcome rule and for
     :func:`accept`."""
@@ -1072,6 +1079,23 @@ def effective(
     for runner, by_case in held.items():
         for case, line in by_case.items():
             want = dict(line['projection'])
+            found.setdefault(case, {})[runner] = (
+                moved(entries, case, runner, outcome_text(want), want) or want
+            )
+    for case, line in reference.items():
+        if case_of(case) == case:
+            continue
+        for runner in DATABASE_RUNNERS:
+            if case in held.get(runner, {}):
+                continue
+            # A runner's baseline holds only the fields it observes, as an
+            # accepted one does: rust-host's no stage and no error.
+            want = {
+                name: None if name in UNOBSERVED.get(runner, ()) else value
+                for name, value in projection(
+                    line, list(OUTCOME_FIELDS)
+                ).items()
+            }
             found.setdefault(case, {})[runner] = (
                 moved(entries, case, runner, outcome_text(want), want) or want
             )
