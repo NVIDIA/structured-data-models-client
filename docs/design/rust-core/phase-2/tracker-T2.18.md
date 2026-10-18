@@ -39,3 +39,7 @@ T2.18 is any column name (KO2-36): a column whose name holds a dot, a backtick o
 - `record_quirks.py` would drop the `core_only` marks on a re-record; the quirk test then fails on the two rows, by name.
 - Coverage rule 6 and the target and entity cases' cell claims (above): for the test author.
 - The filter role is T2.10's, which lifts the core's `target_filter` (the deferred cases and vectors in `contract/deferred/t210-column-filter/`).
+
+### Fix rounds
+
+- Round 1 (the Claude reviewer): `_resolve` keeps its interface, the route decided inside it (P2-1); `task=` refused for a query only the core resolves as for any relational query (P2-2); such a query's refusals said as for any query, a forecast's `top_k` and too many steps in the decomposition's words, a query the core does not resolve with the old validator's diagnostics, and a ranking over candidates refused by name without rename advice (P3-1 to P3-3). The test author's regressions (`test_t218_r1_regressions.py`) pass on all three databases. P3-4 (the gate needs a checkpoint holding T2.1f) is the orchestrator's.
