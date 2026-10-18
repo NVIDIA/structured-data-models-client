@@ -73,6 +73,9 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
 - Fix round 4 (Codex's and the Claude reviewer's round 3): a JSON column is a string field carrying Arrow's `arrow.json` metadata, which PyArrow 14.0.1, the floor, keeps (fix 12; `pa.json_()` does not exist there); a NaN in a wide whole `numeric` is missing, as the reference's null (fix 13); a composite primary or foreign key is refused by name at `describe_source`, `composite_key`, where the reference fails with an unnamed ValueError (fix 14, P2C-11, proposed for the reviewers under E66(b)).
   P2C-9 is approved by both round 3 reviewers.
   The test author's vectors `type.json`, `type.jsonb` and `type.numeric-100-0-nan` pass on the current venv and on the floor (PyArrow 14.0.1, pandas 2.2.2); `key.composite-primary` and `key.composite-foreign` pass once P2C-11 is approved.
+- Rebased onto T2.2's landing (5efb35e2): the Postgres dialect beside SQLite's in `sdm-data`, the bridges' `_provider` and T2.2's `_routing.on_the_core` taking Postgres's paths (built by `_on`, as SQLite's are), the time bounds read by T2.2's `Times::bounds` with fix 9's zoned and date readings, both lanes' register entries under their banners, and the refusal-map citations moved; the reader fills the catalog's new fields as every source but SQLite's does.
+  Round 5: fix 13's row rebuilt without concatenation (ruff RUF005), P2C-11's decision row E66, and the Postgres contract job runs the regression and key vectors on its service.
+  Judged as CI judges, Postgres, SQLite and DuckDB have no differences on either host.
 
 ## Carry items
 
