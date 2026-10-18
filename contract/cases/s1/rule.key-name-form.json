@@ -62,7 +62,19 @@
       "source": {
         "tables": [],
         "primary_keys": {},
-        "time_columns": {}
+        "time_columns": {},
+        "relationships": [
+          [
+            {
+              "table": "orders",
+              "column": "user_id"
+            },
+            {
+              "table": "users",
+              "column": "user"
+            }
+          ]
+        ]
       },
       "check_keys": true
     },

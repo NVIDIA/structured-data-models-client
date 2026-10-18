@@ -152,7 +152,14 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     problems = []
     source = core['describe_source']['source']
     named = given.get('from_source', {})
-    if source != {
+    wanted_links = [
+        [
+            {'table': link['source_table'], 'column': link['source_column']},
+            {'table': link['target_table'], 'column': link['target_column']},
+        ]
+        for link in named.get('relationships', [])
+    ]
+    if {k: v for k, v in source.items() if k != 'relationships'} != {
         'tables': list(named.get('tables', [])),
         'primary_keys': {
             t: {'value': k if isinstance(k, list) else [k]}
@@ -161,7 +168,7 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
         'time_columns': {
             t: {'value': c} for t, c in named.get('time_columns', {}).items()
         },
-    }:
+    } or source.get('relationships', []) != wanted_links:
         problems.append('describe_source is not of its source')
     materialize = core.get('materialize')
     # The operations a case carries are its call's, in order, from
@@ -389,6 +396,15 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     for case_id in (*T20C_DECIMAL, *T218_NAMES, *T212_RULES):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
+    # Seeded: a core whose links or composite key are not its input's.
+    case = copy.deepcopy(committed['rule.key-name-form'])
+    case['core']['describe_source']['source']['relationships'] = []
+    assert _held_to_its_input(case) != []
+    case = copy.deepcopy(committed['rule.composite-key-given'])
+    case['core']['describe_source']['source']['primary_keys'] = {
+        'orders': {'value': ['order_id']}
+    }
+    assert _held_to_its_input(case) != []
     for case_id in T219_SHAPES:
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert committed[case_id]['until'] == 'predict', case_id
