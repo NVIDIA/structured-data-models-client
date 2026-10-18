@@ -6753,16 +6753,20 @@ entries:
     reviewers check this entry fits it. Temporary: it lapses when T2.10
     lands, and the final gate fails while it remains. The rules were read
     from the core's refusals (details rule), the same on DuckDB with the
-    materialize route forced; T2.2 registers the same four on SQLite.
+    materialize route forced; T2.2 registers the same four on SQLite
+    (P2B-16). Each row names materialize under statements_differ (T2.1e),
+    as P2B-16's do: the reference's materialize statements are held only
+    through that call and reported as diagnostic, as the orchestrator
+    decided for the same four on SQLite.
   case_outcomes:
-  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
 
 - id: P2C-8
   title: On Postgres a multi-dimensional array column is left out, where the reference fails the source's description
