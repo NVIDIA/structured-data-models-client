@@ -36,17 +36,36 @@ The test author's 21 cases (`multicall.*`) on a scratch combined branch (`t28c-c
 - Answered parts, through the public API on both routes (a scratch probe): a failure on call 0, 1 and 2 of three, and on step 3 of a three-step forecast; `details` and `details['answered']` (its rows, model, request id, metadata and outputs) equal to the old route's in each.
 - The implementer's own Rust tests, `sdm-core`'s `tests/multi_call.rs` (8): the ids, the numbering, the metadata, the answered parts after a refusal and after a failed transport, none on a first-call failure, the context held per call, a forecast's answered steps, and a later call without an id refused.
 
-## What the gate would still report (needs the orchestrator)
+## Acceptance
 
-`compare.py` with the local python-ref recording as the reference finds three classes, the same on all three databases:
+The test author's five commits (`t28c-tests`, 72521060 to 6b86ea60) cherry-picked onto the lane, as the orchestrator asked:
 
-1. **The class name on the ceilings and the batched-forecast refusal** (`calls.101`, `entities.100001`, `forecast.batched`): `UnsupportedRequestError` where the reference raises `StructuredDataError`, code `UNSUPPORTED_REQUEST` equal; register P1B-20's approved difference (the Python host's one class for the code).
-2. **The payload rule's last call only**: python-core records `core.predicted.body` as the last call's and rust-host the same, while `compare.py` holds `[body]` against every request received (python-core) or the reference sent (rust-host), so any case of several calls fails "1 items against N" (`rows-per-call-3`, `calls.100`, `entities-per-call.10001`, and also a forecast of two steps, `forecast.one-call`). A judging gap: no earlier case made several calls.
-3. **An endpoint's refusal at predict** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`): python-core raises the reference's `NimRequestError` (code none) while its core ends `INVALID_RESPONSE` naming the status, which `compare.py`'s "outcome against core" holds equal; rust-host, which has no transport, reports `INVALID_RESPONSE`. A judging gap too: no earlier case had the endpoint refuse.
+- `contract/tests/test_t28c_multicall.py` (python-core, DuckDB, SQLite and Postgres 17 in the pinned image, `SDM_REQUIRE_POSTGRES=1`): every authored `py:` and `py-carried:` key passes (99 left `pending`).
+- `sdm-testkit`'s `tests/t28c_multicall.rs` (rust-host, DuckDB and SQLite): every authored `rust:` key passes (36 left `pending`).
+- `t28c-pending.json`'s `pending` is empty; `authored` is unchanged.
+- Register P1B-20 names the ceilings' and the batched forecast's cases on all three databases, as the test author asked.
+
+## The judging change, T2.1g (lane h, lands first)
+
+python-core recorded one call's body, the last, and the payload rule held it against every request received, so no case of several calls could pass.
+T2.1g (0a7f6aa1, lane h, from 8006efce) records every call's body (`core.predicted.calls`) on both core runners, holds them call by call, and has the test host read `RequestState.batches` and `CoreError.answered`; single-call lines are unchanged (`contract/tests/test_t21g_calls.py`).
+This lane carries the same files byte for byte (6efcdbd0) so its cases run here; once T2.1g lands, that commit is empty on the rebase.
+My own earlier edits to `run_python.py` and `host.rs` (a later call's id, the batches held) are subsumed by T2.1g's.
+
+## What the gate would still report
+
+`compare.py` (with T2.1g's rule) over python-core and rust-host on the committed reference lines, DuckDB:
+
+1. **The class name** on `calls.101`, `entities.100001` and `forecast.batched`: `UnsupportedRequestError` where the reference raises `StructuredDataError`, code equal; register P1B-20 (approved), whose cases now name them; the ratchet's baselines at landing hold it.
+2. **An endpoint's refusal at predict** (`fail-call-0`, `fail-call-2`, `forecast.fail-call-1`), not settled here:
+   - python-core raises the reference's `NimRequestError` (code none, its text and details the reference's, the answered parts carried) while its core ends `INVALID_RESPONSE` naming the status, which the outcome rule's "outcome against core" holds equal (`_core_consistent`); before this package the host cancelled the run, and the rule's "not one prediction or one error" failed instead, so no flow passes it: no earlier case had the endpoint refuse.
+   - rust-host, which has no transport, reports the core's `INVALID_RESPONSE`, where the reference's outcome has no code.
+   Either a judging change (the predict branch of the outcome rule taking an endpoint's refusal, `NimRequestError` with no code, as agreeing with `INVALID_RESPONSE`) or register entries; for the orchestrator.
 
 ## Deviations and what is left
 
-- No new register entry: on every case the core answers, both hosts match the reference on all three databases, but for the three classes above.
-- The judging-path files touched: `contract/runners/run_python.py` (a later call's request id, a few lines) and `sdm-testkit`'s `host.rs` (the batches held and handed back), each a host's reading of the contract's `RequestState.batches`, which the test author's commit leaves to the implementer; `scripts/rust_core/bridge_changes.json` and the freeze baseline; `docs/design/rust-core/register.yaml` (the three retirements).
-  `compare.py` is untouched; items 2 and 3 above need a judging change, which this package has not made.
-- The python-ref lines and baselines for the cases are the test author's and the combined branch's (as at T2.19).
+- No new register entry; P2B-3, P2B-4 and P2B-9 retired, P1B-20's cases extended.
+- Judging-path files touched on this lane: `contract/runners/run_python.py`, `scripts/rust_core/compare.py`, `contract/observation.schema.json` and `sdm-testkit`'s host (T2.1g's, mirrored); `scripts/rust_core/bridge_changes.json` and the freeze baseline; `contract/refusal-maps/` (three line citations); `docs/design/rust-core/register.yaml`.
+- At landing: the cases' baselines (`ratchet.py accept`) and the SQLite and Postgres goldens for the cases' statements, as at T2.19; `tests/test_contract_cases.py`'s `_not_synthesizable` still names the six multi-call cases the test author left out before T2.1g.
+- The local `contract/tests` run (4,462 passed) failed 132 tests, every one the recorded-environment guard of this machine's venv (pandas and pyarrow not a recorded cell: `test_t136_host2_*`, `test_gate_modes`, `test_gate_evidence_paths`, `test_t20_locked_set`), none of this package's behavior.
+- Found while probing, not this package's: the differential's 50 sources show 7 "schema after the edits" differences (`from_source` reads a column's meaning, `d`, as categorical where the reference reads numerical), the same with one call or two.
