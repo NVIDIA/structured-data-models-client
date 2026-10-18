@@ -44,6 +44,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from contextlib import nullcontext
+from decimal import Decimal
 from typing import Any
 
 #: Rows per Arrow batch; a larger result comes as several.
@@ -287,7 +288,39 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
 def _array(values: Any, kind: Any) -> Any:
     import pyarrow as pa
 
-    return pa.array(values, type=kind)
+    return pa.array([_cell(value, kind) for value in values], type=kind)
+
+
+def _cell(value: Any, kind: Any) -> Any:
+    r"""A driver's value in its column's Arrow form: a value of a type read
+    as text (a ``uuid``, an ``inet``, a ``cidr``) as the reference's text of
+    it, Python's ``str``; an unconstrained ``numeric`` as the double the
+    reference reads it as; an array's elements each so, a multi-dimensional
+    array's in row-major order (Arrow's list holds one dimension; the core
+    sends no list); anything else as the driver gives it."""
+    import pyarrow as pa
+
+    if value is None:
+        return None
+    if pa.types.is_list(kind):
+        return [_cell(item, kind.value_type) for item in _elements(value)]
+    if pa.types.is_string(kind) and not isinstance(value, str):
+        return str(value)
+    if pa.types.is_floating(kind) and isinstance(value, Decimal):
+        return float(value)
+    return value
+
+
+def _elements(value: Any) -> list[Any]:
+    r"""An array's elements, a multi-dimensional array's in row-major
+    order."""
+    found: list[Any] = []
+    for item in value:
+        if isinstance(item, list):
+            found.extend(_elements(item))
+        else:
+            found.append(item)
+    return found
 
 
 def _arrow_type(column: Any, connection: Any) -> Any:
@@ -306,12 +339,15 @@ def _arrow_type(column: Any, connection: Any) -> Any:
 
 
 def _element_type(name: str) -> Any:
-    r"""An array element's Arrow type: the scalar's, a ``numeric`` element
-    read as the driver's value, of no declared scale (text)."""
+    r"""An array element's Arrow type: the scalar's; a ``numeric`` element,
+    whose array carries no scale of its own, a double, as the reference
+    reads one; any other the text the driver gives."""
     import pyarrow as pa
 
     if name in _SCALARS:
         return getattr(pa, _SCALARS[name])()
+    if name == 'numeric':
+        return pa.float64()
     if name == 'timestamp':
         return pa.timestamp('us')
     if name == 'time':
@@ -326,9 +362,11 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
         return getattr(pa, _SCALARS[name])()
     if name == 'numeric':
         precision, scale = column.precision, column.scale
-        if precision is None:
-            # Declared without a precision: any value, held as its text.
-            return pa.string()
+        if precision is None or (scale or 0) < 0:
+            # Declared without a precision or scale, or with a negative
+            # scale, which the core's wire takes no decimal of: the double
+            # the reference reads.
+            return pa.float64()
         if precision <= 38:
             return pa.decimal128(precision, scale or 0)
         return pa.decimal256(precision, scale or 0)
