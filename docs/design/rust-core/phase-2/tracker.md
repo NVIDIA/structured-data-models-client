@@ -27,7 +27,7 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.7 | Non-SQL provider and swapped data layer | C | not started | – | |
 | T2.8a | Ranking, materialize side | D | not started | – | |
 | T2.8b | Ranking, predict side | D | not started | – | |
-| T2.8c | Multi-call `predict` | G | not started | – | `main`'s 1fc5a686; 6–8 h; first wave |
+| T2.8c | Multi-call `predict` | G (run in lane f's worktree) | in progress | – | `main`'s 1fc5a686; 6–8 h; first wave; [tracker-T2.8c.md](tracker-T2.8c.md) |
 | T2.9 | Forecasting | E | not started | – | |
 | T2.10 | PQL targets | E | not started | – | |
 | T2.13 | Query and option long tail | D | not started | – | |
@@ -35,7 +35,7 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.11 | Sampling options | F | not started | – | |
 | T2.17 | Exact decimals | D | not started | – | KO2-35; first wave |
 | T2.18 | Any column name | E | not started | – | KO2-36; first wave |
-| T2.19 | Two-path sampling | F | in progress | – | `main`'s eb6c68eb; first wave; [tracker-T2.19.md](tracker-T2.19.md) |
+| T2.19 | Two-path sampling | F | landed | dfdd532a | `main`'s eb6c68eb; first wave; [tracker-T2.19.md](tracker-T2.19.md) |
 | T2.14a | Bridge freeze widened | A | not started | – | |
 | T2.14b | Host clean-up | A | not started | – | |
 | T2.14c | Bridge freeze lowered | A | not started | – | |
