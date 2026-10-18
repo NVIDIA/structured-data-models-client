@@ -413,7 +413,9 @@ def _json(value: Any, where: str) -> str:
     )
 
 
-def _sqlite_value(value: Any, name: str, where: str) -> Any:
+def _sqlite_value(
+    value: Any, name: str, where: str, refuse_negative_zero: bool = True
+) -> Any:
     r"""A cell as SQLite stores it, by the type map's entry ``name``."""
     if value is None:
         return None
@@ -429,7 +431,8 @@ def _sqlite_value(value: Any, name: str, where: str) -> Any:
         # sqlite_refuses).
         raise Unloadable(f'{where}: a NaN, which SQLite stores as NULL')
     if (
-        name in ('float32', 'float64')
+        refuse_negative_zero
+        and name in ('float32', 'float64')
         and value == 0
         and math.copysign(1, value) < 0
     ):
@@ -712,7 +715,9 @@ def _no_nul(text: Any, where: str) -> Any:
     return text
 
 
-def _load_sqlite(duck: Any, target: Path) -> None:
+def _load_sqlite(
+    duck: Any, target: Path, refuse_negative_zero: bool = True
+) -> None:
     import sqlite3
 
     target = Path(target)
@@ -738,7 +743,9 @@ def _load_sqlite(duck: Any, target: Path) -> None:
                     + (' NOT NULL' if field.name in not_null else '')
                 )
                 convert.append(
-                    lambda value, n=name, w=where: _sqlite_value(value, n, w)
+                    lambda value, n=name, w=where: _sqlite_value(
+                        value, n, w, refuse_negative_zero
+                    )
                 )
             connection.execute(
                 f'CREATE TABLE {quote(table)} ('
@@ -801,14 +808,26 @@ def _load_postgres(duck: Any, dsn: str) -> None:
                     copy.write_row(row)
 
 
-def load(duck: Any, database: str, target: str | Path) -> None:
+def load(
+    duck: Any,
+    database: str,
+    target: str | Path,
+    *,
+    refuse_negative_zero: bool = True,
+) -> None:
     r"""Every table of ``duck``'s main schema, loaded into ``database``
     (``'sqlite'``: a new file at ``target``; ``'postgres'``: the libpq DSN
     ``target``, the tables created in its current schema), each column
     stored as the type map says; :class:`Unloadable` names a column the
-    target cannot hold."""
+    target cannot hold.
+
+    A float -0.0, which SQLite stores as 0.0, is refused on SQLite unless
+    ``refuse_negative_zero`` is false: a caller whose expected answers
+    already read the zeros as SQLite stores them (the provider kit's
+    ``zeros``) loads it as 0.0; a contract case, which names the value it
+    holds, never does."""
     if database == 'sqlite':
-        _load_sqlite(duck, Path(target))
+        _load_sqlite(duck, Path(target), refuse_negative_zero)
     elif database == 'postgres':
         _load_postgres(duck, str(target))
     else:

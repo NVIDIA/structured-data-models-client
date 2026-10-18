@@ -16,6 +16,7 @@ import json
 import re
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 from types import ModuleType
 
@@ -318,6 +319,17 @@ def test_a_negative_zero_sqlite_cannot_hold_is_refused_by_name(
     assert _sqlite_rows(
         tmp_path / 'plus', 'CREATE TABLE t AS SELECT 0.0::DOUBLE AS v'
     ) == [(0.0,)]
+    # A caller that reads the zeros as SQLite stores them (the provider
+    # kit) loads -0.0 as 0.0.
+    import duckdb
+
+    duck = duckdb.connect()
+    duck.execute("CREATE TABLE t AS SELECT '-0.0'::DOUBLE AS v")
+    target = tmp_path / 'kept.sqlite'
+    databases.load(duck, 'sqlite', target, refuse_negative_zero=False)
+    duck.close()
+    with closing(sqlite3.connect(target)) as connection:
+        assert connection.execute('SELECT v FROM t').fetchall() == [(0.0,)]
 
 
 def test_nested_composites_load_on_postgres() -> None:

@@ -438,7 +438,9 @@ def test_the_dataset_loads_into_sqlite_through_the_contract_loader(
     duck = duckdb.connect()
     duck.execute((KIT_DIR / 'dataset.sql').read_text(encoding='utf-8'))
     target = tmp_path / 'kit.sqlite'
-    loader.load(duck, 'sqlite', target)
+    # zeros' -0.0 is stored as SQLite stores it (0.0), as the kit's
+    # expected answers read it (provider_kit.load_sqlite).
+    loader.load(duck, 'sqlite', target, refuse_negative_zero=False)
     duck.close()
     with sqlite3.connect(target) as sqlite:
         for table, (columns, rows) in record.tables().items():
