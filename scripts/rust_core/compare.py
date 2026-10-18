@@ -83,7 +83,10 @@ policy names under ``reach``. A diagnostic rule only reports. The rules:
   where both runners read them from a Python driver, its Arrow schema
   where both read Arrow, and its rows in canonical form, in order only for
   a statement the policy's ``ordered`` names, otherwise as a multiset;
-  between the core runners, each statement's result likewise. A runner's
+  between the core runners, each statement's result likewise. On
+  Postgres the reference's two reads whose results it never uses, the
+  current schema's name and each table's row count, are not expected
+  (KO2-58), every other statement is. A runner's
   record of what ran (the driver capture on a Python runner, the
   provider's own record on ``rust-host``) must be complete, its counts
   equal to DuckDB's own query log; ``rust-host`` is held to the public
@@ -1630,6 +1633,36 @@ def _by_stage(
     return grouped
 
 
+#: The reference's two reads on Postgres whose results it never uses, which
+#: the core does not make (KO2-58, approved by the owner on 2026-10-17):
+#: the current schema's name, and each table's row count.
+_POSTGRES_UNUSED_READS = (
+    re.compile(r'SELECT current_schema\(\)'),
+    re.compile(r'SELECT COUNT\(\*\) FROM "(?:[^"]|"")+"\."(?:[^"]|"")+"'),
+)
+
+
+def _expected_statements(
+    statements: list[dict[str, Any]], database: str
+) -> list[dict[str, Any]]:
+    r"""The reference's ``statements`` of one public call that a core runner
+    is expected to match: on Postgres, all but the two reads whose results
+    the reference never uses (:data:`_POSTGRES_UNUSED_READS`, KO2-58), each
+    with no parameters; every one elsewhere."""
+    if database != 'postgres':
+        return statements
+    return [
+        each
+        for each in statements
+        if not (
+            each['parameters'] is None
+            and any(
+                shape.fullmatch(each['sql']) for shape in _POSTGRES_UNUSED_READS
+            )
+        )
+    ]
+
+
 def _stages(case: dict[str, Any], who: str) -> tuple[str, ...]:
     r"""The public calls whose statements this runner is held to: every
     one on a Python runner, which makes the case's public calls through
@@ -2051,7 +2084,8 @@ def _sql(
     assert mine is not None and theirs is not None
     for stage in stages:
         since = len(report.failures)
-        ours, refs = mine.get(stage, []), theirs.get(stage, [])
+        ours = mine.get(stage, [])
+        refs = _expected_statements(theirs.get(stage, []), database)
         if stage == stop and len(ours) > len(refs):
             # Those after the reference's own came after it stopped.
             ours = ours[: len(refs)]

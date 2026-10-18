@@ -1112,8 +1112,11 @@ jobs:
             python scripts/rust_core/ratchet.py effective $where --out "$out/effective.json" || exit 1
             expect=(--expect "$out/effective.json")
           fi
+          # The candidate's register too, so an owner-approved entry's
+          # more_exact fields count, as the gate's (T2.1e).
           python scripts/rust_core/compare.py --cases contract/cases --database "$DATABASE" \
-            --reference "$reference" ${expect[@]+"${expect[@]}"} "${observed[@]+"${observed[@]}"}" || status=1
+            --reference "$reference" ${expect[@]+"${expect[@]}"} \
+            --register docs/design/rust-core/register.yaml "${observed[@]+"${observed[@]}"}" || status=1
           python - "${observed[@]+"${observed[@]}"}" <<'EOF' || status=1
           import json, os, sys
           cell = os.environ['CELL']
