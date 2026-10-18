@@ -2820,6 +2820,10 @@ entries:
     entities, more than 100 calls) and its batched-forecast refusal, which
     the reference raises as StructuredDataError(UNSUPPORTED_REQUEST) and
     the core refuses with the same code and details; their cases added.
+  case_outcomes:
+  - {case: multicall.calls.101, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T2.8c): the outcome this entry states, held as the case is admitted'}
+  - {case: multicall.entities.100001, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T2.8c): the outcome this entry states, held as the case is admitted'}
+  - {case: multicall.forecast.batched, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T2.8c): the outcome this entry states, held as the case is admitted'}
 
 - id: P1B-21
   title: AVG, MIN or MAX compared with NULL is refused by name only where the reference fails INTERNAL_ERROR
