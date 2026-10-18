@@ -1,7 +1,7 @@
 # Phase 2 tracker: T2.18
 
 The design branch owns `tracker.md`; this file holds T2.18's section until it folds in.
-Lane e, on T2.1f (23fd0b1e, lane d: the comparator's `core_only_columns`, a judging package landing first) over the phase head after T2.4's landing (8006efce), then the test author's acceptance tests (`T2.18 tests:` commits, from `t218-tests`), then this package (`T2.18:` commits).
+Lane e, on the phase head after T2.1f's landing (dfce343e: the comparator's `core_only_columns`, a judging package that landed first, over T2.4's landing), then the test author's acceptance tests (`T2.18 tests:` commits, from `t218-tests`), then this package (`T2.18:` commits).
 The filter role moved to T2.10 by the orchestrator's decision: the test author moved its three cases and vectors to `contract/deferred/t210-column-filter/`, and T2.18 covers the other four roles.
 
 ## T2.18
