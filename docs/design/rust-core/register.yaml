@@ -6210,7 +6210,7 @@ entries:
     relayed by the orchestrator.
   case_outcomes:
   - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
-  - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
+  - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_REQUEST', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
 
 - id: P2B-11
   title: On SQLite, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
@@ -6250,7 +6250,7 @@ entries:
     DT-15's dropped value, is the old behavior the same new one replaces.
   case_outcomes:
   - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
-  - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
+  - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
 
 - id: P2B-12
   title: On SQLite, an unsigned key past int64 is joined by its stored text where the reference fails INTERNAL_ERROR ingesting it
@@ -6286,7 +6286,7 @@ entries:
     each key), relayed by the orchestrator.
   case_outcomes:
   - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the keys joined by their stored text'}
-  - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success', summary: 'the SQLite line: the keys joined by their stored text'}
+  - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'success', summary: 'the SQLite line: the keys joined by their stored text'}
 
 - id: P2B-13
   title: On SQLite, a time of day stored as text is a categorical feature, where the reference reads it as today's timestamp and refuses
@@ -6316,9 +6316,14 @@ entries:
     Approver: owner (not a crash replaced, so outside KO2-11's reviewer
     classes): the core answers where the reference refuses, its reading the
     owner's E68 list. Measured at T2.2.
+  more_exact:
+  - case: time.feature-time-of-day@sqlite
+    runners: [python-core, rust-host]
+    fields:
+    - 'public.schema/tables/1/columns/3/stype'
   case_outcomes:
   - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
-  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
 
 - id: P2B-14
   title: On SQLite, a column declared INTERVAL holding text is text, where the reference takes it as an integer by its declared name
@@ -6348,6 +6353,11 @@ entries:
     materialize and predict (its committed routes stop at from_source,
     where DuckDB's reference refuses): the payload, warnings and result
     match, the schema's dtype does not.
+  more_exact:
+  - case: time.feature-interval@sqlite
+    runners: [python-core, rust-host]
+    fields:
+    - 'public.schema/tables/1/columns/3/dtype'
 
 - id: P2B-15
   title: On SQLite, a sample seed past 2**64 - 1 is refused by name, where the reference takes any non-negative integer
@@ -6408,6 +6418,15 @@ entries:
     it remains (register.py's TEMPORARY). Its cases' SQLite lines
     (<case>@sqlite) are the ones it covers. Measured at T2.2 on python-core
     and rust-host.
+  case_outcomes:
+  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
 
 - id: P2B-17
   title: On SQLite, a stored time's spelling is read once per call, where the reference reads it once per materializer
@@ -6431,10 +6450,13 @@ entries:
     route.
   cases: []
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/backend/sqlite/sampler.py#SQLiteSampler._time_spelling']
-  status: proposed
-  approved_by: null
+  status: rejected
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Approver: reviewer (an extra statement, the answers equal), unless the
     owner takes it. Measured by T2.2's round 1 review (Claude P2-2 (d));
-    no contract case calls materialize twice on one query.
+    no contract case calls materialize twice on one query. Rejected as
+    fixed (T2.2 fix 14, round 2's Claude P2-B): the sampler's memo of
+    decision E52 keeps the spelling across a materializer's runs, so a
+    second materialize reads none, as the reference; the ID is kept.
