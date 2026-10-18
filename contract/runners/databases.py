@@ -44,7 +44,8 @@ TARGETS = ('sqlite', 'postgres')
 #: JSON text; ``iso``: ISO 8601 text; ``digits``: the integer's decimal
 #: digits), and its absence means the engine's own type holds the value.
 #: ``<engine>_refuses`` names a value of the type the engine cannot hold at
-#: all (SQLite stores a NaN as NULL), which the loader refuses by name.
+#: all (SQLite stores a NaN as NULL), which the loader refuses by name; it
+#: refuses a float -0.0 on SQLite too, which SQLite stores as 0.0.
 #: ``(p,s)`` is the column's precision and scale; ``(n)`` the column's own
 #: composite type, created beside its table and named by
 #: :func:`composite_name`. A value past what the engine's
@@ -427,6 +428,14 @@ def _sqlite_value(value: Any, name: str, where: str) -> Any:
         # refused by name, never loaded as a null (the type map's
         # sqlite_refuses).
         raise Unloadable(f'{where}: a NaN, which SQLite stores as NULL')
+    if (
+        name in ('float32', 'float64')
+        and value == 0
+        and math.copysign(1, value) < 0
+    ):
+        # SQLite stores a REAL -0.0 as 0.0 (a whole REAL is written as an
+        # integer): refused by name, as a NaN is, never loaded changed.
+        raise Unloadable(f'{where}: -0.0, which SQLite stores as 0.0')
     if name in ('date', 'time', 'timestamp', 'timestamptz', 'interval'):
         return _iso(value)
     if name in ('list', 'struct', 'map', 'union'):

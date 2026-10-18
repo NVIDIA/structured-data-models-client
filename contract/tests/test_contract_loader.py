@@ -292,6 +292,26 @@ def test_a_nan_sqlite_cannot_hold_is_refused_by_name(tmp_path: Path) -> None:
         _sqlite_rows(tmp_path, "CREATE TABLE t AS SELECT 'NaN'::DOUBLE AS v")
 
 
+def test_a_negative_zero_sqlite_cannot_hold_is_refused_by_name(
+    tmp_path: Path,
+) -> None:
+    r"""T2.12: SQLite stores a REAL -0.0 as 0.0, so the loader refuses it,
+    naming the column, rather than load another value; 0.0 still loads."""
+    for name in ('minus', 'minus32', 'plus'):
+        (tmp_path / name).mkdir()
+    with pytest.raises(databases.Unloadable, match=r't\.v: -0\.0'):
+        _sqlite_rows(
+            tmp_path / 'minus', "CREATE TABLE t AS SELECT '-0.0'::DOUBLE AS v"
+        )
+    with pytest.raises(databases.Unloadable, match=r't\.v: -0\.0'):
+        _sqlite_rows(
+            tmp_path / 'minus32', "CREATE TABLE t AS SELECT '-0.0'::FLOAT AS v"
+        )
+    assert _sqlite_rows(
+        tmp_path / 'plus', 'CREATE TABLE t AS SELECT 0.0::DOUBLE AS v'
+    ) == [(0.0,)]
+
+
 def test_nested_composites_load_on_postgres() -> None:
     r"""T2.1a fix 1: a struct in a struct, and a list of structs, load on
     Postgres as composite types created inner first."""
