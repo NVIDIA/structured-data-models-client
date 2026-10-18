@@ -610,20 +610,19 @@ jobs:
           python-version: '3.10'
       # The connectors are for the canary test's journey over DuckDB
       # (T1.11d), which tests_test_ops runs here at the floor, and psycopg
-      # for the Postgres provider's test (their postgres extra). L5's test
-      # runs in l5-conversion, in every cell.
+      # for the Postgres provider's test, and ADBC's SQLite driver for L5's,
+      # which runs here at the floor as in l5-conversion (their extras).
       - name: The binding's tests on the test-ops build
         run: |
           python -m venv /tmp/test-ops
           /tmp/test-ops/bin/pip install --quiet pytest $BINDING_FLOOR \
             ./packages/structured-data-models-api ./packages/structured-data-models-pql \
-            './packages/structured-data-models-connectors[postgres]' \
+            './packages/structured-data-models-connectors[sqlite,postgres]' \
             "$(ls native-test-ops/*.whl)"
           /tmp/test-ops/bin/python -m pytest rust/bindings/sdm-py/tests -q \
             -p no:cacheprovider --native-build test-ops
           /tmp/test-ops/bin/python -m pytest packages/structured-data-models-client/tests_test_ops -q \
-            -p no:cacheprovider \
-            --ignore=packages/structured-data-models-client/tests_test_ops/test_l5_conversion.py
+            -p no:cacheprovider
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-wheel-test-ops
