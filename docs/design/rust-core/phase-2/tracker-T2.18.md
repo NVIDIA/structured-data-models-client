@@ -29,6 +29,7 @@ T2.18 is any column name (KO2-36): a column whose name holds a dot, a backtick o
 - The twelve cases through this tree's `compare.py` (T2.1f) on each database, against python-ref with the effective expectations: no gated difference; python-core and rust-host agree on every core field, the operations and inputs included.
   Without `core_only_columns`, 51, 51 and 33: the column in the public schema, the request and the statement results, a link where it is the key, and the reference's from_source `SDMWarning`.
 - The client's core-route suites (723 tests), the binding's tests, `test_contract_cases.py` and `test_t22_sqlite.py`, `t22_sqlite.rs`, the corpus, quirks and adapter tests, `cargo test --workspace` and the cheap prepush tier: pass.
+- The gate's full-corpus tests on T2.1f (`test_cross_host`, `test_runners`, `test_t20_checkpoints`, `test_t20f_gate`, `test_gate_*`, `test_t20_locked_set`, `test_contract_cases`, T2.18's and T2.1f's): no comparator difference left; 31 still fail, each on coverage rule 6 alone: the six `name.*-target` and `name.*-entity` cases claim the cells `utf8/target` and `int64/foreign-key`, which their reference observations (refused at materialize, the column left out) never show (the test author's case files).
 - `pytest contract/tests -n 4 --dist loadfile` before T2.1f (a Postgres server named): 4,373 passed, 161 failed: 118 `test_t136_host2_*`, which hold their recorded answers to the ref-pandas3 cell's versions, not this machine's venv's, and 43 full-corpus gate runs, every difference a `name.*` case's, which T2.1f and the deferral of the filter role answer.
 
 ### Deviations and questions
@@ -36,4 +37,5 @@ T2.18 is any column name (KO2-36): a column whose name holds a dot, a backtick o
 - **The contract**: `Materialized.query` is a v26 addition, recorded as T2.2's was, as a deviation from all vocabulary in T2.1b.
 - A query the core cannot resolve over a schema holding such a column is refused by the core's materialize (`INVALID_REQUEST`, field `query`), not with the old validator's diagnostics; the code is the same.
 - `record_quirks.py` would drop the `core_only` marks on a re-record; the quirk test then fails on the two rows, by name.
+- Coverage rule 6 and the target and entity cases' cell claims (above): for the test author.
 - The filter role is T2.10's, which lifts the core's `target_filter` (the deferred cases and vectors in `contract/deferred/t210-column-filter/`).
