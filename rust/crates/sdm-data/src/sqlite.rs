@@ -1023,11 +1023,16 @@ pub(crate) fn read(
                     }
                 }
             }
-            // The rowid alias: a primary key of one column declared
-            // `INTEGER`, which SQLite keeps unique and never null.
-            let keyed: Vec<usize> = (0..read.len()).filter(|&i| read[i].3).collect();
-            let rowid = match keyed.as_slice() {
-                [only] if read[*only].1.trim().eq_ignore_ascii_case("INTEGER") => Some(*only),
+            // The rowid alias as the reference reads it (`SQLiteTable`'s
+            // rowid candidates): the one primary key column declared
+            // `INTEGER`, kept unique and never null. SQLite makes only a
+            // primary key of that one column the alias; the reference takes
+            // a composite key's one `INTEGER` column too, and so does this.
+            let candidates: Vec<usize> = (0..read.len())
+                .filter(|&i| read[i].3 && read[i].1.trim().eq_ignore_ascii_case("INTEGER"))
+                .collect();
+            let rowid = match candidates.as_slice() {
+                [only] => Some(*only),
                 _ => None,
             };
             Ok(CatalogAnswer::Columns(
