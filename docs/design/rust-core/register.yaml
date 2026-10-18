@@ -6408,3 +6408,33 @@ entries:
     it remains (register.py's TEMPORARY). Its cases' SQLite lines
     (<case>@sqlite) are the ones it covers. Measured at T2.2 on python-core
     and rust-host.
+
+- id: P2B-17
+  title: On SQLite, a stored time's spelling is read once per call, where the reference reads it once per materializer
+  kind: change
+  old_behavior: >-
+    The reference's SQLite sampler reads one stored value of a table's time
+    column (SELECT ts FROM t WHERE ts IS NOT NULL LIMIT 1) before its first
+    windowed read and keeps the spelling for the sampler's life, which a
+    PredictiveQuery's materializer holds across its calls; a second
+    materialize of the same query reads none.
+  new_behavior: >-
+    The core reads the spelling once per run, before the table's first
+    windowed read, so a second materialize of the same query on the core
+    route reads it again: one statement more, the same answers. A run
+    holds no state of an earlier one, and holding it across calls would
+    need the host to keep it and hand it back (a contract field), which no
+    other read has.
+  affected_inputs: >-
+    A second PredictiveQuery.materialize of one query over a SQLite source
+    whose window reads a time column stored as text, under a forced core
+    route.
+  cases: []
+  refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/backend/sqlite/sampler.py#SQLiteSampler._time_spelling']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer (an extra statement, the answers equal), unless the
+    owner takes it. Measured by T2.2's round 1 review (Claude P2-2 (d));
+    no contract case calls materialize twice on one query.
