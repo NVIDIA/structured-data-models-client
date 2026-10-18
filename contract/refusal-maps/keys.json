@@ -12,7 +12,18 @@
     "key.varchar-large-buffers",
     "key.varchar",
     "null.some-foreign-keys",
-    "decimal.key-wide"
+    "decimal.key-wide",
+    "shape.chain.addresses",
+    "shape.diamond-from-source",
+    "shape.diamond.addresses",
+    "shape.one-column-two-tables",
+    "shape.same-table-twice.buyers",
+    "shape.same-table-twice.customers",
+    "shape.star.customers",
+    "shape.star.products",
+    "shape.star.stores",
+    "shape.two-paths.keyed",
+    "shape.two-paths.keyless"
   ],
   "reading": "The first refusal of each probe; each case of the keys family probed as it is, none with a removal, since what each varies is the key its question reads. From T1.32a the core casts the entities to the key's type (sdm_engine::keys::cast) and samples decimal keys: the integer, unsigned, text and decimal keys reach predict's result on both runners, key.varchar-large-buffers too, where the reference refuses (P1B-6), the decimal keys where the reference fails (P1B-33), a decimal key with a scale written as its exact text; the uint64 keys past int64 are refused as the reference refuses them, when the payload is written.",
   "gaps": [],
@@ -1145,6 +1156,2329 @@
             "model": "kumo-relational"
           }
         }
+      }
+    },
+    {
+      "id": "shape.chain.addresses",
+      "case": "shape.chain.addresses",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE addresses AS SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE lines AS SELECT i AS lid, i % 40 AS oid, i % 7 AS qty, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts, i AS tag FROM range(120) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "addresses": "addresses",
+              "customers": "customers",
+              "lines": "lines",
+              "orders": "orders"
+            },
+            "primary_keys": {
+              "addresses": "aid",
+              "customers": "cid",
+              "lines": "lid",
+              "orders": "oid"
+            },
+            "time_columns": {
+              "lines": "ts",
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "lines",
+                "source_column": "oid",
+                "target_table": "orders",
+                "target_column": "oid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "customers",
+                "source_column": "aid",
+                "target_table": "addresses",
+                "target_column": "aid"
+              }
+            ]
+          },
+          "pql": "PREDICT addresses.city FOR EACH addresses.aid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE addresses AS SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE lines AS SELECT i AS lid, i % 40 AS oid, i % 7 AS qty, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts, i AS tag FROM range(120) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "addresses",
+                  "source": {
+                    "source": [
+                      "addresses"
+                    ]
+                  }
+                },
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "lines",
+                  "source": {
+                    "source": [
+                      "lines"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "addresses": {
+                  "value": [
+                    "aid"
+                  ]
+                },
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "lines": {
+                  "value": [
+                    "lid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "lines": {
+                  "value": "ts"
+                },
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "lines",
+                    "column": "oid"
+                  },
+                  {
+                    "table": "orders",
+                    "column": "oid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "customers",
+                    "column": "aid"
+                  },
+                  {
+                    "table": "addresses",
+                    "column": "aid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.diamond-from-source",
+      "case": "shape.diamond-from-source",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/all-tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE addresses (aid BIGINT PRIMARY KEY, city VARCHAR, tag BIGINT)",
+            "CREATE TABLE customers (cid BIGINT PRIMARY KEY, aid BIGINT REFERENCES addresses (aid), seg VARCHAR, tag BIGINT)",
+            "CREATE TABLE orders (oid BIGINT PRIMARY KEY, cid BIGINT REFERENCES customers (cid), aid BIGINT REFERENCES addresses (aid), pid BIGINT, sid BIGINT, ts TIMESTAMP, tag BIGINT)",
+            "INSERT INTO addresses SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+            "INSERT INTO customers SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "INSERT INTO orders SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+          ],
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH addresses.aid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE addresses (aid BIGINT PRIMARY KEY, city VARCHAR, tag BIGINT)",
+          "CREATE TABLE customers (cid BIGINT PRIMARY KEY, aid BIGINT REFERENCES addresses (aid), seg VARCHAR, tag BIGINT)",
+          "CREATE TABLE orders (oid BIGINT PRIMARY KEY, cid BIGINT REFERENCES customers (cid), aid BIGINT REFERENCES addresses (aid), pid BIGINT, sid BIGINT, ts TIMESTAMP, tag BIGINT)",
+          "INSERT INTO addresses SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+          "INSERT INTO customers SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "INSERT INTO orders SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [],
+              "primary_keys": {},
+              "time_columns": {}
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.diamond.addresses",
+      "case": "shape.diamond.addresses",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE addresses AS SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "addresses": "addresses",
+              "customers": "customers",
+              "orders": "orders"
+            },
+            "primary_keys": {
+              "addresses": "aid",
+              "customers": "cid",
+              "orders": "oid"
+            },
+            "time_columns": {
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "customers",
+                "source_column": "aid",
+                "target_table": "addresses",
+                "target_column": "aid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "aid",
+                "target_table": "addresses",
+                "target_column": "aid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH addresses.aid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE addresses AS SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "addresses",
+                  "source": {
+                    "source": [
+                      "addresses"
+                    ]
+                  }
+                },
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "addresses": {
+                  "value": [
+                    "aid"
+                  ]
+                },
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "customers",
+                    "column": "aid"
+                  },
+                  {
+                    "table": "addresses",
+                    "column": "aid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "aid"
+                  },
+                  {
+                    "table": "addresses",
+                    "column": "aid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.one-column-two-tables",
+      "case": "shape.one-column-two-tables",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE details AS SELECT i AS did, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "buyers": "buyers",
+              "customers": "customers",
+              "details": "details"
+            },
+            "primary_keys": {
+              "buyers": "cid",
+              "customers": "cid"
+            },
+            "time_columns": {
+              "details": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "details",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "details",
+                "source_column": "cid",
+                "target_table": "buyers",
+                "target_column": "cid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE details AS SELECT i AS did, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "buyers",
+                  "source": {
+                    "source": [
+                      "buyers"
+                    ]
+                  }
+                },
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "details",
+                  "source": {
+                    "source": [
+                      "details"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "buyers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "details": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "details",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "details",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "buyers",
+                    "column": "cid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.same-table-twice.buyers",
+      "case": "shape.same-table-twice.buyers",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "buyers": "buyers",
+              "customers": "customers",
+              "orders": "orders"
+            },
+            "primary_keys": {
+              "buyers": "cid",
+              "customers": "cid",
+              "orders": "oid"
+            },
+            "time_columns": {
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "buyers",
+                "target_column": "cid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH buyers.cid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "buyers",
+                  "source": {
+                    "source": [
+                      "buyers"
+                    ]
+                  }
+                },
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "buyers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "buyers",
+                    "column": "cid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.same-table-twice.customers",
+      "case": "shape.same-table-twice.customers",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "buyers": "buyers",
+              "customers": "customers",
+              "orders": "orders"
+            },
+            "primary_keys": {
+              "buyers": "cid",
+              "customers": "cid",
+              "orders": "oid"
+            },
+            "time_columns": {
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "buyers",
+                "target_column": "cid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH customers.cid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "buyers",
+                  "source": {
+                    "source": [
+                      "buyers"
+                    ]
+                  }
+                },
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "buyers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "buyers",
+                    "column": "cid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.star.customers",
+      "case": "shape.star.customers",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+            "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+            "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "customers": "customers",
+              "orders": "orders",
+              "products": "products",
+              "stores": "stores"
+            },
+            "primary_keys": {
+              "customers": "cid",
+              "orders": "oid",
+              "products": "pid",
+              "stores": "sid"
+            },
+            "time_columns": {
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "pid",
+                "target_table": "products",
+                "target_column": "pid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "sid",
+                "target_table": "stores",
+                "target_column": "sid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH customers.cid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+          "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+          "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                },
+                {
+                  "name": "products",
+                  "source": {
+                    "source": [
+                      "products"
+                    ]
+                  }
+                },
+                {
+                  "name": "stores",
+                  "source": {
+                    "source": [
+                      "stores"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "pid"
+                  ]
+                },
+                "stores": {
+                  "value": [
+                    "sid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "pid"
+                  },
+                  {
+                    "table": "products",
+                    "column": "pid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "sid"
+                  },
+                  {
+                    "table": "stores",
+                    "column": "sid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.star.products",
+      "case": "shape.star.products",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+            "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+            "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "customers": "customers",
+              "orders": "orders",
+              "products": "products",
+              "stores": "stores"
+            },
+            "primary_keys": {
+              "customers": "cid",
+              "orders": "oid",
+              "products": "pid",
+              "stores": "sid"
+            },
+            "time_columns": {
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "pid",
+                "target_table": "products",
+                "target_column": "pid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "sid",
+                "target_table": "stores",
+                "target_column": "sid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH products.pid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+          "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+          "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                },
+                {
+                  "name": "products",
+                  "source": {
+                    "source": [
+                      "products"
+                    ]
+                  }
+                },
+                {
+                  "name": "stores",
+                  "source": {
+                    "source": [
+                      "stores"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "pid"
+                  ]
+                },
+                "stores": {
+                  "value": [
+                    "sid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "pid"
+                  },
+                  {
+                    "table": "products",
+                    "column": "pid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "sid"
+                  },
+                  {
+                    "table": "stores",
+                    "column": "sid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.star.stores",
+      "case": "shape.star.stores",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+            "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+            "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+            "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "customers": "customers",
+              "orders": "orders",
+              "products": "products",
+              "stores": "stores"
+            },
+            "primary_keys": {
+              "customers": "cid",
+              "orders": "oid",
+              "products": "pid",
+              "stores": "sid"
+            },
+            "time_columns": {
+              "orders": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "orders",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "pid",
+                "target_table": "products",
+                "target_column": "pid"
+              },
+              {
+                "source_table": "orders",
+                "source_column": "sid",
+                "target_table": "stores",
+                "target_column": "sid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH stores.sid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+          "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+          "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+          "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "orders",
+                  "source": {
+                    "source": [
+                      "orders"
+                    ]
+                  }
+                },
+                {
+                  "name": "products",
+                  "source": {
+                    "source": [
+                      "products"
+                    ]
+                  }
+                },
+                {
+                  "name": "stores",
+                  "source": {
+                    "source": [
+                      "stores"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "orders": {
+                  "value": [
+                    "oid"
+                  ]
+                },
+                "products": {
+                  "value": [
+                    "pid"
+                  ]
+                },
+                "stores": {
+                  "value": [
+                    "sid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "orders": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "orders",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "pid"
+                  },
+                  {
+                    "table": "products",
+                    "column": "pid"
+                  }
+                ],
+                [
+                  {
+                    "table": "orders",
+                    "column": "sid"
+                  },
+                  {
+                    "table": "stores",
+                    "column": "sid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.two-paths.keyed",
+      "case": "shape.two-paths.keyed",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE customers AS SELECT i AS cid, 'x' AS seg FROM range(10) t(i)",
+            "CREATE TABLE headers AS SELECT i AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts FROM range(40) t(i)",
+            "CREATE TABLE details AS SELECT i AS did, i % 40 AS hid, (i + 1) % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "customers": "customers",
+              "details": "details",
+              "headers": "headers"
+            },
+            "primary_keys": {
+              "customers": "cid",
+              "details": "did",
+              "headers": "hid"
+            },
+            "time_columns": {
+              "details": "ts",
+              "headers": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "headers",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "details",
+                "source_column": "hid",
+                "target_table": "headers",
+                "target_column": "hid"
+              },
+              {
+                "source_table": "details",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE customers AS SELECT i AS cid, 'x' AS seg FROM range(10) t(i)",
+          "CREATE TABLE headers AS SELECT i AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts FROM range(40) t(i)",
+          "CREATE TABLE details AS SELECT i AS did, i % 40 AS hid, (i + 1) % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "details",
+                  "source": {
+                    "source": [
+                      "details"
+                    ]
+                  }
+                },
+                {
+                  "name": "headers",
+                  "source": {
+                    "source": [
+                      "headers"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "details": {
+                  "value": [
+                    "did"
+                  ]
+                },
+                "headers": {
+                  "value": [
+                    "hid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "details": {
+                  "value": "ts"
+                },
+                "headers": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "headers",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "details",
+                    "column": "hid"
+                  },
+                  {
+                    "table": "headers",
+                    "column": "hid"
+                  }
+                ],
+                [
+                  {
+                    "table": "details",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
+      }
+    },
+    {
+      "id": "shape.two-paths.keyless",
+      "case": "shape.two-paths.keyless",
+      "removes": "nothing: the case as committed",
+      "python-core": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "routes": [
+          "schema.from-source/tables/duckdb",
+          "schema.from-source/catalog-keys/duckdb",
+          "query.materialize/indices-binary/duckdb",
+          "query.materialize/indices-multiclass/duckdb",
+          "query.materialize/indices-regression/duckdb",
+          "query.materialize/indices-link-prediction/duckdb",
+          "query.materialize/indices-ranking/duckdb",
+          "query.materialize/indices-forecast/duckdb",
+          "client.predict/binary/duckdb",
+          "client.predict/multiclass/duckdb",
+          "client.predict/regression/duckdb",
+          "client.predict/link-prediction/duckdb",
+          "client.predict/ranking/duckdb",
+          "client.predict/forecast/duckdb"
+        ],
+        "until": "predict",
+        "expect": "success",
+        "input": {
+          "base": "shop",
+          "setup": [
+            "DROP TABLE orders",
+            "DROP TABLE users",
+            "CREATE TABLE customers AS SELECT i AS cid, 'x' AS seg FROM range(10) t(i)",
+            "CREATE TABLE headers AS SELECT i AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts FROM range(40) t(i)",
+            "CREATE TABLE details AS SELECT i AS did, i % 40 AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+          ],
+          "from_source": {
+            "tables": {
+              "customers": "customers",
+              "details": "details",
+              "headers": "headers"
+            },
+            "primary_keys": {
+              "customers": "cid",
+              "headers": "hid"
+            },
+            "time_columns": {
+              "details": "ts",
+              "headers": "ts"
+            },
+            "relationships": [
+              {
+                "source_table": "headers",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              },
+              {
+                "source_table": "details",
+                "source_column": "hid",
+                "target_table": "headers",
+                "target_column": "hid"
+              },
+              {
+                "source_table": "details",
+                "source_column": "cid",
+                "target_table": "customers",
+                "target_column": "cid"
+              }
+            ]
+          },
+          "pql": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid",
+          "materialize": {
+            "indices": [
+              0,
+              1,
+              2
+            ],
+            "anchor_time": "2024-02-01"
+          }
+        }
+      },
+      "rust-host": {
+        "derive": {
+          "from": "case",
+          "steps": []
+        },
+        "expect": "success",
+        "setup": [
+          "DROP TABLE orders",
+          "DROP TABLE users",
+          "CREATE TABLE customers AS SELECT i AS cid, 'x' AS seg FROM range(10) t(i)",
+          "CREATE TABLE headers AS SELECT i AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts FROM range(40) t(i)",
+          "CREATE TABLE details AS SELECT i AS did, i % 40 AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+        ],
+        "core": {
+          "describe_source": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "source": {
+              "tables": [
+                {
+                  "name": "customers",
+                  "source": {
+                    "source": [
+                      "customers"
+                    ]
+                  }
+                },
+                {
+                  "name": "details",
+                  "source": {
+                    "source": [
+                      "details"
+                    ]
+                  }
+                },
+                {
+                  "name": "headers",
+                  "source": {
+                    "source": [
+                      "headers"
+                    ]
+                  }
+                }
+              ],
+              "primary_keys": {
+                "customers": {
+                  "value": [
+                    "cid"
+                  ]
+                },
+                "headers": {
+                  "value": [
+                    "hid"
+                  ]
+                }
+              },
+              "time_columns": {
+                "details": {
+                  "value": "ts"
+                },
+                "headers": {
+                  "value": "ts"
+                }
+              },
+              "relationships": [
+                [
+                  {
+                    "table": "headers",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ],
+                [
+                  {
+                    "table": "details",
+                    "column": "hid"
+                  },
+                  {
+                    "table": "headers",
+                    "column": "hid"
+                  }
+                ],
+                [
+                  {
+                    "table": "details",
+                    "column": "cid"
+                  },
+                  {
+                    "table": "customers",
+                    "column": "cid"
+                  }
+                ]
+              ]
+            },
+            "check_keys": true
+          },
+          "materialize": {
+            "provider": {
+              "provider": "sql",
+              "dialect": "duckdb"
+            },
+            "indices": [
+              {
+                "t": "i64",
+                "v": "0"
+              },
+              {
+                "t": "i64",
+                "v": "1"
+              },
+              {
+                "t": "i64",
+                "v": "2"
+              }
+            ],
+            "anchor_time": {
+              "t": "ts",
+              "v": "1706745600000000000",
+              "unit": "ns",
+              "zone": null
+            },
+            "seed": null
+          },
+          "predict": {
+            "model": "kumo-relational"
+          }
+        },
+        "until": "predict"
       }
     }
   ]
