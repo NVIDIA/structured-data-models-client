@@ -6206,6 +6206,9 @@ entries:
     internal error becoming a named refusal is approved as a class; KO2-11
     class (a)). Measured at T2.2 with python-core and rust-host on SQLite
     against python-ref's committed empty.fact-table line.
+  case_outcomes:
+  - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
+  - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
 
 - id: P2B-11
   title: On SQLite, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
@@ -6237,6 +6240,9 @@ entries:
     empty fetch's columns, which SQLite's driver types as integers, as
     holding no time (T2.2); it is no longer a difference. Measured at T2.2
     against python-ref's committed lines.
+  case_outcomes:
+  - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
+  - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
 
 - id: P2B-12
   title: On SQLite, an unsigned key past int64 is joined by its stored text where the reference fails INTERNAL_ERROR ingesting it
@@ -6266,6 +6272,9 @@ entries:
     becoming a correct answer). The two key-pair vectors are the test
     author's register.required ones; each answers with a right join on the
     core (every row joined to its own entity), measured at T2.2.
+  case_outcomes:
+  - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the keys joined by their stored text'}
+  - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success', summary: 'the SQLite line: the keys joined by their stored text'}
 
 - id: P2B-13
   title: On SQLite, a time of day stored as text is a categorical feature, where the reference reads it as today's timestamp and refuses
