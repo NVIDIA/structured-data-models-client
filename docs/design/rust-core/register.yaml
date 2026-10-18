@@ -6680,8 +6680,8 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    The design's T2.12 row admits the nine edit.* S1 cases as acceptance.
-    For the reviewers: the ratchet's case rule needs an approved entry
+    Approver: reviewer. The design's T2.12 row admits the nine edit.* S1
+    cases as acceptance. For the reviewers: the ratchet's case rule needs an approved entry
     naming each case whose file changed (check_cases); each row states the
     baselined outcome as both old and new. Proposed by T2.12, never
     self-approved.
@@ -6747,7 +6747,7 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    For the owner: an answer where the reference fails unnamed, the
+    Approver: owner. An answer where the reference fails unnamed, the
     answer DuckDB's and SQLite's references give the same source (E66(b)
     approves a named refusal in place of such a failure, not an answer).
     The alternative keeps P2C-11's named refusal under a rule outside
