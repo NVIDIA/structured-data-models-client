@@ -2793,7 +2793,17 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route past the entity count, the context size or the hops
     the endpoint takes.
-  cases: [T1.28a]
+  cases:
+  - T1.28a
+  - multicall.entities.100001
+  - multicall.entities.100001@sqlite
+  - multicall.entities.100001@postgres
+  - multicall.calls.101
+  - multicall.calls.101@sqlite
+  - multicall.calls.101@postgres
+  - multicall.forecast.batched
+  - multicall.forecast.batched@sqlite
+  - multicall.forecast.batched@postgres
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
@@ -2806,6 +2816,10 @@ entries:
     refusal is named): for the reviewer or the owner, never self-approved.
     The alternative, a host mapping UNSUPPORTED_REQUEST to the base class
     by the error's fields, would be a rule in the host.
+    T2.8c: the same class for main's 1fc5a686 ceilings (more than 100,000
+    entities, more than 100 calls) and its batched-forecast refusal, which
+    the reference raises as StructuredDataError(UNSUPPORTED_REQUEST) and
+    the core refuses with the same code and details; their cases added.
 
 - id: P1B-21
   title: AVG, MIN or MAX compared with NULL is refused by name only where the reference fails INTERNAL_ERROR
