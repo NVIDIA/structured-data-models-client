@@ -41,7 +41,9 @@ must equal the reference's. Each case names the exit it covers:
   interpreter and pandas, recorded at each pin (``by_python``,
   ``dtypes_pandas2``); a probability in Kawi digits is the orchestrator's
   Unicode policy, refused INVALID_RESPONSE on the core on every
-  interpreter (``core_outcome``), registered where the reference reads it;
+  interpreter (``core_outcome``), where the reference reads it held to the
+  one entry registering it, P1B-25, approved by the owner and naming the
+  case (M10: never to any mention of the case in the register);
 - the Databricks serving route (``SDMClient.for_databricks_serving`` with a
   fake workspace client, no endpoint): a ``response_json`` nested 5,000
   levels, in the metadata or an item, refused on the core on every
@@ -163,15 +165,26 @@ def _here(expected: dict[str, Any]) -> dict[str, Any]:
     return here
 
 
-def _registered(name: str) -> bool:
-    r"""Whether the register names ``name`` (in an entry's notes, where
-    vectors are named): a difference from the reference that is known."""
+#: The register entry each policy case naming no ``divergence`` differs
+#: from the reference by (M10, T2.8b): one entry, the owner's approval of
+#: it read from its own block, and its text naming the case, never any
+#: mention of the case's name anywhere in the register.
+POLICY_ENTRIES = {'numeric-text.kawi-digits': 'P1B-25'}
+
+
+def _entry_names(entry: str, name: str) -> bool:
+    r"""Whether register entry ``entry``'s own block names ``name`` (in
+    its notes, where vectors are named), as a whole word."""
     text = (ROOT / 'docs/design/rust-core/register.yaml').read_text(
         encoding='utf-8'
     )
-    return (
-        re.search(rf'(?<![\w.-]){re.escape(name)}(?![\w-])', text) is not None
-    )
+    for block in re.split(r'\n- id: ', text)[1:]:
+        if block.split('\n', 1)[0].strip() == entry:
+            return (
+                re.search(rf'(?<![\w.-]){re.escape(name)}(?![\w-])', block)
+                is not None
+            )
+    return False
 
 
 def _on_the_core(
@@ -226,6 +239,23 @@ def _held(got: dict[str, Any], expected: dict[str, Any], name: str) -> None:
         # .items as the reference's: each prediction's value and Python type
         # (an int kept exact, None apart from NaN) and its probabilities.
         assert got.get('items') == expected['items'], f'{name}: items'
+
+
+def test_a_policy_case_is_held_to_the_one_entry_registering_it() -> None:
+    # M10 (T2.8b): every policy case naming no divergence has its entry,
+    # owner-approved and naming it; an entry that merely exists, or one
+    # naming other vectors, does not stand for it.
+    policy = sorted(
+        c['name']
+        for c in CASES
+        if 'core_outcome' in c and not c.get('divergence')
+    )
+    assert policy == sorted(POLICY_ENTRIES)
+    for name, entry in POLICY_ENTRIES.items():
+        assert _owner_approved(entry), entry
+        assert _entry_names(entry, name), (entry, name)
+    assert not _entry_names('P1B-22', 'numeric-text.kawi-digits')
+    assert not _entry_names('P1B-25', 'numeric-text.arabic-indic-digits')
 
 
 def test_the_recording_is_the_reference_s() -> None:
@@ -374,9 +404,15 @@ def test_the_core_s_predict_is_the_reference_s(
             if spec.get('divergence'):
                 assert _owner_approved(spec['divergence']), spec['divergence']
             else:
-                assert _registered(spec['name']), (
+                entry = POLICY_ENTRIES.get(spec['name'])
+                assert entry is not None, (
                     f'{spec["name"]}: the reference here gives '
-                    f'{expected["outcome"]}, and no register entry names it'
+                    f'{expected["outcome"]}, and no register entry is the '
+                    'one it differs by'
+                )
+                assert _owner_approved(entry), f'{spec["name"]}: {entry}'
+                assert _entry_names(entry, spec['name']), (
+                    f'{spec["name"]}: {entry} does not name it'
                 )
         return
     if spec['covers'] == R.SIZE:
