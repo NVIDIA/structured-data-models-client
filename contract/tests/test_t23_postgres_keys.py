@@ -23,11 +23,13 @@ Postgres routes.
   matrix": every vector's public answer on ``python-core`` is the
   reference's (outcome, schema, warnings, each request's digest and tables,
   the result, the key columns), and where the outcome is the reference's,
-  so are the statements per public call; or it differs exactly as an
-  approved register entry declares, its ``refs`` naming the vector and the
-  transition (``contract/postgres-key-vectors.json#<id or glob> <from> ->
-  <to>``), the statement counts excused only under an improvement's entry
-  (KO2-35). A proposed entry excuses nothing.
+  so are the statements per public call; or it differs, in its answer or
+  in its statement counts, exactly as an approved register entry declares,
+  its ``refs`` naming the vector and the transition
+  (``contract/postgres-key-vectors.json#<id or glob> <from> -> <to>``,
+  ``success -> success`` where the outcome is the reference's, as P2C-2's
+  fewer statements are, KO2-58). Without such an entry a count difference
+  still fails, and a proposed entry excuses nothing.
 - Lesson 19, "a wrong row is P1": every pair vector (``pair.*``,
   ``key.pair*``, ``fifteen.*``) the core answers sends requests that join
   the same rows to the same entities as the same-type control
@@ -98,10 +100,6 @@ PAIRS = [
     for v in RECORDED['vectors']
     if v['id'].startswith(('pair.', 'key.pair', 'fifteen.'))
 ]
-#: The decision rows whose approved entries are improvements on the
-#: reference (KO2-35, exact decimals): a vector such an entry names may
-#: differ in its statement counts too.
-IMPROVEMENT_ROWS = frozenset({'KO2-35'})
 TRANSITION = re.compile(
     re.escape(P.REGISTER_REF)
     + r'(?P<glob>\S+) (?P<old>success|refusal [A-Z][A-Z_]*)'
@@ -114,9 +112,9 @@ def _entries() -> list[dict[str, Any]]:
     return list(document['entries'])
 
 
-def covered(vector_id: str, old: str, new: str) -> tuple[str | None, bool]:
+def covered(vector_id: str, old: str, new: str) -> str | None:
     r"""The approved entry whose ``refs`` name the vector with exactly the
-    transition ``old -> new``, and whether it is an improvement's."""
+    transition ``old -> new``, if any."""
     for entry in _entries():
         if entry.get('status') != 'approved':
             continue
@@ -127,33 +125,29 @@ def covered(vector_id: str, old: str, new: str) -> tuple[str | None, bool]:
                 and (found['old'], found['new']) == (old, new)
                 and fnmatch.fnmatchcase(vector_id, found['glob'])
             ):
-                row = (entry.get('decision_ref') or {}).get('row')
-                return str(entry['id']), row in IMPROVEMENT_ROWS
-    return None, False
+                return str(entry['id'])
+    return None
 
 
 def problem_of(
     vector: dict[str, Any], got: dict[str, Any], counted: dict[str, int]
 ) -> str | None:
-    r"""Why ``got`` and the statements counted fail the vector, or None."""
+    r"""Why ``got`` and the statements counted fail the vector, or None:
+    a difference from the reference, in the answer or in the counts, passes
+    only under an approved entry declaring the vector's transition."""
     want = vector['reference']
-    if got == want:
-        if counted != vector['statements']:
-            return (
-                f'{vector["id"]}: statements {counted}, the reference '
-                f'{vector["statements"]}'
-            )
+    if got == want and counted == vector['statements']:
         return None
     old = P.outcome_class(want['outcome'])
     new = P.outcome_class(got['outcome'])
-    entry, improvement = covered(vector['id'], old, new)
-    if entry is not None:
-        if old == new and counted != vector['statements'] and not improvement:
-            return (
-                f'{vector["id"]}: statements {counted}, the reference '
-                f'{vector["statements"]} ({entry} does not excuse them)'
-            )
+    if covered(vector['id'], old, new) is not None:
         return None
+    if got == want:
+        return (
+            f'{vector["id"]}: statements {counted}, the reference '
+            f'{vector["statements"]}; no approved entry declares {old} -> '
+            f'{new}'
+        )
     parts = sorted(k for k in want if got.get(k) != want[k])
     return (
         f'{vector["id"]}: {parts} differ: got {got["outcome"]}, the '
