@@ -1,22 +1,6 @@
 {
  "about": "T2.19's acceptance tests that failed when the test author wrote them, before the implementation, by case key (contract/tests/test_t219_two_paths.py as py:<key>, sdm-testkit's tests/t219_two_paths.rs as rust:<key>). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [
-  "py:shape.diamond.addresses",
-  "py:shape.diamond-from-source",
-  "py:shape.two-paths.keyed",
-  "py:shape.diamond.addresses@sqlite",
-  "py:shape.diamond-from-source@sqlite",
-  "py:shape.two-paths.keyed@sqlite",
-  "py:shape.diamond.addresses@postgres",
-  "py:shape.diamond-from-source@postgres",
-  "py:shape.two-paths.keyed@postgres",
-  "rust:shape.diamond.addresses",
-  "rust:shape.diamond-from-source",
-  "rust:shape.two-paths.keyed",
-  "rust:shape.diamond.addresses@sqlite",
-  "rust:shape.diamond-from-source@sqlite",
-  "rust:shape.two-paths.keyed@sqlite"
- ],
+ "pending": [],
  "authored": [
   "py:shape.diamond.addresses",
   "py:shape.same-table-twice.buyers",
