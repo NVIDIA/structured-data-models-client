@@ -126,12 +126,19 @@ unchanged past the stop. Where that move is to a success and the owner-
 approved entry's ``case_outcomes`` row for the line names the stopping
 call under ``statements_differ`` (T2.1e), the call answers where the
 reference refused: its ``sql.count`` and ``sql.result`` against the
-reference's are reported as diagnostic, nothing else. A SQLite or
+reference's are reported as diagnostic, nothing else; where the move is
+from the reference's answer to the runner's refusal at the call the row
+names, the reference's statements of that call are its only ones held,
+their ``sql.count`` and ``sql.result`` and the line's ``warnings``
+reported as diagnostic. A SQLite or
 Postgres line is held, by the ``route``, ``inputs`` and core-consistency
 rules, to the case's core operations of the calls before the one it stops
 at (its effective expectation's refusal, else the reference line's), and
 to any of that call or a later one the runner ran (T2.1e): the case's
-core block is DuckDB's run.
+core block is DuckDB's run. There the ``core`` rule between the two
+core runners, where one went on past the operations both ran into the
+call the line stops at or a later one, holds them on the operations
+both ran.
 And a row read's DuckDB types name the Arrow
 types DuckDB reads them as with ``arrow_large_buffer_size`` where the
 case's own setup sets it (``large_string``, ``large_binary``,
@@ -801,14 +808,46 @@ def _core_consistent(
         )
 
 
+def shared_operations(
+    python: dict[str, Any], rust: dict[str, Any], stop: str | None
+) -> list[str] | None:
+    r"""On a database line that stops at ``stop`` (T2.1e), the operations
+    both core runners ran, where one ran them and then more, every one of
+    them of that call or a later one (python-core refused there by the
+    client's check, rust-host's core refusing in the call it went on to);
+    None otherwise, and the hosts are held to each other whole."""
+    if stop is None:
+        return None
+    mine = python['identity']['operations']
+    theirs = rust['identity']['operations']
+    short, long = (mine, theirs) if len(mine) <= len(theirs) else (theirs, mine)
+    if mine == theirs or long[: len(short)] != short:
+        return None
+    limit = STAGES.index(stop)
+    for op in long[len(short) :]:
+        if op not in STAGE_OF or STAGES.index(STAGE_OF[op]) < limit:
+            return None
+    return list(short)
+
+
 def _core_agree(
     report: Report,
     case: dict[str, Any],
     python: dict[str, Any],
     rust: dict[str, Any],
+    stop: str | None = None,
 ) -> None:
-    r"""The kind and code rule: the two core runners on ``core`` fields."""
+    r"""The kind and code rule: the two core runners on ``core`` fields.
+    On a database line stopping at ``stop`` where one host went on past
+    the operations both ran into that call or a later one
+    (:func:`shared_operations`, T2.1e), the hosts are held to each other
+    on the operations both ran, their fetches the shorter's, and not on
+    the results of the operations one alone ran."""
     where = f'{case["id"]}: python-core against rust-host'
+    shared = shared_operations(python, rust, stop)
+    if shared is not None:
+        _core_agree_shared(report, where, python['core'], rust['core'], shared)
+        return
     if python['identity']['operations'] != rust['identity']['operations']:
         _differ(
             report,
@@ -854,6 +893,48 @@ def _core_agree(
                 f'identity.{field}',
                 python['identity'][field],
                 rust['identity'][field],
+                rule='core',
+            )
+
+
+def _core_agree_shared(
+    report: Report,
+    where: str,
+    mine: dict[str, Any] | None,
+    theirs: dict[str, Any] | None,
+    shared: list[str],
+) -> None:
+    r""":func:`_core_agree` on the operations both hosts ran (``shared``)."""
+    if mine is None or theirs is None:
+        return
+    count = len(shared)
+    fetched = min(len(mine['fetches'] or []), len(theirs['fetches'] or []))
+    held = {
+        'inputs': (
+            (mine['inputs'] or [])[:count],
+            (theirs['inputs'] or [])[:count],
+        ),
+        'fetches': (
+            (mine['fetches'] or [])[:fetched],
+            (theirs['fetches'] or [])[:fetched],
+        ),
+    }
+    for field, op in (
+        ('described', 'describe_source'),
+        ('accepted', 'validate_query'),
+        ('materialized', 'materialize'),
+    ):
+        if op in shared:
+            held[field] = (mine[field], theirs[field])
+    for field, (a, b) in held.items():
+        if a != b:
+            _differ(
+                report,
+                where,
+                f'core.{field}',
+                None,
+                None,
+                show=False,
                 rule='core',
             )
 
@@ -2003,6 +2084,30 @@ def _sql(
                 )
 
 
+def statements_refused(
+    report: Report,
+    key: str,
+    who: str,
+    wanted: dict[str, Any] | None,
+    reference: dict[str, Any] | None,
+) -> str | None:
+    r"""The call ``who`` refuses at on the line ``key`` where the reference
+    answered, when the owner-approved entry's row moving it there names
+    that call under ``statements_differ`` (T2.1e): the reference's
+    statements there and after, and its warnings, are no expectation of a
+    call the runner refuses by that approval; None otherwise."""
+    theirs = (reference or {}).get('outcome') or {}
+    if (
+        wanted is None
+        or wanted.get('result') != 'refusal'
+        or theirs.get('result') != 'success'
+    ):
+        return None
+    calls = report.statements_differ.get((key, who), ())
+    stage = wanted.get('stage') or (calls[0] if len(calls) == 1 else None)
+    return stage if stage in calls else None
+
+
 def statements_opted_in(
     report: Report,
     key: str,
@@ -2292,6 +2397,7 @@ def compare(
             if found is not None:
                 report.info.append(f'{case["id"]}: {who}: {found}')
             _core_payload(report, case, who, observation, ref, stop)
+            refused = statements_refused(report, case['id'], who, wanted, ref)
             if ref is not None:
                 cell = observation['identity'].get('cell')
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
@@ -2304,7 +2410,14 @@ def compare(
                         since, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
+                    since = len(report.failures)
                     _host_fields(report, case, who, observation, ref, stop=stop)
+                    if refused is not None:
+                        # The warnings of a call refused by the approval.
+                        report.demote(
+                            since,
+                            keep=tuple(r for r in RULES if r != 'warnings'),
+                        )
                 _sql(
                     report,
                     case,
@@ -2312,10 +2425,11 @@ def compare(
                     observation,
                     ref,
                     ordered,
-                    stop,
+                    stop if refused is None else refused,
                     large,
                     database,
-                    answered=statements_opted_in(
+                    answered=refused is not None
+                    or statements_opted_in(
                         report, case['id'], who, stop, wanted
                     ),
                 )
@@ -2344,7 +2458,17 @@ def compare(
         _cell_pair(report, case, python, old, pair_stop)
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
-            _core_agree(report, case, python, rust)
+            _core_agree(
+                report,
+                case,
+                python,
+                rust,
+                None
+                if on_duckdb
+                else line_stop(
+                    effective.get(case['id'], {}).get('python-core'), ref
+                ),
+            )
             _sql_core(report, case, python, rust, ordered, large, database)
         if not gating:
             report.demote(before, keep=('reach',) if reach else ())
