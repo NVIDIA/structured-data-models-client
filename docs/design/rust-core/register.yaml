@@ -6883,7 +6883,7 @@ entries:
   - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   status: approved
   approved_by: reviewer
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Approved by both of T2.3's round 4 reviewers (APPROVE-P2C-11): E66(b)'s
     class, the reference's unnamed error a named refusal. Before T2.3's
