@@ -1,7 +1,8 @@
 # Phase 2 tracker: T2.18
 
 The design branch owns `tracker.md`; this file holds T2.18's section until it folds in.
-Lane e, on the phase head after T2.3's landing (68f9b8e4), then the test author's acceptance tests (`T2.18 tests:` commits, d5b9f2e3 to 7fb2bd1c, from `t218-tests`), then this package (`T2.18:` commits).
+Lane e, on T2.1f (f321a90b, lane d: the comparator's `core_only_columns`, a judging package landing first) over the phase head after T2.3's landing (68f9b8e4), then the test author's acceptance tests (`T2.18 tests:` commits, from `t218-tests`), then this package (`T2.18:` commits).
+The filter role moved to T2.10 by the orchestrator's decision: the test author moved its three cases and vectors to `contract/deferred/t210-column-filter/`, and T2.18 covers the other four roles.
 
 ## T2.18
 
@@ -20,23 +21,19 @@ T2.18 is any column name (KO2-36): a column whose name holds a dot, a backtick o
 - **The PQL quirk table's new readings**: its two rows whose spelling the reference refuses and the core reads (`backticks/unknown-with-dot`, `backticks/newline-inside`) are marked `core_only`, each held to the core's refusal by name (unknown table, unknown column) and to differing from the reference's recorded answer (`pql_quirks.rs`).
   The 417-query corpus holds no query the change moves.
 - **L4 goldens**: the 27 requests the `name.*` cases make naming such a column, pinned with their statements on SQLite (`sqlite_goldens.rs`) and on DuckDB and Postgres (`name_goldens.rs`).
-- **Register**: P2E-1 (permanent, KO2-36), P2E-2 (temporary, KO2-56, until T2.10: the filter cases), P2B-2 retired (rejected, citing KO2-36, ID kept); DuckDB baselines for the fifteen cases on the three runners.
+- **Register**: P2E-1 (permanent, KO2-36), naming the twelve cases' outcome moves and, under `core_only_columns` (T2.1f), the six columns the core keeps and the reference leaves out; P2E-2 rejected, ID kept (the filter role deferred to T2.10); P2B-2 retired (rejected, citing KO2-36, ID kept); DuckDB baselines for the twelve cases on the three runners.
 
 ### Probes
 
-- The test author's tests with the pending list emptied: python-core passes step 1 on all three databases and step 2 on every vector but the filter role's (12 of 60), whose twins the core refuses the same way under its not-yet rule `target_filter`; rust-host keeps every column and answers every case through `predict` on DuckDB and SQLite but the three filter cases.
-- The fifteen cases through `compare.py` on each database, against python-ref with the effective expectations: python-core and rust-host agree on every core field, the operations and inputs included.
-  What differs from the reference is what it leaves out: the column in the public schema and the payload, its statement results and counts, a link where the column is the key, and the from_source `SDMWarning`; the filter cases' `route` and `inputs` (predict never runs).
-  The comparator has no way to register these (`more_exact` leaves out values, never an item one side lacks): the question below.
+- The test author's tests (the filter role deferred): all pass, the pending list empty; python-core's 48 vectors' schemas and requests are their twins' on the reference, the name read as the vector's, on DuckDB, SQLite and Postgres, and rust-host answers each case through `predict` on DuckDB and SQLite.
+- The twelve cases through this tree's `compare.py` (T2.1f) on each database, against python-ref with the effective expectations: no gated difference; python-core and rust-host agree on every core field, the operations and inputs included.
+  Without `core_only_columns`, 51, 51 and 33: the column in the public schema, the request and the statement results, a link where it is the key, and the reference's from_source `SDMWarning`.
 - The client's core-route suites (723 tests), the binding's tests, `test_contract_cases.py` and `test_t22_sqlite.py`, `t22_sqlite.rs`, the corpus, quirks and adapter tests, `cargo test --workspace` and the cheap prepush tier: pass.
-- `pytest contract/tests -n 4 --dist loadfile` (a Postgres server named): 4,373 passed, 161 failed.
-  118 are `test_t136_host2_*`, which hold their recorded answers to the ref-pandas3 cell's versions, not this machine's venv's.
-  The other 43 are the gate's full-corpus runs (`test_gate_modes`, `test_gate_controls`, `test_cross_host`, `test_gate_evidence_paths`, `test_t20*`, `test_runners`), every difference a `name.*` case's: the KO2-36 differences above, and the filter cases' `route` and `inputs`.
+- `pytest contract/tests -n 4 --dist loadfile` before T2.1f (a Postgres server named): 4,373 passed, 161 failed: 118 `test_t136_host2_*`, which hold their recorded answers to the ref-pandas3 cell's versions, not this machine's venv's, and 43 full-corpus gate runs, every difference a `name.*` case's, which T2.1f and the deferral of the filter role answer.
 
 ### Deviations and questions
 
-- **The filter role waits for T2.10.** The core refuses a target filter under its not-yet rule `target_filter` whatever the column's name, so the three `name.*-filter` cases and the twelve filter vectors cannot answer until T2.10 lands; P2E-2 registers them, and the acceptance tests that hold every role (step 2, each case through predict, rust-host's predict runs) stay pending for that role alone.
-- **The comparator's KO2-36 differences** (above) need a judging change or an owner ruling before the gate passes these cases; no judging file is touched here.
 - **The contract**: `Materialized.query` is a v26 addition, recorded as T2.2's was, as a deviation from all vocabulary in T2.1b.
 - A query the core cannot resolve over a schema holding such a column is refused by the core's materialize (`INVALID_REQUEST`, field `query`), not with the old validator's diagnostics; the code is the same.
 - `record_quirks.py` would drop the `core_only` marks on a re-record; the quirk test then fails on the two rows, by name.
+- The filter role is T2.10's, which lifts the core's `target_filter` (the deferred cases and vectors in `contract/deferred/t210-column-filter/`).
