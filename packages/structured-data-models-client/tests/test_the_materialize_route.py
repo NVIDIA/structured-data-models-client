@@ -1843,3 +1843,45 @@ def test_numpy_inference_options_are_read_as_on_the_old_route(
         return
     old = _materialize(query=query, inference_config=config)
     assert core._payloads[0]['inference'] == old._payloads[0]['inference']
+
+
+def test_a_zoned_time_column_one_answer_holds_no_value_of_still_joins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""T2.2 fix 6 (round 1, Claude P1-2): a TIMESTAMPTZ column that one
+    of a table's answers holds no value of (the referrers' last logins,
+    read by their own lookup) keeps its unit there as in the others, so
+    the answers join and ``materialize`` succeeds, as on the old route; a
+    column holding no value was read to nanoseconds before its zone was
+    looked at, and the join failed INTERNAL_ERROR."""
+    connection = duckdb.connect()
+    for statement in (
+        'CREATE TABLE users (user_id INTEGER PRIMARY KEY, '
+        'last_login TIMESTAMPTZ, country VARCHAR)',
+        "INSERT INTO users SELECT i, TIMESTAMPTZ '2024-01-01 00:00:00+00' "
+        "+ i * INTERVAL 1 HOUR, 'c' || (i % 3) FROM range(40) t(i)",
+        "INSERT INTO users SELECT i, NULL, 'r' FROM range(100, 105) t(i)",
+        'CREATE TABLE orders (order_id INTEGER PRIMARY KEY, '
+        'user_id INTEGER REFERENCES users(user_id), '
+        'referrer_id INTEGER REFERENCES users(user_id), ts TIMESTAMP, '
+        'price DOUBLE)',
+        'INSERT INTO orders SELECT i, i % 40, 100 + i % 5, '
+        "TIMESTAMP '2024-01-10' + (i % 50) * INTERVAL 1 DAY, i + 0.5 "
+        'FROM range(200) t(i)',
+        'CREATE TABLE visits (visit_id INTEGER PRIMARY KEY, '
+        'user_id INTEGER REFERENCES users(user_id), ts TIMESTAMP)',
+        'INSERT INTO visits SELECT i, i % 40, '
+        "TIMESTAMP '2024-01-10' + (i % 50) * INTERVAL 1 DAY "
+        'FROM range(300) t(i)',
+    ):
+        connection.execute(statement)
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(
+            'PREDICT COUNT(visits.*, 0, 30, days) FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[0, 1], anchor_time=ANCHOR)
+    [payload] = request._payloads
+    assert payload['context']['instance_table']['rows']
