@@ -12,14 +12,44 @@
    "setup": [
     "CREATE TABLE users (id INTEGER PRIMARY KEY, age REAL)",
     "INSERT INTO users VALUES (101, 10), (102, 20), (103, 30), (104, 40), (105, 50), (106, 60)",
-    "CREATE TEMP TABLE __sdm_seeds__ (important TEXT)",
-    "INSERT INTO temp.__sdm_seeds__ VALUES ('keep me')"
+    "CREATE TEMP TABLE \"__sdm_seeds__\" (important TEXT)",
+    "INSERT INTO temp.\"__sdm_seeds__\" VALUES ('keep me')"
    ],
-   "indices": [
-    101
-   ],
+   "tables": {
+    "users": "users"
+   },
+   "materialize": {
+    "indices": [
+     101
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
    "temp_table": "__sdm_seeds__",
    "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
     "payloads": [
      {
       "model": "kumo-relational",
@@ -192,7 +222,475 @@
     ],
     "outcome": {
      "result": "success",
-     "code": null
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 4,
+     "materialize": 2
+    },
+    "temp_after": {
+     "columns": [
+      "important"
+     ],
+     "rows": [
+      [
+       "keep me"
+      ]
+     ]
+    }
+   }
+  },
+  "seeds-table-numbered": {
+   "setup": [
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, age REAL)",
+    "INSERT INTO users VALUES (101, 10), (102, 20), (103, 30), (104, 40), (105, 50), (106, 60)",
+    "CREATE TEMP TABLE \"__sdm_seeds_1__\" (important TEXT)",
+    "INSERT INTO temp.\"__sdm_seeds_1__\" VALUES ('keep me')"
+   ],
+   "tables": {
+    "users": "users"
+   },
+   "materialize": {
+    "indices": [
+     101
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "temp_table": "__sdm_seeds_1__",
+   "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ]
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "id": {
+           "dtype": "int64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          102,
+          20.0
+         ],
+         [
+          1,
+          106,
+          60.0
+         ],
+         [
+          2,
+          105,
+          50.0
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           0,
+           102
+          ],
+          [
+           1,
+           106
+          ],
+          [
+           2,
+           105
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0"
+        ],
+        "rows": [
+         [
+          3,
+          101
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           3,
+           101
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT users.age FOR EACH users.id",
+       "num_context_examples": 3,
+       "num_prediction_examples": 1
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 4,
+     "materialize": 2
+    },
+    "temp_after": {
+     "columns": [
+      "important"
+     ],
+     "rows": [
+      [
+       "keep me"
+      ]
+     ]
+    }
+   }
+  },
+  "seeds-table-upper": {
+   "setup": [
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, age REAL)",
+    "INSERT INTO users VALUES (101, 10), (102, 20), (103, 30), (104, 40), (105, 50), (106, 60)",
+    "CREATE TEMP TABLE \"__SDM_SEEDS_1__\" (important TEXT)",
+    "INSERT INTO temp.\"__SDM_SEEDS_1__\" VALUES ('keep me')"
+   ],
+   "tables": {
+    "users": "users"
+   },
+   "materialize": {
+    "indices": [
+     101
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "temp_table": "__SDM_SEEDS_1__",
+   "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ]
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "id": {
+           "dtype": "int64",
+           "nullable": false
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          102,
+          20.0
+         ],
+         [
+          1,
+          106,
+          60.0
+         ],
+         [
+          2,
+          105,
+          50.0
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           0,
+           102
+          ],
+          [
+           1,
+           106
+          ],
+          [
+           2,
+           105
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0"
+        ],
+        "rows": [
+         [
+          3,
+          101
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "id"
+         ],
+         "rows": [
+          [
+           3,
+           101
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT users.age FOR EACH users.id",
+       "num_context_examples": 3,
+       "num_prediction_examples": 1
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 4,
+     "materialize": 2
     },
     "temp_after": {
      "columns": [
@@ -211,10 +709,40 @@
     "CREATE TABLE users (id INT PRIMARY KEY, age REAL)",
     "INSERT INTO users VALUES (101.5, 10), (102.5, 20), (103.5, 30), (104.5, 40), (105.5, 50), (106.5, 60), (107.5, 70)"
    ],
-   "indices": [
-    101.5
-   ],
+   "tables": {
+    "users": "users"
+   },
+   "materialize": {
+    "indices": [
+     101.5
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
    "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
     "payloads": [
      {
       "model": "kumo-relational",
@@ -387,7 +915,11 @@
     ],
     "outcome": {
      "result": "success",
-     "code": null
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 6,
+     "materialize": 2
     }
    }
   },
@@ -396,10 +928,40 @@
     "CREATE TABLE users (id INT PRIMARY KEY, age REAL)",
     "INSERT INTO users VALUES (NULL, 99), (101, 10), (102, 20), (103, 30), (104, 40), (105, 50), (106, 60)"
    ],
-   "indices": [
-    101
-   ],
+   "tables": {
+    "users": "users"
+   },
+   "materialize": {
+    "indices": [
+     101
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
    "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
     "payloads": [
      {
       "model": "kumo-relational",
@@ -572,7 +1134,3153 @@
     ],
     "outcome": {
      "result": "success",
-     "code": null
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 6,
+     "materialize": 2
+    }
+   }
+  },
+  "integer-fractions": {
+   "setup": [
+    "CREATE TABLE users (user_id INTEGER, score INTEGER)",
+    "CREATE TABLE orders (order_id INTEGER, user_id INTEGER, ts TIMESTAMP, price REAL)",
+    "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 39) INSERT INTO users SELECT i, i + 0.5 FROM n",
+    "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 199) INSERT INTO orders SELECT i, i % 40, printf('2024-0%d-%02d 00:00:00', 1 + i % 2, 10 + i % 15), i + 0.5 FROM n"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "score",
+         "dtype": "int64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "user_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "order_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "ts",
+         "dtype": "string",
+         "stype": "timestamp"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ]
+    },
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ],
+       "anchor_time_column": "__kumo_anchor_time"
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "stype": "timestamp",
+          "nullable": false
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "user_id": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "score": {
+           "dtype": "float64",
+           "stype": "numerical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "user_id"
+         ]
+        },
+        "orders": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "price": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "user_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "user_id"
+         ]
+        },
+        {
+         "source_table": "orders",
+         "source_columns": [
+          "user_id"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "user_id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          37,
+          "2024-01-31T00:00:00.000000Z",
+          587.5
+         ],
+         [
+          1,
+          33,
+          "2024-01-31T00:00:00.000000Z",
+          567.5
+         ],
+         [
+          2,
+          27,
+          "2024-01-31T00:00:00.000000Z",
+          537.5
+         ],
+         [
+          3,
+          3,
+          "2024-01-31T00:00:00.000000Z",
+          417.5
+         ],
+         [
+          4,
+          18,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          5,
+          7,
+          "2024-01-31T00:00:00.000000Z",
+          437.5
+         ],
+         [
+          6,
+          2,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          7,
+          5,
+          "2024-01-31T00:00:00.000000Z",
+          427.5
+         ],
+         [
+          8,
+          11,
+          "2024-01-31T00:00:00.000000Z",
+          457.5
+         ],
+         [
+          9,
+          16,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          10,
+          1,
+          "2024-01-31T00:00:00.000000Z",
+          407.5
+         ],
+         [
+          11,
+          28,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          12,
+          38,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          13,
+          26,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          14,
+          30,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          15,
+          10,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          16,
+          19,
+          "2024-01-31T00:00:00.000000Z",
+          497.5
+         ],
+         [
+          17,
+          17,
+          "2024-01-31T00:00:00.000000Z",
+          487.5
+         ],
+         [
+          18,
+          15,
+          "2024-01-31T00:00:00.000000Z",
+          477.5
+         ],
+         [
+          19,
+          20,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          20,
+          0,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          21,
+          25,
+          "2024-01-31T00:00:00.000000Z",
+          527.5
+         ],
+         [
+          22,
+          29,
+          "2024-01-31T00:00:00.000000Z",
+          547.5
+         ],
+         [
+          23,
+          35,
+          "2024-01-31T00:00:00.000000Z",
+          577.5
+         ],
+         [
+          24,
+          31,
+          "2024-01-31T00:00:00.000000Z",
+          557.5
+         ],
+         [
+          25,
+          12,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          26,
+          9,
+          "2024-01-31T00:00:00.000000Z",
+          447.5
+         ],
+         [
+          27,
+          4,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          28,
+          6,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          29,
+          14,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          30,
+          22,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          31,
+          13,
+          "2024-01-31T00:00:00.000000Z",
+          467.5
+         ],
+         [
+          32,
+          21,
+          "2024-01-31T00:00:00.000000Z",
+          507.5
+         ],
+         [
+          33,
+          34,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          34,
+          23,
+          "2024-01-31T00:00:00.000000Z",
+          517.5
+         ],
+         [
+          35,
+          8,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          36,
+          24,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          37,
+          36,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          38,
+          32,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          39,
+          39,
+          "2024-01-31T00:00:00.000000Z",
+          597.5
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "user_id",
+          "score"
+         ],
+         "rows": [
+          [
+           0,
+           37,
+           37.5
+          ],
+          [
+           1,
+           33,
+           33.5
+          ],
+          [
+           2,
+           27,
+           27.5
+          ],
+          [
+           3,
+           3,
+           3.5
+          ],
+          [
+           4,
+           18,
+           18.5
+          ],
+          [
+           5,
+           7,
+           7.5
+          ],
+          [
+           6,
+           2,
+           2.5
+          ],
+          [
+           7,
+           5,
+           5.5
+          ],
+          [
+           8,
+           11,
+           11.5
+          ],
+          [
+           9,
+           16,
+           16.5
+          ],
+          [
+           10,
+           1,
+           1.5
+          ],
+          [
+           11,
+           28,
+           28.5
+          ],
+          [
+           12,
+           38,
+           38.5
+          ],
+          [
+           13,
+           26,
+           26.5
+          ],
+          [
+           14,
+           30,
+           30.5
+          ],
+          [
+           15,
+           10,
+           10.5
+          ],
+          [
+           16,
+           19,
+           19.5
+          ],
+          [
+           17,
+           17,
+           17.5
+          ],
+          [
+           18,
+           15,
+           15.5
+          ],
+          [
+           19,
+           20,
+           20.5
+          ],
+          [
+           20,
+           0,
+           0.5
+          ],
+          [
+           21,
+           25,
+           25.5
+          ],
+          [
+           22,
+           29,
+           29.5
+          ],
+          [
+           23,
+           35,
+           35.5
+          ],
+          [
+           24,
+           31,
+           31.5
+          ],
+          [
+           25,
+           12,
+           12.5
+          ],
+          [
+           26,
+           9,
+           9.5
+          ],
+          [
+           27,
+           4,
+           4.5
+          ],
+          [
+           28,
+           6,
+           6.5
+          ],
+          [
+           29,
+           14,
+           14.5
+          ],
+          [
+           30,
+           22,
+           22.5
+          ],
+          [
+           31,
+           13,
+           13.5
+          ],
+          [
+           32,
+           21,
+           21.5
+          ],
+          [
+           33,
+           34,
+           34.5
+          ],
+          [
+           34,
+           23,
+           23.5
+          ],
+          [
+           35,
+           8,
+           8.5
+          ],
+          [
+           36,
+           24,
+           24.5
+          ],
+          [
+           37,
+           36,
+           36.5
+          ],
+          [
+           38,
+           32,
+           32.5
+          ],
+          [
+           39,
+           39,
+           39.5
+          ]
+         ]
+        },
+        "orders": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "price",
+          "user_id"
+         ],
+         "rows": [
+          [
+           4,
+           0,
+           "2024-01-23T00:00:00.000000Z",
+           58.5,
+           18
+          ],
+          [
+           4,
+           1,
+           "2024-01-23T00:00:00.000000Z",
+           178.5,
+           18
+          ],
+          [
+           4,
+           2,
+           "2024-01-18T00:00:00.000000Z",
+           98.5,
+           18
+          ],
+          [
+           4,
+           3,
+           "2024-01-13T00:00:00.000000Z",
+           18.5,
+           18
+          ],
+          [
+           4,
+           4,
+           "2024-01-13T00:00:00.000000Z",
+           138.5,
+           18
+          ],
+          [
+           6,
+           5,
+           "2024-01-22T00:00:00.000000Z",
+           42.5,
+           2
+          ],
+          [
+           6,
+           6,
+           "2024-01-22T00:00:00.000000Z",
+           162.5,
+           2
+          ],
+          [
+           6,
+           7,
+           "2024-01-17T00:00:00.000000Z",
+           82.5,
+           2
+          ],
+          [
+           6,
+           8,
+           "2024-01-12T00:00:00.000000Z",
+           2.5,
+           2
+          ],
+          [
+           6,
+           9,
+           "2024-01-12T00:00:00.000000Z",
+           122.5,
+           2
+          ],
+          [
+           9,
+           10,
+           "2024-01-21T00:00:00.000000Z",
+           56.5,
+           16
+          ],
+          [
+           9,
+           11,
+           "2024-01-21T00:00:00.000000Z",
+           176.5,
+           16
+          ],
+          [
+           9,
+           12,
+           "2024-01-16T00:00:00.000000Z",
+           96.5,
+           16
+          ],
+          [
+           9,
+           13,
+           "2024-01-11T00:00:00.000000Z",
+           16.5,
+           16
+          ],
+          [
+           9,
+           14,
+           "2024-01-11T00:00:00.000000Z",
+           136.5,
+           16
+          ],
+          [
+           11,
+           15,
+           "2024-01-23T00:00:00.000000Z",
+           28.5,
+           28
+          ],
+          [
+           11,
+           16,
+           "2024-01-23T00:00:00.000000Z",
+           148.5,
+           28
+          ],
+          [
+           11,
+           17,
+           "2024-01-18T00:00:00.000000Z",
+           68.5,
+           28
+          ],
+          [
+           11,
+           18,
+           "2024-01-18T00:00:00.000000Z",
+           188.5,
+           28
+          ],
+          [
+           11,
+           19,
+           "2024-01-13T00:00:00.000000Z",
+           108.5,
+           28
+          ],
+          [
+           12,
+           20,
+           "2024-01-23T00:00:00.000000Z",
+           118.5,
+           38
+          ],
+          [
+           12,
+           21,
+           "2024-01-18T00:00:00.000000Z",
+           38.5,
+           38
+          ],
+          [
+           12,
+           22,
+           "2024-01-18T00:00:00.000000Z",
+           158.5,
+           38
+          ],
+          [
+           12,
+           23,
+           "2024-01-13T00:00:00.000000Z",
+           78.5,
+           38
+          ],
+          [
+           12,
+           24,
+           "2024-01-13T00:00:00.000000Z",
+           198.5,
+           38
+          ],
+          [
+           13,
+           25,
+           "2024-01-21T00:00:00.000000Z",
+           26.5,
+           26
+          ],
+          [
+           13,
+           26,
+           "2024-01-21T00:00:00.000000Z",
+           146.5,
+           26
+          ],
+          [
+           13,
+           27,
+           "2024-01-16T00:00:00.000000Z",
+           66.5,
+           26
+          ],
+          [
+           13,
+           28,
+           "2024-01-16T00:00:00.000000Z",
+           186.5,
+           26
+          ],
+          [
+           13,
+           29,
+           "2024-01-11T00:00:00.000000Z",
+           106.5,
+           26
+          ],
+          [
+           14,
+           30,
+           "2024-01-20T00:00:00.000000Z",
+           70.5,
+           30
+          ],
+          [
+           14,
+           31,
+           "2024-01-20T00:00:00.000000Z",
+           190.5,
+           30
+          ],
+          [
+           14,
+           32,
+           "2024-01-15T00:00:00.000000Z",
+           110.5,
+           30
+          ],
+          [
+           14,
+           33,
+           "2024-01-10T00:00:00.000000Z",
+           30.5,
+           30
+          ],
+          [
+           14,
+           34,
+           "2024-01-10T00:00:00.000000Z",
+           150.5,
+           30
+          ],
+          [
+           15,
+           35,
+           "2024-01-20T00:00:00.000000Z",
+           10.5,
+           10
+          ],
+          [
+           15,
+           36,
+           "2024-01-20T00:00:00.000000Z",
+           130.5,
+           10
+          ],
+          [
+           15,
+           37,
+           "2024-01-15T00:00:00.000000Z",
+           50.5,
+           10
+          ],
+          [
+           15,
+           38,
+           "2024-01-15T00:00:00.000000Z",
+           170.5,
+           10
+          ],
+          [
+           15,
+           39,
+           "2024-01-10T00:00:00.000000Z",
+           90.5,
+           10
+          ],
+          [
+           19,
+           40,
+           "2024-01-20T00:00:00.000000Z",
+           100.5,
+           20
+          ],
+          [
+           19,
+           41,
+           "2024-01-15T00:00:00.000000Z",
+           20.5,
+           20
+          ],
+          [
+           19,
+           42,
+           "2024-01-15T00:00:00.000000Z",
+           140.5,
+           20
+          ],
+          [
+           19,
+           43,
+           "2024-01-10T00:00:00.000000Z",
+           60.5,
+           20
+          ],
+          [
+           19,
+           44,
+           "2024-01-10T00:00:00.000000Z",
+           180.5,
+           20
+          ],
+          [
+           20,
+           45,
+           "2024-01-20T00:00:00.000000Z",
+           40.5,
+           0
+          ],
+          [
+           20,
+           46,
+           "2024-01-20T00:00:00.000000Z",
+           160.5,
+           0
+          ],
+          [
+           20,
+           47,
+           "2024-01-15T00:00:00.000000Z",
+           80.5,
+           0
+          ],
+          [
+           20,
+           48,
+           "2024-01-10T00:00:00.000000Z",
+           0.5,
+           0
+          ],
+          [
+           20,
+           49,
+           "2024-01-10T00:00:00.000000Z",
+           120.5,
+           0
+          ],
+          [
+           25,
+           50,
+           "2024-01-22T00:00:00.000000Z",
+           12.5,
+           12
+          ],
+          [
+           25,
+           51,
+           "2024-01-22T00:00:00.000000Z",
+           132.5,
+           12
+          ],
+          [
+           25,
+           52,
+           "2024-01-17T00:00:00.000000Z",
+           52.5,
+           12
+          ],
+          [
+           25,
+           53,
+           "2024-01-17T00:00:00.000000Z",
+           172.5,
+           12
+          ],
+          [
+           25,
+           54,
+           "2024-01-12T00:00:00.000000Z",
+           92.5,
+           12
+          ],
+          [
+           27,
+           55,
+           "2024-01-24T00:00:00.000000Z",
+           44.5,
+           4
+          ],
+          [
+           27,
+           56,
+           "2024-01-24T00:00:00.000000Z",
+           164.5,
+           4
+          ],
+          [
+           27,
+           57,
+           "2024-01-19T00:00:00.000000Z",
+           84.5,
+           4
+          ],
+          [
+           27,
+           58,
+           "2024-01-14T00:00:00.000000Z",
+           4.5,
+           4
+          ],
+          [
+           27,
+           59,
+           "2024-01-14T00:00:00.000000Z",
+           124.5,
+           4
+          ],
+          [
+           28,
+           60,
+           "2024-01-21T00:00:00.000000Z",
+           86.5,
+           6
+          ],
+          [
+           28,
+           61,
+           "2024-01-16T00:00:00.000000Z",
+           6.5,
+           6
+          ],
+          [
+           28,
+           62,
+           "2024-01-16T00:00:00.000000Z",
+           126.5,
+           6
+          ],
+          [
+           28,
+           63,
+           "2024-01-11T00:00:00.000000Z",
+           46.5,
+           6
+          ],
+          [
+           28,
+           64,
+           "2024-01-11T00:00:00.000000Z",
+           166.5,
+           6
+          ],
+          [
+           29,
+           65,
+           "2024-01-24T00:00:00.000000Z",
+           14.5,
+           14
+          ],
+          [
+           29,
+           66,
+           "2024-01-24T00:00:00.000000Z",
+           134.5,
+           14
+          ],
+          [
+           29,
+           67,
+           "2024-01-19T00:00:00.000000Z",
+           54.5,
+           14
+          ],
+          [
+           29,
+           68,
+           "2024-01-19T00:00:00.000000Z",
+           174.5,
+           14
+          ],
+          [
+           29,
+           69,
+           "2024-01-14T00:00:00.000000Z",
+           94.5,
+           14
+          ],
+          [
+           30,
+           70,
+           "2024-01-22T00:00:00.000000Z",
+           102.5,
+           22
+          ],
+          [
+           30,
+           71,
+           "2024-01-17T00:00:00.000000Z",
+           22.5,
+           22
+          ],
+          [
+           30,
+           72,
+           "2024-01-17T00:00:00.000000Z",
+           142.5,
+           22
+          ],
+          [
+           30,
+           73,
+           "2024-01-12T00:00:00.000000Z",
+           62.5,
+           22
+          ],
+          [
+           30,
+           74,
+           "2024-01-12T00:00:00.000000Z",
+           182.5,
+           22
+          ],
+          [
+           33,
+           75,
+           "2024-01-24T00:00:00.000000Z",
+           74.5,
+           34
+          ],
+          [
+           33,
+           76,
+           "2024-01-24T00:00:00.000000Z",
+           194.5,
+           34
+          ],
+          [
+           33,
+           77,
+           "2024-01-19T00:00:00.000000Z",
+           114.5,
+           34
+          ],
+          [
+           33,
+           78,
+           "2024-01-14T00:00:00.000000Z",
+           34.5,
+           34
+          ],
+          [
+           33,
+           79,
+           "2024-01-14T00:00:00.000000Z",
+           154.5,
+           34
+          ],
+          [
+           35,
+           80,
+           "2024-01-23T00:00:00.000000Z",
+           88.5,
+           8
+          ],
+          [
+           35,
+           81,
+           "2024-01-18T00:00:00.000000Z",
+           8.5,
+           8
+          ],
+          [
+           35,
+           82,
+           "2024-01-18T00:00:00.000000Z",
+           128.5,
+           8
+          ],
+          [
+           35,
+           83,
+           "2024-01-13T00:00:00.000000Z",
+           48.5,
+           8
+          ],
+          [
+           35,
+           84,
+           "2024-01-13T00:00:00.000000Z",
+           168.5,
+           8
+          ],
+          [
+           36,
+           85,
+           "2024-01-24T00:00:00.000000Z",
+           104.5,
+           24
+          ],
+          [
+           36,
+           86,
+           "2024-01-19T00:00:00.000000Z",
+           24.5,
+           24
+          ],
+          [
+           36,
+           87,
+           "2024-01-19T00:00:00.000000Z",
+           144.5,
+           24
+          ],
+          [
+           36,
+           88,
+           "2024-01-14T00:00:00.000000Z",
+           64.5,
+           24
+          ],
+          [
+           36,
+           89,
+           "2024-01-14T00:00:00.000000Z",
+           184.5,
+           24
+          ],
+          [
+           37,
+           90,
+           "2024-01-21T00:00:00.000000Z",
+           116.5,
+           36
+          ],
+          [
+           37,
+           91,
+           "2024-01-16T00:00:00.000000Z",
+           36.5,
+           36
+          ],
+          [
+           37,
+           92,
+           "2024-01-16T00:00:00.000000Z",
+           156.5,
+           36
+          ],
+          [
+           37,
+           93,
+           "2024-01-11T00:00:00.000000Z",
+           76.5,
+           36
+          ],
+          [
+           37,
+           94,
+           "2024-01-11T00:00:00.000000Z",
+           196.5,
+           36
+          ],
+          [
+           38,
+           95,
+           "2024-01-22T00:00:00.000000Z",
+           72.5,
+           32
+          ],
+          [
+           38,
+           96,
+           "2024-01-22T00:00:00.000000Z",
+           192.5,
+           32
+          ],
+          [
+           38,
+           97,
+           "2024-01-17T00:00:00.000000Z",
+           112.5,
+           32
+          ],
+          [
+           38,
+           98,
+           "2024-01-12T00:00:00.000000Z",
+           32.5,
+           32
+          ],
+          [
+           38,
+           99,
+           "2024-01-12T00:00:00.000000Z",
+           152.5,
+           32
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "rows": [
+         [
+          40,
+          0,
+          "2024-03-01T00:00:00.000000Z"
+         ],
+         [
+          41,
+          1,
+          "2024-03-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "user_id",
+          "score"
+         ],
+         "rows": [
+          [
+           40,
+           0,
+           0.5
+          ],
+          [
+           41,
+           1,
+           1.5
+          ]
+         ]
+        },
+        "orders": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "price",
+          "user_id"
+         ],
+         "rows": [
+          [
+           40,
+           100,
+           "2024-01-20T00:00:00.000000Z",
+           40.5,
+           0
+          ],
+          [
+           40,
+           101,
+           "2024-01-20T00:00:00.000000Z",
+           160.5,
+           0
+          ],
+          [
+           40,
+           102,
+           "2024-01-15T00:00:00.000000Z",
+           80.5,
+           0
+          ],
+          [
+           40,
+           103,
+           "2024-01-10T00:00:00.000000Z",
+           0.5,
+           0
+          ],
+          [
+           40,
+           104,
+           "2024-01-10T00:00:00.000000Z",
+           120.5,
+           0
+          ],
+          [
+           41,
+           105,
+           "2024-02-21T00:00:00.000000Z",
+           41.5,
+           1
+          ],
+          [
+           41,
+           106,
+           "2024-02-21T00:00:00.000000Z",
+           161.5,
+           1
+          ],
+          [
+           41,
+           107,
+           "2024-02-16T00:00:00.000000Z",
+           81.5,
+           1
+          ],
+          [
+           41,
+           108,
+           "2024-02-11T00:00:00.000000Z",
+           1.5,
+           1
+          ],
+          [
+           41,
+           109,
+           "2024-02-11T00:00:00.000000Z",
+           121.5,
+           1
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+       "num_context_examples": 40,
+       "num_prediction_examples": 2
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 10,
+     "materialize": 8
+    }
+   }
+  },
+  "composite-key": {
+   "setup": [
+    "CREATE TABLE users (user_id INTEGER, country TEXT, PRIMARY KEY (user_id, country))",
+    "CREATE TABLE orders (order_id INTEGER, user_id INTEGER, ts TIMESTAMP, price REAL)",
+    "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 39) INSERT INTO users SELECT i % 30, 'c' || i FROM n",
+    "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 199) INSERT INTO orders SELECT i, i % 40, printf('2024-0%d-%02d 00:00:00', 1 + i % 2, 10 + i % 15), i + 0.5 FROM n"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "country",
+         "dtype": "string",
+         "stype": "text"
+        }
+       ],
+       "primary_key": "user_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "order_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "ts",
+         "dtype": "string",
+         "stype": "timestamp"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ]
+    },
+    "payloads": null,
+    "outcome": {
+     "result": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "statements": {
+     "from_source": 11,
+     "materialize": 6
+    }
+   }
+  },
+  "partial-unique": {
+   "setup": [
+    "CREATE TABLE users (user_id INTEGER, country TEXT)",
+    "CREATE UNIQUE INDEX uu ON users(user_id) WHERE user_id >= 0",
+    "CREATE TABLE orders (order_id INTEGER, user_id INTEGER, ts TIMESTAMP, price REAL)",
+    "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 39) INSERT INTO users SELECT i, 'c' || (i % 3) FROM n",
+    "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 199) INSERT INTO orders SELECT i, i % 40, printf('2024-0%d-%02d 00:00:00', 1 + i % 2, 10 + i % 15), i + 0.5 FROM n"
+   ],
+   "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01"
+   },
+   "reference": {
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "country",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "user_id",
+       "time_column": null,
+       "duplicate_keys": 0
+      },
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "order_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "ts",
+         "dtype": "string",
+         "stype": "timestamp"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "order_id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "user_id"
+      ]
+     ]
+    },
+    "payloads": [
+     {
+      "model": "kumo-relational",
+      "task": {
+       "kind": "regression",
+       "target": {
+        "column_name": "TARGET",
+        "dtype": "float32"
+       },
+       "entity_table_names": [
+        "users"
+       ],
+       "anchor_time_column": "__kumo_anchor_time"
+      },
+      "schema": {
+       "instance_table": {
+        "columns": {
+         "instance_id": {
+          "dtype": "int64",
+          "stype": "ID",
+          "nullable": false
+         },
+         "__kumo_entity_ref_0": {
+          "dtype": "int64",
+          "stype": "ID"
+         },
+         "__kumo_anchor_time": {
+          "dtype": "timestamp[us]",
+          "stype": "timestamp",
+          "nullable": false
+         },
+         "TARGET": {
+          "dtype": "float32",
+          "stype": "numerical"
+         }
+        },
+        "primary_key": "instance_id"
+       },
+       "related_tables": {
+        "users": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "user_id": {
+           "dtype": "int64",
+           "nullable": false
+          },
+          "country": {
+           "dtype": "string",
+           "stype": "categorical"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "user_id"
+         ]
+        },
+        "orders": {
+         "columns": {
+          "instance_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "__node_id": {
+           "dtype": "int64",
+           "stype": "ID",
+           "nullable": false
+          },
+          "ts": {
+           "dtype": "timestamp[us]",
+           "stype": "timestamp"
+          },
+          "price": {
+           "dtype": "float64",
+           "stype": "numerical"
+          },
+          "user_id": {
+           "dtype": "int64",
+           "stype": "ID"
+          }
+         },
+         "primary_key": [
+          "instance_id",
+          "__node_id"
+         ]
+        }
+       },
+       "relationships": [
+        {
+         "source_columns": [
+          "__kumo_entity_ref_0"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "user_id"
+         ]
+        },
+        {
+         "source_table": "orders",
+         "source_columns": [
+          "user_id"
+         ],
+         "target_table": "users",
+         "target_columns": [
+          "user_id"
+         ]
+        }
+       ]
+      },
+      "context": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time",
+         "TARGET"
+        ],
+        "rows": [
+         [
+          0,
+          37,
+          "2024-01-31T00:00:00.000000Z",
+          587.5
+         ],
+         [
+          1,
+          33,
+          "2024-01-31T00:00:00.000000Z",
+          567.5
+         ],
+         [
+          2,
+          27,
+          "2024-01-31T00:00:00.000000Z",
+          537.5
+         ],
+         [
+          3,
+          3,
+          "2024-01-31T00:00:00.000000Z",
+          417.5
+         ],
+         [
+          4,
+          18,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          5,
+          7,
+          "2024-01-31T00:00:00.000000Z",
+          437.5
+         ],
+         [
+          6,
+          2,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          7,
+          5,
+          "2024-01-31T00:00:00.000000Z",
+          427.5
+         ],
+         [
+          8,
+          11,
+          "2024-01-31T00:00:00.000000Z",
+          457.5
+         ],
+         [
+          9,
+          16,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          10,
+          1,
+          "2024-01-31T00:00:00.000000Z",
+          407.5
+         ],
+         [
+          11,
+          28,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          12,
+          38,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          13,
+          26,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          14,
+          30,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          15,
+          10,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          16,
+          19,
+          "2024-01-31T00:00:00.000000Z",
+          497.5
+         ],
+         [
+          17,
+          17,
+          "2024-01-31T00:00:00.000000Z",
+          487.5
+         ],
+         [
+          18,
+          15,
+          "2024-01-31T00:00:00.000000Z",
+          477.5
+         ],
+         [
+          19,
+          20,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          20,
+          0,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          21,
+          25,
+          "2024-01-31T00:00:00.000000Z",
+          527.5
+         ],
+         [
+          22,
+          29,
+          "2024-01-31T00:00:00.000000Z",
+          547.5
+         ],
+         [
+          23,
+          35,
+          "2024-01-31T00:00:00.000000Z",
+          577.5
+         ],
+         [
+          24,
+          31,
+          "2024-01-31T00:00:00.000000Z",
+          557.5
+         ],
+         [
+          25,
+          12,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          26,
+          9,
+          "2024-01-31T00:00:00.000000Z",
+          447.5
+         ],
+         [
+          27,
+          4,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          28,
+          6,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          29,
+          14,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          30,
+          22,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          31,
+          13,
+          "2024-01-31T00:00:00.000000Z",
+          467.5
+         ],
+         [
+          32,
+          21,
+          "2024-01-31T00:00:00.000000Z",
+          507.5
+         ],
+         [
+          33,
+          34,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          34,
+          23,
+          "2024-01-31T00:00:00.000000Z",
+          517.5
+         ],
+         [
+          35,
+          8,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          36,
+          24,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          37,
+          36,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          38,
+          32,
+          "2024-01-31T00:00:00.000000Z",
+          0.0
+         ],
+         [
+          39,
+          39,
+          "2024-01-31T00:00:00.000000Z",
+          597.5
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "user_id",
+          "country"
+         ],
+         "rows": [
+          [
+           0,
+           37,
+           "c1"
+          ],
+          [
+           1,
+           33,
+           "c0"
+          ],
+          [
+           2,
+           27,
+           "c0"
+          ],
+          [
+           3,
+           3,
+           "c0"
+          ],
+          [
+           4,
+           18,
+           "c0"
+          ],
+          [
+           5,
+           7,
+           "c1"
+          ],
+          [
+           6,
+           2,
+           "c2"
+          ],
+          [
+           7,
+           5,
+           "c2"
+          ],
+          [
+           8,
+           11,
+           "c2"
+          ],
+          [
+           9,
+           16,
+           "c1"
+          ],
+          [
+           10,
+           1,
+           "c1"
+          ],
+          [
+           11,
+           28,
+           "c1"
+          ],
+          [
+           12,
+           38,
+           "c2"
+          ],
+          [
+           13,
+           26,
+           "c2"
+          ],
+          [
+           14,
+           30,
+           "c0"
+          ],
+          [
+           15,
+           10,
+           "c1"
+          ],
+          [
+           16,
+           19,
+           "c1"
+          ],
+          [
+           17,
+           17,
+           "c2"
+          ],
+          [
+           18,
+           15,
+           "c0"
+          ],
+          [
+           19,
+           20,
+           "c2"
+          ],
+          [
+           20,
+           0,
+           "c0"
+          ],
+          [
+           21,
+           25,
+           "c1"
+          ],
+          [
+           22,
+           29,
+           "c2"
+          ],
+          [
+           23,
+           35,
+           "c2"
+          ],
+          [
+           24,
+           31,
+           "c1"
+          ],
+          [
+           25,
+           12,
+           "c0"
+          ],
+          [
+           26,
+           9,
+           "c0"
+          ],
+          [
+           27,
+           4,
+           "c1"
+          ],
+          [
+           28,
+           6,
+           "c0"
+          ],
+          [
+           29,
+           14,
+           "c2"
+          ],
+          [
+           30,
+           22,
+           "c1"
+          ],
+          [
+           31,
+           13,
+           "c1"
+          ],
+          [
+           32,
+           21,
+           "c0"
+          ],
+          [
+           33,
+           34,
+           "c1"
+          ],
+          [
+           34,
+           23,
+           "c2"
+          ],
+          [
+           35,
+           8,
+           "c2"
+          ],
+          [
+           36,
+           24,
+           "c0"
+          ],
+          [
+           37,
+           36,
+           "c0"
+          ],
+          [
+           38,
+           32,
+           "c2"
+          ],
+          [
+           39,
+           39,
+           "c0"
+          ]
+         ]
+        },
+        "orders": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "price",
+          "user_id"
+         ],
+         "rows": [
+          [
+           4,
+           0,
+           "2024-01-23T00:00:00.000000Z",
+           58.5,
+           18
+          ],
+          [
+           4,
+           1,
+           "2024-01-23T00:00:00.000000Z",
+           178.5,
+           18
+          ],
+          [
+           4,
+           2,
+           "2024-01-18T00:00:00.000000Z",
+           98.5,
+           18
+          ],
+          [
+           4,
+           3,
+           "2024-01-13T00:00:00.000000Z",
+           18.5,
+           18
+          ],
+          [
+           4,
+           4,
+           "2024-01-13T00:00:00.000000Z",
+           138.5,
+           18
+          ],
+          [
+           6,
+           5,
+           "2024-01-22T00:00:00.000000Z",
+           42.5,
+           2
+          ],
+          [
+           6,
+           6,
+           "2024-01-22T00:00:00.000000Z",
+           162.5,
+           2
+          ],
+          [
+           6,
+           7,
+           "2024-01-17T00:00:00.000000Z",
+           82.5,
+           2
+          ],
+          [
+           6,
+           8,
+           "2024-01-12T00:00:00.000000Z",
+           2.5,
+           2
+          ],
+          [
+           6,
+           9,
+           "2024-01-12T00:00:00.000000Z",
+           122.5,
+           2
+          ],
+          [
+           9,
+           10,
+           "2024-01-21T00:00:00.000000Z",
+           56.5,
+           16
+          ],
+          [
+           9,
+           11,
+           "2024-01-21T00:00:00.000000Z",
+           176.5,
+           16
+          ],
+          [
+           9,
+           12,
+           "2024-01-16T00:00:00.000000Z",
+           96.5,
+           16
+          ],
+          [
+           9,
+           13,
+           "2024-01-11T00:00:00.000000Z",
+           16.5,
+           16
+          ],
+          [
+           9,
+           14,
+           "2024-01-11T00:00:00.000000Z",
+           136.5,
+           16
+          ],
+          [
+           11,
+           15,
+           "2024-01-23T00:00:00.000000Z",
+           28.5,
+           28
+          ],
+          [
+           11,
+           16,
+           "2024-01-23T00:00:00.000000Z",
+           148.5,
+           28
+          ],
+          [
+           11,
+           17,
+           "2024-01-18T00:00:00.000000Z",
+           68.5,
+           28
+          ],
+          [
+           11,
+           18,
+           "2024-01-18T00:00:00.000000Z",
+           188.5,
+           28
+          ],
+          [
+           11,
+           19,
+           "2024-01-13T00:00:00.000000Z",
+           108.5,
+           28
+          ],
+          [
+           12,
+           20,
+           "2024-01-23T00:00:00.000000Z",
+           118.5,
+           38
+          ],
+          [
+           12,
+           21,
+           "2024-01-18T00:00:00.000000Z",
+           38.5,
+           38
+          ],
+          [
+           12,
+           22,
+           "2024-01-18T00:00:00.000000Z",
+           158.5,
+           38
+          ],
+          [
+           12,
+           23,
+           "2024-01-13T00:00:00.000000Z",
+           78.5,
+           38
+          ],
+          [
+           12,
+           24,
+           "2024-01-13T00:00:00.000000Z",
+           198.5,
+           38
+          ],
+          [
+           13,
+           25,
+           "2024-01-21T00:00:00.000000Z",
+           26.5,
+           26
+          ],
+          [
+           13,
+           26,
+           "2024-01-21T00:00:00.000000Z",
+           146.5,
+           26
+          ],
+          [
+           13,
+           27,
+           "2024-01-16T00:00:00.000000Z",
+           66.5,
+           26
+          ],
+          [
+           13,
+           28,
+           "2024-01-16T00:00:00.000000Z",
+           186.5,
+           26
+          ],
+          [
+           13,
+           29,
+           "2024-01-11T00:00:00.000000Z",
+           106.5,
+           26
+          ],
+          [
+           14,
+           30,
+           "2024-01-20T00:00:00.000000Z",
+           70.5,
+           30
+          ],
+          [
+           14,
+           31,
+           "2024-01-20T00:00:00.000000Z",
+           190.5,
+           30
+          ],
+          [
+           14,
+           32,
+           "2024-01-15T00:00:00.000000Z",
+           110.5,
+           30
+          ],
+          [
+           14,
+           33,
+           "2024-01-10T00:00:00.000000Z",
+           30.5,
+           30
+          ],
+          [
+           14,
+           34,
+           "2024-01-10T00:00:00.000000Z",
+           150.5,
+           30
+          ],
+          [
+           15,
+           35,
+           "2024-01-20T00:00:00.000000Z",
+           10.5,
+           10
+          ],
+          [
+           15,
+           36,
+           "2024-01-20T00:00:00.000000Z",
+           130.5,
+           10
+          ],
+          [
+           15,
+           37,
+           "2024-01-15T00:00:00.000000Z",
+           50.5,
+           10
+          ],
+          [
+           15,
+           38,
+           "2024-01-15T00:00:00.000000Z",
+           170.5,
+           10
+          ],
+          [
+           15,
+           39,
+           "2024-01-10T00:00:00.000000Z",
+           90.5,
+           10
+          ],
+          [
+           19,
+           40,
+           "2024-01-20T00:00:00.000000Z",
+           100.5,
+           20
+          ],
+          [
+           19,
+           41,
+           "2024-01-15T00:00:00.000000Z",
+           20.5,
+           20
+          ],
+          [
+           19,
+           42,
+           "2024-01-15T00:00:00.000000Z",
+           140.5,
+           20
+          ],
+          [
+           19,
+           43,
+           "2024-01-10T00:00:00.000000Z",
+           60.5,
+           20
+          ],
+          [
+           19,
+           44,
+           "2024-01-10T00:00:00.000000Z",
+           180.5,
+           20
+          ],
+          [
+           20,
+           45,
+           "2024-01-20T00:00:00.000000Z",
+           40.5,
+           0
+          ],
+          [
+           20,
+           46,
+           "2024-01-20T00:00:00.000000Z",
+           160.5,
+           0
+          ],
+          [
+           20,
+           47,
+           "2024-01-15T00:00:00.000000Z",
+           80.5,
+           0
+          ],
+          [
+           20,
+           48,
+           "2024-01-10T00:00:00.000000Z",
+           0.5,
+           0
+          ],
+          [
+           20,
+           49,
+           "2024-01-10T00:00:00.000000Z",
+           120.5,
+           0
+          ],
+          [
+           25,
+           50,
+           "2024-01-22T00:00:00.000000Z",
+           12.5,
+           12
+          ],
+          [
+           25,
+           51,
+           "2024-01-22T00:00:00.000000Z",
+           132.5,
+           12
+          ],
+          [
+           25,
+           52,
+           "2024-01-17T00:00:00.000000Z",
+           52.5,
+           12
+          ],
+          [
+           25,
+           53,
+           "2024-01-17T00:00:00.000000Z",
+           172.5,
+           12
+          ],
+          [
+           25,
+           54,
+           "2024-01-12T00:00:00.000000Z",
+           92.5,
+           12
+          ],
+          [
+           27,
+           55,
+           "2024-01-24T00:00:00.000000Z",
+           44.5,
+           4
+          ],
+          [
+           27,
+           56,
+           "2024-01-24T00:00:00.000000Z",
+           164.5,
+           4
+          ],
+          [
+           27,
+           57,
+           "2024-01-19T00:00:00.000000Z",
+           84.5,
+           4
+          ],
+          [
+           27,
+           58,
+           "2024-01-14T00:00:00.000000Z",
+           4.5,
+           4
+          ],
+          [
+           27,
+           59,
+           "2024-01-14T00:00:00.000000Z",
+           124.5,
+           4
+          ],
+          [
+           28,
+           60,
+           "2024-01-21T00:00:00.000000Z",
+           86.5,
+           6
+          ],
+          [
+           28,
+           61,
+           "2024-01-16T00:00:00.000000Z",
+           6.5,
+           6
+          ],
+          [
+           28,
+           62,
+           "2024-01-16T00:00:00.000000Z",
+           126.5,
+           6
+          ],
+          [
+           28,
+           63,
+           "2024-01-11T00:00:00.000000Z",
+           46.5,
+           6
+          ],
+          [
+           28,
+           64,
+           "2024-01-11T00:00:00.000000Z",
+           166.5,
+           6
+          ],
+          [
+           29,
+           65,
+           "2024-01-24T00:00:00.000000Z",
+           14.5,
+           14
+          ],
+          [
+           29,
+           66,
+           "2024-01-24T00:00:00.000000Z",
+           134.5,
+           14
+          ],
+          [
+           29,
+           67,
+           "2024-01-19T00:00:00.000000Z",
+           54.5,
+           14
+          ],
+          [
+           29,
+           68,
+           "2024-01-19T00:00:00.000000Z",
+           174.5,
+           14
+          ],
+          [
+           29,
+           69,
+           "2024-01-14T00:00:00.000000Z",
+           94.5,
+           14
+          ],
+          [
+           30,
+           70,
+           "2024-01-22T00:00:00.000000Z",
+           102.5,
+           22
+          ],
+          [
+           30,
+           71,
+           "2024-01-17T00:00:00.000000Z",
+           22.5,
+           22
+          ],
+          [
+           30,
+           72,
+           "2024-01-17T00:00:00.000000Z",
+           142.5,
+           22
+          ],
+          [
+           30,
+           73,
+           "2024-01-12T00:00:00.000000Z",
+           62.5,
+           22
+          ],
+          [
+           30,
+           74,
+           "2024-01-12T00:00:00.000000Z",
+           182.5,
+           22
+          ],
+          [
+           33,
+           75,
+           "2024-01-24T00:00:00.000000Z",
+           74.5,
+           34
+          ],
+          [
+           33,
+           76,
+           "2024-01-24T00:00:00.000000Z",
+           194.5,
+           34
+          ],
+          [
+           33,
+           77,
+           "2024-01-19T00:00:00.000000Z",
+           114.5,
+           34
+          ],
+          [
+           33,
+           78,
+           "2024-01-14T00:00:00.000000Z",
+           34.5,
+           34
+          ],
+          [
+           33,
+           79,
+           "2024-01-14T00:00:00.000000Z",
+           154.5,
+           34
+          ],
+          [
+           35,
+           80,
+           "2024-01-23T00:00:00.000000Z",
+           88.5,
+           8
+          ],
+          [
+           35,
+           81,
+           "2024-01-18T00:00:00.000000Z",
+           8.5,
+           8
+          ],
+          [
+           35,
+           82,
+           "2024-01-18T00:00:00.000000Z",
+           128.5,
+           8
+          ],
+          [
+           35,
+           83,
+           "2024-01-13T00:00:00.000000Z",
+           48.5,
+           8
+          ],
+          [
+           35,
+           84,
+           "2024-01-13T00:00:00.000000Z",
+           168.5,
+           8
+          ],
+          [
+           36,
+           85,
+           "2024-01-24T00:00:00.000000Z",
+           104.5,
+           24
+          ],
+          [
+           36,
+           86,
+           "2024-01-19T00:00:00.000000Z",
+           24.5,
+           24
+          ],
+          [
+           36,
+           87,
+           "2024-01-19T00:00:00.000000Z",
+           144.5,
+           24
+          ],
+          [
+           36,
+           88,
+           "2024-01-14T00:00:00.000000Z",
+           64.5,
+           24
+          ],
+          [
+           36,
+           89,
+           "2024-01-14T00:00:00.000000Z",
+           184.5,
+           24
+          ],
+          [
+           37,
+           90,
+           "2024-01-21T00:00:00.000000Z",
+           116.5,
+           36
+          ],
+          [
+           37,
+           91,
+           "2024-01-16T00:00:00.000000Z",
+           36.5,
+           36
+          ],
+          [
+           37,
+           92,
+           "2024-01-16T00:00:00.000000Z",
+           156.5,
+           36
+          ],
+          [
+           37,
+           93,
+           "2024-01-11T00:00:00.000000Z",
+           76.5,
+           36
+          ],
+          [
+           37,
+           94,
+           "2024-01-11T00:00:00.000000Z",
+           196.5,
+           36
+          ],
+          [
+           38,
+           95,
+           "2024-01-22T00:00:00.000000Z",
+           72.5,
+           32
+          ],
+          [
+           38,
+           96,
+           "2024-01-22T00:00:00.000000Z",
+           192.5,
+           32
+          ],
+          [
+           38,
+           97,
+           "2024-01-17T00:00:00.000000Z",
+           112.5,
+           32
+          ],
+          [
+           38,
+           98,
+           "2024-01-12T00:00:00.000000Z",
+           32.5,
+           32
+          ],
+          [
+           38,
+           99,
+           "2024-01-12T00:00:00.000000Z",
+           152.5,
+           32
+          ]
+         ]
+        }
+       }
+      },
+      "predict": {
+       "instance_table": {
+        "format": "arrays",
+        "columns": [
+         "instance_id",
+         "__kumo_entity_ref_0",
+         "__kumo_anchor_time"
+        ],
+        "rows": [
+         [
+          40,
+          0,
+          "2024-03-01T00:00:00.000000Z"
+         ],
+         [
+          41,
+          1,
+          "2024-03-01T00:00:00.000000Z"
+         ]
+        ]
+       },
+       "related_tables": {
+        "users": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "user_id",
+          "country"
+         ],
+         "rows": [
+          [
+           40,
+           0,
+           "c0"
+          ],
+          [
+           41,
+           1,
+           "c1"
+          ]
+         ]
+        },
+        "orders": {
+         "format": "arrays",
+         "columns": [
+          "instance_id",
+          "__node_id",
+          "ts",
+          "price",
+          "user_id"
+         ],
+         "rows": [
+          [
+           40,
+           100,
+           "2024-01-20T00:00:00.000000Z",
+           40.5,
+           0
+          ],
+          [
+           40,
+           101,
+           "2024-01-20T00:00:00.000000Z",
+           160.5,
+           0
+          ],
+          [
+           40,
+           102,
+           "2024-01-15T00:00:00.000000Z",
+           80.5,
+           0
+          ],
+          [
+           40,
+           103,
+           "2024-01-10T00:00:00.000000Z",
+           0.5,
+           0
+          ],
+          [
+           40,
+           104,
+           "2024-01-10T00:00:00.000000Z",
+           120.5,
+           0
+          ],
+          [
+           41,
+           105,
+           "2024-02-21T00:00:00.000000Z",
+           41.5,
+           1
+          ],
+          [
+           41,
+           106,
+           "2024-02-21T00:00:00.000000Z",
+           161.5,
+           1
+          ],
+          [
+           41,
+           107,
+           "2024-02-16T00:00:00.000000Z",
+           81.5,
+           1
+          ],
+          [
+           41,
+           108,
+           "2024-02-11T00:00:00.000000Z",
+           1.5,
+           1
+          ],
+          [
+           41,
+           109,
+           "2024-02-11T00:00:00.000000Z",
+           121.5,
+           1
+          ]
+         ]
+        }
+       }
+      },
+      "output": {
+       "fields": [
+        "prediction"
+       ]
+      },
+      "inference": {
+       "run_mode": "fast",
+       "use_prediction_time": false,
+       "inference_config": {
+        "kind": "regression",
+        "num_estimators": 1,
+        "column_shuffle": false,
+        "category_shuffle": false,
+        "hop_shuffle": false,
+        "target_transforms": [
+         "quantile"
+        ],
+        "output_type": "median"
+       }
+      },
+      "metadata": {
+       "source_query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+       "num_context_examples": 40,
+       "num_prediction_examples": 2
+      }
+     }
+    ],
+    "outcome": {
+     "result": "success",
+     "stage": "materialize"
+    },
+    "statements": {
+     "from_source": 11,
+     "materialize": 7
     }
    }
   }

@@ -12,27 +12,40 @@ repository's root::
 
     ~/code/sdmc-reference/.venv/bin/python -I contract/tools/sqlite_regressions_record.py
 
-Written by T2.2's test author from the round 1 review's repros. Each
-scenario is a SQLite database made on an in-memory ADBC connection by its
-``setup``, read by ``Schema.from_source(SQLiteSource(connection),
-tables={'users': 'users'})`` and asked ``PREDICT users.age FOR EACH
-users.id`` by ``materialize(indices=..., num_context_samples=3,
-random_seed=42)``:
+Written by T2.2's test author from the round 1 and round 2 reviews'
+repros. Each scenario is a SQLite database made on an in-memory ADBC
+connection by its ``setup``, read by ``Schema.from_source`` (over the
+tables its ``tables`` names, or every table) and asked its ``query``
+(default ``PREDICT users.age FOR EACH users.id``) by ``materialize`` with
+its ``materialize`` keywords:
 
-- ``seeds-table``: the caller's own temporary table ``__sdm_seeds__``
-  holding ``'keep me'`` beside the source; ``temp_after`` is that table
-  after the call, columns and rows;
+- ``seeds-table``, ``seeds-table-numbered``, ``seeds-table-upper``: the
+  caller's own temporary table holding ``'keep me'`` beside the source,
+  named as the provider's scratch relations are or were (``__sdm_seeds__``,
+  ``__sdm_seeds_1__``, and ``__SDM_SEEDS_1__``, which SQLite takes for the
+  same name); ``temp_after`` is that table after the call, columns and
+  rows;
 - ``float-keys``: an ``INT PRIMARY KEY`` holding 101.5 to 107.5 (SQLite
   stores each as a REAL), so the seeded context sample is the reference's
   for a key whose storage class differs from its declared type;
 - ``null-key``: an ``INT PRIMARY KEY`` holding a NULL beside 101 to 106
-  (SQLite lets a primary key that is not a rowid alias hold one).
+  (SQLite lets a primary key that is not a rowid alias hold one);
+- ``integer-fractions``: a column declared ``INTEGER`` holding fractions
+  (``i.5``), described as its declaration types it;
+- ``composite-key``: a composite primary key of an ``INTEGER`` column
+  holding repeated ids and a ``TEXT`` one, described as the reference
+  reads it (the ``INTEGER`` column as SQLite's rowid alias), and refused
+  at ``materialize`` as there;
+- ``partial-unique``: a partial unique index on the key column, read as
+  unique, with the reference's statements.
 
-The reference's answer is kept as the call gave it: the outcome (success,
-or the refusal's class and ``StructuredDataError.code``, no message text,
-H17) and the request's payloads as JSON. :func:`run` is imported by
-``contract/tests/test_t22_r1_regressions.py``, so ``python-core`` is run
-by the same code.
+The reference's answer is kept as the calls gave it: the outcome (success,
+or the refusal's class, ``StructuredDataError.code`` and the call it ended,
+no message text, H17), the public schema as ``run_python.py`` projects it,
+the request's payloads as JSON, and the statements the driver ran per
+public call (``run_python.py``'s ``StatementLog``, the setup outside it).
+:func:`run` is imported by ``contract/tests/test_t22_r1_regressions.py``,
+so ``python-core`` is run by the same code.
 """
 
 from __future__ import annotations
@@ -50,25 +63,67 @@ OUT = ROOT / 'contract/sqlite-regression-vectors.json'
 FORMAT = 'sdm-sqlite-regression-vectors/1'
 QUERY = 'PREDICT users.age FOR EACH users.id'
 
-SCENARIOS: dict[str, dict[str, Any]] = {
-    'seeds-table': {
+
+def _seeds(name: str) -> dict[str, Any]:
+    return {
         'setup': [
             'CREATE TABLE users (id INTEGER PRIMARY KEY, age REAL)',
             'INSERT INTO users VALUES (101, 10), (102, 20), (103, 30), '
             '(104, 40), (105, 50), (106, 60)',
-            'CREATE TEMP TABLE __sdm_seeds__ (important TEXT)',
-            "INSERT INTO temp.__sdm_seeds__ VALUES ('keep me')",
+            f'CREATE TEMP TABLE "{name}" (important TEXT)',
+            f'INSERT INTO temp."{name}" VALUES (\'keep me\')',
         ],
-        'indices': [101],
-        'temp_table': '__sdm_seeds__',
-    },
+        'tables': {'users': 'users'},
+        'materialize': {
+            'indices': [101],
+            'num_context_samples': 3,
+            'random_seed': 42,
+        },
+        'temp_table': name,
+    }
+
+
+def _shop(
+    users: list[str], score: str = "'c' || (i % 3)", ids: str = 'i'
+) -> list[str]:
+    r"""Round 2's shop: ``users`` made by its statements and filled with
+    40 rows of ``ids`` and ``score`` over i from 0 to 39, and 200 orders
+    over users 0 to 39 in two months."""
+    return [
+        *users,
+        'CREATE TABLE orders (order_id INTEGER, user_id INTEGER, '
+        'ts TIMESTAMP, price REAL)',
+        'WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n '
+        f'WHERE i < 39) INSERT INTO users SELECT {ids}, {score} FROM n',
+        'WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n '
+        'WHERE i < 199) INSERT INTO orders SELECT i, i % 40, '
+        "printf('2024-0%d-%02d 00:00:00', 1 + i % 2, 10 + i % 15), i + 0.5 "
+        'FROM n',
+    ]
+
+
+#: Round 2's question, entities and anchor time.
+SUMMED = {
+    'query': 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+    'materialize': {'indices': [0, 1], 'anchor_time': '2024-03-01'},
+}
+
+SCENARIOS: dict[str, dict[str, Any]] = {
+    'seeds-table': _seeds('__sdm_seeds__'),
+    'seeds-table-numbered': _seeds('__sdm_seeds_1__'),
+    'seeds-table-upper': _seeds('__SDM_SEEDS_1__'),
     'float-keys': {
         'setup': [
             'CREATE TABLE users (id INT PRIMARY KEY, age REAL)',
             'INSERT INTO users VALUES (101.5, 10), (102.5, 20), (103.5, 30), '
             '(104.5, 40), (105.5, 50), (106.5, 60), (107.5, 70)',
         ],
-        'indices': [101.5],
+        'tables': {'users': 'users'},
+        'materialize': {
+            'indices': [101.5],
+            'num_context_samples': 3,
+            'random_seed': 42,
+        },
     },
     'null-key': {
         'setup': [
@@ -76,7 +131,39 @@ SCENARIOS: dict[str, dict[str, Any]] = {
             'INSERT INTO users VALUES (NULL, 99), (101, 10), (102, 20), '
             '(103, 30), (104, 40), (105, 50), (106, 60)',
         ],
-        'indices': [101],
+        'tables': {'users': 'users'},
+        'materialize': {
+            'indices': [101],
+            'num_context_samples': 3,
+            'random_seed': 42,
+        },
+    },
+    'integer-fractions': {
+        'setup': _shop(
+            ['CREATE TABLE users (user_id INTEGER, score INTEGER)'],
+            score='i + 0.5',
+        ),
+        **SUMMED,
+    },
+    'composite-key': {
+        'setup': _shop(
+            [
+                'CREATE TABLE users (user_id INTEGER, country TEXT, '
+                'PRIMARY KEY (user_id, country))'
+            ],
+            score="'c' || i",
+            ids='i % 30',
+        ),
+        **SUMMED,
+    },
+    'partial-unique': {
+        'setup': _shop(
+            [
+                'CREATE TABLE users (user_id INTEGER, country TEXT)',
+                'CREATE UNIQUE INDEX uu ON users(user_id) WHERE user_id >= 0',
+            ]
+        ),
+        **SUMMED,
     },
 }
 
@@ -87,36 +174,66 @@ def _plain(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
 
 
+def _runner() -> Any:
+    import importlib.util
+
+    if 'run_python' not in sys.modules:
+        path = ROOT / 'contract/runners/run_python.py'
+        spec = importlib.util.spec_from_file_location('run_python', path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules['run_python'] = module
+        spec.loader.exec_module(module)
+    return sys.modules['run_python']
+
+
 def run(scenario: dict[str, Any]) -> dict[str, Any]:
     r"""One scenario through the public calls, on whatever route the
-    environment gives: its outcome, payloads and the caller's temporary
-    table after the call."""
+    environment gives: its outcome, public schema, payloads, statements per
+    call and the caller's temporary table after the call."""
     import adbc_driver_sqlite.dbapi
+    import pandas as pd
     from sdm_client import PredictiveQuery, Schema, StructuredDataError
     from sdm_connectors import SQLiteSource
 
+    runner = _runner()
     connection = adbc_driver_sqlite.dbapi.connect()
     cursor = connection.cursor()
     try:
         for statement in scenario['setup']:
             cursor.execute(statement)
-        answer: dict[str, Any] = {'payloads': None}
+        answer: dict[str, Any] = {'schema': None, 'payloads': None}
+        statements: dict[str, int] = {}
+        keywords = dict(scenario['materialize'])
+        if 'anchor_time' in keywords:
+            keywords['anchor_time'] = pd.Timestamp(keywords['anchor_time'])
+        stage = 'from_source'
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             try:
-                schema = Schema.from_source(
-                    SQLiteSource(connection), tables={'users': 'users'}
-                )
-                request = PredictiveQuery(QUERY, schema).materialize(
-                    indices=list(scenario['indices']),
-                    num_context_samples=3,
-                    random_seed=42,
-                )
-                answer['outcome'] = {'result': 'success', 'code': None}
+                with runner.StatementLog('sqlite') as log:
+                    if 'tables' in scenario:
+                        schema = Schema.from_source(
+                            SQLiteSource(connection), tables=scenario['tables']
+                        )
+                    else:
+                        schema = Schema.from_source(SQLiteSource(connection))
+                statements[stage] = sum(1 for text in log.texts if text)
+                answer['schema'] = _plain(runner._schema_projection(schema))
+                stage = 'materialize'
+                with runner.StatementLog('sqlite') as log:
+                    try:
+                        request = PredictiveQuery(
+                            scenario.get('query', QUERY), schema
+                        ).materialize(**keywords)
+                    finally:
+                        statements[stage] = sum(1 for t in log.texts if t)
+                answer['outcome'] = {'result': 'success', 'stage': stage}
                 answer['payloads'] = _plain(list(request.payloads))
             except Exception as error:  # noqa: BLE001 - the call's outcome
                 answer['outcome'] = {
                     'result': 'refusal',
+                    'stage': stage,
                     'error': type(error).__name__,
                     'code': (
                         error.code
@@ -124,6 +241,7 @@ def run(scenario: dict[str, Any]) -> dict[str, Any]:
                         else None
                     ),
                 }
+        answer['statements'] = statements
         if 'temp_table' in scenario:
             cursor.execute(f'SELECT * FROM temp."{scenario["temp_table"]}"')
             answer['temp_after'] = {
