@@ -109,16 +109,27 @@ const MOST_PARTS: usize = 2;
 /// provider binds as a temporary table, read as `temp`'s.
 const SEEDS: &str = "__sdm_seeds";
 
-/// The relation a statement joining `table` reads the key set `seeds` by:
-/// [`SEEDS`] and the key set's attachment, one name per key set of the run
-/// (`__sdm_seeds_3__`), so the provider never binds two over one table and
-/// a caller's own temporary table of the old fixed name is never the
-/// provider's; lengthened by underscores until it is not `table`'s last
-/// part in any case (SQLite matches ASCII names without case), which a
-/// source table of the same name would hide from an unqualified name.
-pub(crate) fn seeds_for(table: &Relation, seeds: &KeySet) -> String {
+/// The relation a statement answering `request`, which joins `table`, reads
+/// its key set by: [`SEEDS`] and the 64-bit FNV-1a digest of the request as
+/// the contract writes it, in 16 hex digits (`__sdm_seeds_3f2a9c0d1e4b5a67__`),
+/// so each key set of a run has its own name (its attachment is in the
+/// request), both hosts and the goldens render one text, and no name a
+/// caller would write (`__sdm_seeds__`, `__sdm_seeds_1__`) is the
+/// provider's. The reference names its key tables by an object's address,
+/// which no caller predicts either. Lengthened by underscores until it is
+/// not `table`'s last part in any case (SQLite matches ASCII names without
+/// case), which a source table of the same name would hide from an
+/// unqualified name.
+pub(crate) fn seeds_for(request: &DataRequest, table: &Relation) -> String {
+    // FNV-1a: no digest crate shipped for a name no caller writes.
+    let written = serde_json::to_vec(request).unwrap_or_default();
+    let digest = written
+        .iter()
+        .fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+        });
     let last = table.source.last().map(String::as_str).unwrap_or_default();
-    let mut name = format!("{SEEDS}_{}__", seeds.attachment.0);
+    let mut name = format!("{SEEDS}_{digest:016x}__");
     while name.eq_ignore_ascii_case(last) {
         name.push('_');
     }
@@ -266,7 +277,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             per_seed,
             order,
         } => {
-            let seeds_name = seeds_for(table, seeds);
+            let seeds_name = seeds_for(request, table);
             let table = from(request, "table", table)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
@@ -290,7 +301,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             columns,
             seeds,
         } => {
-            let seeds_name = seeds_for(table, seeds);
+            let seeds_name = seeds_for(request, table);
             let table = from(request, "table", table)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
