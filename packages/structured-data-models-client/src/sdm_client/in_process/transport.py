@@ -33,7 +33,7 @@ from sdm_client.in_process.answers import (
     row_ids,
 )
 from sdm_client.in_process.columns import Context
-from sdm_client.in_process.refusal import refusal
+from sdm_client.in_process.refusal import in_session, refusal
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
 
@@ -126,6 +126,7 @@ class InProcessTransport:
             served, model = self._serving(payload.get('model'))
             task = payload['task']
             fields = _fields(served, task['kind'], payload.get('output'))
+            _check_trained_for(served, model, task['kind'])
             _check_inference(payload.get('inference'), task)
             context = served.context(payload)
             output = _run(_fit(model, context), served.query(context, payload))
@@ -145,7 +146,9 @@ class InProcessTransport:
         with self._answering():
             served, model = self._serving(payload.get('model'))
             _outputs(served, payload['task']['kind'])
-            context = served.context(payload)
+            _check_trained_for(served, model, payload['task']['kind'])
+            with in_session('SESSION_CREATE_VALIDATION_FAILED'):
+                context = served.context(payload)
             session_id = f'sess_{uuid.uuid4().hex}'
             fitted = _fit(model, context)
             self._sessions[session_id] = _Session(
@@ -172,10 +175,10 @@ class InProcessTransport:
             fields = _fields(
                 session.served, task['kind'], payload.get('output')
             )
-            _check_inference(payload.get('inference'), task, settled=True)
-            output = _run(
-                session.fitted, session.served.query(session.context, payload)
-            )
+            with in_session('SESSION_PREDICT_SCHEMA_MISMATCH'):
+                _check_inference(payload.get('inference'), task, settled=True)
+                query = session.served.query(session.context, payload)
+            output = _run(session.fitted, query)
             return _response(
                 session.served,
                 task,
@@ -328,6 +331,25 @@ def _outputs(served: Tabular | Relational, kind: str) -> tuple[str, ...]:
             f'supported: {list(served.outputs)}',
         )
     return available
+
+
+def _check_trained_for(
+    served: Tabular | Relational, model: Any, kind: str
+) -> None:
+    r"""Refuse a task the model was loaded without.
+
+    A model can be loaded for classification or regression alone, which a
+    NIM's never is, so this is asked of the model rather than of its kind.
+    """
+    needed = 'regression' if kind == 'regression' else 'classification'
+    loaded = sorted(str(task) for task in model.tasks)
+    if needed not in loaded:
+        raise refusal(
+            'UNSUPPORTED_TASK',
+            f'this {served.model_id} model was loaded for {loaded} only, so '
+            f'it cannot answer {kind!r}; load it for both, which is the '
+            f'default',
+        )
 
 
 def _fields(

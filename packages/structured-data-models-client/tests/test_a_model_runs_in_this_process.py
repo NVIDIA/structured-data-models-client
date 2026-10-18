@@ -282,6 +282,49 @@ def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
             assert all(name in error.message for name in named)
 
 
+def test_a_refusal_inside_a_session_is_filed_as_the_sessions(relational):
+    """A NIM reports a request refused while creating a session under that
+    session's code, and refuses a relational context with no rows, such as
+    one a holdout of every entity has emptied."""
+    tables = graph()
+    texty = Schema.from_data(tables)
+    texty['users']['tier'].stype = 'text'
+    with SDMClient.in_process(relational) as client:
+        for request, holdout in (
+            (PredictiveQuery(COUNT, texty).materialize(indices=[0, 1]), None),
+            (
+                PredictiveQuery(COUNT, tables).materialize(indices=[0, 1]),
+                list(range(40)),
+            ),
+        ):
+            error = refused(
+                lambda request=request, holdout=holdout: client.fit(
+                    request, model=KumoRelational(), holdout=holdout
+                )
+            )
+            assert (error.code, error.status_code) == (
+                'SESSION_CREATE_VALIDATION_FAILED',
+                422,
+            )
+
+
+def test_a_task_the_model_was_not_loaded_for_is_refused(sdm):
+    regressor = sdm.models.KumoTabular(
+        task='regression', size='small', pretrained=False, device='cpu'
+    )
+    frame = people()
+    request = Request(
+        context=frame.iloc[:45][['person_id', 'age', 'churn']],
+        predict=frame.iloc[45:][['person_id', 'age']],
+        target='churn',
+        task='classification',
+    )
+    with SDMClient.in_process(regressor) as client:
+        error = refused(lambda: client.predict(request, model=KumoTabular()))
+    assert (error.code, error.status_code) == ('UNSUPPORTED_TASK', 422)
+    assert "['regression']" in error.message
+
+
 def test_a_model_passed_in_keeps_what_was_fitted_on_it(sdm, tabular):
     frame = people()
     features = {'age': 'numerical', 'visits': 'numerical'}

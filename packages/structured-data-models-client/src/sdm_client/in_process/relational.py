@@ -70,6 +70,13 @@ class Relational:
         spec = schema['instance_table']
         table = split['instance_table']
         declared(spec, table)
+        if not table['rows']:
+            raise refusal(
+                'VALIDATION_FAILED',
+                'Kumo Relational context must contain training data. '
+                'context.instance_table.rows: At least one context instance '
+                'row is required.',
+            )
         instance = Shape.of(
             spec,
             _instance_stypes(
