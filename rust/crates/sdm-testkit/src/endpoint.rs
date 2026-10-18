@@ -48,9 +48,64 @@
 //! The pure-Rust host calls the rule in process ([`answer`]): it has no
 //! transport of its own to exercise, so no HTTP server or client is built
 //! into the test kit (decision E46).
+//!
+//! A test may stand a script of its own in for the rule on its thread
+//! ([`answered_by`]): each model call the host makes there is then
+//! answered by the script, given the call's number (from zero) and body,
+//! with a status and the answer's bytes as they travel, so an answer the
+//! rule never gives (probabilities, a `NaN` token, a failed call) reaches
+//! the core as a recorded answer does (T2.8's ranking vectors).
+
+use std::cell::RefCell;
 
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
+
+/// A script answering a model call: its number, from zero, and body, to a
+/// status and the answer's bytes.
+type Script = Box<dyn FnMut(u64, &[u8]) -> (u16, Vec<u8>)>;
+
+thread_local! {
+    /// The script answering this thread's model calls, and how many it has
+    /// answered, while [`answered_by`] runs.
+    static SCRIPT: RefCell<Option<(Script, u64)>> = const { RefCell::new(None) };
+}
+
+/// Takes the script off the thread when [`answered_by`]'s run ends,
+/// whether it returns or panics.
+struct Unset;
+
+impl Drop for Unset {
+    fn drop(&mut self) {
+        SCRIPT.with(|script| script.borrow_mut().take());
+    }
+}
+
+/// Runs `run` with each model call the host makes on this thread answered
+/// by `script` (the call's number, from zero, and body, to a status and
+/// the answer's bytes) in place of the rule; afterwards the rule answers
+/// again.
+pub fn answered_by<T>(
+    script: impl FnMut(u64, &[u8]) -> (u16, Vec<u8>) + 'static,
+    run: impl FnOnce() -> T,
+) -> T {
+    SCRIPT.with(|slot| *slot.borrow_mut() = Some((Box::new(script), 0)));
+    let _unset = Unset;
+    run()
+}
+
+/// The answer to a model call with `body` from the script this thread
+/// runs under ([`answered_by`]), numbering the call; none where it runs
+/// under none, and the rule answers.
+pub fn scripted(body: &[u8]) -> Option<(u16, Vec<u8>)> {
+    SCRIPT.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let (script, calls) = slot.as_mut()?;
+        let call = *calls;
+        *calls += 1;
+        Some(script(call, body))
+    })
+}
 
 /// The path the client posts a prediction to.
 pub const PREDICTIONS: &str = "/v1/predictions";
