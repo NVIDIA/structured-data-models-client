@@ -29,8 +29,21 @@ No separate test author was assigned: the new tests are this package's own, mini
 - **Evidence the L5 table shows** (not failures; no type all three store): DuckDB's `TIMESTAMPTZ` reaches the core as `timestamp[us, tz=Etc/UTC]` and Postgres's as `tz=UTC`; a DuckDB list's child field is `l`, Postgres's `item`; a Postgres composite reaches the core as its row text (`(1,x)`); an interval on DuckDB and Postgres, and a DuckDB union, are refused by the core's admission (UNSUPPORTED_TYPE), as the type set records.
 - **Judging change**: `compare.py` alone in the first commit; the gate takes it from the checkpoint only on DuckDB, where it changes nothing, and the new jobs run the candidate's comparator, as the existing database jobs do.
 
+## Fix round 1
+
+Both round 1 reviewers approved b736cfb6 (Codex, and the Claude reviewer with P3s only). Folded on the rebase onto T2.19's landing (dfdd532a):
+
+- The L5 test's session zone is pinned (`SET GLOBAL TimeZone = 'Etc/UTC'` on DuckDB, so each cursor the provider opens inherits it; `TimeZone=Etc/UTC` on every psycopg connection), and the recorder `contract/tools/l5_record.py` pins DuckDB's alike: DuckDB names a `TIMESTAMPTZ`'s Arrow zone by the session's, which followed the machine's. Before, the test failed on a machine in `America/New_York`; now its 13 tests pass in all three cells with the machine in `America/New_York`, `Asia/Kolkata` and `UTC`.
+- In the floor and dbr17 cells off DuckDB, python-core's host fields (the schema as described, the warning classes, the frame) stay reported against the reference, not gated: the only expectation for them is python-ref's lines, recorded in the reference cell, and they legitimately differ there by pandas major (a text column `object` on pandas 2, `str` on pandas 3); python-old, which gives another cell's expectation on DuckDB (H1), does not run off DuckDB. Gating them needs python-ref's SQLite and Postgres lines recorded in each cell (as the test author recorded the key vectors' host fields per cell in 4edd4cf1) and the comparator reading a line per cell: a recorder's and a judging package's work, not built here. Every core field, statement, result and outcome gates in every cell.
+
+Left as notes (the orchestrator's decision):
+
+- The three `l4-goldens` legs wait on all three reference-cell contract jobs, so the SQLite and Postgres legs wait on the DuckDB job; off the critical path, which `contract-python (ref-pandas3, duckdb)` already sets.
+- L5's test runs twice at the floor, in `native-test-ops` and `l5-conversion (floor-pandas2.2)`, since the skip scan refuses an `--ignore` there; about a second.
+- `replay_jobs.py` substitutes only `matrix.python-version`, so it cannot replay `l5-conversion` (its `include` values) or `cross-host (postgres)` (it needs `rust-test`'s build): both are CI's to run.
+
 ## Judging and protected paths touched
 
 - Judging: `scripts/rust_core/compare.py`, `.github/workflows/ci.yml`.
-- Protected, for the landing's `Protected-paths`: `.github/workflows/ci.yml`, `scripts/rust_core/compare.py`, `contract/tests/test_t24_cells_off_duckdb.py`, `packages/structured-data-models-client/tests_test_ops/test_l5_conversion.py`.
+- Protected, for the landing's `Protected-paths`: `.github/workflows/ci.yml`, `scripts/rust_core/compare.py`, `contract/tests/test_t24_cells_off_duckdb.py`, `packages/structured-data-models-client/tests_test_ops/test_l5_conversion.py`, and the test author's `contract/l5-vectors.json`, `contract/postgres-key-vectors.json` and `contract/tests/test_t23_postgres_keys.py`.
 - New, unprotected: `rust/crates/sdm-data/tests/{goldens/mod.rs,duckdb_goldens.rs,postgres_goldens.rs}`; changed: `sqlite_goldens.rs`.
