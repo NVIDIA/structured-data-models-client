@@ -122,7 +122,11 @@ further ones there came after the reference stopped), none after; the
 and ``payload`` (the core's call on ``rust-host`` too) where it reached
 ``predict``, the result where it recorded one; its ``warnings`` the first
 of the runner's, in order. The rules between the core runners are
-unchanged past the stop. And a row read's DuckDB types name the Arrow
+unchanged past the stop. Where that move is to a success and the owner-
+approved entry's ``case_outcomes`` row for the line names the stopping
+call under ``statements_differ`` (T2.1e), the call answers where the
+reference refused: its ``sql.count`` and ``sql.result`` against the
+reference's are reported as diagnostic, nothing else. And a row read's DuckDB types name the Arrow
 types DuckDB reads them as with ``arrow_large_buffer_size`` where the
 case's own setup sets it (``large_string``, ``large_binary``,
 ``large_list``).
@@ -271,6 +275,9 @@ class Report:
         #: The fields left out as more exact than the reference, by case
         #: and runner (:func:`more_exact`).
         self.more_exact: dict[tuple[str, str], tuple[str, ...]] = {}
+        #: The public calls whose statements an entry says differ from the
+        #: reference's, by case and runner (:func:`statements_differ`).
+        self.statements_differ: dict[tuple[str, str], tuple[str, ...]] = {}
 
     def fail(self, text: str, rule: str | None = None) -> None:
         if rule is not None and self.rules.get(rule) == 'diagnostic':
@@ -1297,6 +1304,52 @@ def _owner_rows() -> set[str]:
     }
 
 
+def statements_differ(
+    register: Path,
+) -> dict[tuple[str, str], tuple[str, ...]]:
+    r"""The public calls each ``case_outcomes`` row of ``register`` names
+    under ``statements_differ``, by its case (the line's key) and runner,
+    from an entry approved as :func:`more_exact` reads one (by the owner,
+    under a row of this harness's decisions the owner approved): the call
+    an owner-approved move turns from the reference's refusal into an
+    answer, whose statements up to that refusal are no expectation of its
+    own (T2.1e). Anything else, and a file it cannot read, opts in
+    nothing."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
+        return {}
+    approved = _owner_rows()
+    entries = loaded.get('entries') if isinstance(loaded, dict) else None
+    found: dict[tuple[str, str], tuple[str, ...]] = {}
+    for entry in entries if isinstance(entries, list) else []:
+        if not (
+            isinstance(entry, dict)
+            and entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and isinstance(entry.get('decision_ref'), dict)
+            and isinstance(entry['decision_ref'].get('row'), str)
+            and entry['decision_ref']['row'] in approved
+            and isinstance(entry.get('case_outcomes'), list)
+        ):
+            continue
+        for item in entry['case_outcomes']:
+            if not isinstance(item, dict):
+                continue
+            case, runner = item.get('case'), item.get('runner')
+            calls = item.get('statements_differ')
+            if (
+                isinstance(case, str)
+                and isinstance(runner, str)
+                and isinstance(calls, list)
+            ):
+                kept = tuple(c for c in calls if c in STAGES)
+                found[(case, runner)] = found.get((case, runner), ()) + kept
+    return found
+
+
 def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
     r"""The fields each entry of ``register`` lists under ``more_exact``, by
     case and runner, from an entry approved by the owner whose
@@ -1802,12 +1855,20 @@ def _sql(
     stop: str | None = None,
     large: bool = False,
     database: str = 'duckdb',
+    answered: bool = False,
 ) -> None:
     r"""Decision H9 against the reference: ``sql.count`` and ``sql.result``,
     with ``sql.text``, ``sql.parameters`` and ``sql.bindings`` reported;
     past the reference's ``stop`` (:func:`past_stop`), at that stage the
     reference's statements and bindings each against the runner's at its
-    position, and none after."""
+    position, and none after. Where the approved move is to a success and
+    its owner-approved entry says that call's statements differ
+    (``answered``: ``statements_differ`` on its ``case_outcomes`` row,
+    T2.1e), the call answers where the reference refused, so the
+    reference's statements up to its refusal are no expectation of its
+    own: its ``sql.count`` and ``sql.result`` differences are reported as
+    diagnostic, every other rule and every other call as before. Without
+    that opt-in, the reference's statements at its stop gate as ever."""
     stages = _stages(case, who)
     if stop is not None:
         stages = tuple(
@@ -1825,6 +1886,7 @@ def _sql(
     mine, theirs = _by_stage(observation), _by_stage(reference)
     assert mine is not None and theirs is not None
     for stage in stages:
+        since = len(report.failures)
         ours, refs = mine.get(stage, []), theirs.get(stage, [])
         if stage == stop and len(ours) > len(refs):
             # Those after the reference's own came after it stopped.
@@ -1835,22 +1897,32 @@ def _sql(
                 f'{len(refs)}',
                 'sql.count',
             )
-            continue
-        for position, (a, b) in enumerate(zip(ours, refs, strict=True)):
-            at = f'{where}: {stage} statement {position}'
-            if a['sql'] != b['sql']:
-                report.fail(f'{at}: text differs', 'sql.text')
-            if a['parameters'] != b['parameters']:
-                report.fail(f'{at}: parameters differ', 'sql.parameters')
-            _results(
-                report,
-                at,
-                a,
-                b,
-                position in ordered.get(stage, []),
-                (who, 'python-ref'),
-                large,
-                database,
+        else:
+            for position, (a, b) in enumerate(zip(ours, refs, strict=True)):
+                at = f'{where}: {stage} statement {position}'
+                if a['sql'] != b['sql']:
+                    report.fail(f'{at}: text differs', 'sql.text')
+                if a['parameters'] != b['parameters']:
+                    report.fail(f'{at}: parameters differ', 'sql.parameters')
+                _results(
+                    report,
+                    at,
+                    a,
+                    b,
+                    position in ordered.get(stage, []),
+                    (who, 'python-ref'),
+                    large,
+                    database,
+                )
+        if answered and stage == stop:
+            # That call's own sql.count and sql.result, as diagnostic notes.
+            report.demote(
+                since,
+                keep=tuple(
+                    rule
+                    for rule in RULES
+                    if rule not in ('sql.count', 'sql.result')
+                ),
             )
     mine_bound = _by_stage(observation, 'bindings') or {}
     theirs_bound = _by_stage(reference, 'bindings') or {}
@@ -1876,6 +1948,26 @@ def _sql(
                     'columns included',
                     'sql.bindings',
                 )
+
+
+def statements_opted_in(
+    report: Report,
+    key: str,
+    who: str,
+    stop: str | None,
+    wanted: dict[str, Any] | None,
+) -> bool:
+    r"""Whether ``who``'s statements at the reference's ``stop`` on the line
+    ``key`` are no expectation of its own (T2.1e): its effective
+    expectation is an approved move past that stop (:func:`past_stop`) to
+    a success, and the owner-approved entry's row names that call under
+    ``statements_differ``. A move to a later refusal, and a row that does
+    not opt in, never are."""
+    return (
+        stop is not None
+        and (wanted or {}).get('result') == 'success'
+        and stop in report.statements_differ.get((key, who), ())
+    )
 
 
 def _sql_core(
@@ -1982,6 +2074,7 @@ def compare(
     report = Report(policy['rules'], check.excluded(policy))
     report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
     report.more_exact = more_exact(improvements or register_file)
+    report.statements_differ = statements_differ(improvements or register_file)
     if set(policy['rules']) != set(RULES):
         report.fail(
             'compare-policy.yaml: its rules are not the ones this runs: '
@@ -2163,6 +2256,9 @@ def compare(
                     stop,
                     large,
                     database,
+                    answered=statements_opted_in(
+                        report, case['id'], who, stop, wanted
+                    ),
                 )
                 theirs = ref['identity']['versions']['duckdb']
                 mine = observation['identity']['versions']['duckdb']

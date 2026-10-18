@@ -27,6 +27,8 @@ It holds the file, as ``--root``'s tree has it, to:
 - each ``more_exact`` item's case a line's key (``X``, ``X@sqlite`` or
   ``X@postgres``, T2.1d) whose case part is one of its entry's ``cases``
   (T2.0g);
+- a ``case_outcomes`` row's ``statements_differ`` the one call its old
+  outcome refuses at, on a move from that refusal to a success (T2.1e);
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;
   and no entry accepting ``INTERNAL_ERROR``, the code a contained panic
@@ -279,6 +281,22 @@ def _outcome_problems(
     old, new = parse_outcome(outcome['old']), parse_outcome(outcome['new'])
     if new is not None and new['code'] == PANIC:
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
+    calls = outcome.get('statements_differ')
+    if calls is not None and not (
+        old is not None
+        and old['result'] == 'refusal'
+        and new is not None
+        and new['result'] == 'success'
+        and len(calls) == 1
+        and old['stage'] in (None, calls[0])
+    ):
+        # The call whose statements differ is the one the reference refused
+        # (rust-host's outcome names no stage), on a move from that refusal
+        # to an answer (T2.1e).
+        found.append(
+            f'{where}: statements_differ names other than the call the '
+            'reference refused, on a move from that refusal to a success'
+        )
     refuses = new is not None and new['result'] == 'refusal'
     newly = refuses and (
         (old is not None and old['result'] == 'success')

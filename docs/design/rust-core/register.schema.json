@@ -30,7 +30,8 @@
         "runner": {"enum": ["python-ref", "python-core", "python-old", "rust-host"]},
         "old": {"$ref": "#/$defs/outcome"},
         "new": {"$ref": "#/$defs/outcome"},
-        "summary": {"type": "string", "minLength": 1}
+        "summary": {"type": "string", "minLength": 1},
+        "statements_differ": {"description": "The public call an owner-approved move from the reference's refusal there to a success answers instead (T2.1e): the reference's statements up to its refusal are no expectation of that call's, so compare.py reports its sql.count and sql.result against them as diagnostic. Only on a row whose old outcome is a refusal at that call and whose new outcome is a success (register.py).", "type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["from_source", "materialize", "predict"]}}
       }
     },
     "entry": {
