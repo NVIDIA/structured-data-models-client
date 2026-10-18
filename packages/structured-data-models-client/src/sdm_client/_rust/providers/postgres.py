@@ -89,7 +89,6 @@ _TEXT = frozenset(
         'money',
         'bit',
         'varbit',
-        'timetz',
     }
 )
 
@@ -341,6 +340,18 @@ def _cell(value: Any, kind: Any) -> Any:
         return str(value)
     if pa.types.is_floating(kind) and isinstance(value, Decimal):
         return float(value)
+    if (
+        pa.types.is_decimal(kind)
+        and isinstance(value, Decimal)
+        and value.is_nan()
+    ):
+        # A numeric's NaN, which no Arrow decimal holds: missing, as the
+        # reference's double of it is.
+        return None
+    if pa.types.is_time(kind) and value.tzinfo is not None:
+        # A timetz's time of day, its offset left out, as the reference
+        # reads a time.
+        return value.replace(tzinfo=None)
     return value
 
 
@@ -395,10 +406,11 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
         return getattr(pa, _SCALARS[name])()
     if name == 'numeric':
         precision, scale = column.precision, column.scale
-        if precision is None or (scale or 0) < 0:
-            # Declared without a precision or scale, or with a negative
-            # scale, which the core's wire takes no decimal of: the double
-            # the reference reads.
+        if precision is None or (scale or 0) < 0 or precision > 76:
+            # Declared without a precision or scale, with a negative scale,
+            # which the core's wire takes no decimal of, or past the 76
+            # digits Arrow's widest decimal holds: the double the reference
+            # reads.
             return pa.float64()
         if precision <= 38:
             return pa.decimal128(precision, scale or 0)
@@ -409,7 +421,9 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
         # The instant, in UTC whatever the session's zone, so the type is
         # the same on every session (the comparator's vocabulary holds it).
         return pa.timestamp('us', tz='UTC')
-    if name == 'time':
+    if name in ('time', 'timetz'):
+        # A timetz as its time of day (:func:`_cell`), as the reference
+        # reads a time.
         return pa.time64('us')
     if name == 'interval':
         return pa.month_day_nano_interval()
