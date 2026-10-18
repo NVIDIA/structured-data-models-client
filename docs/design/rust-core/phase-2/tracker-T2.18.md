@@ -28,7 +28,10 @@ T2.18 is any column name (KO2-36): a column whose name holds a dot, a backtick o
 - The fifteen cases through `compare.py` on each database, against python-ref with the effective expectations: python-core and rust-host agree on every core field, the operations and inputs included.
   What differs from the reference is what it leaves out: the column in the public schema and the payload, its statement results and counts, a link where the column is the key, and the from_source `SDMWarning`; the filter cases' `route` and `inputs` (predict never runs).
   The comparator has no way to register these (`more_exact` leaves out values, never an item one side lacks): the question below.
-- The client's core-route suites (723 tests), the binding's tests, `test_contract_cases.py` and `test_t22_sqlite.py`, `t22_sqlite.rs`, the corpus, quirks and adapter tests: pass.
+- The client's core-route suites (723 tests), the binding's tests, `test_contract_cases.py` and `test_t22_sqlite.py`, `t22_sqlite.rs`, the corpus, quirks and adapter tests, `cargo test --workspace` and the cheap prepush tier: pass.
+- `pytest contract/tests -n 4 --dist loadfile` (a Postgres server named): 4,373 passed, 161 failed.
+  118 are `test_t136_host2_*`, which hold their recorded answers to the ref-pandas3 cell's versions, not this machine's venv's.
+  The other 43 are the gate's full-corpus runs (`test_gate_modes`, `test_gate_controls`, `test_cross_host`, `test_gate_evidence_paths`, `test_t20*`, `test_runners`), every difference a `name.*` case's: the KO2-36 differences above, and the filter cases' `route` and `inputs`.
 
 ### Deviations and questions
 
