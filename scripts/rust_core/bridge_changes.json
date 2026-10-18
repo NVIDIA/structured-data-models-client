@@ -36,10 +36,10 @@
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "refactor": "T2.18: _alone, whether a resolved query is the core's alone, importing the bridge on the core route only; the forecast's steps kept together by _kept_as_steps, shared by both core paths; a type-checking import; no rule added"
+      "refactor": "T2.18: _alone, whether a resolved query is the core's alone, importing the bridge on the core route only; _refuse_the_task, the task= refusal both paths raise; the forecast's steps kept together by _kept_as_steps and a query only the core resolves gathered by _on_the_core_alone; a type-checking import; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
-      "moved": "T2.18: whether materialize runs on the core is decided before the query is resolved; a query only the core resolves is gathered as itself, a forecast kept in the steps the core asked, a ranking over candidates refused as the old validator refuses it"
+      "moved": "T2.18: a query only the core resolves (KO2-36) is held to task= as any relational query, then gathered as itself (_on_the_core_alone): a forecast kept in the steps the core asked, the core's forecast top_k and too-many-steps refusals said in this client's words, a query the core does not resolve refused with the old validator's diagnostics, a ranking over candidates refused by name"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
@@ -102,7 +102,7 @@
       "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
-      "moved": "T2.18: where materialize runs on the core over a schema holding a column the old validator's language cannot say, a query the old validator refuses is the core's to resolve as it gathers it (Unresolved, KO2-36); every other query as before, the shadow check kept"
+      "moved": "T2.18: where a relational materialize runs on the core over a schema holding a column the old validator's language cannot say, a query the old validator refuses is the core's to resolve as it gathers it (Unresolved, KO2-36), holding the old validator's refusal; every other query as before, the shadow check kept; the route is decided here, the interface unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
       "moved": "T2.18: a query only the core resolves (KO2-36) holds its text and the old validator's refusal, for the one call the core does not answer (a ranking over candidates); no rule of the host's"
