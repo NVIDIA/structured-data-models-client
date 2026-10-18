@@ -6676,15 +6676,17 @@ entries:
     The nine edit.* S1 cases' files; no behavior.
   cases: [edit.accepted-meaning-key-links, edit.key-missing-column, edit.key-time-column, edit.leave-out-the-key, edit.link-not-the-key, edit.meaning-not-carried, edit.meaning-unknown, edit.time-column-not-a-time, edit.time-column-text]
   refs: [T1.24b, E67, 'docs/design/rust-core/phase-2/design.md#T2.12']
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
     Approver: reviewer. The design's T2.12 row admits the nine edit.* S1
-    cases as acceptance. For the reviewers: the ratchet's case rule needs an approved entry
+    cases as acceptance. The ratchet's case rule needs an approved entry
     naming each case whose file changed (check_cases); each row states the
     baselined outcome as both old and new. Proposed by T2.12, never
-    self-approved.
+    self-approved. Approved by both of T2.12's round 1 reviewers, relayed by
+    the orchestrator: the Claude reviewer (reviews/T2.12-r1-claude.md) and
+    Codex (codex-reports/T2.12-r1.md, "Approve P2E-3").
   case_outcomes:
   - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'success at materialize', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
   - {case: edit.accepted-meaning-key-links, cell: ref-pandas3, runner: python-old, old: 'success at materialize', new: 'success at materialize', summary: 'admitted as an acceptance case (T2.12): the outcome as baselined, the case file its status and paths'}
