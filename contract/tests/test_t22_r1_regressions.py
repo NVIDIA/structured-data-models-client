@@ -23,7 +23,11 @@ with SQLite's core routes forced, each held to the reference's answer in
 - a composite primary key with one ``INTEGER`` column is described as the
   reference reads it, and refused at ``materialize`` as there;
 - a partial unique index on the key is read as unique: the reference's
-  schema, statement counts per call and request.
+  schema, statement counts per call and request;
+- ``materialize`` called twice on one query over a source whose time
+  column SQLite holds as text: each call's statement count and request
+  are the reference's (the stored time's spelling is kept across a
+  materializer's runs).
 """
 
 from __future__ import annotations
@@ -191,3 +195,20 @@ def test_a_partial_unique_index_keeps_the_key_unique(
     assert got['statements'] == wanted['statements']
     assert got['outcome'] == wanted['outcome']
     assert got['payloads'] == wanted['payloads']
+
+
+def test_a_second_materialize_reads_no_more_than_the_reference_s(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""``materialize`` twice on one query, the time column stored as text:
+    each call's statements and request are the reference's, the second
+    call's among them."""
+    wanted = _reference('materialize-twice')
+    got = _on_the_core(monkeypatch, 'materialize-twice')
+    assert got['outcome'] == wanted['outcome']
+    assert got['statements'] == wanted['statements']
+    assert got['payloads'] == wanted['payloads']
+    assert [r['statements'] for r in got['repeated']] == [
+        r['statements'] for r in wanted['repeated']
+    ]
+    assert got['repeated'] == wanted['repeated']

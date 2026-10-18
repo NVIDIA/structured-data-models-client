@@ -36,6 +36,10 @@ its ``materialize`` keywords:
   holding repeated ids and a ``TEXT`` one, described as the reference
   reads it (the ``INTEGER`` column as SQLite's rowid alias), and refused
   at ``materialize`` as there;
+- ``materialize-twice``: ``materialize`` called twice on one query over
+  round 2's shop, whose time column SQLite holds as text: each call's
+  statements and request (``repeated`` holds the second's), the second
+  reading the stored time's spelling no more than the reference does;
 - ``partial-unique``: a partial unique index on the key column, read as
   unique, with the reference's statements.
 
@@ -156,6 +160,11 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         ),
         **SUMMED,
     },
+    'materialize-twice': {
+        'setup': _shop(['CREATE TABLE users (user_id INTEGER, country TEXT)']),
+        **SUMMED,
+        'repeat': 2,
+    },
     'partial-unique': {
         'setup': _shop(
             [
@@ -221,15 +230,25 @@ def run(scenario: dict[str, Any]) -> dict[str, Any]:
                 statements[stage] = sum(1 for text in log.texts if text)
                 answer['schema'] = _plain(runner._schema_projection(schema))
                 stage = 'materialize'
+                query = PredictiveQuery(scenario.get('query', QUERY), schema)
                 with runner.StatementLog('sqlite') as log:
                     try:
-                        request = PredictiveQuery(
-                            scenario.get('query', QUERY), schema
-                        ).materialize(**keywords)
+                        request = query.materialize(**keywords)
                     finally:
                         statements[stage] = sum(1 for t in log.texts if t)
                 answer['outcome'] = {'result': 'success', 'stage': stage}
                 answer['payloads'] = _plain(list(request.payloads))
+                # Each further call on the same query: what a materializer
+                # keeps between its runs is read once, as on the reference.
+                for _ in range(scenario.get('repeat', 1) - 1):
+                    with runner.StatementLog('sqlite') as log:
+                        again = query.materialize(**keywords)
+                    answer.setdefault('repeated', []).append(
+                        {
+                            'statements': sum(1 for t in log.texts if t),
+                            'payloads': _plain(list(again.payloads)),
+                        }
+                    )
             except Exception as error:  # noqa: BLE001 - the call's outcome
                 answer['outcome'] = {
                     'result': 'refusal',
