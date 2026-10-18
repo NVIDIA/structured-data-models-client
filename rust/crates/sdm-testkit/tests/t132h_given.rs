@@ -493,7 +493,11 @@ fn the_vectors_are_the_reference_s_where_a_caller_can_give_them() {
         kinds["case"] >= 20 && kinds["wire"] >= 15 && kinds["edit"] >= 4,
         "{kinds:?}"
     );
-    for rule in ["key_not_names", "time_column_not_a_name", "composite_key"] {
+    for rule in [
+        "key_not_names",
+        "time_column_not_a_name",
+        "key_column_twice",
+    ] {
         assert!(rules.contains(rule), "no vector of {rule}");
     }
 }

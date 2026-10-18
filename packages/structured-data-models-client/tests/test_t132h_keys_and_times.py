@@ -293,7 +293,6 @@ TIME_NOT_A_NAME = {
     'rule': 'time_column_not_a_name',
 }
 EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
-COMPOSITE = {'operation': 'describe_source', 'rule': 'composite_key'}
 
 
 def table_not_a_name(field: str) -> dict[str, Any]:
@@ -518,7 +517,12 @@ ROWS = [
         'k.composite',
         lambda: ['order_id', 'user_id'],
         V(['order_id', 'user_id']),
-        refused(COMPOSITE, 'UNSUPPORTED_REQUEST', 'UnsupportedRequestError'),
+        # T2.12 lifted composite_key: described as the reference describes
+        # it, the key the two columns in order.
+        (
+            'success',
+            {'primary_key': ['order_id', 'user_id'], 'time_column': 'ts'},
+        ),
         REF_OK,
     ),
     # Time columns: rows 18 to 22.

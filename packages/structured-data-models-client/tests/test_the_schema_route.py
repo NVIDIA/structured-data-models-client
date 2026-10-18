@@ -467,19 +467,20 @@ def test_what_the_core_does_not_describe_yet_is_refused_by_name(
             'column_type',
             'UNSUPPORTED_REQUEST',
         ),
-        # A key of two columns, which this core does not hold yet.
-        (
-            _connection,
-            {'primary_keys': {'orders': ['order_id', 'user_id']}},
-            'composite_key',
-            'UNSUPPORTED_REQUEST',
-        ),
     ]
     for build, arguments, rule, code in refusals:
         with pytest.raises(StructuredDataError) as refused:
             Schema.from_source(DuckDBSource(build()), **arguments)
         assert refused.value.code == code
         assert refused.value.details['rule'] == rule
+    # A key of two columns, refused by name (composite_key) until T2.12,
+    # is described as the reference describes it: the two columns, in
+    # order.
+    schema = Schema.from_source(
+        DuckDBSource(_connection()),
+        primary_keys={'orders': ['order_id', 'user_id']},
+    )
+    assert tuple(schema['orders'].primary_key) == ('order_id', 'user_id')
 
 
 def test_the_bridge_refuses_none_of_the_call_s_arguments(

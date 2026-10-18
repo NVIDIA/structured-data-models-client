@@ -676,17 +676,25 @@
     "time_columns": {}
    },
    "core": {
-    "outcome": "refusal",
+    "outcome": "success",
     "at": "run",
-    "code": "UNSUPPORTED_REQUEST",
-    "fields": {
-     "operation": "describe_source",
-     "rule": "composite_key"
+    "tables": {
+     "orders": {
+      "primary_key": [
+       "order_id",
+       "user_id"
+      ],
+      "time_column": "ts"
+     },
+     "users": {
+      "primary_key": [
+       "user_id"
+      ],
+      "time_column": null
+     }
     }
    },
-   "register": {
-    "phase2": "composite_key"
-   },
+   "register": null,
    "reference": {
     "result": "success",
     "stage": "from_source",

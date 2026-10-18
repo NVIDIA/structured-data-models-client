@@ -377,17 +377,20 @@ fn without_the_flag_an_old_shape_case_stops_at_the_preflight() {
 }
 
 /// 2. A composite key in contract 22's shape, under the flag, observes as
-///    its Given-shaped twin: the core's refusal of a composite key.
+///    its Given-shaped twin: described, the key the two columns in order,
+///    as the reference describes it (T2.12 lifted `composite_key`).
 #[test]
 fn an_old_composite_key_observes_as_its_given_twin() {
     let twin = shop_case("t136.composite", composite_from_source(), composite_given());
     match twin_answer(&twin) {
-        Answer::Error { code, fields, .. } => {
-            assert_eq!(code, "UNSUPPORTED_REQUEST");
-            assert_eq!(
-                fields.get("rule").map(String::as_str),
-                Some("composite_key")
-            );
+        Answer::Described(described) => {
+            let orders = described["tables"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|t| t["name"] == "orders")
+                .unwrap();
+            assert_eq!(orders["primary_key"], json!(["order_id", "user_id"]));
         }
         other => panic!("the twin answered {other:?}"),
     }

@@ -149,9 +149,6 @@ TWICE = {
     'column': 'order_id',
     'rule': 'key_column_twice',
 }
-COMPOSITE = refused(
-    'UNSUPPORTED_REQUEST', operation='describe_source', rule='composite_key'
-)
 ORDERS_INFERRED = (['order_id'], 'ts')
 
 
@@ -290,8 +287,9 @@ VECTORS: list[dict[str, Any]] = [
         'key.composite',
         {'primary_keys': {'orders': ['order_id', 'user_id']}},
         spec({'orders': V(['order_id', 'user_id'])}),
-        COMPOSITE,
-        {'phase2': 'composite_key'},
+        # T2.12 lifted composite_key: the key the two columns in order, as
+        # the reference describes it.
+        described((['order_id', 'user_id'], 'ts')),
     ),
     case(
         'key.missing-column',
