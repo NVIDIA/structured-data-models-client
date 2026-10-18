@@ -6881,12 +6881,13 @@ entries:
   - E92
   - 'contract/postgres-regression-vectors.json#key.composite-primary refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
   - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
-    Approver: reviewer: E66(b)'s class, the reference's unnamed error a
-    named refusal. Before T2.3's fix 12 the core keyed such a table by one
+    Approved by both of T2.3's round 4 reviewers (APPROVE-P2C-11): E66(b)'s
+    class, the reference's unnamed error a named refusal. Before T2.3's
+    fix 14 the core keyed such a table by one
     of the key's columns and linked on one of the foreign key's, which can
     join rows the key does not; by the orchestrator's decision at round 3
     it is refused as DuckDB refuses a key of several columns named. Its
