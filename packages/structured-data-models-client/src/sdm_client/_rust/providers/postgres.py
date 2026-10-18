@@ -48,6 +48,8 @@ from contextlib import nullcontext
 from decimal import Decimal
 from typing import Any
 
+#: The range of an ``int64``.
+_INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 #: Rows per Arrow batch; a larger result comes as several.
 BATCH_ROWS = 100_000
 
@@ -292,16 +294,19 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
     description = cursor.description
     if description is None:
         raise PlanNotRun('a plan whose last statement returns no rows')
+    # One read of every row, as the reference reads a result
+    # (``fetchall``), built into batches of at most ``batch_rows``.
+    rows = cursor.fetchall()
     types = [_arrow_type(column, connection) for column in description]
+    for at, kind in enumerate(types):
+        if isinstance(kind, _Numeric):
+            types[at] = kind.read(row[at] for row in rows)
     schema = pa.schema(
         [
             pa.field(column.name, kind)
             for column, kind in zip(description, types, strict=True)
         ]
     )
-    # One read of every row, as the reference reads a result
-    # (``fetchall``), built into batches of at most ``batch_rows``.
-    rows = cursor.fetchall()
     batches = []
     for start in range(0, len(rows), batch_rows):
         columns = list(zip(*rows[start : start + batch_rows], strict=True))
@@ -317,6 +322,29 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
     return pa.Table.from_batches(batches, schema=schema)
 
 
+class _Numeric:
+    r"""A ``numeric`` column no Arrow decimal holds: declared without a
+    precision, with a negative scale (which the core's wire takes no decimal
+    of), or past the 76 digits Arrow's widest decimal holds. Its type is
+    read as the reference's Postgres table reads such a column by its
+    declaration (``_to_dtype``): of a scale of zero as an integer, a whole
+    number past ``int64`` as its digits (where the reference overflows);
+    else as a double."""
+
+    def __init__(self, whole: bool) -> None:
+        self.whole = whole
+
+    def read(self, values: Any) -> Any:
+        import pyarrow as pa
+
+        if not self.whole:
+            return pa.float64()
+        for value in values:
+            if value is not None and not _INT64_MIN <= value <= _INT64_MAX:
+                return pa.string()
+        return pa.int64()
+
+
 def _array(values: Any, kind: Any) -> Any:
     import pyarrow as pa
 
@@ -326,16 +354,19 @@ def _array(values: Any, kind: Any) -> Any:
 def _cell(value: Any, kind: Any) -> Any:
     r"""A driver's value in its column's Arrow form: a value of a type read
     as text (a ``uuid``, an ``inet``, a ``cidr``) as the reference's text of
-    it, Python's ``str``; an unconstrained ``numeric`` as the double the
-    reference reads it as; an array's elements each so, a multi-dimensional
-    array's in row-major order (Arrow's list holds one dimension; the core
-    sends no list); anything else as the driver gives it."""
+    it, Python's ``str``; a ``numeric`` no Arrow decimal holds as the
+    integer, text or double :class:`_Numeric` reads it as; an array's elements
+    each so, a multi-dimensional array's in row-major order (Arrow's list
+    holds one dimension; the core sends no list); anything else as the
+    driver gives it."""
     import pyarrow as pa
 
     if value is None:
         return None
     if pa.types.is_list(kind):
         return [_cell(item, kind.value_type) for item in _elements(value)]
+    if isinstance(value, Decimal) and pa.types.is_integer(kind):
+        return int(value)
     if pa.types.is_string(kind) and not isinstance(value, str):
         return str(value)
     if pa.types.is_floating(kind) and isinstance(value, Decimal):
@@ -400,6 +431,8 @@ def _element_type(name: str) -> Any:
 
 
 def _scalar_type(name: str, column: Any, connection: Any) -> Any:
+    r"""A scalar column's Arrow type, or a :class:`_Numeric` its
+    declaration and values decide."""
     import pyarrow as pa
 
     if name in _SCALARS:
@@ -409,9 +442,9 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
         if precision is None or (scale or 0) < 0 or precision > 76:
             # Declared without a precision or scale, with a negative scale,
             # which the core's wire takes no decimal of, or past the 76
-            # digits Arrow's widest decimal holds: the double the reference
-            # reads.
-            return pa.float64()
+            # digits Arrow's widest decimal holds: read by its declaration
+            # and values (:class:`_Numeric`).
+            return _Numeric(whole=precision is not None and scale == 0)
         if precision <= 38:
             return pa.decimal128(precision, scale or 0)
         return pa.decimal256(precision, scale or 0)
