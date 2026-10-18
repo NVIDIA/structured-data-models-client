@@ -75,6 +75,13 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'contract/postgres-regression-vectors.json'
 FORMAT = 'sdm-postgres-regression-vectors/1'
+#: The zone of every connection the recorder opens, set before anything is
+#: read, so no answer depends on the recorder's environment (``PGTZ``) or
+#: the server's default. The source reads every cursor through one
+#: connection, which a vector's ``session`` statements then set further
+#: (only ``time.new-york-auto-anchor``'s, on purpose); its ``setup`` names
+#: no zone, as ``tests/test_contract_cases.py`` holds every vector file to.
+UTC = "SET TimeZone TO 'UTC'"
 #: How a register entry names the vectors it covers, as the key vectors'.
 REGISTER_REF = 'contract/postgres-regression-vectors.json#'
 
@@ -242,7 +249,7 @@ VECTORS: list[dict[str, Any]] = [
                     _SHOP_USERS.format(
                         'user_id bigint PRIMARY KEY, x timetz, age integer'
                     ),
-                    "INSERT INTO users SELECT i, TIME WITH TIME ZONE '12:00+02' "
+                    "INSERT INTO users SELECT i, '12:00+02'::timetz "
                     '+ make_interval(mins => i), 20 + i '
                     'FROM generate_series(0, 7) i',
                     _SHOP_ORDERS.format(
@@ -362,10 +369,12 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
     previous = os.environ.pop('SDM_CORE_ROUTES', None)
     try:
         with psycopg.connect(scoped, autocommit=True) as connection:
+            connection.execute(UTC)
             for statement in vector['setup']:
                 connection.execute(statement)
         types = {}
         with psycopg.connect(scoped) as connection:
+            connection.execute(UTC)
             for table, column in vector['columns']:
                 row = connection.execute(
                     'SELECT format_type(a.atttypid, a.atttypmod) '
@@ -397,6 +406,9 @@ def observe(vector: dict[str, Any], dsn: str, core: bool) -> dict[str, Any]:
         from sdm_connectors import PostgresSource
 
         with psycopg.connect(scoped, autocommit=True) as connection:
+            # Every cursor the source reads through is this connection's:
+            # UTC, then the vector's own session statements, if any.
+            connection.execute(UTC)
             for statement in vector['session']:
                 connection.execute(statement)
             stage = 'from_source'

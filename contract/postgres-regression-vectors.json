@@ -1076,7 +1076,7 @@
    "session": [],
    "setup": [
     "CREATE TABLE users (user_id bigint PRIMARY KEY, x timetz, age integer)",
-    "INSERT INTO users SELECT i, TIME WITH TIME ZONE '12:00+02' + make_interval(mins => i), 20 + i FROM generate_series(0, 7) i",
+    "INSERT INTO users SELECT i, '12:00+02'::timetz + make_interval(mins => i), 20 + i FROM generate_series(0, 7) i",
     "CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id bigint REFERENCES users(user_id), price double precision, ts timestamp)",
     "INSERT INTO orders SELECT i, i % 8, 10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7) FROM generate_series(0, 79) i"
    ],

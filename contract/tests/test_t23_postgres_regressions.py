@@ -191,6 +191,11 @@ def test_the_vectors_are_the_reference_s_on_postgres() -> None:
         'orders.ts': 'timestamp with time zone'
     }
     assert "'America/New_York'" in time['session'][0]
+    # The one vector that reads in a zone other than the recorder's UTC,
+    # set on the source's own connection, so on every cursor it reads.
+    assert [v['id'] for v in RECORDED['vectors'] if v['session']] == [
+        'time.new-york-auto-anchor'
+    ]
     assert BY_ID['relation.dollar']['reference']['postgres'] == {
         'users$1.id': 'integer'
     }
