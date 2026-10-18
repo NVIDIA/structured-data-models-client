@@ -339,15 +339,18 @@ def test_each_case_holds_its_rule_s_input() -> None:
 
 
 def test_sqlite_cannot_hold_the_float_cases(tmp_path: Path) -> None:
-    r"""Exit "cases per rule", the float cases' exclusion: the contract
-    loader refuses a NaN on SQLite by name, and SQLite gives -0.0 back as
-    0.0, so neither rule's input can be put to a host there."""
+    r"""Exit "cases per rule", the float cases' exclusion: SQLite gives a
+    NaN back as NULL and -0.0 as 0.0, so the contract loader refuses each
+    by name, and neither rule's input can be put to a host there."""
     loader = _module('t212_databases', ROOT / 'contract/runners/databases.py')
-    for case_id in RULES['float_nan']:
+    for case_id, held in (
+        *((c, 'a NaN') for c in RULES['float_nan']),
+        *((c, '-0.0') for c in RULES['float_signed_zero']),
+    ):
         case, _ = cases()[case_id]
         connection = _built(case)
         try:
-            with pytest.raises(loader.Unloadable, match='NaN'):
+            with pytest.raises(loader.Unloadable, match=re.escape(held)):
                 loader.load(connection, 'sqlite', tmp_path / f'{case_id}.db')
         finally:
             connection.close()

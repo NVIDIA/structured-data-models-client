@@ -79,9 +79,17 @@ def _duck(case: dict[str, object]) -> object:
 )
 def test_every_s1_case_loads_on_sqlite(path: Path, tmp_path: Path) -> None:
     r"""Each table, its columns declared by the map and its rows in
-    DuckDB's order, every value kept (a JSON or ISO text read back)."""
-    duck = _duck(json.loads(path.read_text()))
+    DuckDB's order, every value kept (a JSON or ISO text read back). A case
+    whose ``databases`` leave SQLite out (T2.12's float cases, under their
+    exclusion) holds a value SQLite cannot store, which the loader refuses
+    by name."""
+    case = json.loads(path.read_text())
+    duck = _duck(case)
     target = tmp_path / 'case.sqlite'
+    if 'sqlite' not in runner.case_databases(case):
+        with pytest.raises(databases.Unloadable):
+            databases.load(duck, 'sqlite', target)
+        return
     databases.load(duck, 'sqlite', target)
     connection = sqlite3.connect(target)
     try:
