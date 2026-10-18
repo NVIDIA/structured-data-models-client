@@ -284,7 +284,10 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                     .map(|row| rows.row(row))
                     .collect();
                 let missing = (0..total).filter(|&row| !holds(&present, row)).count();
-                positions.push(i32::try_from(at).map_err(|_| internal("too many keys"))?);
+                // Labelled as the dialects label it: its label, where it
+                // gives one, else its position (T2.12).
+                positions
+                    .push(i32::try_from(key.label_at(at)).map_err(|_| internal("too many keys"))?);
                 for (count, value) in counts.iter_mut().zip([total, distinct.len(), missing]) {
                     count.push(i64_of(value)?);
                 }
@@ -449,6 +452,15 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             out.push_count("rows", scanned.batch.num_rows());
             held.finish(out)
         }
+        // A key folded into a source's own text, which the core reads only
+        // of a provider declaring the read (T2.12): the fallback has no
+        // source's text to fold by.
+        DataRequest::FoldedKey { .. } => Err(not_kept(
+            request,
+            "key",
+            "the in-memory fallback does not fold a key into a source's text",
+        )
+        .into()),
         DataRequest::Describe { .. } | DataRequest::Scan { .. } => {
             Err(internal("a request every provider answers reached the fallback").into())
         }
