@@ -39,6 +39,11 @@ vector's own.
   floor (14.0.1) as on its newest (``type.json``, ``type.jsonb``; run
   this file in the floor cell too), and a NaN in a ``numeric(100,0)`` is
   sent as the reference sends it, null (``type.numeric-100-0-nan``).
+- From Claude's third round: a composite primary key
+  (``key.composite-primary``) and a composite foreign key
+  (``key.composite-foreign``), which the reference refuses at
+  ``Schema.from_source`` with an unnamed ValueError; the core may answer
+  only under an approved entry declaring ``refusal UNNAMED -> success``.
 - From Claude's second round: unconstrained ``numeric`` keys are sent as
   the reference sends them, small (``key.numeric-unconstrained-small``)
   and past 2**53, never merged (``key.numeric-unconstrained-past-2-53``).
@@ -178,8 +183,20 @@ def test_the_vectors_are_the_reference_s_on_postgres() -> None:
     # Not vacuous: the reference answers each, a request made, every column
     # the type the vector names, read by name; the automatic anchor is the
     # one the review measured, in UTC.
+    refused = {'key.composite-primary', 'key.composite-foreign'}
     for vector in RECORDED['vectors']:
         answer = vector['reference']
+        if vector['id'] in refused:
+            # The reference's graph discovery takes single-column keys
+            # only: an unnamed ValueError before any request.
+            assert answer['outcome'] == {
+                'result': 'refusal',
+                'stage': 'from_source',
+                'error': 'ValueError',
+                'code': None,
+            }, vector['id']
+            assert answer['payloads'] is None, vector['id']
+            continue
         assert answer['outcome']['result'] == 'success', vector['id']
         assert answer['payloads'] is not None, vector['id']
     for name, (kind, _) in P.FEATURES.items():

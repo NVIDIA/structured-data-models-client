@@ -1758,6 +1758,92 @@
      "orders.user_id": "numeric"
     }
    }
+  },
+  {
+   "id": "key.composite-primary",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users (user_id bigint, region int, age integer, PRIMARY KEY (user_id, region))",
+    "INSERT INTO users SELECT i, 1, 20 + i FROM generate_series(0, 7) i",
+    "CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id bigint, price double precision, ts timestamp)",
+    "INSERT INTO orders SELECT i, i % 8, 10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7) FROM generate_series(0, 79) i"
+   ],
+   "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "user_id"
+    ],
+    [
+     "users",
+     "region"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "schema": null,
+    "payloads": null,
+    "postgres": {
+     "users.user_id": "bigint",
+     "users.region": "integer"
+    }
+   }
+  },
+  {
+   "id": "key.composite-foreign",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users (user_id bigint PRIMARY KEY, region int, age integer, UNIQUE (user_id, region))",
+    "INSERT INTO users SELECT i, 1, 20 + i FROM generate_series(0, 7) i",
+    "CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id bigint REFERENCES users(user_id), region int, price double precision, ts timestamp, FOREIGN KEY (user_id, region) REFERENCES users(user_id, region))",
+    "INSERT INTO orders SELECT i, i % 8, 1, 10 + i * 1.5, TIMESTAMP '2023-01-01' + make_interval(days => i * 7) FROM generate_series(0, 79) i"
+   ],
+   "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+   "materialize": {
+    "indices": [
+     0,
+     1
+    ],
+    "anchor_time": "2024-03-01",
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "orders",
+     "user_id"
+    ],
+    [
+     "orders",
+     "region"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "refusal",
+     "stage": "from_source",
+     "error": "ValueError",
+     "code": null
+    },
+    "schema": null,
+    "payloads": null,
+    "postgres": {
+     "orders.user_id": "bigint",
+     "orders.region": "integer"
+    }
+   }
   }
  ]
 }

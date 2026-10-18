@@ -47,7 +47,11 @@ Postgres's own types (which the contract loader does not make):
 - from Claude's second round: ``key.numeric-unconstrained-small`` and
   ``key.numeric-unconstrained-past-2-53``, unconstrained ``numeric``
   primary and foreign keys holding 0 to 7, and 10**17 + i, which must
-  not merge.
+  not merge;
+- from Claude's third round: ``key.composite-primary`` and
+  ``key.composite-foreign``, a composite primary key and a composite
+  foreign key, which the reference refuses at ``Schema.from_source``
+  with an unnamed ValueError.
 
 For each the reference's public answer is kept: the outcome (result,
 stage, exception class and ``StructuredDataError`` code), the public
@@ -315,6 +319,52 @@ for _name, _base in (('small', 0), ('past-2-53', 10**17)):
                 'random_seed': 42,
             },
             'columns': [['users', 'user_id'], ['orders', 'user_id']],
+        }
+    )
+# Claude's third round: a composite primary key, and a composite foreign
+# key, which the reference refuses at Schema.from_source (an unnamed
+# ValueError: its graph discovery takes single-column keys only).
+for _name, _setup, _columns in (
+    (
+        'key.composite-primary',
+        [
+            'CREATE TABLE users (user_id bigint, region int, age integer, '
+            'PRIMARY KEY (user_id, region))',
+            'INSERT INTO users SELECT i, 1, 20 + i FROM generate_series(0, 7) i',
+            _SHOP_ORDERS.format('user_id bigint'),
+            'INSERT INTO orders SELECT i, i % 8, '
+            f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+        ],
+        [['users', 'user_id'], ['users', 'region']],
+    ),
+    (
+        'key.composite-foreign',
+        [
+            'CREATE TABLE users (user_id bigint PRIMARY KEY, region int, '
+            'age integer, UNIQUE (user_id, region))',
+            'INSERT INTO users SELECT i, 1, 20 + i FROM generate_series(0, 7) i',
+            'CREATE TABLE orders (order_id bigint PRIMARY KEY, user_id bigint '
+            'REFERENCES users(user_id), region int, price double precision, '
+            'ts timestamp, FOREIGN KEY (user_id, region) '
+            'REFERENCES users(user_id, region))',
+            'INSERT INTO orders SELECT i, i % 8, 1, '
+            f'{_SHOP_FACTS} FROM generate_series(0, 79) i',
+        ],
+        [['orders', 'user_id'], ['orders', 'region']],
+    ),
+):
+    VECTORS.append(
+        {
+            'id': _name,
+            'session': [],
+            'setup': _setup,
+            'pql': SHOP_QUESTION,
+            'materialize': {
+                'indices': [0, 1],
+                'anchor_time': '2024-03-01',
+                'random_seed': 42,
+            },
+            'columns': _columns,
         }
     )
 
