@@ -308,6 +308,8 @@ def vector(
     *,
     outputs: list[str] | None = None,
     edit: dict[str, Any] | None = None,
+    database: str | None = None,
+    setup: list[str] | None = None,
     **materialize: Any,
 ) -> None:
     assert covers in EXITS, covers
@@ -320,6 +322,10 @@ def vector(
             'predict': {} if outputs is None else {'outputs': outputs},
             'edit': edit,
             'script': script,
+            # Off DuckDB, and over data changed by statements of its own,
+            # only where a vector says so.
+            **({'database': database} if database else {}),
+            **({'setup': setup} if setup else {}),
         }
     )
 
@@ -555,6 +561,110 @@ vector(
 )
 
 
+# Round 1's candidates (T2.8 fix round 1): each over item keys held as
+# text, key 0 replaced by the text a candidate spells, on each database.
+DATABASES = ('duckdb', 'sqlite', 'postgres')
+
+
+def text_keys(key0: str) -> list[str]:
+    r"""Statements making ``items.item_id`` and ``buys.item_id`` text,
+    key 0 spelled ``key0``."""
+    return [
+        f'ALTER TABLE {table} ALTER COLUMN item_id TYPE VARCHAR USING '
+        f"CASE WHEN item_id = 0 THEN '{key0}' ELSE item_id::VARCHAR END"
+        for table in ('items', 'buys')
+    ]
+
+
+WIDE = 10**39
+#: Past the 76 digits a Decimal256 holds.
+PAST_76 = 10**77 + 123456789
+for where in DATABASES:
+    at = '' if where == 'duckdb' else f'@{where}'
+    on = {'database': where} if where != 'duckdb' else {}
+    # A date and its spelling are two candidates on the reference.
+    vector(
+        f'candidates.date-and-text{at}',
+        'candidates',
+        RANK,
+        scores(),
+        setup=text_keys('2023-01-01'),
+        indices=[0, 1, 2],
+        candidates=[{'date': '2023-01-01'}, '2023-01-01', 1],
+        **on,
+    )
+    # A timestamp and its spelling (the reference writes a Timestamp as
+    # str() does, '2023-01-01 00:00:00'), the key holding that spelling.
+    vector(
+        f'candidates.timestamp-and-text{at}',
+        'candidates',
+        RANK,
+        scores(),
+        setup=text_keys('2023-01-01 00:00:00'),
+        indices=[0, 1, 2],
+        candidates=[
+            {'timestamp': '2023-01-01'},
+            '2023-01-01 00:00:00',
+            1,
+        ],
+        **on,
+    )
+    # A key past i128, as a Decimal and as an int.
+    vector(
+        f'candidates.decimal-past-i128{at}',
+        'candidates',
+        RANK,
+        scores(),
+        setup=text_keys(str(WIDE)),
+        indices=[0, 1, 2],
+        candidates=[{'decimal': str(WIDE)}, 1],
+        **on,
+    )
+    vector(
+        f'candidates.int-past-i128{at}',
+        'candidates',
+        RANK,
+        scores(),
+        setup=text_keys(str(WIDE)),
+        indices=[0, 1, 2],
+        candidates=[WIDE, 1],
+        **on,
+    )
+    # A key past the 76 digits a Decimal256 holds, scored as itself.
+    vector(
+        f'candidates.int-past-76-digits{at}',
+        'candidates',
+        RANK,
+        scores(),
+        setup=text_keys(str(PAST_76)),
+        indices=[0, 1, 2],
+        candidates=[PAST_76, 1],
+        **on,
+    )
+
+
+def _candidate(value: Any) -> Any:
+    r"""A candidate as the vector file writes it, as the Python value
+    the caller passes: ``{'date': ...}`` a ``datetime.date``,
+    ``{'timestamp': ...}`` a ``pandas.Timestamp``, ``{'decimal': ...}`` a
+    ``Decimal``, anything else as it is."""
+    if isinstance(value, dict):
+        [(kind, text)] = value.items()
+        if kind == 'date':
+            from datetime import date
+
+            return date.fromisoformat(text)
+        if kind == 'timestamp':
+            import pandas as pd
+
+            return pd.Timestamp(text)
+        if kind == 'decimal':
+            from decimal import Decimal
+
+            return Decimal(text)
+    return value
+
+
 # --- observing ------------------------------------------------------------
 
 
@@ -586,6 +696,15 @@ def _cell(value: Any) -> Any:
         return {'map': [[str(k), _cell(v)] for k, v in value.items()]}
     if hasattr(value, 'tolist'):
         return _cell(value.tolist())
+    from datetime import date, datetime
+    from decimal import Decimal
+
+    if isinstance(value, Decimal):
+        return {'decimal': str(value)}
+    if isinstance(value, datetime):
+        return {'timestamp': value.isoformat()}
+    if isinstance(value, date):
+        return {'date': value.isoformat()}
     return {'other': repr(value)}
 
 
@@ -659,18 +778,89 @@ def _frame(result: Any) -> dict[str, Any]:
     }
 
 
+@contextmanager
+def source(spec: dict[str, Any]) -> Iterator[Any]:
+    r"""The public source over the vector's data on its database: DuckDB's
+    in-memory connection, or its tables loaded by the contract loader
+    (``contract/runners/databases.py``) into a new SQLite file read through
+    ADBC, or into a new database on ``SDM_POSTGRES_TEST_DSN``'s server read
+    through psycopg, as the case runner loads a case."""
+    import duckdb
+    import sdm_connectors
+
+    duck = duckdb.connect()
+    for statement in [*statements(), *spec.get('setup', [])]:
+        duck.execute(statement)
+    database = spec.get('database', 'duckdb')
+    if database == 'duckdb':
+        try:
+            yield sdm_connectors.DuckDBSource(duck)
+        finally:
+            duck.close()
+        return
+    import importlib.util
+    import tempfile
+
+    found = importlib.util.spec_from_file_location(
+        't28_databases', ROOT / 'contract/runners/databases.py'
+    )
+    assert found is not None and found.loader is not None
+    loader = importlib.util.module_from_spec(found)
+    sys.modules['t28_databases'] = loader
+    found.loader.exec_module(loader)
+    if database == 'sqlite':
+        import adbc_driver_sqlite.dbapi
+
+        with tempfile.TemporaryDirectory(prefix='t28-vector-') as folder:
+            path = Path(folder) / 'data.sqlite'
+            loader.load(duck, 'sqlite', path)
+            duck.close()
+            connection = adbc_driver_sqlite.dbapi.connect(str(path))
+            try:
+                yield sdm_connectors.SQLiteSource(connection)
+            finally:
+                connection.close()
+        return
+    import os
+    import uuid
+
+    import psycopg
+    from psycopg.conninfo import make_conninfo
+
+    dsn = os.environ['SDM_POSTGRES_TEST_DSN']
+    name = f't28_vector_{uuid.uuid4().hex[:16]}'
+    with psycopg.connect(dsn, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE {name}')
+    try:
+        scoped = make_conninfo(dsn, dbname=name)
+        loader.load(duck, 'postgres', scoped)
+        duck.close()
+        connection = psycopg.connect(scoped)
+        try:
+            yield sdm_connectors.PostgresSource(connection)
+        finally:
+            connection.close()
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(f'DROP DATABASE {name} WITH (FORCE)')
+
+
 def observe(spec: dict[str, Any]) -> dict[str, Any]:
     r"""The vector's outcome on the route the environment selects."""
-    import duckdb
+    with source(spec) as given:
+        return _observe(spec, given)
+
+
+def _observe(spec: dict[str, Any], given: Any) -> dict[str, Any]:
     import pandas as pd
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-    from sdm_connectors import DuckDBSource
 
-    connection = duckdb.connect()
-    for statement in statements():
-        connection.execute(statement)
     arguments = dict(spec['materialize'])
     arguments['anchor_time'] = pd.Timestamp(arguments['anchor_time'])
+    if 'candidates' in arguments:
+        arguments['candidates'] = [
+            _candidate(c) for c in arguments['candidates']
+        ]
     notices: list[str] = []
     out: dict[str, Any]
     with endpoint(spec['script']) as (url, calls):
@@ -678,7 +868,7 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
             warnings.simplefilter('always')
             stage = 'materialize'
             try:
-                schema = Schema.from_source(DuckDBSource(connection))
+                schema = Schema.from_source(given)
                 request = PredictiveQuery(spec['query'], schema).materialize(
                     **arguments
                 )

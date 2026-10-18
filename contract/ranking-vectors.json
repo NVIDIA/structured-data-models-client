@@ -6018,6 +6018,6445 @@
      }
     ]
    }
+  },
+  {
+   "name": "candidates.date-and-text",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "date": "2023-01-01"
+     },
+     "2023-01-01",
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "str": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "str": "2023-01-01"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "str": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "str": "2023-01-01"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.timestamp-and-text",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "timestamp": "2023-01-01"
+     },
+     "2023-01-01 00:00:00",
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01 00:00:00' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01 00:00:00' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "str": "2023-01-01 00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "str": "2023-01-01 00:00:00"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "str": "2023-01-01 00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "str": "2023-01-01 00:00:00"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.decimal-past-i128",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "decimal": "1000000000000000000000000000000000000000"
+     },
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.int-past-i128",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     1000000000000000000000000000000000000000,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.int-past-76-digits",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     100000000000000000000000000000000000000000000000000000000000000000000123456789,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '100000000000000000000000000000000000000000000000000000000000000000000123456789' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '100000000000000000000000000000000000000000000000000000000000000000000123456789' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.date-and-text@sqlite",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "date": "2023-01-01"
+     },
+     "2023-01-01",
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "sqlite",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "str": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "str": "2023-01-01"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "str": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "str": "2023-01-01"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.timestamp-and-text@sqlite",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "timestamp": "2023-01-01"
+     },
+     "2023-01-01 00:00:00",
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "sqlite",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01 00:00:00' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01 00:00:00' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "str": "2023-01-01 00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "str": "2023-01-01 00:00:00"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "str": "2023-01-01 00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "str": "2023-01-01 00:00:00"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.decimal-past-i128@sqlite",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "decimal": "1000000000000000000000000000000000000000"
+     },
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "sqlite",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.int-past-i128@sqlite",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     1000000000000000000000000000000000000000,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "sqlite",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.int-past-76-digits@sqlite",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     100000000000000000000000000000000000000000000000000000000000000000000123456789,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "sqlite",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '100000000000000000000000000000000000000000000000000000000000000000000123456789' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '100000000000000000000000000000000000000000000000000000000000000000000123456789' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.date-and-text@postgres",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "date": "2023-01-01"
+     },
+     "2023-01-01",
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "postgres",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "str": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "str": "2023-01-01"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "str": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "str": "2023-01-01"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "date": "2023-01-01"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "date": "2023-01-01"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.timestamp-and-text@postgres",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "timestamp": "2023-01-01"
+     },
+     "2023-01-01 00:00:00",
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "postgres",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01 00:00:00' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '2023-01-01 00:00:00' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "str": "2023-01-01 00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "str": "2023-01-01 00:00:00"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "str": "2023-01-01 00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fd999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "str": "2023-01-01 00:00:00"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "str": "2023-01-01 00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "timestamp": "2023-01-01T00:00:00"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "timestamp": "2023-01-01T00:00:00"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-2\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.6, \"true\": 0.4}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.7, \"true\": 0.3}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.decimal-past-i128@postgres",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     {
+      "decimal": "1000000000000000000000000000000000000000"
+     },
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "postgres",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "decimal": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "decimal": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.int-past-i128@postgres",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     1000000000000000000000000000000000000000,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "postgres",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '1000000000000000000000000000000000000000' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "1000000000000000000000000000000000000000"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "1000000000000000000000000000000000000000"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1000000000000000000000000000000000000000"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "candidates.int-past-76-digits@postgres",
+   "covers": "candidates",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     100000000000000000000000000000000000000000000000000000000000000000000123456789,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ]
+   },
+   "database": "postgres",
+   "setup": [
+    "ALTER TABLE items ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '100000000000000000000000000000000000000000000000000000000000000000000123456789' ELSE item_id::VARCHAR END",
+    "ALTER TABLE buys ALTER COLUMN item_id TYPE VARCHAR USING CASE WHEN item_id = 0 THEN '100000000000000000000000000000000000000000000000000000000000000000000123456789' ELSE item_id::VARCHAR END"
+   ],
+   "expected": {
+    "stage": "predict",
+    "outcome": "result",
+    "outputs": [
+     "prediction",
+     "rankings"
+    ],
+    "unscored": {
+     "list": []
+    },
+    "items": [
+     {
+      "row_index": {
+       "int": "0"
+      },
+      "id": {
+       "int": "0"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "1"
+      },
+      "id": {
+       "int": "1"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     },
+     {
+      "row_index": {
+       "int": "2"
+      },
+      "id": {
+       "int": "2"
+      },
+      "prediction": {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      "probabilities": null,
+      "scores": null,
+      "rankings": {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     }
+    ],
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "dtypes": [
+     "int64",
+     "int64",
+     "object",
+     "object"
+    ],
+    "rows": [
+     [
+      {
+       "int": "0"
+      },
+      {
+       "int": "0"
+      },
+      {
+       "list": [
+        {
+         "int": "1"
+        },
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe6666666666666"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fc999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "1"
+      },
+      {
+       "int": "1"
+      },
+      {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3feccccccccccccd"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ],
+     [
+      {
+       "int": "2"
+      },
+      {
+       "int": "2"
+      },
+      {
+       "list": [
+        {
+         "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+        },
+        {
+         "int": "1"
+        }
+       ]
+      },
+      {
+       "list": [
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "100000000000000000000000000000000000000000000000000000000000000000000123456789"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fe0000000000000"
+           }
+          ]
+         ]
+        },
+        {
+         "map": [
+          [
+           "candidate",
+           {
+            "int": "1"
+           }
+          ],
+          [
+           "score",
+           {
+            "f64_bits": "3fb999999999999a"
+           }
+          ]
+         ]
+        }
+       ]
+      }
+     ]
+    ],
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     },
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-1\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.3, \"true\": 0.7}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.9, \"true\": 0.1}}]}"
+     }
+    ]
+   }
   }
  ],
  "controls": [
