@@ -14,9 +14,10 @@
 //!
 //! Limits fail loudly by name, never by reading on or cutting short: each
 //! scan asks for one row past what is left of `max_rows`, so no scan moves
-//! more than the limit allows, and more rows than the limit, or more bytes
-//! of Arrow data held (the seeds, every scan and the answer) than
-//! `max_bytes`, end the run with `UNSUPPORTED_REQUEST` naming the request,
+//! more than the limit allows, each page of a scan is held to what is left
+//! of both limits as it arrives, so none is asked for past them, and more
+//! rows than the limit, or more bytes of Arrow data held (the seeds, every
+//! scan and the answer) than `max_bytes`, end the run with `UNSUPPORTED_REQUEST` naming the request,
 //! the rule [`LIMIT_RULE`], the `limit` and its `most`. A value the fallback does
 //! not read (a time in a column that is neither a zone-less timestamp nor a
 //! date, a key joined to seeds of another type, a column the row format
@@ -63,7 +64,7 @@ use sdm_contract::data::{
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_engine::random::{Entropy, default_rng};
 
-use crate::run::{ArrowData, Asker, FetchResult, Reply, internal, schema_mismatch};
+use crate::run::{ArrowData, Asker, Budget, FetchResult, Reply, internal, schema_mismatch};
 
 /// The rule the fallback's refusal of a value it does not read names.
 pub(crate) const RULE: &str = "fallback";
@@ -140,14 +141,24 @@ impl Held<'_> {
     ) -> Result<Scanned, Failed> {
         let left = self.limits.max_rows.saturating_sub(self.rows);
         let limit = left.saturating_add(1).min(most.unwrap_or(u64::MAX));
+        // Held to what is left of both limits as each page arrives.
+        let budget = Budget {
+            rows: left,
+            bytes: self.limits.max_bytes.saturating_sub(self.bytes),
+            past_rows: over(self.request, "max_rows", self.limits.max_rows),
+            past_bytes: over(self.request, "max_bytes", self.limits.max_bytes),
+        };
         let asked = self
             .asker
-            .fetch(DataRequest::Scan {
-                table: table.clone(),
-                columns,
-                filters,
-                limit: Some(limit),
-            })?
+            .fetch_within(
+                DataRequest::Scan {
+                    table: table.clone(),
+                    columns,
+                    filters,
+                    limit: Some(limit),
+                },
+                budget,
+            )?
             .await;
         let data = match asked {
             Reply::Fetch(FetchResult::Data(data)) => data,

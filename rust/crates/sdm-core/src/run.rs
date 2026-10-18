@@ -194,7 +194,19 @@ impl Asker {
                 limits,
                 seeds,
             ))),
+            budget: None,
         })
+    }
+
+    /// [`Asker::fetch`], the answer held to `budget` as each page arrives.
+    pub(crate) fn fetch_within(
+        &self,
+        request: DataRequest,
+        budget: Budget,
+    ) -> Result<Ask, CoreError> {
+        let mut ask = self.fetch(request)?;
+        ask.budget = Some(Box::new(budget));
+        Ok(ask)
     }
 
     /// The Arrow data the body attached as `id`, taken back before the host
@@ -268,6 +280,7 @@ impl Asker {
         Ask {
             shared: Arc::clone(&self.shared),
             state: AskState::New(Asked::Fetch(Box::new((request, plan)))),
+            budget: None,
         }
     }
 
@@ -280,6 +293,7 @@ impl Asker {
                 content_type,
                 body,
             }),
+            budget: None,
         }
     }
 
@@ -357,6 +371,40 @@ enum Asked {
 pub struct Ask {
     shared: Arc<Mutex<Shared>>,
     state: AskState,
+    /// What the answer may hold, checked as each page arrives.
+    budget: Option<Box<Budget>>,
+}
+
+/// What one fetch's answer may hold, the in-memory fallback's limits on a
+/// scan it asks (T2.6): checked as each page arrives, so past either the
+/// run ends with that limit's error, at once, and no later page is asked
+/// for or its failure awaited.
+pub(crate) struct Budget {
+    pub(crate) rows: u64,
+    pub(crate) bytes: u64,
+    pub(crate) past_rows: CoreError,
+    pub(crate) past_bytes: CoreError,
+}
+
+impl Budget {
+    /// The error of the limit `data`, the pages read so far, is past.
+    fn exceeded(&self, data: &ArrowData) -> Option<CoreError> {
+        let rows: usize = data.batches.iter().map(RecordBatch::num_rows).sum();
+        if rows as u64 > self.rows {
+            return Some(self.past_rows.clone());
+        }
+        let bytes: usize = data
+            .batches
+            .iter()
+            .map(RecordBatch::get_array_memory_size)
+            .sum();
+        (bytes as u64 > self.bytes).then(|| self.past_bytes.clone())
+    }
+}
+
+/// The error of the limit `data` is past, where `budget` is given.
+fn past(budget: &Option<Box<Budget>>, data: &ArrowData) -> Option<CoreError> {
+    budget.as_ref().and_then(|budget| budget.exceeded(data))
 }
 
 enum AskState {
@@ -469,6 +517,11 @@ impl Future for Ask {
                             return Poll::Pending;
                         }
                     };
+                    // Past the budget: no next page is asked for.
+                    if let Some(err) = past(&this.budget, &pages) {
+                        shared.exhausted.get_or_insert(err);
+                        return Poll::Pending;
+                    }
                     let Some(asked) = fetch else {
                         shared
                             .exhausted
@@ -492,16 +545,21 @@ impl Future for Ask {
                     };
                     Poll::Pending
                 }
-                // The last page: the pages read as one answer.
-                Some(Reply::Fetch(FetchResult::Data(data))) if pages.is_some() => {
-                    match add_page(pages, data) {
-                        Ok(whole) => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
-                        Err(err) => {
+                // The last page, or the only one: the pages read as one
+                // answer, held to the budget.
+                Some(Reply::Fetch(FetchResult::Data(data))) => match add_page(pages, data) {
+                    Ok(whole) => match past(&this.budget, &whole) {
+                        Some(err) => {
                             shared.exhausted.get_or_insert(err);
                             Poll::Pending
                         }
+                        None => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
+                    },
+                    Err(err) => {
+                        shared.exhausted.get_or_insert(err);
+                        Poll::Pending
                     }
-                }
+                },
                 Some(reply) => Poll::Ready(reply),
             },
             AskState::Fallback(_) => unreachable!("polled above"),
