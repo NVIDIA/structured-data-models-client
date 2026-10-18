@@ -38,7 +38,8 @@ is converted after the read where the core takes it another way: a
 ``json`` or ``jsonb`` value as the reference's text of it (compact JSON,
 its field marked as JSON, Arrow's ``arrow.json``),
 an ``interval`` (the driver's ``timedelta``, a month counted as 30 days as
-the reference's driver counts it) as pyarrow's ``MonthDayNano``. A
+the reference's driver counts it) as pyarrow's ``MonthDayNano``, its field
+tagged ``sdm:interval`` = ``timedelta`` (:data:`INTERVAL_TAG`). A
 ``timestamptz`` is built as the instant in UTC, whatever the session's
 zone.
 """
@@ -54,6 +55,10 @@ from typing import Any
 #: The field metadata key marking a column of numbers handed over as their
 #: exact text (``sdm_contract::data::EXACT_NUMBER_MARKER``).
 EXACT_NUMBER_MARKER = 'sdm:exact_number'
+#: The field metadata key, and its value, marking an interval column built
+#: from the driver's ``timedelta``s (:func:`_interval`), a month counted as
+#: 30 days as psycopg counts it.
+INTERVAL_TAG = ('sdm:interval', 'timedelta')
 #: The range of an ``int64``.
 _INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 #: Rows per Arrow batch; a larger result comes as several.
@@ -283,7 +288,14 @@ def _result(cursor: Any, connection: Any, batch_rows: int) -> Any:
         fields.append(
             kind.field(column.name, (row[at] for row in rows))
             if isinstance(kind, _Numeric)
-            else pa.field(column.name, kind)
+            else pa.field(
+                column.name,
+                kind,
+                # Built from the driver's timedelta (_interval): so tagged.
+                metadata=dict([INTERVAL_TAG])
+                if kind == pa.month_day_nano_interval()
+                else None,
+            )
         )
     schema = pa.schema(fields)
     types = [field.type for field in fields]
