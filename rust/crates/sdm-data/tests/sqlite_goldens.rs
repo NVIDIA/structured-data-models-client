@@ -18,6 +18,10 @@ use sdm_data::Data;
 /// carries on SQLite, in order.
 const GOLDENS: &[(&str, &[&str])] = &[
     (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &["PRAGMA foreign_key_list(\"addresses\")"],
+    ),
+    (
         r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["adventureworks_customers"]}]}"##,
         &["PRAGMA foreign_key_list(\"adventureworks_customers\")"],
     ),
@@ -34,12 +38,44 @@ const GOLDENS: &[(&str, &[&str])] = &[
         &["PRAGMA foreign_key_list(\"adventureworks_sales_order_headers\")"],
     ),
     (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &["PRAGMA foreign_key_list(\"buyers\")"],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &["PRAGMA foreign_key_list(\"customers\")"],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &["PRAGMA foreign_key_list(\"details\")"],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &["PRAGMA foreign_key_list(\"headers\")"],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &["PRAGMA foreign_key_list(\"lines\")"],
+    ),
+    (
         r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["orders"]}]}"##,
         &["PRAGMA foreign_key_list(\"orders\")"],
     ),
     (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &["PRAGMA foreign_key_list(\"products\")"],
+    ),
+    (
+        r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &["PRAGMA foreign_key_list(\"stores\")"],
+    ),
+    (
         r##"{"part": "foreign_keys", "request": "describe", "tables": [{"source": ["users"]}]}"##,
         &["PRAGMA foreign_key_list(\"users\")"],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &["PRAGMA index_list(\"addresses\")"],
     ),
     (
         r##"{"part": "keys", "request": "describe", "tables": [{"source": ["adventureworks_customers"]}]}"##,
@@ -58,12 +94,44 @@ const GOLDENS: &[(&str, &[&str])] = &[
         &["PRAGMA index_list(\"adventureworks_sales_order_headers\")"],
     ),
     (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &["PRAGMA index_list(\"buyers\")"],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &["PRAGMA index_list(\"customers\")"],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &["PRAGMA index_list(\"details\")"],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &["PRAGMA index_list(\"headers\")"],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &["PRAGMA index_list(\"lines\")"],
+    ),
+    (
         r##"{"part": "keys", "request": "describe", "tables": [{"source": ["orders"]}]}"##,
         &["PRAGMA index_list(\"orders\")"],
     ),
     (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &["PRAGMA index_list(\"products\")"],
+    ),
+    (
+        r##"{"part": "keys", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &["PRAGMA index_list(\"stores\")"],
+    ),
+    (
         r##"{"part": "keys", "request": "describe", "tables": [{"source": ["users"]}]}"##,
         &["PRAGMA index_list(\"users\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &["PRAGMA table_info(\"addresses\")"],
     ),
     (
         r##"{"part": "columns", "request": "describe", "tables": [{"source": ["adventureworks_customers"]}]}"##,
@@ -82,8 +150,36 @@ const GOLDENS: &[(&str, &[&str])] = &[
         &["PRAGMA table_info(\"adventureworks_sales_order_headers\")"],
     ),
     (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &["PRAGMA table_info(\"buyers\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &["PRAGMA table_info(\"customers\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &["PRAGMA table_info(\"details\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &["PRAGMA table_info(\"headers\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &["PRAGMA table_info(\"lines\")"],
+    ),
+    (
         r##"{"part": "columns", "request": "describe", "tables": [{"source": ["orders"]}]}"##,
         &["PRAGMA table_info(\"orders\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &["PRAGMA table_info(\"products\")"],
+    ),
+    (
+        r##"{"part": "columns", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &["PRAGMA table_info(\"stores\")"],
     ),
     (
         r##"{"part": "columns", "request": "describe", "tables": [{"source": ["users"]}]}"##,
@@ -97,6 +193,48 @@ const GOLDENS: &[(&str, &[&str])] = &[
         r##"{"keys": [{"columns": ["CustomerID"], "table": {"source": ["adventureworks_customers"]}}, {"columns": ["ProductID"], "table": {"source": ["adventureworks_products"]}}, {"columns": ["SalesOrderDetailID"], "table": {"source": ["adventureworks_sales_order_details"]}}], "request": "key_counts"}"##,
         &[
             "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"CustomerID\") AS d, COUNT(CASE WHEN \"CustomerID\" IS NULL THEN 1 END) AS z\nFROM \"adventureworks_customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"ProductID\") AS d, COUNT(CASE WHEN \"ProductID\" IS NULL THEN 1 END) AS z\nFROM \"adventureworks_products\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"SalesOrderDetailID\") AS d, COUNT(CASE WHEN \"SalesOrderDetailID\" IS NULL THEN 1 END) AS z\nFROM \"adventureworks_sales_order_details\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["aid"], "table": {"source": ["addresses"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["lid"], "table": {"source": ["lines"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"aid\") AS d, COUNT(CASE WHEN \"aid\" IS NULL THEN 1 END) AS z\nFROM \"addresses\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"lid\") AS d, COUNT(CASE WHEN \"lid\" IS NULL THEN 1 END) AS z\nFROM \"lines\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["aid"], "table": {"source": ["addresses"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"aid\") AS d, COUNT(CASE WHEN \"aid\" IS NULL THEN 1 END) AS z\nFROM \"addresses\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["buyers"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"buyers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["buyers"]}}, {"columns": ["cid"], "table": {"source": ["customers"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"buyers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["did"], "table": {"source": ["details"]}}, {"columns": ["hid"], "table": {"source": ["headers"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"did\") AS d, COUNT(CASE WHEN \"did\" IS NULL THEN 1 END) AS z\nFROM \"details\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"headers\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["hid"], "table": {"source": ["headers"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"hid\") AS d, COUNT(CASE WHEN \"hid\" IS NULL THEN 1 END) AS z\nFROM \"headers\"",
+        ],
+    ),
+    (
+        r##"{"keys": [{"columns": ["cid"], "table": {"source": ["customers"]}}, {"columns": ["oid"], "table": {"source": ["orders"]}}, {"columns": ["pid"], "table": {"source": ["products"]}}, {"columns": ["sid"], "table": {"source": ["stores"]}}], "request": "key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"cid\") AS d, COUNT(CASE WHEN \"cid\" IS NULL THEN 1 END) AS z\nFROM \"customers\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"oid\") AS d, COUNT(CASE WHEN \"oid\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"pid\") AS d, COUNT(CASE WHEN \"pid\" IS NULL THEN 1 END) AS z\nFROM \"products\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"sid\") AS d, COUNT(CASE WHEN \"sid\" IS NULL THEN 1 END) AS z\nFROM \"stores\"",
         ],
     ),
     (
@@ -190,6 +328,102 @@ const GOLDENS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        r##"{"columns": ["aid", "city", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"aid\", t.\"city\", t.\"tag\"\nFROM temp.\"__sdm_seeds_8c86de7a897c4696__\" s\nJOIN \"addresses\" t\n  ON t.\"aid\" = s.\"key\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid", "city", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"addresses\" WHERE \"aid\" == s.\"key\") AS \"__kumo_matches__\", t.\"aid\", t.\"city\", t.\"tag\"\nFROM temp.\"__sdm_seeds_52e9c370f77751e2__\" s\nJOIN \"addresses\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"addresses\"\n    WHERE \"aid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid", "tag"], "key": ["aid"], "request": "lookup", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"addresses\" WHERE \"aid\" == s.\"key\") AS \"__kumo_matches__\", t.\"aid\", t.\"tag\"\nFROM temp.\"__sdm_seeds_0c19054dd75f7b56__\" s\nJOIN \"addresses\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"addresses\"\n    WHERE \"aid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["buyers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"buyers\" WHERE \"cid\" == s.\"key\") AS \"__kumo_matches__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_1b714f319225d9d8__\" s\nJOIN \"buyers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"buyers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"customers\" WHERE \"cid\" == s.\"key\") AS \"__kumo_matches__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_ec46213a60d8279d__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["buyers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_1986c936fe713ad2__\" s\nJOIN \"buyers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"buyers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_4515f57e455ec979__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_3294f14ccac0db3d__\" s\nJOIN \"customers\" t\n  ON t.\"cid\" = s.\"key\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_9542387fdea30ebb__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "seg"], "key": ["cid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"customers\" WHERE \"cid\" == s.\"key\") AS \"__kumo_matches__\", t.\"cid\", t.\"seg\"\nFROM temp.\"__sdm_seeds_bbad3ddf0df06d3b__\" s\nJOIN \"customers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"customers\"\n    WHERE \"cid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["hid", "cid", "ts"], "key": ["hid"], "request": "lookup", "seeds": {"attachment": 6, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["headers"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_a5f0d3ecaeb32cba__\" s\nJOIN \"headers\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"headers\"\n    WHERE \"hid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"products\" WHERE \"pid\" == s.\"key\") AS \"__kumo_matches__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_7b749117acaeeeda__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_6871999bf17091cc__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "key": ["pid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["products"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"pid\", t.\"price\", t.\"tag\"\nFROM temp.\"__sdm_seeds_41ce1d0d69f89623__\" s\nJOIN \"products\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"products\"\n    WHERE \"pid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["sid", "size", "tag"], "key": ["sid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["stores"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", (SELECT COUNT(*) FROM \"stores\" WHERE \"sid\" == s.\"key\") AS \"__kumo_matches__\", t.\"sid\", t.\"size\", t.\"tag\"\nFROM temp.\"__sdm_seeds_c5bde6793459d8ce__\" s\nJOIN \"stores\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"stores\"\n    WHERE \"sid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"columns": ["sid", "size", "tag"], "key": ["sid"], "request": "lookup", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"metadata": {"sdm:count_unread": "true"}, "name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["stores"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"sid\", t.\"size\", t.\"tag\"\nFROM temp.\"__sdm_seeds_a969a6fa56cbd2af__\" s\nJOIN \"stores\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"stores\"\n    WHERE \"sid\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
         r##"{"columns": ["uid", "age", "country"], "key": ["uid"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"metadata": {"sdm:key_unique": "true"}, "name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"##,
         &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"uid\", t.\"age\", t.\"country\"\nFROM temp.\"__sdm_seeds_4147eb4816a8d16e__\" s\nJOIN \"users\" t\n  ON t.\"uid\" = s.\"key\"",
@@ -232,9 +466,87 @@ const GOLDENS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["aid"], "order": [{"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}, "window": null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_cbaac5239dff16c0__\" s\nJOIN \"customers\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"customers\"\n  WHERE \"aid\" = s.\"key\"\n  ORDER BY \"cid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"cid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "key": ["aid"], "order": [{"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["customers"]}, "window": null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"cid\", t.\"aid\", t.\"seg\", t.\"tag\"\nFROM temp.\"__sdm_seeds_d8edbc08965d49f1__\" s\nJOIN \"customers\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"customers\"\n  WHERE \"aid\" = s.\"key\"\n  ORDER BY \"cid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"cid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": false}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"did\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_97610f73eab6b892__\" s\nJOIN \"details\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"details\"\n  WHERE \"cid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"cid\", \"did\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"cid\", t.\"did\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": false}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": false}, {"as_timestamp": false, "column": "hid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"did\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_144effdd4926c632__\" s\nJOIN \"details\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"details\"\n  WHERE \"cid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"cid\", \"did\", \"hid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"cid\", t.\"did\", t.\"hid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"did\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_32733c8906a7a82d__\" s\nJOIN \"details\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"details\"\n  WHERE \"cid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"did\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"did\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["hid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "cid", "descending": false, "nulls_last": false}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": false}, {"as_timestamp": false, "column": "hid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"did\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_6985cf8c5add6346__\" s\nJOIN \"details\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"details\"\n  WHERE \"hid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"cid\", \"did\", \"hid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"cid\", t.\"did\", t.\"hid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "key": ["hid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "did", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"did\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_c84a3c1c63dd4921__\" s\nJOIN \"details\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"details\"\n  WHERE \"hid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"did\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"did\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["hid", "cid", "ts"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "hid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["headers"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"hid\", t.\"cid\", t.\"ts\"\nFROM temp.\"__sdm_seeds_cbac9e10a143e307__\" s\nJOIN \"headers\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"headers\"\n  WHERE \"cid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"hid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"hid\"",
+        ],
+    ),
+    (
         r##"{"columns": ["oid", "buyer", "price", "ts"], "key": ["buyer"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2023-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
         &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"oid\", t.\"buyer\", t.\"price\", t.\"ts\"\nFROM temp.\"__sdm_seeds_f27296d1591af8b8__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"buyer\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"oid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"oid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["aid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 4, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"oid\", t.\"cid\", t.\"aid\", t.\"pid\", t.\"sid\", t.\"ts\", t.\"tag\"\nFROM temp.\"__sdm_seeds_4a20a4b4d4c84164__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"aid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"oid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"oid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"oid\", t.\"cid\", t.\"aid\", t.\"pid\", t.\"sid\", t.\"ts\", t.\"tag\"\nFROM temp.\"__sdm_seeds_169810670be1e1e7__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"cid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"oid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"oid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["cid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 5, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"oid\", t.\"cid\", t.\"aid\", t.\"pid\", t.\"sid\", t.\"ts\", t.\"tag\"\nFROM temp.\"__sdm_seeds_a65b8c82bd1fbc71__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"cid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"oid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"oid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["pid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"oid\", t.\"cid\", t.\"aid\", t.\"pid\", t.\"sid\", t.\"ts\", t.\"tag\"\nFROM temp.\"__sdm_seeds_b8d98ed4f58a85d8__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"pid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"oid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"oid\"",
+        ],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "key": ["sid"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": false}, {"as_timestamp": false, "column": "oid", "descending": false, "nulls_last": false}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"oid\", t.\"cid\", t.\"aid\", t.\"pid\", t.\"sid\", t.\"ts\", t.\"tag\"\nFROM temp.\"__sdm_seeds_b13b7d349be62697__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"sid\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"oid\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"oid\"",
         ],
     ),
     (
@@ -358,6 +670,36 @@ const GOLDENS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        r##"{"columns": ["ts"], "key": ["aid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM temp.\"__sdm_seeds_11ed4e001309341d__\" s\nJOIN \"orders\" t\n  ON t.\"aid\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["cid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["details"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM temp.\"__sdm_seeds_1dd4fdea90e69436__\" s\nJOIN \"details\" t\n  ON t.\"cid\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["cid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM temp.\"__sdm_seeds_f2c6870d1c89b9d3__\" s\nJOIN \"orders\" t\n  ON t.\"cid\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["pid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM temp.\"__sdm_seeds_89edf4f61e4ffb50__\" s\nJOIN \"orders\" t\n  ON t.\"pid\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"columns": ["ts"], "key": ["sid"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"metadata": {"sdm:stored_time": "2024-01-01 00:00:00"}, "name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM temp.\"__sdm_seeds_0696e019c64a58e3__\" s\nJOIN \"orders\" t\n  ON t.\"sid\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
         r##"{"columns": ["ts"], "key": ["user_id"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"metadata": {"sdm:stored_time": "2023-01-01 00:00:00"}, "name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"metadata": {"sdm:stored_time": "2023-01-01 00:00:00"}, "name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"##,
         &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\"\nFROM temp.\"__sdm_seeds_c3aff1e1327eaf9e__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
@@ -388,8 +730,48 @@ const GOLDENS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        r##"{"columns": ["aid", "city", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["addresses"]}}"##,
+        &["SELECT \"aid\", \"city\", \"tag\" FROM \"addresses\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["buyers"]}}"##,
+        &["SELECT \"cid\", \"aid\", \"seg\", \"tag\" FROM \"buyers\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["cid", "aid", "seg", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["customers"]}}"##,
+        &["SELECT \"cid\", \"aid\", \"seg\", \"tag\" FROM \"customers\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["cid", "seg"], "limit": 1000, "request": "preview", "table": {"source": ["customers"]}}"##,
+        &["SELECT \"cid\", \"seg\" FROM \"customers\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["did", "cid", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["details"]}}"##,
+        &["SELECT \"did\", \"cid\", \"ts\" FROM \"details\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["did", "hid", "cid", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["details"]}}"##,
+        &["SELECT \"did\", \"hid\", \"cid\", \"ts\" FROM \"details\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["hid", "cid", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["headers"]}}"##,
+        &["SELECT \"hid\", \"cid\", \"ts\" FROM \"headers\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["lid", "oid", "qty", "ts", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["lines"]}}"##,
+        &[
+            "SELECT \"lid\", \"oid\", \"qty\", \"ts\", \"tag\" FROM \"lines\" ORDER BY rowid LIMIT 1000",
+        ],
+    ),
+    (
         r##"{"columns": ["oid", "buyer", "price", "ts"], "limit": 1000, "request": "preview", "table": {"source": ["orders"]}}"##,
         &["SELECT \"oid\", \"buyer\", \"price\", \"ts\" FROM \"orders\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["oid", "cid", "aid", "pid", "sid", "ts", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["orders"]}}"##,
+        &[
+            "SELECT \"oid\", \"cid\", \"aid\", \"pid\", \"sid\", \"ts\", \"tag\" FROM \"orders\" ORDER BY rowid LIMIT 1000",
+        ],
     ),
     (
         r##"{"columns": ["order_id", "user_id", "price", "day"], "limit": 1000, "request": "preview", "table": {"source": ["orders"]}}"##,
@@ -414,6 +796,14 @@ const GOLDENS: &[(&str, &[&str])] = &[
         &[
             "SELECT \"order_id\", \"user_id\", \"price\", \"ts\", \"amount\" FROM \"orders\" ORDER BY rowid LIMIT 1000",
         ],
+    ),
+    (
+        r##"{"columns": ["pid", "price", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["products"]}}"##,
+        &["SELECT \"pid\", \"price\", \"tag\" FROM \"products\" ORDER BY rowid LIMIT 1000"],
+    ),
+    (
+        r##"{"columns": ["sid", "size", "tag"], "limit": 1000, "request": "preview", "table": {"source": ["stores"]}}"##,
+        &["SELECT \"sid\", \"size\", \"tag\" FROM \"stores\" ORDER BY rowid LIMIT 1000"],
     ),
     (
         r##"{"columns": ["uid", "age", "country"], "limit": 1000, "request": "preview", "table": {"source": ["users"]}}"##,
@@ -478,6 +868,48 @@ const GOLDENS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        r##"{"columns": ["aid", "city"], "filters": [{"column": "aid", "filter": "not_null"}], "key": ["aid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT \"aid\", \"city\"\nFROM \"addresses\"\nWHERE \"aid\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('addresses') WHERE name = 'aid')), 1) = 1 THEN ((((787846414 * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('addresses') WHERE name = 'aid')), 1) = 1 THEN \"aid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid"], "filters": [], "key": ["aid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT \"aid\"\nFROM \"addresses\"\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('addresses') WHERE name = 'aid')), 1) = 1 THEN ((((787846414 * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('addresses') WHERE name = 'aid')), 1) = 1 THEN \"aid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["aid"], "filters": [{"column": "aid", "filter": "not_null"}], "key": ["aid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["addresses"]}}"##,
+        &[
+            "SELECT \"aid\"\nFROM \"addresses\"\nWHERE \"aid\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('addresses') WHERE name = 'aid')), 1) = 1 THEN ((((787846414 * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"aid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('addresses') WHERE name = 'aid')), 1) = 1 THEN \"aid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid"], "filters": [{"column": "cid", "filter": "not_null"}], "key": ["cid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["buyers"]}}"##,
+        &[
+            "SELECT \"cid\"\nFROM \"buyers\"\nWHERE \"cid\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('buyers') WHERE name = 'cid')), 1) = 1 THEN ((((787846414 * ((\"cid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"cid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"cid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('buyers') WHERE name = 'cid')), 1) = 1 THEN \"cid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["cid"], "filters": [{"column": "cid", "filter": "not_null"}], "key": ["cid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["customers"]}}"##,
+        &[
+            "SELECT \"cid\"\nFROM \"customers\"\nWHERE \"cid\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('customers') WHERE name = 'cid')), 1) = 1 THEN ((((787846414 * ((\"cid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"cid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"cid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('customers') WHERE name = 'cid')), 1) = 1 THEN \"cid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["pid"], "filters": [{"column": "pid", "filter": "not_null"}], "key": ["pid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["products"]}}"##,
+        &[
+            "SELECT \"pid\"\nFROM \"products\"\nWHERE \"pid\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('products') WHERE name = 'pid')), 1) = 1 THEN ((((787846414 * ((\"pid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"pid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"pid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('products') WHERE name = 'pid')), 1) = 1 THEN \"pid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns": ["sid"], "filters": [{"column": "sid", "filter": "not_null"}], "key": ["sid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["stores"]}}"##,
+        &[
+            "SELECT \"sid\"\nFROM \"stores\"\nWHERE \"sid\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('stores') WHERE name = 'sid')), 1) = 1 THEN ((((787846414 * ((\"sid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"sid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"sid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('stores') WHERE name = 'sid')), 1) = 1 THEN \"sid\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
         r##"{"columns": ["uid"], "filters": [], "key": ["uid"], "key_dtype": "int", "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["users"]}}"##,
         &[
             "SELECT \"uid\"\nFROM \"users\"\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('users') WHERE name = 'uid')), 1) = 1 THEN ((((787846414 * ((\"uid\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"uid\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"uid\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('users') WHERE name = 'uid')), 1) = 1 THEN \"uid\" END, rowid LIMIT 10000",
@@ -534,6 +966,14 @@ const GOLDENS: &[(&str, &[&str])] = &[
         &["SELECT \"happened\" FROM \"orders\" WHERE \"happened\" IS NOT NULL LIMIT 1"],
     ),
     (
+        r##"{"columns": ["ts"], "filters": [{"column": "ts", "filter": "not_null"}], "limit": 1, "request": "scan", "table": {"source": ["details"]}}"##,
+        &["SELECT \"ts\" FROM \"details\" WHERE \"ts\" IS NOT NULL LIMIT 1"],
+    ),
+    (
+        r##"{"columns": ["ts"], "filters": [{"column": "ts", "filter": "not_null"}], "limit": 1, "request": "scan", "table": {"source": ["headers"]}}"##,
+        &["SELECT \"ts\" FROM \"headers\" WHERE \"ts\" IS NOT NULL LIMIT 1"],
+    ),
+    (
         r##"{"columns": ["ts"], "filters": [{"column": "ts", "filter": "not_null"}], "limit": 1, "request": "scan", "table": {"source": ["orders"]}}"##,
         &["SELECT \"ts\" FROM \"orders\" WHERE \"ts\" IS NOT NULL LIMIT 1"],
     ),
@@ -568,10 +1008,58 @@ const GOLDENS: &[(&str, &[&str])] = &[
         ],
     ),
     (
+        r##"{"columns": [{"column": "ts", "table": {"source": ["details"]}}], "request": "time_bounds"}"##,
+        &[
+            "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"details\"",
+        ],
+    ),
+    (
+        r##"{"columns": [{"column": "ts", "table": {"source": ["lines"]}}, {"column": "ts", "table": {"source": ["orders"]}}], "request": "time_bounds"}"##,
+        &[
+            "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"lines\"\nUNION ALL\nSELECT\n  1 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"orders\"",
+        ],
+    ),
+    (
         r##"{"columns": [{"column": "ts", "table": {"source": ["orders"]}}], "request": "time_bounds"}"##,
         &[
             "SELECT\n  0 as table_index,\n  MIN(\"ts\") as min_date,\n  MAX(\"ts\") as max_date\nFROM \"orders\"",
         ],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["addresses"]}]}"##,
+        &["PRAGMA index_list(\"addresses\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["buyers"]}]}"##,
+        &["PRAGMA index_list(\"buyers\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["customers"]}]}"##,
+        &["PRAGMA index_list(\"customers\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["details"]}]}"##,
+        &["PRAGMA index_list(\"details\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["headers"]}]}"##,
+        &["PRAGMA index_list(\"headers\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["lines"]}]}"##,
+        &["PRAGMA index_list(\"lines\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["orders"]}]}"##,
+        &["PRAGMA index_list(\"orders\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["products"]}]}"##,
+        &["PRAGMA index_list(\"products\")"],
+    ),
+    (
+        r##"{"part": "indexes", "request": "describe", "tables": [{"source": ["stores"]}]}"##,
+        &["PRAGMA index_list(\"stores\")"],
     ),
 ];
 
