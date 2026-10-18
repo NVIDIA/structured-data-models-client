@@ -2266,6 +2266,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
                     seed: seed_value,
                     columns: entity.ordered(&entity_columns),
                     filters,
+                    key_dtype: None,
                 },
             )
             .await?,

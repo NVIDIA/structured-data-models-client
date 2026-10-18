@@ -386,7 +386,12 @@ pub enum DataRequest {
     /// reads one to show a repeated key (`_repeated_key_sql`).
     RepeatedKey { table: Relation, key: Vec<String> },
     /// A seeded sample of `n` entities of `table` by `key`: `columns` in
-    /// order, from the rows meeting every filter.
+    /// order, from the rows meeting every filter. `key_dtype`, where given,
+    /// is the data type of a key of one column the draw orders by: the type
+    /// the source declares it where its catalog fixes one, else the
+    /// schema's; a dialect that hashes only some types (SQLite's, which
+    /// hashes an integer key and the `rowid` otherwise) chooses by it once
+    /// for the column. Left out, the dialect decides by itself.
     SampleEntities {
         table: Relation,
         key: Vec<String>,
@@ -394,6 +399,8 @@ pub enum DataRequest {
         seed: Scalar,
         columns: Vec<String>,
         filters: Vec<Filter>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key_dtype: Option<crate::ops::Dtype>,
     },
     /// The rows of `table` whose `key` equals a seed's key, `columns` in
     /// order after the seed's batch position (decision H15). `key` names the

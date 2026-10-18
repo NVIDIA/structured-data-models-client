@@ -274,6 +274,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         filters: vec![Filter::NotNull {
                             column: "user_id".into(),
                         }],
+                        key_dtype: None,
                     },
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},

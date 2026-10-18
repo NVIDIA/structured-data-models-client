@@ -251,6 +251,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             seed,
             columns,
             filters,
+            ..
         } => {
             let table = from(request, "table", table)?;
             sample_entities(request, &table, key, *n, seed, columns, filters)?
