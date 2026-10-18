@@ -35,6 +35,10 @@ vector's own.
   ``numeric(100,0)`` stay exact (``type.numeric-100-0-past-2-53``), and a
   text-key join reads its seed rows whatever the table's columns are named,
   ``x`` included (``join.domain-not-null-text-key-column-x``).
+- From Codex's third round: a json or jsonb feature reads on PyArrow's
+  floor (14.0.1) as on its newest (``type.json``, ``type.jsonb``; run
+  this file in the floor cell too), and a NaN in a ``numeric(100,0)`` is
+  sent as the reference sends it, null (``type.numeric-100-0-nan``).
 - From Claude's second round: unconstrained ``numeric`` keys are sent as
   the reference sends them, small (``key.numeric-unconstrained-small``)
   and past 2**53, never merged (``key.numeric-unconstrained-past-2-53``).

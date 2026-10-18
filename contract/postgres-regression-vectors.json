@@ -495,6 +495,201 @@
    }
   },
   {
+   "id": "type.json",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature json)",
+    "INSERT INTO users SELECT n, n * 10, json_build_object('a', n) FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "03de5a4fb3a1a7e6989bcb0c77a378b9d3999e80f9f9729cfad4d6ba9265bd0b",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "json"
+    }
+   }
+  },
+  {
+   "id": "type.jsonb",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature jsonb)",
+    "INSERT INTO users SELECT n, n * 10, jsonb_build_object('a', n) FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "03de5a4fb3a1a7e6989bcb0c77a378b9d3999e80f9f9729cfad4d6ba9265bd0b",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "jsonb"
+    }
+   }
+  },
+  {
+   "id": "type.numeric-100-0-nan",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature numeric(100,0))",
+    "INSERT INTO users SELECT n, n * 10, CASE WHEN n = 1 THEN 'NaN'::numeric ELSE n END FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "int64",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "fe10384c69cdd65df611c142e93b4acf4f9a77b9f014521586f8ea84408878d5",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "numeric(100,0)"
+    }
+   }
+  },
+  {
    "id": "relation.dollar",
    "session": [],
    "setup": [

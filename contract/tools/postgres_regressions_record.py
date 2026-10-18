@@ -41,6 +41,9 @@ Postgres's own types (which the contract loader does not make):
   values past 2**53 in a ``numeric(100,0)``, and
   ``join.domain-not-null-text-key-column-x``, the domain vector with a
   column named ``x`` added to ``orders``;
+- from Codex's third round: ``type.json`` and ``type.jsonb``, a json or
+  jsonb feature, and ``type.numeric-100-0-nan``, a ``numeric(100,0)``
+  holding a NaN;
 - from Claude's second round: ``key.numeric-unconstrained-small`` and
   ``key.numeric-unconstrained-past-2-53``, unconstrained ``numeric``
   primary and foreign keys holding 0 to 7, and 10**17 + i, which must
@@ -98,6 +101,15 @@ FEATURES = {
     # Codex round 2: integral values past 2**53, within int64, in a numeric
     # wider than Arrow's decimals; the reference keeps them exact.
     'numeric-100-0-past-2-53': ('numeric(100,0)', '9007199254740992 + n'),
+    # Codex round 3: json and jsonb features, which must read on PyArrow's
+    # floor (14.0.1) as on its newest; and a NaN in a numeric(100,0),
+    # which the reference sends as null.
+    'json': ('json', "json_build_object('a', n)"),
+    'jsonb': ('jsonb', "jsonb_build_object('a', n)"),
+    'numeric-100-0-nan': (
+        'numeric(100,0)',
+        "CASE WHEN n = 1 THEN 'NaN'::numeric ELSE n END",
+    ),
 }
 #: The second review's shape: ``users``, and ``orders`` whose columns
 #: before ``price`` and ``ts`` each vector names, and its question.
