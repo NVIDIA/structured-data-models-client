@@ -3832,5 +3832,334 @@
    "opening": "[INVALID_REQUEST] rows_per_call is 0, and a call scores a whole number of rows, at least one",
    "remedy": null
   }
+ },
+ "raised": {
+  "multicall.forecast.one-call": {
+   "case": "d5116ecb593901b79dcc0269d3d63ec99aa536997680574ef40b01ed159ffdfc",
+   "call": 1,
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "ValueError",
+    "code": null
+   },
+   "calls": [
+    3
+   ],
+   "result": null,
+   "details": {
+    "parts_answered": 1
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "opening": "a failure that is not the client's own (scripted)",
+   "remedy": null
+  },
+  "multicall.forecast.one-call@postgres": {
+   "case": "d5116ecb593901b79dcc0269d3d63ec99aa536997680574ef40b01ed159ffdfc",
+   "call": 1,
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "ValueError",
+    "code": null
+   },
+   "calls": [
+    3
+   ],
+   "result": null,
+   "details": {
+    "parts_answered": 1
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "opening": "a failure that is not the client's own (scripted)",
+   "remedy": null
+  },
+  "multicall.forecast.one-call@sqlite": {
+   "case": "d5116ecb593901b79dcc0269d3d63ec99aa536997680574ef40b01ed159ffdfc",
+   "call": 1,
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "ValueError",
+    "code": null
+   },
+   "calls": [
+    3
+   ],
+   "result": null,
+   "details": {
+    "parts_answered": 1
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "opening": "a failure that is not the client's own (scripted)",
+   "remedy": null
+  },
+  "multicall.rows-per-call-3": {
+   "case": "dd0a4b49ebefc85c52ed150f8d8fb07abebfd34dccf80b060f319fc50a5f18dd",
+   "call": 2,
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "ValueError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": null,
+   "details": {
+    "calls_answered": 2,
+    "rows_answered": 6
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ]
+    ]
+   },
+   "opening": "a failure that is not the client's own (scripted)",
+   "remedy": null
+  },
+  "multicall.rows-per-call-3@postgres": {
+   "case": "dd0a4b49ebefc85c52ed150f8d8fb07abebfd34dccf80b060f319fc50a5f18dd",
+   "call": 2,
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "ValueError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": null,
+   "details": {
+    "calls_answered": 2,
+    "rows_answered": 6
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ]
+    ]
+   },
+   "opening": "a failure that is not the client's own (scripted)",
+   "remedy": null
+  },
+  "multicall.rows-per-call-3@sqlite": {
+   "case": "dd0a4b49ebefc85c52ed150f8d8fb07abebfd34dccf80b060f319fc50a5f18dd",
+   "call": 2,
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "ValueError",
+    "code": null
+   },
+   "calls": [
+    3,
+    3
+   ],
+   "result": null,
+   "details": {
+    "calls_answered": 2,
+    "rows_answered": 6
+   },
+   "answered": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 6,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ],
+     [
+      2,
+      2,
+      1.0
+     ],
+     [
+      3,
+      3,
+      1.0
+     ],
+     [
+      4,
+      4,
+      1.0
+     ],
+     [
+      5,
+      5,
+      1.0
+     ]
+    ]
+   },
+   "opening": "a failure that is not the client's own (scripted)",
+   "remedy": null
+  }
  }
 }

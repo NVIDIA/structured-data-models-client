@@ -41,6 +41,13 @@ package's exits name, is kept here, per case key:
   already scores one row" or "What comes down is one of three" to the
   end), or null.
 
+``raised`` holds, by the same keys, the cases :data:`RAISED` names
+observed with the client's transport raising a ``ValueError`` on the
+named call, an error that is not the client's own, as a transport may
+raise one mid-request (the Databricks SDK on a failed OAuth refresh):
+the reference raises it as it was, with the answers already received
+kept on it as for its own errors. ``--raised`` records that part alone.
+
 :func:`observe` is imported by ``contract/tests/test_t28c_multicall.py``,
 so ``python-core`` is observed by the same code.
 """
@@ -67,6 +74,19 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 ROWS_KEPT = 200
 #: Of a longer one, this many rows at each end.
 ENDS_KEPT = 3
+#: The calls that raise an error that is not the client's own, by case:
+#: the call's number from zero. A transport may raise one mid-request (the
+#: Databricks SDK's ``ValueError`` on a failed OAuth refresh), and the
+#: reference keeps the answers already paid for on it (``client.py``'s
+#: ``_carry_the_answers_already_paid_for``, by step for a forecast). The
+#: third call of ``rows_per_call=3`` over 8 (6 rows answered before it),
+#: and the second step's call of the two-step forecast.
+RAISED = {
+    'multicall.rows-per-call-3': 2,
+    'multicall.forecast.one-call': 1,
+}
+#: What the raised error says.
+RAISED_TEXT = "a failure that is not the client's own (scripted)"
 #: Where the client's own remedy for a call past the 30 MiB body begins
 #: (``relational.py``'s ``_NO_CALL_IS_SMALLER`` and
 #: ``_ASK_IN_SMALLER_CALLS`` at the reference).
@@ -166,11 +186,40 @@ def _rows_sent(body: bytes) -> int | None:
     return len(rows) if isinstance(rows, list) else None
 
 
-def observe(case: dict[str, Any], database: str, core: bool) -> dict[str, Any]:
+def _raising(client: Any, call: int) -> None:
+    r"""``client``'s transport raising ``ValueError`` on the call numbered
+    ``call`` from zero, before it is sent; every other call as it is. Both
+    of the transport's ways to send a prediction are counted together: the
+    old route's ``predict`` and the core route's ``predict_body``."""
+    transport = client._transport
+    made = [0]
+    for name in ('predict', 'predict_body'):
+        original = getattr(transport, name, None)
+        if original is None:
+            continue
+
+        def sent(
+            *arguments: Any, _original: Any = original, **named: Any
+        ) -> Any:
+            made[0] += 1
+            if made[0] == call + 1:
+                raise ValueError(RAISED_TEXT)
+            return _original(*arguments, **named)
+
+        setattr(transport, name, sent)
+
+
+def observe(
+    case: dict[str, Any],
+    database: str,
+    core: bool,
+    raise_on_call: int | None = None,
+) -> dict[str, Any]:
     r"""``case``'s public calls on ``database``: on the core where ``core``
     (``SDM_CORE_ROUTES`` set to the case's routes there, as
     ``run_python.py`` sets them for ``python-core``), else on the routes
-    the interpreter's client takes."""
+    the interpreter's client takes; with ``raise_on_call``, the client's
+    transport raising ``ValueError`` on that call (:func:`_raising`)."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
 
     run = runner()
@@ -213,6 +262,8 @@ def observe(case: dict[str, Any], database: str, core: bool) -> dict[str, Any]:
                     if case['until'] == 'predict':
                         stage = 'predict'
                         with SDMClient(url) as client:
+                            if raise_on_call is not None:
+                                _raising(client, raise_on_call)
                             result = client.predict(
                                 request, model=KumoRelational()
                             )
@@ -250,6 +301,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--reference', type=Path, required=True)
     parser.add_argument(
         '--database', nargs='+', choices=DATABASES, default=list(DATABASES)
+    )
+    parser.add_argument(
+        '--raised',
+        action='store_true',
+        help='record only the calls raising an error that is not the '
+        "client's own (RAISED), keeping every other vector",
     )
     arguments = parser.parse_args(argv)
     run = runner()
@@ -289,14 +346,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     digests = {case['id']: digest for case, digest in loaded}
     cases = {case['id']: case for case, _ in loaded}
+    raised = document.setdefault('raised', {})
     for database in arguments.database:
-        for case_id in case_ids():
+        for case_id in [] if arguments.raised else case_ids():
             key = run.case_key(case_id, database)
             observed = observe(cases[case_id], database, core=False)
             document['vectors'][key] = {'case': digests[case_id], **observed}
             print(f'{key}: {observed["outcome"]["result"]}', file=sys.stderr)
+        for case_id, call in RAISED.items():
+            key = run.case_key(case_id, database)
+            observed = observe(
+                cases[case_id], database, core=False, raise_on_call=call
+            )
+            raised[key] = {'case': digests[case_id], 'call': call, **observed}
+            print(f'{key} raising: {observed["outcome"]}', file=sys.stderr)
     guard.check('after the last case')
     document['vectors'] = dict(sorted(document['vectors'].items()))
+    document['raised'] = dict(sorted(raised.items()))
     OUT.write_text(
         json.dumps(document, indent=1, ensure_ascii=False) + '\n',
         encoding='utf-8',
