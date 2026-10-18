@@ -1008,7 +1008,9 @@ def _not_synthesizable() -> dict[str, str]:
     for another runner's, by why: the core reaches another call than the
     reference did (an approved register entry, other than the placeholder
     P1B-1, must list the case, so the difference is held, not hidden), or
-    the reference read a value the canonical form does not hold. Each is
+    the reference read a value the canonical form does not hold, or sent
+    the request in several calls (T2.8c, until a core runner records every
+    call's body). Each is
     held by the gate's own runs, never by these syntheses; a diagnostic
     case is compared whatever it is, its differences reported."""
     reference = {
@@ -1040,6 +1042,13 @@ def _not_synthesizable() -> dict[str, str]:
             )
         elif _unencodable(observed):
             found[case['id']] = 'values the canonical form does not hold'
+        elif len((observed.get('public') or {}).get('payloads') or []) > 1:
+            # T2.8c's multi-call cases: the reference sent several requests,
+            # and a core runner's core.predicted.body is one call's, which
+            # the payload rule holds against every request received; the
+            # runner and the rule hold every call's from T2.8c, and the
+            # T2.8c tests hold each call meanwhile.
+            found[case['id']] = 'a request sent in several calls'
     return found
 
 
