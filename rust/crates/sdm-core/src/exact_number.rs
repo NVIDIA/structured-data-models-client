@@ -173,6 +173,7 @@ mod tests {
         CatalogKey {
             kind,
             columns: vec![column.to_owned()],
+            index: None,
         }
     }
 
@@ -206,6 +207,7 @@ mod tests {
             CatalogKey {
                 kind: KeyKind::Unique,
                 columns: vec!["amount".to_owned(), "note".to_owned()],
+                index: None,
             },
         ];
         let settled = settle(preview, &keys).unwrap();

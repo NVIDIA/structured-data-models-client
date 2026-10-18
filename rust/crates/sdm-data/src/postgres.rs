@@ -252,6 +252,9 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             seed,
             columns,
             filters,
+            // Given only to a layer sampling by the key's type (SQLite's,
+            // `samples_by_key_dtype`), which this one is not.
+            key_dtype: _,
         } => {
             let table = from(request, "table", table)?;
             let (seeded, text) = sample_entities(request, &table, key, *n, seed, columns, filters)?;
@@ -438,6 +441,9 @@ pub(crate) fn read(
                         declared_type: crate::read::text(declared, row).unwrap_or_default(),
                         not_null: crate::read::text(nullable, row).as_deref() == Some("NO"),
                         primary_key: false,
+                        key_nullable: false,
+                        unique: false,
+                        dtype: None,
                     });
                 }
             }
@@ -474,6 +480,7 @@ pub(crate) fn read(
                             _ => KeyKind::Other,
                         },
                         columns: columns.into_iter().map(|(_, c)| c).collect(),
+                        index: None,
                     }
                 })
                 .collect();
