@@ -3890,7 +3890,7 @@
           ]
         },
         {
-          "description": "A seeded sample of `n` entities of `table` by `key`: `columns` in\norder, from the rows meeting every filter.",
+          "description": "A seeded sample of `n` entities of `table` by `key`: `columns` in\norder, from the rows meeting every filter. `key_dtype`, where given,\nis the data type of a key of one column the draw orders by: the type\nthe source declares it where its catalog fixes one, else the\nschema's; a dialect that hashes only some types (SQLite's, which\nhashes an integer key and the `rowid` otherwise) chooses by it once\nfor the column. Left out, the dialect decides by itself.",
           "type": "object",
           "properties": {
             "table": {
@@ -3921,6 +3921,16 @@
               "items": {
                 "$ref": "#/$defs/Filter"
               }
+            },
+            "key_dtype": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Dtype"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "request": {
               "type": "string",
