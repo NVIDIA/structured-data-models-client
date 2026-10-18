@@ -178,14 +178,15 @@ with SDMClient.in_process(relational) as client:
 
 It answers as the NIM does. The context is fitted with the NIM's seed and
 settings, `fit()` holds its session in memory, and a request the NIM refuses
-is refused with the same `NimRequestError`. On a GPU it computes at the NIM's
-reduced precision; on a CPU it computes at full precision, so its
-probabilities can differ from a GPU-hosted NIM's in the last digits. The limits a deployment sets to
-protect a shared server are the exception, since none is shared here; see
-[limits](../reference/limits.md). This needs
-`pip install 'structured-data-models-client[in-process]'`, which brings
-PyTorch, on Python 3.11 or later. A relational request is still gathered by
-the relational engine, so for `KumoRelational` install both:
+is refused with the same `NimRequestError`. Two things differ by design. On a
+CPU it computes at full precision, so its probabilities can differ from a
+GPU-hosted NIM's in the last digits; on a GPU it uses the NIM's precision. And
+the limits a deployment sets to protect a shared server are not applied, since
+none is shared here; see [limits](../reference/limits.md).
+
+This needs `pip install 'structured-data-models-client[in-process]'`, which
+brings PyTorch, on Python 3.11 or later. A relational request is still
+gathered by the relational engine, so for `KumoRelational` install both:
 `pip install 'structured-data-models-client[relational,in-process]'`.
 
 ## Which rows get scored

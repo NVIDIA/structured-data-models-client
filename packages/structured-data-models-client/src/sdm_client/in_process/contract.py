@@ -2,12 +2,12 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""The request contract's own limits, checked as a NIM checks them.
+r"""The request contract's own rules, checked as a NIM checks them.
 
 Before anything reads a request, a NIM validates it against the contract:
-every name and label it carries is at most 1,024 characters, and a table
-names each column once. A request outside those is refused whole, with each
-offending field named.
+every name and label it carries is at most 1,024 characters, a table names
+each column once, and each table supplies exactly the columns its schema
+declares. A request outside those is refused, with the field named.
 """
 
 from __future__ import annotations
@@ -114,3 +114,64 @@ def _columns(where: str, table: Any) -> Iterator[tuple[str, str]]:
                 f"duplicate column name '{column}'",
             )
         seen.add(column)
+
+
+def check_columns(
+    payload: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    splits: tuple[str, ...],
+) -> None:
+    r"""Refuse a table that does not supply exactly its declared columns.
+
+    The rows to score may leave out the target, which they are asked about.
+    """
+    target = (payload.get('task') or {}).get('target') or {}
+    column = target.get('column_name')
+    target_table = target.get('table_name') or 'instance_table'
+    related_schemas = schema.get('related_tables') or {}
+    for split in splits:
+        tables = payload.get(split) or {}
+        unasked = (
+            frozenset({column})
+            if split == 'predict' and column
+            else frozenset()
+        )
+        _check_table(
+            f'{split}.instance_table',
+            tables.get('instance_table'),
+            schema.get('instance_table'),
+            unasked if target_table == 'instance_table' else frozenset(),
+        )
+        for name, table in (tables.get('related_tables') or {}).items():
+            if name not in related_schemas:
+                raise refusal(
+                    'INVALID_SCHEMA',
+                    f"related table '{name}' is not declared in schema.",
+                )
+            _check_table(
+                f'{split}.related_tables.{name}',
+                table,
+                related_schemas[name],
+                unasked if target_table == name else frozenset(),
+            )
+
+
+def _check_table(
+    where: str, table: Any, schema: Any, unasked: frozenset[str]
+) -> None:
+    if not isinstance(table, Mapping) or not isinstance(schema, Mapping):
+        return
+    declared = set(schema.get('columns') or {})
+    present = set(table.get('columns') or ())
+    missing = sorted(declared - present - unasked)
+    extra = sorted(present - declared)
+    if missing or extra:
+        reason = f'missing={missing}, extra={extra}.'
+        raise refusal(
+            'INVALID_SCHEMA',
+            'Table columns do not match the declared inputs; '
+            + reason
+            + format_invalid_params(
+                [{'name': f'{where}.columns', 'reason': reason}]
+            ),
+        )

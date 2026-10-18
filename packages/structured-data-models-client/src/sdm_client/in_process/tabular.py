@@ -12,7 +12,6 @@ from typing import Any
 from sdm_client.in_process.columns import (
     Context,
     Shape,
-    declared,
     key_columns,
     labelled,
     stype_of,
@@ -45,18 +44,21 @@ class Tabular:
 
     def context(self, payload: Mapping[str, Any]) -> Context:
         schema = payload['schema']
-        if (
-            schema.get('related_tables')
-            or schema.get('relationships')
-            or payload['context'].get('related_tables')
+        related = schema.get('related_tables') or any(
+            (payload.get(split) or {}).get('related_tables')
+            for split in ('context', 'predict')
+        )
+        for present, what in (
+            (schema.get('relationships'), 'relationships'),
+            (related, 'related tables'),
         ):
-            raise refusal(
-                'UNSUPPORTED_FEATURE',
-                f'related tables are not supported by model {self.model_id!r}',
-            )
+            if present:
+                raise refusal(
+                    'UNSUPPORTED_FEATURE',
+                    f'{what} are not supported by model {self.model_id!r}.',
+                )
         spec = schema['instance_table']
         table = payload['context']['instance_table']
-        declared(spec, table)
         task = payload['task']
         target = task['target']['column_name']
         keys = key_columns(spec)
@@ -110,6 +112,11 @@ class Tabular:
             )
 
     @staticmethod
-    def query(context: Context, payload: Mapping[str, Any]) -> tuple[Any, Any]:
+    def query(
+        context: Context,
+        payload: Mapping[str, Any],
+        schema: Mapping[str, Any],
+    ) -> tuple[Any, Any]:
+        r"""The rows to score, read as the context was."""
         table = payload['predict']['instance_table']
-        return context.instance.tensor(table, 'the rows to score'), None
+        return context.instance.tensor(table, 'predict instance table'), None

@@ -10,7 +10,8 @@
   runs no model and downloads no weights. The one exception is a client
   opened with `SDMClient.in_process()`, which runs the model itself; see the
   [quickstart](quickstart.md#a-model-in-this-process).
-- **No GPU** on the client. The NIM owns that.
+- **No GPU** on the client. The NIM owns that. A client opened with
+  `SDMClient.in_process()` uses one when there is one, and the CPU otherwise.
 
 ## Platforms
 

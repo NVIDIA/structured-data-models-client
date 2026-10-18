@@ -68,18 +68,6 @@ def key_columns(schema: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(key or ())
 
 
-def declared(schema: Mapping[str, Any], table: Mapping[str, Any]) -> None:
-    r"""Refuse a column the schema does not describe."""
-    undeclared = [
-        name for name in table['columns'] if name not in schema['columns']
-    ]
-    if undeclared:
-        raise refusal(
-            'INVALID_SCHEMA',
-            f'column(s) {undeclared} are not declared in the schema',
-        )
-
-
 @dataclass(frozen=True)
 class Shape:
     r"""Which columns of a table the model reads, and as what.
@@ -113,7 +101,8 @@ class Shape:
         if absent:
             raise refusal(
                 'SESSION_PREDICT_SCHEMA_MISMATCH',
-                f'{where} omits column(s) {absent} that the context carries',
+                f'{where} omits column(s) {absent} that the context was '
+                f'compiled with',
             )
         arrow = to_arrow(table, self.columns, self.dtypes, self.keys)
         try:

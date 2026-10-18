@@ -103,12 +103,11 @@ def regressed(
     The point prediction is the distribution's mean or median, and each
     quantile asked for is interpolated between the two predicted around it.
     """
-    for level in levels:
-        if not 0.001 <= level <= 0.999:
-            raise refusal(
-                'UNSUPPORTED_OUTPUT',
-                f'quantile level {level!r} is outside 0.001 to 0.999',
-            )
+    if 'quantiles' in fields and not all(0.001 <= x <= 0.999 for x in levels):
+        raise refusal(
+            'UNSUPPORTED_OUTPUT',
+            'quantile levels must be between 0.001 and 0.999',
+        )
     quantiles = _numbers(output)
     if quantiles.shape[1] != _QUANTILES:
         raise refusal(

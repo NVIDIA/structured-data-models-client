@@ -367,6 +367,103 @@ def test_inference_options_are_read_as_the_nim_reads_them(
     assert (error.code, error.status_code) == refusal
 
 
+def _tabular_payload(task: str) -> dict:
+    from sdm_client.adapters.tabular import TabularAdapter
+
+    frame = people()[['person_id', 'age', 'churn']]
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task=task,
+    )
+    return next(
+        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
+    )
+
+
+def _relational_payload() -> dict:
+    from sdm_client.adapters.relational import RelationalAdapter
+
+    request = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
+    return next(
+        iter(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    )
+
+
+def _without(table: dict, column: str) -> None:
+    position = table['columns'].index(column)
+    del table['columns'][position]
+    for row in table['rows']:
+        del row[position]
+
+
+@pytest.mark.parametrize(
+    ('model', 'change', 'answer'),
+    [
+        (
+            'tabular',
+            lambda p: p['schema'].update(
+                relationships=[
+                    {
+                        'source_columns': ['age'],
+                        'target_table': 'other',
+                        'target_columns': ['age'],
+                    }
+                ]
+            ),
+            ('UNSUPPORTED_FEATURE', 422, 'relationships are not'),
+        ),
+        (
+            'regression',
+            lambda p: p.update(
+                output={'fields': ['prediction'], 'quantile_levels': [1.5]}
+            ),
+            None,
+        ),
+        (
+            'relational',
+            lambda p: _without(p['predict']['related_tables']['orders'], 'ts'),
+            ('INVALID_SCHEMA', 422, "missing=['ts'], extra=[]"),
+        ),
+        (
+            'relational',
+            lambda p: p['predict']['related_tables'].update(
+                ghost={'format': 'arrays', 'columns': ['k'], 'rows': []}
+            ),
+            ('INVALID_SCHEMA', 422, "'ghost' is not declared"),
+        ),
+        (
+            'relational',
+            lambda p: p['predict']['related_tables'].pop('orders'),
+            ('INVALID_SCHEMA', 422, "reference table(s) ['orders']"),
+        ),
+    ],
+)
+def test_a_request_is_read_in_the_order_the_nim_reads_it(
+    relational, tabular, model, change, answer
+):
+    """Each table supplies exactly its declared columns, a split carries
+    every table the relationships name, and a field the request does not ask
+    for is not judged."""
+    payload = (
+        _relational_payload()
+        if model == 'relational'
+        else _tabular_payload(
+            'regression' if model == 'regression' else 'classification'
+        )
+    )
+    change(payload)
+    with SDMClient.in_process(relational, tabular) as client:
+        if answer is None:
+            client._transport.predict(payload)
+            return
+        error = refused(lambda: client._transport.predict(payload))
+    code, status, said = answer
+    assert (error.code, error.status_code) == (code, status)
+    assert said in error.message
+
+
 def test_a_model_passed_in_keeps_what_was_fitted_on_it(sdm, tabular):
     frame = people()
     features = {'age': 'numerical', 'visits': 'numerical'}
@@ -474,10 +571,9 @@ def test_a_model_left_in_training_mode_is_named_not_run(tabular):
 
 
 def test_without_the_extra_the_extra_is_named():
-    """In a fresh interpreter, since nothing the extra brings may already be
-    imported: a module imported at the top of the in-process package once
-    failed before the check that names the extra. On Python 3.10, where the
-    extra installs nothing, the refusal says which Python it needs."""
+    """Run in a fresh interpreter, so nothing the extra brings is already
+    imported. On Python 3.10, where the extra installs nothing, the refusal
+    says which Python it needs."""
     script = (
         'import sys\n'
         "for name in ('sdm', 'torch', 'pyarrow'):\n"

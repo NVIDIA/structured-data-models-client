@@ -33,7 +33,7 @@ from sdm_client.in_process.answers import (
     row_ids,
 )
 from sdm_client.in_process.columns import Context
-from sdm_client.in_process.contract import check_contract
+from sdm_client.in_process.contract import check_columns, check_contract
 from sdm_client.in_process.inference import read_inference
 from sdm_client.in_process.refusal import in_session, refusal
 from sdm_client.in_process.relational import Relational
@@ -124,13 +124,15 @@ class InProcessTransport:
         with self._answering():
             check_contract(payload)
             payload['inference'] = read_inference(payload.get('inference'))
+            check_columns(payload, payload['schema'], ('context', 'predict'))
             served, model = self._serving(payload.get('model'))
             task = payload['task']
             fields = _fields(served, task['kind'], payload.get('output'))
             _check_trained_for(served, model, task['kind'])
             served.check_inference(payload['inference'], task)
             context = served.context(payload)
-            output = _run(_fit(model, context), served.query(context, payload))
+            query = served.query(context, payload, payload['schema'])
+            output = _run(_fit(model, context), query)
             return _response(
                 served,
                 task,
@@ -146,6 +148,8 @@ class InProcessTransport:
         payload = _received(payload)
         with self._answering():
             check_contract(payload)
+            with in_session('SESSION_CREATE_VALIDATION_FAILED'):
+                check_columns(payload, payload['schema'], ('context',))
             served, model = self._serving(payload.get('model'))
             _outputs(served, payload['task']['kind'])
             _check_trained_for(served, model, payload['task']['kind'])
@@ -180,8 +184,13 @@ class InProcessTransport:
                 session.served, task['kind'], payload.get('output')
             )
             with in_session('SESSION_PREDICT_SCHEMA_MISMATCH'):
+                check_columns(
+                    {**payload, 'task': task}, session.schema, ('predict',)
+                )
                 session.served.check_inference(inference, task, settled=True)
-                query = session.served.query(session.context, payload)
+                query = session.served.query(
+                    session.context, payload, session.schema
+                )
             output = _run(session.fitted, query)
             return _response(
                 session.served,

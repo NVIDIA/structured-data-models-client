@@ -17,7 +17,6 @@ from typing import Any
 from sdm_client.in_process.columns import (
     Context,
     Shape,
-    declared,
     key_columns,
     labelled,
     stype_of,
@@ -72,7 +71,6 @@ class Relational:
         split = payload['context']
         spec = schema['instance_table']
         table = split['instance_table']
-        declared(spec, table)
         if not table['rows']:
             raise refusal(
                 'VALIDATION_FAILED',
@@ -80,6 +78,7 @@ class Relational:
                 'context.instance_table.rows: At least one context instance '
                 'row is required.',
             )
+        shapes = _shapes(split, schema, joins, edges, links)
         instance = Shape.of(
             spec,
             _instance_stypes(
@@ -92,18 +91,11 @@ class Relational:
             joins[INSTANCE_TABLE],
         )
         y, encoded, labels = labelled(table, task, task['kind'] != 'regression')
-        shapes = {}
-        tensors = {}
-        for name, related in (split.get('related_tables') or {}).items():
-            table_schema = schema['related_tables'][name]
-            declared(table_schema, related)
-            keys = joins.get(name, frozenset()) | key_columns(table_schema)
-            shapes[name] = Shape.of(
-                table_schema, _related_stypes(table_schema, related, keys), keys
-            )
-            tensors[name] = shapes[name].tensor(
-                related, f'context table {name!r}'
-            )
+        related = split.get('related_tables') or {}
+        tensors = {
+            name: shape.tensor(related[name], f'context table {name!r}')
+            for name, shape in shapes.items()
+        }
         return Context(
             x=instance.tensor(table, 'the context'),
             y=y,
@@ -157,25 +149,28 @@ class Relational:
             )
 
     @staticmethod
-    def query(context: Context, payload: Mapping[str, Any]) -> tuple[Any, Any]:
+    def query(
+        context: Context,
+        payload: Mapping[str, Any],
+        schema: Mapping[str, Any],
+    ) -> tuple[Any, Any]:
+        r"""The rows to score, read against the context they are scored
+        against, and refused where they do not fit it."""
         from sdm import RelatedTables
 
         split = payload['predict']
+        edges, links = list(context.relationships), list(context.task_links)
+        _shapes(
+            split, schema, _joins(edges, links), edges, links, context.tables
+        )
         related = split.get('related_tables') or {}
-        tensors = {}
-        for name, shape in context.tables.items():
-            if name not in related:
-                raise refusal(
-                    'SESSION_PREDICT_SCHEMA_MISMATCH',
-                    f'the rows to score omit related table {name!r}, which '
-                    f'the context carries',
-                )
-            tensors[name] = shape.tensor(
-                related[name], f'related table {name!r}'
-            )
+        tensors = {
+            name: shape.tensor(related[name], f'related table {name!r}')
+            for name, shape in context.tables.items()
+        }
         return (
             context.instance.tensor(
-                split['instance_table'], 'the rows to score'
+                split['instance_table'], 'predict instance table'
             ),
             RelatedTables(
                 tables=tensors,
@@ -218,6 +213,57 @@ def _graph(relationships: Sequence[Mapping[str, Any]]) -> tuple[list, list]:
                 )
             )
     return edges, links
+
+
+def _shapes(
+    split: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    joins: Mapping[str, frozenset[str]],
+    edges: list,
+    links: list,
+    compiled: Mapping[str, Shape] | None = None,
+) -> dict[str, Shape]:
+    r"""Each related table's shape, refused where the NIM refuses it.
+
+    Every table supplies its declared columns, which the contract checks
+    first. With ``compiled``, the shapes the context was fitted in, which the
+    rows scored against it must match table for table.
+    """
+    tables = split.get('related_tables') or {}
+    shapes = {}
+    for name, table in tables.items():
+        if compiled is not None:
+            if name not in compiled:
+                raise refusal(
+                    'SESSION_PREDICT_SCHEMA_MISMATCH',
+                    f'related table {name!r} was not present when the '
+                    f'context was compiled',
+                )
+            shapes[name] = compiled[name]
+            continue
+        table_schema = schema['related_tables'][name]
+        keys = joins.get(name, frozenset()) | key_columns(table_schema)
+        shapes[name] = Shape.of(
+            table_schema, _related_stypes(table_schema, table, keys), keys
+        )
+    referenced = {link.table for link in links}
+    for edge in edges:
+        referenced.update({edge.left_table, edge.right_table})
+    missing = sorted(name for name in referenced if name not in shapes)
+    if missing:
+        raise refusal(
+            'INVALID_SCHEMA',
+            f'relationships reference table(s) {missing} that carry no rows',
+        )
+    if compiled is not None:
+        omitted = sorted(set(compiled) - set(tables))
+        if omitted:
+            raise refusal(
+                'SESSION_PREDICT_SCHEMA_MISMATCH',
+                f'predict split omits related table(s) {omitted} that the '
+                f'context was compiled with',
+            )
+    return shapes
 
 
 def _joins(edges: list, links: list) -> dict[str, frozenset[str]]:

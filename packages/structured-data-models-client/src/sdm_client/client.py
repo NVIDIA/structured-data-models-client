@@ -396,7 +396,10 @@ class SDMClient:
 
         Raises:
             MissingExtraError: If structured-data-models is not installed;
-                install ``structured-data-models-client[in-process]``.
+                install ``structured-data-models-client[in-process]``. On
+                Python 3.10, which it does not support, the error is a
+                :class:`StructuredDataError` with the same code
+                ``MISSING_EXTRA`` that names the Python it needs.
             StructuredDataError: With code ``INVALID_CONFIGURATION``, for a
                 model other than those two, two of one kind, or ``device``
                 given with ``models``.
