@@ -1741,16 +1741,25 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     # same code, raised as UnsupportedRequestError, its subclass.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     for options in (
-        {'indices': list(range(100_001))},
-        {'indices': list(range(101)), 'rows_per_call': 1},
         {'num_context_samples': 10_001},
         {'num_hops': 7},
     ):
         core = _refusal_of(**options)
         assert core.code == 'UNSUPPORTED_REQUEST', options
         assert type(core).__name__ == 'UnsupportedRequestError', options
-        # The ceilings of main's 1fc5a686 name theirs (T2.8c).
-        assert core.details.get('rule') in (None, 'most_entities', 'most_calls')
+        assert 'rule' not in core.details, options
+    # main's 1fc5a686 ceilings, which its client raises as the base class:
+    # the core route keeps that class (T2.8c fix 2), naming the rule.
+    for options, rule in (
+        ({'indices': list(range(100_001))}, 'most_entities'),
+        ({'indices': list(range(101)), 'rows_per_call': 1}, 'most_calls'),
+    ):
+        core = _refusal_of(**options)
+        assert (type(core), core.code) == (
+            StructuredDataError,
+            'UNSUPPORTED_REQUEST',
+        ), options
+        assert core.details.get('rule') == rule, options
     # From T2.8c the core gathers 1,001 entities as the reference does, and
     # refuses these (the shop has 8 users) for the reference's reason
     # (register P2B-3, retired).

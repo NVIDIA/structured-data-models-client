@@ -10,7 +10,10 @@ and a sentence written for people, and a test iterates every code the core
 has. The kind is fixed by the code in ``sdm-contract``, so it decides
 nothing here, and the core's message text is never read: the exception's
 text is the table's sentence, and what a caller branches on is ``code`` and
-``details``. A warning's class is chosen by its code alone.
+``details``. A warning's class is chosen by its code alone. One narrow
+exception (:data:`AS_THE_BASE_CLASS`, T2.8c fix 2): the refusals the
+reference raises as ``StructuredDataError`` under their code, by the rule
+the core names, keep the reference's class.
 
 A warning the core gives as a code and fields is worded here, from
 :data:`SAID`'s templates, in the reference's words (decision E59): the
@@ -193,6 +196,21 @@ WORDED: dict[tuple[str, ...], str] = {
         'fewer entities at a time'
     ),
 }
+
+
+#: The refusals the reference raises as its base class under their code,
+#: by code and rule: ``main``'s 1fc5a686 ceilings on what one
+#: ``materialize`` gathers and its refusal of a batched forecast, each a
+#: ``StructuredDataError(code='UNSUPPORTED_REQUEST')`` in the reference's
+#: client, so a caller's ``except`` sees the class it would there (T2.8c fix
+#: 2). Every other refusal takes its code's class (:data:`ERRORS`).
+AS_THE_BASE_CLASS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ('UNSUPPORTED_REQUEST', 'most_entities'),
+        ('UNSUPPORTED_REQUEST', 'most_calls'),
+        ('UNSUPPORTED_REQUEST', 'batched_part'),
+    }
+)
 
 
 def _worded(code: str, details: dict[str, Any]) -> str | None:
@@ -774,6 +792,8 @@ def error_from_core(
     details['retryable'] = bool(error.get('retryable', False))
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
+    if (code, details.get('rule')) in AS_THE_BASE_CLASS:
+        cls = StructuredDataError
     template = _worded(code, details)
     if template is not None:
         # Fields its template cannot fill give the code's sentence.
