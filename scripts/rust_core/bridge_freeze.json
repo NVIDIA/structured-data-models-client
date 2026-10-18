@@ -62,7 +62,7 @@
         "fingerprint": "4e2da16f138742ace0f2fba35ac329bb91bf7264670a363fa01b21e2c8536c92"
       },
       "_carry_the_answers": {
-        "fingerprint": "816bf5c5b1af685dd51e48e2050bb624111388363a0f348c143a585d0e8bc026"
+        "fingerprint": "b35feceaf6894253d79a2c55d48e9f76c4313694f83de86d64efd9b30d15362a"
       },
       "_copied": {
         "fingerprint": "58e3fda97077418be3f92af5a1a8e1b816bd21d54d146f4951a4490bd45b8cbb"
@@ -86,7 +86,7 @@
         "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
       },
       "predict": {
-        "fingerprint": "38f408b469f943298be698f503b4711eca59b4b8483e4c834746dc3fc0cc23c6"
+        "fingerprint": "9df0642df8447717eb30dab75db085e203f9006c82d1b0bd66f20f644ede23cc"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {

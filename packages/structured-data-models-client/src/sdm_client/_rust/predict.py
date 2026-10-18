@@ -367,7 +367,7 @@ def predict(
         # call order (T2.8c).
         operation['state']['batches'] = []
         for at, (more, rows) in enumerate(
-            zip(request.payloads[1:], batched, strict=True), start=3
+            zip((request.payloads or ())[1:], batched, strict=True), start=3
         ):
             attachments[at] = _payload(more)
             operation['state']['batches'].append(
@@ -460,7 +460,7 @@ def _carry_the_answers(error: Exception, by_step: bool) -> None:
     carried = getattr(error, '_answered', None)
     if carried is None:
         return
-    del error._answered
+    delattr(error, '_answered')
     stream, rows = carried
     table = pa.RecordBatchReader._import_from_c_capsule(
         stream.__arrow_c_stream__()
