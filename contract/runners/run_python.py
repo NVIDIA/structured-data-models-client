@@ -588,6 +588,7 @@ class _Capture:
         self._state: dict[str, Any] | None = None
         self._request_id: str | None = None
         self._request_ids: list[str] = []
+        self._skippable: set[str] = set()
         self._call: int | None = None
         self._body: dict[str, Any] | None = None
         self._bodies: list[dict[str, Any]] = []
@@ -623,12 +624,25 @@ class _Capture:
                     (batch['request_id'], batch['payload'])
                     for batch in state.get('batches') or ()
                 ]
+                # A ranking's later questions (T2.8), each the id the host
+                # gave it, in order.
+                + [
+                    (part['request_id'], part['payload'])
+                    for part in (state.get('ranking') or {}).get('parts', ())
+                ]
             )
             self._request_ids = [
                 request_id
                 for request_id, payload in steps
                 if not _nothing_to_score(json.loads(attachments[payload]))
             ]
+            # A ranking's question whose context holds one answer is asked
+            # no call (T2.8): its id may be passed over, in order.
+            self._skippable = (
+                {request_id for request_id, _ in steps}
+                if state.get('ranking') is not None
+                else set()
+            )
             self.inputs.append(
                 {
                     'op': 'predict',
@@ -762,6 +776,7 @@ class _Capture:
             self._state = result['state']
             self.materialized = {'version': result['state']['version']}
         if result.get('op') == 'predict':
+            self._passed_over()
             if self._request_ids:
                 raise RunnerFailure(
                     'predict answered without calling the model for a step '
@@ -785,6 +800,7 @@ class _Capture:
             self._bodies.append(self._body)
             # The next step with rows to score's id, and no call past them.
             carried = self._body.get('metadata', {}).get('request_id')
+            self._passed_over(carried)
             if not self._request_ids or carried != self._request_ids.pop(0):
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
@@ -808,6 +824,16 @@ class _Capture:
         if attachment == state['query'] and isinstance(value, bytes):
             self.materialized['query'] = json.loads(value)
 
+    def _passed_over(self, carried: str | None = None) -> None:
+        r"""Drops the ids of a ranking's questions asked no call before the
+        call carrying ``carried``, or, with none, all that are left."""
+        while (
+            self._request_ids
+            and self._request_ids[0] != carried
+            and self._request_ids[0] in self._skippable
+        ):
+            self._request_ids.pop(0)
+
     def core(self) -> dict[str, Any]:
         core: dict[str, Any] = {
             'inputs': self.inputs,
@@ -830,7 +856,9 @@ def _result_rows(stream: Any) -> dict[str, Any]:
     hex digits, so no text form of a float is compared) or text
     (``utf8``); from T1.28b a boolean (``bool``) and a class's
     probabilities (``map``: each class and its probability's bits, in
-    order)."""
+    order); from T2.8 a list (``list``: a ranking's scores and rankings, an
+    item's own, each member a cell as above, a null ``None``), as the
+    pure-Rust host records one."""
     import pyarrow as pa
 
     table = pa.RecordBatchReader._import_from_c_capsule(
@@ -846,13 +874,22 @@ def _result_rows(stream: Any) -> dict[str, Any]:
     def kind_of(field: Any) -> str:
         if pa.types.is_map(field.type):
             return 'map'
+        if pa.types.is_list(field.type) or pa.types.is_large_list(field.type):
+            return 'list'
         return kinds.get(field.type, 'other')
 
     columns = [
         {'name': field.name, 'type': kind_of(field)} for field in table.schema
     ]
+    # Each list column's members' kind, as a cell of their type records.
+    members = [
+        kinds.get(field.type.value_type, 'other')
+        if kind_of(field) == 'list'
+        else None
+        for field in table.schema
+    ]
 
-    def cell(kind: str, value: Any) -> Any:
+    def cell(kind: str, value: Any, member: str | None = None) -> Any:
         if value is None:
             return None
         if kind == 'int64':
@@ -867,14 +904,16 @@ def _result_rows(stream: Any) -> dict[str, Any]:
             return {
                 'map': [[key, struct.pack('>d', p).hex()] for key, p in value]
             }
+        if kind == 'list' and member is not None:
+            return {'list': [cell(member, item) for item in value]}
         raise RunnerFailure(
             'a result column of a type this runner does not record'
         )
 
     rows = [
         [
-            cell(column['type'], value)
-            for column, value in zip(columns, row, strict=True)
+            cell(column['type'], value, member)
+            for column, value, member in zip(columns, row, members, strict=True)
         ]
         for row in zip(
             *(table.column(i).to_pylist() for i in range(table.num_columns)),
