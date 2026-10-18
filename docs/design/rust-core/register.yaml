@@ -6808,9 +6808,9 @@ entries:
     date or timestamp column, on a session whose DateStyle is not ISO.
   cases: [T2.3]
   refs: [E66]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
     Approver: reviewer: E66(b)'s class, the reference's unnamed error a
     named code. Found by the Claude reviewer at T2.3's round 2 with
@@ -6818,7 +6818,8 @@ entries:
     Postgres 17, against python-ref at 6298913c, in both modes. Setting ISO
     on the provider's reads would answer where the reference fails, which
     E66(b) does not cover, so the provider leaves the session's DateStyle
-    as it is.
+    as it is. Approved under E66(b) by both reviewers of T2.3's round 3,
+    Codex and the Claude reviewer, relayed by the orchestrator.
 
 - id: P2C-10
   title: On Postgres, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
@@ -6852,3 +6853,44 @@ entries:
   case_outcomes:
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
   - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
+
+- id: P2C-11
+  title: On Postgres a composite primary or foreign key is refused by name, where the reference fails the source's description with an unnamed ValueError
+  kind: change
+  old_behavior: >-
+    The reference's Postgres graph discovery takes one-column keys only:
+    reading a table whose primary key covers several columns
+    (_get_source_columns) or that declares a foreign key of several columns
+    (_get_source_foreign_keys), it fails Schema.from_source with an
+    unnamed ValueError.
+  new_behavior: >-
+    The core reads the same catalog answers and refuses such a key by name
+    at describe_source (Schema.from_source), as it refuses a key of several
+    columns a caller names: UNSUPPORTED_REQUEST rule composite_key (E92's
+    Phase 2 class, until T2.12). A composite primary key is refused as the
+    table's keys are read, a composite foreign key as the foreign keys are
+    read, at the same statements the reference fails after; no later call
+    is reached. A composite UNIQUE constraint is left aside, as the
+    reference leaves it.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source a table of
+    which declares a primary key or a foreign key of several columns.
+  cases: [T2.3]
+  refs:
+  - E66
+  - E92
+  - 'contract/postgres-regression-vectors.json#key.composite-primary refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer: E66(b)'s class, the reference's unnamed error a
+    named refusal. Before T2.3's fix 12 the core keyed such a table by one
+    of the key's columns and linked on one of the foreign key's, which can
+    join rows the key does not; by the orchestrator's decision at round 3
+    it is refused as DuckDB refuses a key of several columns named. Its
+    inputs are the test author's two regression vectors,
+    key.composite-primary@postgres and key.composite-foreign@postgres
+    (contract/postgres-regression-vectors.json, the refs), not corpus
+    cases.
