@@ -1,0 +1,502 @@
+{
+ "format": "sdm-postgres-regression-vectors/1",
+ "recorded_by": "contract/tools/postgres_regressions_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "psycopg": "3.3.6",
+  "postgres": 17
+ },
+ "register_ref": "contract/postgres-regression-vectors.json#",
+ "vectors": [
+  {
+   "id": "time.new-york-auto-anchor",
+   "session": [
+    "SET TimeZone TO 'America/New_York'"
+   ],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL)",
+    "INSERT INTO users SELECT n, n * 10 FROM generate_series(1, 12) n",
+    "CREATE TABLE orders(id INTEGER PRIMARY KEY, user_id INTEGER REFERENCES users(id), price REAL, ts TIMESTAMPTZ)",
+    "INSERT INTO orders SELECT n, (n % 12) + 1, n * 0.5, '2024-01-01 00:00:00+00'::timestamptz + n * interval '2 hours' FROM generate_series(1, 1200) n"
+   ],
+   "pql": "PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "orders",
+     "ts"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "orders",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "user_id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "price",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "ts",
+         "dtype": "timestamp[us]",
+         "stype": "timestamp"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": "ts",
+       "duplicate_keys": 0
+      },
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": [
+      [
+       "orders",
+       "user_id",
+       "users",
+       "id"
+      ]
+     ]
+    },
+    "payloads": {
+     "digest": "5f23d71d7aaad3ecf2592af5fbd43b6a86e7055c282790e657b0177842b86af0",
+     "anchors": [
+      "2024-04-03T00:00:00.000000Z",
+      "2024-04-10T00:00:00.000000Z"
+     ]
+    },
+    "postgres": {
+     "orders.ts": "timestamp with time zone"
+    }
+   }
+  },
+  {
+   "id": "type.uuid",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature uuid)",
+    "INSERT INTO users SELECT n, n * 10, ('00000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "d072955b2b23684e21343d715fc2f93d1bc9b71337ce1c26e4a38d794081f2e6",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "uuid"
+    }
+   }
+  },
+  {
+   "id": "type.inet",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature inet)",
+    "INSERT INTO users SELECT n, n * 10, ('192.168.0.' || n)::inet FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "6a588b39c1e15353cd1963e2d3d5f0e363be3f31135fb410f0f652c5046f44fc",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "inet"
+    }
+   }
+  },
+  {
+   "id": "type.numeric",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature numeric)",
+    "INSERT INTO users SELECT n, n * 10, n + 0.25 FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "float64",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "53f09f7c9560d32c884cafe185ca7c4ac919e8b58a5d71fe1f744a6d4b0324cb",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "numeric"
+    }
+   }
+  },
+  {
+   "id": "type.numeric-array",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature numeric[])",
+    "INSERT INTO users SELECT n, n * 10, ARRAY[n::numeric] FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "bc25d081bcdf863d19476220fc3c80d33aa48ecf93be2464e5ed149771249750",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "numeric[]"
+    }
+   }
+  },
+  {
+   "id": "type.uuid-array",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature uuid[])",
+    "INSERT INTO users SELECT n, n * 10, ARRAY[('00000000-0000-0000-0000-' || lpad(n::text, 12, '0'))::uuid] FROM generate_series(1, 12) n"
+   ],
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users",
+     "feature"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "bc25d081bcdf863d19476220fc3c80d33aa48ecf93be2464e5ed149771249750",
+     "anchors": []
+    },
+    "postgres": {
+     "users.feature": "uuid[]"
+    }
+   }
+  },
+  {
+   "id": "relation.dollar",
+   "session": [],
+   "setup": [
+    "CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature text)",
+    "INSERT INTO users SELECT n, n * 10, 'abc' FROM generate_series(1, 12) n",
+    "ALTER TABLE users RENAME TO \"users$1\""
+   ],
+   "tables": {
+    "users": "users$1"
+   },
+   "pql": "PREDICT users.age FOR EACH users.id",
+   "materialize": {
+    "indices": [
+     1
+    ],
+    "num_context_samples": 3,
+    "random_seed": 42
+   },
+   "columns": [
+    [
+     "users$1",
+     "id"
+    ]
+   ],
+   "reference": {
+    "outcome": {
+     "result": "success",
+     "stage": "materialize",
+     "error": null,
+     "code": null
+    },
+    "schema": {
+     "tables": [
+      {
+       "name": "users",
+       "columns": [
+        {
+         "name": "id",
+         "dtype": "int64",
+         "stype": "ID"
+        },
+        {
+         "name": "age",
+         "dtype": "float64",
+         "stype": "numerical"
+        },
+        {
+         "name": "feature",
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       ],
+       "primary_key": "id",
+       "time_column": null,
+       "duplicate_keys": 0
+      }
+     ],
+     "links": []
+    },
+    "payloads": {
+     "digest": "6c5d94dd159f34db5363c2ef2b37ddeeb8d6387d774bcee0ebe14af019a9e512",
+     "anchors": []
+    },
+    "postgres": {
+     "users$1.id": "integer"
+    }
+   }
+  }
+ ]
+}
