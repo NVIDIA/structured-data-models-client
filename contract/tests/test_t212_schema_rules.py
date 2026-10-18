@@ -105,8 +105,22 @@ UMBRELLAS = ('P1B-1', 'P1B-2', 'P1B-3', 'P1B-4')
 
 #: The rule cases, by the rule each holds.
 RULES = {
-    'float_nan': ('rule.float-nan-feature', 'rule.float-nan-aggregated'),
-    'float_signed_zero': ('rule.float-signed-zero-feature',),
+    'float_nan': (
+        'rule.float-nan-feature',
+        'rule.float-nan-aggregated',
+        # T2.12 round 1: a NaN that changes what the preview infers (the
+        # feature's meaning, the key the tie leaves), and a NaN key sampled
+        # at materialize.
+        'rule.float-nan-category-double',
+        'rule.float-nan-category-float',
+        'rule.float-nan-key-tie',
+        'rule.float-nan-key-double',
+        'rule.float-nan-key-float',
+    ),
+    'float_signed_zero': (
+        'rule.float-signed-zero-feature',
+        'rule.float-signed-zero-key-tie',
+    ),
     'key_tie': ('rule.key-tie-fact', 'rule.key-tie-entity'),
     'key_name_order': ('rule.key-name-form',),
     'composite_key': (
@@ -310,6 +324,49 @@ def test_each_case_holds_its_rule_s_input() -> None:
         if v == 0.0
     ]
     assert {math.copysign(1, v) for v in zeros} == {-1.0, 1.0}
+    # T2.12 round 1: a NaN or -0.0 that changes what is inferred.
+    for case_id in (
+        'rule.float-nan-category-double',
+        'rule.float-nan-category-float',
+    ):
+        values = _column(case_id, 'users', 'feature')
+        nans = sum(math.isnan(v) for v in values)
+        assert (len(values), nans) == (1000, 970), case_id
+        assert len({v for v in values if not math.isnan(v)}) == 30, case_id
+    for case_id, held in (
+        ('rule.float-nan-key-tie', 'nan'),
+        ('rule.float-signed-zero-key-tie', 'minus-zero'),
+    ):
+        first = _column(case_id, 'orders', 'order_id')
+        second = _column(case_id, 'orders', 'orderid')
+        assert second == [float(i) for i in range(80)], case_id
+        changed = [
+            i
+            for i, (a, b) in enumerate(zip(first, second, strict=True))
+            if a != b or math.copysign(1, a) != math.copysign(1, b)
+        ]
+        assert changed == [3], case_id
+        if held == 'nan':
+            assert math.isnan(first[3])
+        else:
+            assert first[3] == 0.0 and math.copysign(1, first[3]) == -1.0
+            assert math.copysign(1, first[0]) == 1.0 and first[0] == 0.0
+    for case_id in ('rule.float-nan-key-double', 'rule.float-nan-key-float'):
+        keys = _column(case_id, 'users', 'user_id')
+        assert [i for i, v in enumerate(keys) if math.isnan(v)] == [3], case_id
+        case, _ = cases()[case_id]
+        connection = _built(case)
+        try:
+            kinds = dict(
+                connection.execute(
+                    'SELECT table_name, data_type FROM duckdb_columns() '
+                    "WHERE column_name = 'user_id'"
+                ).fetchall()
+            )
+        finally:
+            connection.close()
+        assert kinds['orders'] == 'BIGINT', case_id
+        assert kinds['users'] == case_id.rsplit('-', 1)[1].upper(), case_id
     for case_id, table, pair in (
         ('rule.key-tie-fact', 'orders', ('order_id', 'orderid')),
         ('rule.key-tie-entity', 'users', ('user_id', 'userid')),

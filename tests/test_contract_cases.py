@@ -351,6 +351,12 @@ T212_RULES = (
     'rule.composite-key-given',
     'rule.composite-key-declared',
     'rule.composite-foreign-key-declared',
+    'rule.float-nan-category-double',
+    'rule.float-nan-category-float',
+    'rule.float-nan-key-tie',
+    'rule.float-signed-zero-key-tie',
+    'rule.float-nan-key-double',
+    'rule.float-nan-key-float',
 )
 
 
