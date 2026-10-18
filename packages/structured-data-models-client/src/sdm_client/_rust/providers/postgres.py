@@ -35,7 +35,8 @@ which is how the driver reads it); the values are the driver's, converted
 by pyarrow. The driver reads each value as it reads the reference's (its
 own loaders, so the statements' results are the reference's), and a value
 is converted after the read where the core takes it another way: a
-``json`` or ``jsonb`` value as the reference's text of it (compact JSON),
+``json`` or ``jsonb`` value as the reference's text of it (compact JSON,
+its field marked as JSON, Arrow's ``arrow.json``),
 an ``interval`` (the driver's ``timedelta``, a month counted as 30 days as
 the reference's driver counts it) as pyarrow's ``MonthDayNano``. A
 ``timestamptz`` is built as the instant in UTC, whatever the session's
@@ -450,6 +451,10 @@ def _scalar_type(name: str, column: Any, connection: Any) -> Any:
         return pa.time64('us')
     if name == 'interval':
         return pa.month_day_nano_interval()
+    if name in _JSON:
+        # The reference's text of the value (json_text), marked as JSON
+        # (Arrow's arrow.json over a string).
+        return pa.json_()
     return pa.string()
 
 
