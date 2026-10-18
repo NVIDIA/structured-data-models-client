@@ -59,6 +59,16 @@ from sdm_client.schema import Schema
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
 
+    from sdm_client._rust.materialize import Unresolved
+
+
+def _alone(asked: Any) -> bool:
+    r"""Whether ``asked`` is a query only the core resolves (KO2-36), read
+    on the core route only, where the bridge is imported."""
+    from sdm_client._rust.materialize import Unresolved
+
+    return isinstance(asked, Unresolved)
+
 
 class PredictiveQuery:
     r"""A question expressed in PQL and answered from the tables in its schema.
@@ -206,15 +216,34 @@ class PredictiveQuery:
             ),
         )
 
-        # Resolved once, and against the profile this request is for, because
-        # whether it is asked as several questions is a property of the query
-        # and the profile answers what the query is allowed to be.
-        asked = self._resolve(RELATIONAL if relational else TABULAR)
         # A forecast over a DuckDB, SQLite or Postgres source on the core route is split into
         # its steps by the core (T1.36 fix 21).
         on_the_core = relational and _routing.on_the_core(
             self.schema.source, _routing.MATERIALIZE
         )
+        # Resolved once, and against the profile this request is for, because
+        # whether it is asked as several questions is a property of the query
+        # and the profile answers what the query is allowed to be.
+        asked = self._resolve(
+            RELATIONAL if relational else TABULAR, on_the_core=on_the_core
+        )
+        if on_the_core and _alone(asked):
+            # A query only the core resolves (KO2-36): gathered as the core
+            # resolves it, a forecast in the steps the core asks.
+            if candidates is not None:
+                raise asked.refusal
+            assert indices is not None
+            whole = self._relational_materializer.materialize(
+                query=asked,
+                indices=indices,
+                num_context_samples=num_context_samples,
+                options=options,
+            )
+            if whole._core_state.get('forecast') is None:
+                return whole
+            return self._kept_as_steps(
+                whole, Decomposition(FORECAST, ()), indices
+            )
         rewritten = parts_of(
             asked,
             self.text,
@@ -479,8 +508,6 @@ class PredictiveQuery:
         the first where this client refuses the call's options before the
         core runs.
         """
-        import copy
-
         steps = int(getattr(asked, 'num_forecasts', 1) or 1)
         named = Decomposition(
             FORECAST, tuple((None, n + 1) for n in range(steps))
@@ -503,6 +530,16 @@ class PredictiveQuery:
                 else 1
             )
             raise about_the_part(error, named, step) from error
+        return self._kept_as_steps(whole, rewritten, indices)
+
+    def _kept_as_steps(
+        self, whole: Request, rewritten: Decomposition, indices: Sequence[Any]
+    ) -> Request:
+        r"""A forecast the core gathered in steps, kept together as
+        :meth:`_in_parts` keeps the parts it gathers: one request per step,
+        with the step's payload and query."""
+        import copy
+
         state = whole._core_state
         gathered = []
         for step, payload, query in [
@@ -529,33 +566,52 @@ class PredictiveQuery:
         carrier._asked = self.text
         return carrier
 
-    def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
+    def _resolve(
+        self, profile: Profile, *, on_the_core: bool = False
+    ) -> ValidatedPredictiveQuery | Unresolved:
         r"""Parse and validate the query.
 
         On the core route (S0, the private routing seam) the core decides
         validity, and an accepted query is resolved by the old validator for
         the old materializer, which also checks that the two agree.
+
+        Where materialize runs on the core (``on_the_core``) over a schema
+        holding a column the old validator's language cannot name (a dot, a
+        backtick or a line break in its name), a query the old validator
+        refuses is the core's to resolve as it gathers it (KO2-36, T2.18):
+        :class:`~sdm_client._rust.materialize.Unresolved`, holding the old
+        validator's refusal for a call only the old route answers.
         """
         from predictive_query import validate
 
         from sdm_client import _routing
-        from sdm_client.schema import to_schema_definition
+        from sdm_client.schema import (
+            names_a_query_cannot_say,
+            to_schema_definition,
+        )
 
         core = _routing.route(_routing.S0) == 'core'
         definition = to_schema_definition(self.schema)
+        alone = on_the_core and names_a_query_cannot_say(self.schema)
         if core:
             from sdm_client._rust import s0
 
             accepted, messages = s0.validate(self.text, definition, profile)
-            if accepted:
+            if not accepted:
+                raise self._refusal(messages, profile)
+            if not alone:
                 return s0.shadow(self.text, definition, profile)
-            raise self._refusal(messages, profile)
-        resolved, response = validate(self.text, definition, profile)
-        if resolved is None or not response.ok:
-            raise self._refusal(
-                [error.message for error in response.errors], profile
-            )
-        return resolved
+        old, response = validate(self.text, definition, profile)
+        if old is not None and response.ok:
+            return old
+        refusal = self._refusal(
+            [error.message for error in response.errors], profile
+        )
+        if alone:
+            from sdm_client._rust.materialize import Unresolved
+
+            return Unresolved(self.text, refusal)
+        raise refusal
 
     def _refusal(
         self, messages: list[str], profile: Profile

@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "refactor": "T2.3: imports the Postgres provider beside the DuckDB and SQLite providers; no rule added"
+      "moved": "T2.18: the module gains Unresolved, a query only the core resolves, and asked, the host's reading of what the core resolved of a query (Materialized.query, contract v26)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "refactor": "T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's, and an unused local is gone; no rule added (T1.36 fix 21's forecast split stays as it moved)"
+      "moved": "T2.18: the run's answer of what the core resolved of the query (Materialized.query) is kept beside the state's version for asked; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -36,10 +36,10 @@
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "refactor": "T2.18: _alone, whether a resolved query is the core's alone, importing the bridge on the core route only; the forecast's steps kept together by _kept_as_steps, shared by both core paths; a type-checking import; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
-      "refactor": "T2.2: a schema over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's materialize paths); no rule added"
+      "moved": "T2.18: whether materialize runs on the core is decided before the query is resolved; a query only the core resolves is gathered as itself, a forecast kept in the steps the core asked, a ranking over candidates refused as the old validator refuses it"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
@@ -69,19 +69,19 @@
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
-      "refactor": "T2.2: a schema over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's materialize paths); no rule added"
+      "moved": "T2.18: on the core route the target's window and the entity table are read through _rust.materialize.asked, what the core resolved for a query only it resolves (KO2-36); the old route reads them as before"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._in_parts": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
-      "main": "eb6c68eb1d5aef8c1315d9ccfd44989b2e767df2 Make Databricks metric views work across real-world configurations (#8)"
+      "moved": "T2.18: names_a_query_cannot_say, whether a schema holds a column the old validator's language cannot say, which only the core route keeps and only the core resolves a query naming (KO2-36); it refuses nothing"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
       "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
-      "refactor": "T2.1b: a described table's source read as contract v26 writes it, the one part of its relation (codec.relation_name); no rule added"
+      "moved": "T2.18: the old route's column-name rule (SourceTable's check of each column's name for a dot, a backtick or a line break) no longer runs on the core route: each table is built with the columns the core described, whatever their names, which the core keeps as data and a query names apart from their table (KO2-36)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
       "refactor": "T2.1b: a held table's source sent as contract v26 writes it, a relation of one part (codec.relation); no rule added"
@@ -97,6 +97,18 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_provider": {
       "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::asked": {
+      "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
+      "moved": "T2.18: where materialize runs on the core over a schema holding a column the old validator's language cannot say, a query the old validator refuses is the core's to resolve as it gathers it (Unresolved, KO2-36); every other query as before, the shadow check kept"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
+      "moved": "T2.18: a query only the core resolves (KO2-36) holds its text and the old validator's refusal, for the one call the core does not answer (a ranking over candidates); no rule of the host's"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.to_string": {
+      "moved": "T2.18: such a query is sent to materialize as the caller wrote it; the core resolves it and writes it back"
     }
   }
 }

@@ -280,9 +280,6 @@ class RelationalMaterializer:
                 'the client derives what the endpoint needs',
                 code='INVALID_REQUEST',
             )
-        windowed = (
-            getattr(query.target_ast, 'date_offset_range', None) is not None
-        )
         # Over a DuckDB, SQLite or Postgres source on the core route (T1.11c, T2.2, T2.3),
         # the core gathers and lays out the request, the rules around the
         # gathering the core's (T1.28a); the old route holds its own.
@@ -295,7 +292,12 @@ class RelationalMaterializer:
             payloads, core_state = on_the_core.gather(
                 self, query, indices, num_context_samples, options
             )
+            windowed, entity_table = on_the_core.asked(query, core_state)
         else:
+            windowed = (
+                getattr(query.target_ast, 'date_offset_range', None) is not None
+            )
+            entity_table = table_name(query.entity_column)
             if len(indices) == 0:
                 raise StructuredDataError(
                     'indices names no entity, and gathering a relational '
@@ -318,9 +320,7 @@ class RelationalMaterializer:
             if statistic is not None:
                 _record_the_statistic(payloads, statistic)
             sent = _tables_sent(payloads, self.schema)
-            _warn_of_tables_left_out(
-                self.schema, sent, table_name(query.entity_column)
-            )
+            _warn_of_tables_left_out(self.schema, sent, entity_table)
             _warn_of_columns_the_model_does_not_read(
                 self.schema, _columns_to_leave_out(query, options), sent
             )
@@ -331,7 +331,7 @@ class RelationalMaterializer:
             schema=self.schema.snapshot(),
             query=query.to_string(),
             indices=list(indices),
-            entity_table=table_name(query.entity_column),
+            entity_table=entity_table,
             # A copy: the payloads were gathered from the config as it is
             # now, and a caller's later edit to it must not change what the
             # adapter believes was asked for.

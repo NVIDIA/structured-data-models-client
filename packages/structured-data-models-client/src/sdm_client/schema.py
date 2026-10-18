@@ -1800,6 +1800,19 @@ def _invalid_name_chars(name: str) -> list[str]:
     return [char for char in _INVALID_NAME_CHARS if char in name]
 
 
+def names_a_query_cannot_say(schema: Schema) -> bool:
+    r"""Whether a table of ``schema`` holds a column whose name the old
+    validator's language cannot say: one holding a dot, a backtick or a
+    line break. Only the core route keeps such a column, and only the core
+    resolves a query naming it (KO2-36, T2.18).
+    """
+    return any(
+        _invalid_name_chars(name)
+        for table in schema.tables.values()
+        for name in table.columns
+    )
+
+
 def _describe_source_table(
     engine_table: Any, source_name: str, *, name: str | None = None
 ) -> SourceTable:

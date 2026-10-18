@@ -175,11 +175,18 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             columns[column['name']] = Column(
                 column['name'], dtype, column['stype']
             )
+        # Every column the core described is kept, whatever its name: the
+        # core holds a query's table and column apart, so a dot, a backtick
+        # or a line break in a column's name is data (KO2-36, T2.18). The
+        # table is built without its columns, which SourceTable would check
+        # by the old route's rule, and then given them.
         table_shape = SourceTable(
             name=name,
             source_name=codec.relation_name(table['source']),
-            columns=columns,
+            columns={},
         )
+        table_shape.columns = columns
+        table_shape._own_columns()
         keys = tuple(table['primary_key'])
         if keys:
             table_shape.primary_key = keys[0] if len(keys) == 1 else keys

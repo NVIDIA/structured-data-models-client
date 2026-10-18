@@ -310,7 +310,12 @@ def gather(
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
     query = json.loads(finished.take(state['query']))
-    kept: dict[str, Any] = {'version': state['version']}
+    # What the core resolved of the query (T2.18), which asked() reads and
+    # takes out before the request keeps the state.
+    kept: dict[str, Any] = {
+        'version': state['version'],
+        'facts': finished.result.get('query'),
+    }
     if state.get('forecast') is not None:
         # A forecast, which the core asked as one regression per step (T1.36
         # fix 21): step 1's query, and each later step's number, payload
@@ -325,6 +330,45 @@ def gather(
             for step in state['forecast']
         ]
     return (payload,), kept
+
+
+class Unresolved:
+    r"""A query only the core resolves: one naming a column whose name holds
+    a dot, a backtick or a line break, which the old validator refuses and
+    the core holds apart from its table (KO2-36, T2.18). It is gathered as
+    the caller wrote it, and the core answers what it resolved of it
+    (``Materialized.query``, contract v26). ``refusal`` is the old
+    validator's, for a call the core does not answer (a ranking over
+    candidates, which this client asks one part per candidate)."""
+
+    def __init__(self, text: str, refusal: StructuredDataError) -> None:
+        self.text = text
+        self.refusal = refusal
+
+    def to_string(self) -> str:
+        r"""The query as the caller wrote it, which materialize sends."""
+        return self.text
+
+
+def asked(query: Any, state: dict[str, Any]) -> tuple[bool, str]:
+    r"""Whether the target of ``query`` moves with time, and its entity
+    table: as the core resolved them (``state``'s ``facts``, taken out of
+    it) for a query only the core resolves (:class:`Unresolved`), else as
+    the old validator resolved them."""
+    facts = state.pop('facts', None)
+    if isinstance(query, Unresolved):
+        if facts is None:
+            raise StructuredDataError(
+                'the core gathered a query and said nothing of it',
+                code='INTERNAL_ERROR',
+            )
+        return bool(facts['windowed']), str(facts['entity_table'])
+    from predictive_query.validator.utils import table_name
+
+    return (
+        getattr(query.target_ast, 'date_offset_range', None) is not None,
+        table_name(query.entity_column),
+    )
 
 
 def _provider(source: Any) -> tuple[dict[str, Any], Any]:
