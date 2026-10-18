@@ -6307,12 +6307,12 @@ entries:
     - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
     - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
   notes: >-
-    Approver: owner (its more_exact fields and the OverflowError cases, a
-    reference crash answered), under KO2-35, as P2B-1 on DuckDB. Measured at
+    Approved by the owner on 2026-10-16 as KO2-35 ("better than main"),
+    relayed by the orchestrator, as P2B-1 on DuckDB. Measured at
     T2.3 on Postgres 17, python-core and rust-host alike; every key pair
     joins the rows the same-type control joins (the key matrix's lesson 19
     test). The orchestrator asked for these, key.pair-merging.* and
