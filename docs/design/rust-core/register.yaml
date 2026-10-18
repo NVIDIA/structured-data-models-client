@@ -6665,6 +6665,50 @@ entries:
     (contract/deferred/t210-column-filter), so no case is under this
     entry.
 
+# --- lane G entries (P2G-1..19) ---
+
+- id: P2G-1
+  title: rust-host reports an endpoint's refusal of a call as the core's INVALID_RESPONSE, where the reference raises NimRequestError with no code
+  kind: change
+  old_behavior: >-
+    The reference's client raises an endpoint's refusal of a call (an
+    HTTP status other than 2xx) as the endpoint's own refusal: a public
+    NimRequestError carrying the endpoint's text and details and no code of
+    the client's (decision E47), so the reference's outcome is a refusal
+    at predict with no code.
+  new_behavior: >-
+    The pure-Rust host (rust-host) has no transport and no client class:
+    it hands the endpoint's status to the core, which ends the run with
+    INVALID_RESPONSE naming the field (status) and the reason
+    (not_a_success), carrying the answers received before the call
+    (decision E45; T2.8c's answered parts), and rust-host's outcome is that
+    code. python-core raises the reference's NimRequestError itself, its
+    core's INVALID_RESPONSE beside it. The comparator already agrees the
+    two under T2.1g's rule (an endpoint's refusal with no code at predict
+    and the core's INVALID_RESPONSE for the same call); this entry states
+    rust-host's outcome for the ratchet's first admission and for the
+    SQLite host test, which hold rust-host to the reference's outcome
+    unless an approved entry names the case.
+  affected_inputs: >-
+    A predict on rust-host whose model endpoint refuses a call: T2.8c's
+    cases failing call 0 or call 2 of a request asked in several calls,
+    and call 1 of a two-step forecast, on DuckDB and SQLite.
+  cases: [multicall.fail-call-0, multicall.fail-call-0@sqlite, multicall.fail-call-2, multicall.fail-call-2@sqlite, multicall.forecast.fail-call-1, multicall.forecast.fail-call-1@sqlite]
+  refs: [1fc5a686, E45, E47, T2.1g]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E45}
+  notes: >-
+    Approved by the reviewer under decision E45, as the orchestrator
+    relayed on 2026-10-18; both of T2.8c's reviewers confirm it in round 1.
+    Not a refusal of an input the reference accepts: both refuse, and the
+    difference is the code the outcome names. Postgres's rust-host leg
+    replays its fetches and is held by the comparator alone.
+  case_outcomes:
+  - {case: multicall.fail-call-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_RESPONSE', summary: 'first admission (T2.8c): the endpoint refused a call; rust-host has no transport or client class, so its outcome is the core''s INVALID_RESPONSE, which T2.1g''s comparator rule agrees with the reference''s code-less NimRequestError'}
+  - {case: multicall.fail-call-2, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_RESPONSE', summary: 'first admission (T2.8c): the endpoint refused a call; rust-host has no transport or client class, so its outcome is the core''s INVALID_RESPONSE, which T2.1g''s comparator rule agrees with the reference''s code-less NimRequestError'}
+  - {case: multicall.forecast.fail-call-1, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_RESPONSE', summary: 'first admission (T2.8c): the endpoint refused a call; rust-host has no transport or client class, so its outcome is the core''s INVALID_RESPONSE, which T2.1g''s comparator rule agrees with the reference''s code-less NimRequestError'}
+
 # --- lane C entries (P2C-1..19) ---
 
 - id: P2C-1
