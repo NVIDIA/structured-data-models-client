@@ -230,7 +230,12 @@ def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
                 model=KumoRelational(),
                 outputs=['prediction', 'scores'],
             ),
-            ('UNSUPPORTED_OUTPUT', 422, 'explanation'): lambda: client.predict(
+            (
+                'UNSUPPORTED_OUTPUT',
+                422,
+                "explanation'] not",
+                "supported: ['prediction', 'probabilities'].",
+            ): lambda: client.predict(
                 one,
                 model=KumoRelational(),
                 outputs=['prediction', 'explanation'],
@@ -253,7 +258,7 @@ def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
                 ),
                 model=KumoRelational(),
             ),
-            ('UNSUPPORTED_TASK', 422): lambda: client.predict(
+            ('UNSUPPORTED_TASK', 422, "'regression']."): lambda: client.predict(
                 PredictiveQuery(
                     'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) '
                     'FOR EACH users.user_id',

@@ -7,7 +7,9 @@ r"""A client's requests, answered by structured-data-models in this process.
 The client sends what it would send a NIM and reads back what a NIM answers,
 so everything that works against a NIM works here, sessions included. The
 model is fitted the way the hosted deployments fit it, so the same request is
-answered the same way wherever it runs.
+answered the same way wherever it runs, and refused the same way too. A payload
+written by hand and passed to the transport directly is not held to every rule
+a NIM applies.
 """
 
 from __future__ import annotations
@@ -177,7 +179,7 @@ class InProcessTransport:
             if session is None:
                 raise refusal(
                     'SESSION_NOT_FOUND',
-                    f'session {session_id!r} does not exist or was released',
+                    f"no session '{session_id}'.",
                 )
             task = session.task
             fields = _fields(
@@ -340,8 +342,8 @@ def _outputs(served: Tabular | Relational, kind: str) -> tuple[str, ...]:
     if available is None:
         raise refusal(
             'UNSUPPORTED_TASK',
-            f'task {kind!r} not supported by model {served.model_id!r}; '
-            f'supported: {list(served.outputs)}',
+            f"task '{kind}' not supported by model '{served.model_id}'; "
+            f'supported: {list(served.outputs)}.',
         )
     return available
 
@@ -379,8 +381,8 @@ def _fields(
         raise refusal(
             'UNSUPPORTED_OUTPUT',
             f'output(s) {unsupported} not supported by model '
-            f'{served.model_id!r} for task {kind!r}; supported: '
-            f'{list(available)}',
+            f"'{served.model_id}' for task '{kind}'; supported: "
+            f'{list(available)}.',
         )
     return fields
 
