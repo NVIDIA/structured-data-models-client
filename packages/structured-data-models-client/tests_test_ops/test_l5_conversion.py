@@ -13,7 +13,11 @@ NumPy, beside the pinned Postgres service.
   core's data layer and admitted by the core (the test-only fetch): its
   Arrow type is :data:`CONVERSION`'s, recorded from the three providers
   and reviewed, or the core refuses it by name; so a unit, scale or type
-  change in one driver's path fails.
+  change in one driver's path fails. On DuckDB and SQLite each is the type
+  the reference's own reads give it (``contract/l5-vectors.json``'s
+  ``drivers``, recorded from the reference by
+  ``contract/tools/l5_record.py`` in every cell), but the two the core
+  refuses by name.
 - Without loss: each admitted column holds what the database stores, as
   that database's own driver reads it (DuckDB's, ``sqlite3``, psycopg),
   value by value, nulls and order included.
@@ -29,7 +33,9 @@ NumPy, beside the pinned Postgres service.
   (``_rust/predict.py``'s ``_rows``, ``_id`` and ``_as_answered``) and
   presented by ``PredictionResult.to_pandas()``: each cell is the answer's
   JSON value, and each column's dtype is :data:`PRESENTATION`'s for this
-  pandas major, recorded on pandas 2 and 3.
+  pandas major, recorded from the reference (pandas 3) and python-old
+  (pandas 2) presenting the same answers (``contract/l5-vectors.json``,
+  T1.31's rule).
 
 Where ``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES``
 is not set, the Postgres leg has nothing to hold and the drivers' tests
@@ -615,55 +621,65 @@ LAYOUTS: dict[str, tuple[pa.Table, list[dict[str, Any]]]] = {
 }
 
 #: Each layout's presented columns and their dtypes, by pandas major:
-#: recorded on pandas 2.2 and 3.0 and reviewed.
+#: recorded by ``contract/tools/l5_record.py`` from the reference in
+#: ``ref-pandas3`` (pandas 3) and python-old in ``dbr17-pandas2`` (pandas 2),
+#: never written here (T1.31).
+L5 = json.loads((ROOT / 'contract/l5-vectors.json').read_text(encoding='utf-8'))
 PRESENTATION: dict[str, dict[str, dict[str, str]]] = {
-    'regression, float answers': {
-        '2': {'row_index': 'int64', 'id': 'float64', 'prediction': 'float64'},
-        '3': {'row_index': 'int64', 'id': 'float64', 'prediction': 'float64'},
-    },
-    'regression, integer answers': {
-        '2': {'row_index': 'int64', 'id': 'int64', 'prediction': 'int64'},
-        '3': {'row_index': 'int64', 'id': 'int64', 'prediction': 'int64'},
-    },
-    'regression, an integer widened among floats': {
-        '2': {'row_index': 'int64', 'id': 'int64', 'prediction': 'float64'},
-        '3': {'row_index': 'int64', 'id': 'int64', 'prediction': 'float64'},
-    },
-    'binary classification, text ids': {
-        '2': {
-            'row_index': 'int64',
-            'id': 'object',
-            'prediction': 'object',
-            'probability_True': 'float64',
-            'probability_False': 'float64',
-        },
-        '3': {
-            'row_index': 'int64',
-            'id': 'str',
-            'prediction': 'object',
-            'probability_True': 'float64',
-            'probability_False': 'float64',
-        },
-    },
-    'multiclass, ids of mixed types': {
-        '2': {'row_index': 'int64', 'id': 'object', 'prediction': 'object'},
-        '3': {'row_index': 'int64', 'id': 'object', 'prediction': 'str'},
-    },
-    'forecast, a step per row': {
-        '2': {
-            'row_index': 'int64',
-            'id': 'int64',
-            'forecast_step': 'float64',
-            'prediction': 'float64',
-        },
-        '3': {
-            'row_index': 'int64',
-            'id': 'int64',
-            'forecast_step': 'float64',
-            'prediction': 'float64',
-        },
-    },
+    layout: {major: L5['presentation'][major][layout] for major in ('2', '3')}
+    for layout in LAYOUTS
 }
+
+
+def _recorder() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        't24_l5_record', ROOT / 'contract/tools/l5_record.py'
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_the_recorded_tables_are_the_reference_s_for_these_inputs() -> None:
+    # The recorder's inputs are this file's: the table it reads and the
+    # answers it presents; the presentation was recorded by the reference in
+    # ref-pandas3 and python-old in dbr17-pandas2, for every layout.
+    recorder = _recorder()
+    assert recorder.SETUP == SETUP
+    assert {name: answered for name, (_, answered) in LAYOUTS.items()} == (
+        recorder.ANSWERED
+    )
+    assert L5['recorded_by'] == 'contract/tools/l5_record.py'
+    assert L5['by']['ref-pandas3']['runner'] == 'python-ref'
+    assert L5['by']['dbr17-pandas2']['runner'] == 'python-old'
+    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
+    assert f'reference: {L5["reference"]}' in env
+    for major in ('2', '3'):
+        assert sorted(L5['presentation'][major]) == sorted(LAYOUTS)
+
+
+def test_duckdb_and_sqlite_reach_the_core_as_the_reference_s_drivers_read() -> (
+    None
+):
+    # The reference reads DuckDB through to_arrow_table() and SQLite through
+    # ADBC's fetch_arrow_table(), so on those two each admitted type is the
+    # one the reference's own read gives, recorded in each of its cells;
+    # where the core refuses a type by name (an interval and a union on
+    # DuckDB, as the type set records) the reference reads it. The reference
+    # reads Postgres as Python rows, with no Arrow type to hold the core's
+    # to; its values are held to psycopg's above.
+    refused = set()
+    for cell, read in L5['drivers'].items():
+        assert sorted(read) == sorted(COLUMNS), cell
+        for column, by_database in read.items():
+            for database, kind in by_database.items():
+                wanted = CONVERSION[column][database]
+                if wanted == REFUSED:
+                    refused.add((column, database))
+                    continue
+                assert wanted == kind, (cell, column, database, wanted, kind)
+    assert refused == {('iv', 'duckdb'), ('un', 'duckdb')}
 
 
 def _presented(table: pa.Table) -> pd.DataFrame:
