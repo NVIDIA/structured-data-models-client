@@ -1,16 +1,12 @@
 {
  "about": "T2.18's acceptance tests that failed when the test author wrote them, before the implementation (contract/tests/test_t218_column_names.py as py:<test>, with [<database>] for a test run per database; sdm-testkit's tests/t218_column_names.rs as rust:<test>). Each listed test must still fail (strict); the implementer takes a name out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": [
-  "py:test_the_core_keeps_every_column_whatever_its_name[duckdb]",
-  "py:test_the_core_keeps_every_column_whatever_its_name[sqlite]",
-  "py:test_the_core_keeps_every_column_whatever_its_name[postgres]",
   "py:test_a_query_names_any_column_in_every_role[duckdb]",
   "py:test_a_query_names_any_column_in_every_role[sqlite]",
   "py:test_a_query_names_any_column_in_every_role[postgres]",
   "py:test_each_case_answers_through_predict_and_its_difference_is_registered[duckdb]",
   "py:test_each_case_answers_through_predict_and_its_difference_is_registered[sqlite]",
   "py:test_each_case_answers_through_predict_and_its_difference_is_registered[postgres]",
-  "py:test_the_temporary_entry_is_retired",
   "rust:rust_host_answers_each_name_case_through_predict_on_duckdb",
   "rust:rust_host_answers_each_name_case_through_predict_on_sqlite"
  ],
