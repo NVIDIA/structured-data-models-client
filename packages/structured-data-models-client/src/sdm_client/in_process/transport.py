@@ -33,6 +33,7 @@ from sdm_client.in_process.answers import (
     row_ids,
 )
 from sdm_client.in_process.columns import Context
+from sdm_client.in_process.contract import check_contract
 from sdm_client.in_process.inference import read_inference
 from sdm_client.in_process.refusal import in_session, refusal
 from sdm_client.in_process.relational import Relational
@@ -121,6 +122,7 @@ class InProcessTransport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         payload = _received(payload)
         with self._answering():
+            check_contract(payload)
             payload['inference'] = read_inference(payload.get('inference'))
             served, model = self._serving(payload.get('model'))
             task = payload['task']
@@ -143,6 +145,7 @@ class InProcessTransport:
         r"""Fit the context once, to be scored against until released."""
         payload = _received(payload)
         with self._answering():
+            check_contract(payload)
             served, model = self._serving(payload.get('model'))
             _outputs(served, payload['task']['kind'])
             _check_trained_for(served, model, payload['task']['kind'])
@@ -164,6 +167,7 @@ class InProcessTransport:
     ) -> dict[str, Any]:
         payload = _received(payload)
         with self._answering():
+            check_contract(payload)
             inference = read_inference(payload.get('inference'))
             session = self._sessions.get(session_id)
             if session is None:

@@ -178,7 +178,9 @@ with SDMClient.in_process(relational) as client:
 
 It answers as the NIM does. The context is fitted with the NIM's seed and
 settings, `fit()` holds its session in memory, and a request the NIM refuses
-is refused with the same `NimRequestError`. The limits a deployment sets to
+is refused with the same `NimRequestError`. On a GPU it computes at the NIM's
+reduced precision; on a CPU it computes at full precision, so its
+probabilities can differ from a GPU-hosted NIM's in the last digits. The limits a deployment sets to
 protect a shared server are the exception, since none is shared here; see
 [limits](../reference/limits.md). This needs
 `pip install 'structured-data-models-client[in-process]'`, which brings

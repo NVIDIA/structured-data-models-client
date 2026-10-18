@@ -239,6 +239,14 @@ def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
                 PredictiveQuery(COUNT, texty).materialize(indices=[0, 1]),
                 model=KumoRelational(),
             ),
+            ('VALIDATION_FAILED', 422, 'source_query'): lambda: client.predict(
+                PredictiveQuery(
+                    f'{COUNT} WHERE '
+                    + ' OR '.join(f'users.age > {i}' for i in range(60)),
+                    tables,
+                ).materialize(indices=[0, 1]),
+                model=KumoRelational(),
+            ),
             ('INVALID_REQUEST', 400): lambda: client.predict(
                 PredictiveQuery(COUNT, tables).materialize(
                     indices=[0, 1], inference_config={'num_estimators': 4}
