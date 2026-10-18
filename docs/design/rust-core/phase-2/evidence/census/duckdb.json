@@ -1,21 +1,17 @@
 {
   "commit": {
     "clean": true,
-    "sha": "dcac0f6e4fd86b9bf1d04cfeb599ec773b3d1222"
+    "sha": "cb2886ac49c198a623a3d56b7c0a93e3a53ea582"
   },
   "database": "duckdb",
   "departs": [
-    "rule:composite_key",
     "rule:condition",
     "rule:entity_filter",
     "rule:entity_ids",
     "rule:evaluate",
     "rule:exclude_cols_dict",
     "rule:explain",
-    "rule:float_nan",
-    "rule:float_signed_zero",
     "rule:inference_config_text",
-    "rule:key_tie",
     "rule:lag_timesteps",
     "rule:logical_target",
     "rule:max_pq_iterations",
@@ -150,31 +146,6 @@
         }
       },
       "site": "rule:column_type"
-    },
-    {
-      "departs": true,
-      "outcomes": {
-        "python-core": {
-          "code": "UNSUPPORTED_REQUEST",
-          "detail_keys": [
-            "kind",
-            "operation",
-            "retryable",
-            "rule"
-          ],
-          "error": "UnsupportedRequestError",
-          "field": null,
-          "operation": "describe_source",
-          "result": "refusal",
-          "rule": "composite_key",
-          "stage": "from_source"
-        },
-        "reference": {
-          "result": "success",
-          "stage": "from_source"
-        }
-      },
-      "site": "rule:composite_key"
     },
     {
       "departs": true,
@@ -446,56 +417,6 @@
         "python-core": {
           "code": "UNSUPPORTED_REQUEST",
           "detail_keys": [
-            "kind",
-            "operation",
-            "retryable",
-            "rule"
-          ],
-          "error": "UnsupportedRequestError",
-          "field": null,
-          "operation": "describe_source",
-          "result": "refusal",
-          "rule": "float_nan",
-          "stage": "from_source"
-        },
-        "reference": {
-          "result": "success",
-          "stage": "from_source"
-        }
-      },
-      "site": "rule:float_nan"
-    },
-    {
-      "departs": true,
-      "outcomes": {
-        "python-core": {
-          "code": "UNSUPPORTED_REQUEST",
-          "detail_keys": [
-            "kind",
-            "operation",
-            "retryable",
-            "rule"
-          ],
-          "error": "UnsupportedRequestError",
-          "field": null,
-          "operation": "describe_source",
-          "result": "refusal",
-          "rule": "float_signed_zero",
-          "stage": "from_source"
-        },
-        "reference": {
-          "result": "success",
-          "stage": "from_source"
-        }
-      },
-      "site": "rule:float_signed_zero"
-    },
-    {
-      "departs": true,
-      "outcomes": {
-        "python-core": {
-          "code": "UNSUPPORTED_REQUEST",
-          "detail_keys": [
             "key",
             "kind",
             "operation",
@@ -529,45 +450,6 @@
         }
       },
       "site": "rule:instance_id_type"
-    },
-    {
-      "departs": false,
-      "outcomes": {
-        "python-core": {
-          "result": "success",
-          "stage": "from_source"
-        },
-        "reference": {
-          "result": "success",
-          "stage": "from_source"
-        }
-      },
-      "site": "rule:key_name_order"
-    },
-    {
-      "departs": true,
-      "outcomes": {
-        "python-core": {
-          "code": "UNSUPPORTED_REQUEST",
-          "detail_keys": [
-            "kind",
-            "operation",
-            "retryable",
-            "rule"
-          ],
-          "error": "UnsupportedRequestError",
-          "field": null,
-          "operation": "describe_source",
-          "result": "refusal",
-          "rule": "key_tie",
-          "stage": "from_source"
-        },
-        "reference": {
-          "result": "success",
-          "stage": "from_source"
-        }
-      },
-      "site": "rule:key_tie"
     },
     {
       "departs": false,
@@ -1452,6 +1334,20 @@
       "departs": false,
       "outcomes": {
         "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
           "code": "UNSUPPORTED_TYPE",
           "detail_keys": [
             "arrow_type",
@@ -1477,7 +1373,7 @@
           "stage": "from_source"
         }
       },
-      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1"
+      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#2"
     },
     {
       "departs": false,
@@ -1821,7 +1717,7 @@
     "clean": true,
     "sha": "6298913c3b66da9459bb605d0127f8493adaa1fc"
   },
-  "sites": 71,
+  "sites": 67,
   "unmeasured": [
     "postgres",
     "sqlite"
