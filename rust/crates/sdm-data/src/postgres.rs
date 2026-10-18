@@ -694,7 +694,7 @@ fn seed_cte(
         }) {
             let alias = format!("w{position}");
             timed.push(format!(
-                "\n  CROSS JOIN LATERAL jsonb_populate_record(b.x, jsonb_build_object({}, r.value->{position})) AS {alias}",
+                "\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object({}, r.value->{position})) AS {alias}",
                 text(&window.column)
             ));
             format!("{alias}.{}", identifier(&window.column))
@@ -727,18 +727,20 @@ fn seed_cte(
         ));
     }
     // A value is read in its column's own type by putting it in place of
-    // that column in one row of the table (`b`), whose other fields hold the
-    // table's own values, so a NOT NULL domain elsewhere in the row is never
-    // checked on a null; a table of no row gives no seeds, and so no rows.
+    // that column in one row of the table (`b.base`, the row built from the
+    // alias's columns, `ROW(t.*)`, which no column's name can stand for),
+    // whose other fields hold the table's own values, so a NOT NULL domain
+    // elsewhere in the row is never checked on a null; a table of no row
+    // gives no seeds, and so no rows.
     let mut typed = String::new();
     if !built.is_empty() || !timed.is_empty() {
         typed.push_str(&format!(
-            "\n  CROSS JOIN (SELECT x FROM {row_type} AS x LIMIT 1) AS b"
+            "\n  CROSS JOIN (SELECT ROW(t.*)::{row_type} AS base FROM {row_type} AS t LIMIT 1) AS b"
         ));
     }
     if !built.is_empty() {
         typed.push_str(&format!(
-            "\n  CROSS JOIN LATERAL jsonb_populate_record(b.x, jsonb_build_object({})) AS k",
+            "\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object({})) AS k",
             built.join(", ")
         ));
     }
