@@ -55,6 +55,18 @@ vectors whose requests join the same rows to the same entities have the same
 ``joined``, whatever their key types; the test holds the core's to the
 same-type control's (``pair.i64.i64``).
 
+The host's own fields of an answer, :data:`HOST_FIELDS` (the public
+result as ``to_pandas()`` presents it, and the warning classes), depend on
+the cell's pandas: a text key's column is ``object`` on pandas 2 and
+``str`` on pandas 3. So the reference is also run in each other cell of
+``run_python.CELLS`` (``--cell``, with that cell's interpreter, the
+reference checkout's packages on its path), and its host fields are kept
+per vector under ``cells`` by cell name; every other field of its answer,
+its statements and its joined rows must be the reference cell's exactly,
+or the run fails, naming them::
+
+    <cell's interpreter> -I contract/tools/postgres_keys_record.py --cell
+
 Nothing here is written by hand but the inputs. ``VECTORS``, ``run``,
 ``joined`` and ``project`` are imported by
 ``contract/tests/test_t23_postgres_keys.py``, so ``python-core`` is observed
@@ -274,6 +286,30 @@ def run(
 # --- the answer ----------------------------------------------------------------
 
 project = R.project
+#: The fields of an answer the host presents itself, recorded per cell.
+HOST_FIELDS = ('result', 'warnings')
+#: The cell the vectors' ``reference`` is recorded in.
+REFERENCE_CELL = 'ref-pandas3'
+
+
+def this_cell() -> str | None:
+    r"""The cell of ``run_python.CELLS`` this interpreter is, or None."""
+    runner = _module('run_python', RUNNER)
+    return runner._cell(runner._versions())
+
+
+def expected(vector: dict[str, Any], cell: str | None) -> dict[str, Any]:
+    r"""The answer the vector holds a run in ``cell`` to: the reference
+    cell's, with the host's own fields the cell's where they are recorded
+    (any other cell, or none, takes the reference cell's)."""
+    want = copy.deepcopy(vector['reference'])
+    recorded = (vector.get('cells') or {}).get(cell or '')
+    if recorded is not None:
+        for field in HOST_FIELDS:
+            want[field] = copy.deepcopy(recorded[field])
+    return want
+
+
 statements = R.statements
 outcome_class = E.outcome_class
 register = E.register
@@ -379,6 +415,63 @@ def postgres_holds(vector: dict[str, Any]) -> dict[str, str]:
             admin.execute(f'DROP DATABASE {name} WITH (FORCE)')
 
 
+def record_cell(reference: Path) -> int:
+    r"""``--cell``: the reference in this interpreter's cell, other than
+    the reference cell, its host fields written into the vectors' ``cells``;
+    every other field must be the recorded reference cell's."""
+    cell = this_cell()
+    if cell is None or cell == REFERENCE_CELL:
+        print(
+            f'--cell runs in another cell than {REFERENCE_CELL}, not {cell}',
+            file=sys.stderr,
+        )
+        return 1
+    document = json.loads(OUT.read_text(encoding='utf-8'))
+    with tempfile.TemporaryDirectory(prefix='t23-record-') as tmp:
+        observed = run('python-ref', VECTORS, Path(tmp), reference=reference)
+    problems = []
+    for vector in document['vectors']:
+        observation = observed[vector['id']]
+        answer = project(observation, vector)
+        others = sorted(
+            field
+            for field in vector['reference']
+            if field not in HOST_FIELDS
+            and answer[field] != vector['reference'][field]
+        )
+        if statements(observation) != vector['statements']:
+            others.append('statements')
+        if joined(observation, vector) != vector['joined']:
+            others.append('joined')
+        if others:
+            problems.append(f'{vector["id"]}: {others}')
+            continue
+        vector.setdefault('cells', {})[cell] = {
+            field: answer[field] for field in HOST_FIELDS
+        }
+    if problems:
+        print(
+            f'the reference in {cell} differs from {REFERENCE_CELL} beyond '
+            'the host fields:\n' + '\n'.join(problems),
+            file=sys.stderr,
+        )
+        return 1
+    OUT.write_text(json.dumps(document, indent=1) + '\n', encoding='utf-8')
+    differing = sum(
+        any(
+            vector['cells'][cell][field] != vector['reference'][field]
+            for field in HOST_FIELDS
+        )
+        for vector in document['vectors']
+    )
+    print(
+        f'{cell}: host fields of {len(document["vectors"])} vectors written, '
+        f'{differing} differing from {REFERENCE_CELL}',
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main() -> int:
     import duckdb
     import numpy as np
@@ -403,6 +496,8 @@ def main() -> int:
         return 1
     with psycopg.connect(os.environ['SDM_POSTGRES_TEST_DSN']) as connection:
         server = connection.info.server_version // 10000
+    if sys.argv[1:] == ['--cell']:
+        return record_cell(reference)
     only = sys.argv[1:]
     chosen = [
         v

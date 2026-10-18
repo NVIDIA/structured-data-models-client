@@ -32,7 +32,12 @@ Postgres routes.
   the statement counts alone differ, every answer the reference's (as
   P2C-2's fewer Postgres statements, KO2-58), and excuses no answer
   difference. Without such a ref a difference fails, and a proposed entry
-  excuses nothing.
+  excuses nothing. The host's own fields (``HOST_FIELDS``: the public
+  result as ``to_pandas()`` presents it, and the warning classes) are held
+  to the reference's in this run's cell (``cells``, recorded per cell
+  from python-ref, ``--cell``), since pandas 2 presents a text key as
+  ``object`` and pandas 3 as ``str``; every other field, the statements
+  and the joined rows are the reference cell's in every cell.
 - Lesson 19, "a wrong row is P1": every pair vector (``pair.*``,
   ``key.pair*``, ``fifteen.*``) the core answers sends requests that join
   the same rows to the same entities as the same-type control
@@ -94,6 +99,8 @@ P = _module(
     'postgres_keys_record', ROOT / 'contract/tools/postgres_keys_record.py'
 )
 RECORDED: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
+#: This run's cell, whose recorded host fields it is held to.
+CELL = P.this_cell()
 BY_ID = {vector['id']: vector for vector in RECORDED['vectors']}
 #: The inputs a vector carries, each as the recorder wrote it.
 INPUTS = ('columns', 'setup', 'indices', 'indices_as', 'offset', 'unit')
@@ -151,7 +158,7 @@ def problem_of(
     the answer the reference's, its counts too or excused by a counts-only
     ref; or the answer different exactly as an approved transition ref
     declares, which excuses its counts with it."""
-    want = vector['reference']
+    want = P.expected(vector, CELL)
     if got == want:
         if counted == vector['statements']:
             return None
@@ -251,6 +258,41 @@ def test_a_key_pair_joins_as_one_type_does_on_the_core(
 
 
 # --- the vectors ---------------------------------------------------------------
+
+
+def test_each_vector_holds_the_host_fields_of_every_other_cell() -> None:
+    # Recorded per cell from python-ref (--cell), the host fields only, and
+    # the one difference the cells' pandas makes is there: a text key's
+    # column, object on pandas 2 and str on pandas 3.
+    runner = P._module('run_python', P.RUNNER)
+    others = sorted(set(runner.CELLS) - {P.REFERENCE_CELL})
+    assert others == ['dbr17-pandas2', 'floor-pandas2.2']
+    differing = set()
+    for vector in RECORDED['vectors']:
+        cells = vector['cells']
+        assert sorted(cells) == others, vector['id']
+        for cell, fields in cells.items():
+            assert sorted(fields) == sorted(P.HOST_FIELDS), (vector['id'], cell)
+            if any(fields[f] != vector['reference'][f] for f in P.HOST_FIELDS):
+                differing.add((vector['id'], cell))
+    assert differing == {
+        ('pair.text.text', 'dbr17-pandas2'),
+        ('pair.text.text', 'floor-pandas2.2'),
+    }
+    dtypes = {
+        cell: [
+            c['dtype']
+            for c in BY_ID['pair.text.text']['cells'][cell]['result']['columns']
+            if c['name'] == 'id'
+        ]
+        for cell in others
+    }
+    assert dtypes == {
+        'dbr17-pandas2': ['object'],
+        'floor-pandas2.2': ['object'],
+    }
+    reference = BY_ID['pair.text.text']['reference']['result']['columns']
+    assert [c['dtype'] for c in reference if c['name'] == 'id'] == ['str']
 
 
 def test_the_vectors_are_the_reference_s_on_postgres() -> None:
