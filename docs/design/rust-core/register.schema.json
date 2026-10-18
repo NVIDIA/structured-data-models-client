@@ -88,7 +88,8 @@
             "properties": {
               "case": {"description": "The line's key, as a case outcome's: the bare case ID on DuckDB, <case>@sqlite or <case>@postgres on another database (T2.1d); the part before @ one of the entry's cases.", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres))?$"},
               "runners": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["python-core", "rust-host"]}},
-              "fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(public\\.schema|public\\.result|public\\.payloads|core\\.predicted\\.body)(/[^/]+)+$"}}
+              "fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(public\\.schema|public\\.result|public\\.payloads|core\\.predicted\\.body)(/[^/]+)+$"}},
+              "null_on_one_side": {"description": "Also leave out, at those fields, a value present on one side and null or absent on the other (T2.1e): an owner-approved difference such as KO2-61's, where the core names no time column the reference names. Read only as the item is, from an owner-approved entry.", "type": "boolean"}
             }
           }
         },

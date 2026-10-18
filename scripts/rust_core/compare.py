@@ -104,7 +104,9 @@ standing for any one key or index. For that case and runner, the
 such path, on both sides, and compare everything else; a field present on
 one side only, a list of another length, or any other field still differs.
 A value is left out only where both sides hold one value there (a
-string, a number or a boolean), never a dict, a list or a null. The
+string, a number or a boolean), never a dict, a list or a null; an item
+marked ``null_on_one_side`` (T2.1e) also leaves out, at its fields, one
+value on one side and a null or nothing on the other. The
 register is the candidate's (``--register``; ``gate.sh`` gives it), but an
 entry counts only when its ``decision_ref`` names a row of this harness's
 (the checkpoint's) decisions approved by the owner, as a policy relaxation
@@ -228,6 +230,10 @@ _MORE_EXACT_FIELD = re.compile(
 )
 #: What stands for a value ``more_exact`` leaves out, on both sides.
 _MORE_EXACT = 'left out: more exact than the reference'
+#: How :func:`more_exact` marks a field of an item that also excuses a
+#: value present on one side and null or absent on the other
+#: (``null_on_one_side``, T2.1e); no path starts with it.
+_NULL_SIDE = 'null-on-one-side:'
 
 
 def _runner() -> ModuleType:
@@ -1135,6 +1141,11 @@ def _left_out(
     replaced by one marker where both hold one value there (:func:`_one`);
     a dict, a list or a null there, on either side, is kept, so it still
     differs, and so do keys and lengths."""
+    if _null_side(path, excused) and (mine is None) != (theirs is None):
+        # A value on one side, null or absent on the other, where an
+        # owner-approved item says so (null_on_one_side, T2.1e).
+        if _one(mine) or _one(theirs):
+            return _MORE_EXACT, _MORE_EXACT
     if any(_matches(path, field) for field in excused):
         if _one(mine) and _one(theirs):
             return _MORE_EXACT, _MORE_EXACT
@@ -1144,14 +1155,21 @@ def _left_out(
             key: _left_out(mine[key], theirs[key], f'{path}/{key}', excused)
             for key in mine.keys() & theirs.keys()
         }
+        for key in mine.keys() ^ theirs.keys():
+            if _null_side(f'{path}/{key}', excused):
+                pairs[key] = _left_out(
+                    mine.get(key), theirs.get(key), f'{path}/{key}', excused
+                )
         return (
             {
                 key: pairs[key][0] if key in pairs else v
-                for key, v in mine.items()
+                for key, v in {**theirs, **mine}.items()
+                if key in mine or key in pairs
             },
             {
                 key: pairs[key][1] if key in pairs else v
-                for key, v in theirs.items()
+                for key, v in {**mine, **theirs}.items()
+                if key in theirs or key in pairs
             },
         )
     if (
@@ -1165,6 +1183,16 @@ def _left_out(
         ]
         return [a for a, _ in pairs_of], [b for _, b in pairs_of]
     return mine, theirs
+
+
+def _null_side(path: str, excused: tuple[str, ...]) -> bool:
+    r"""Whether an item excusing a value null or absent on one side names
+    ``path`` (:data:`_NULL_SIDE`)."""
+    return any(
+        field.startswith(_NULL_SIDE)
+        and _matches(path, field[len(_NULL_SIDE) :])
+        for field in excused
+    )
 
 
 def _one(value: Any) -> bool:
@@ -1529,6 +1557,8 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
                 for field in fields
                 if isinstance(field, str) and _MORE_EXACT_FIELD.fullmatch(field)
             )
+            if item.get('null_on_one_side') is True:
+                kept += tuple(_NULL_SIDE + field for field in kept)
             for who in runners:
                 if who in MORE_EXACT_RUNNERS:
                     found[case, who] = found.get((case, who), ()) + kept
