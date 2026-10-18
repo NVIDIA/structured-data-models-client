@@ -856,6 +856,7 @@ def _core_agree(
     shared = shared_operations(python, rust, stop)
     if shared is not None:
         _core_agree_shared(report, where, python['core'], rust['core'], shared)
+        _same_contract(report, where, python, rust)
         return
     if python['identity']['operations'] != rust['identity']['operations']:
         _differ(
@@ -894,16 +895,23 @@ def _core_agree(
                 theirs[field],
                 rule='core',
             )
-    for field in ('contract',):
-        if python['identity'][field] != rust['identity'][field]:
-            _differ(
-                report,
-                where,
-                f'identity.{field}',
-                python['identity'][field],
-                rust['identity'][field],
-                rule='core',
-            )
+    _same_contract(report, where, python, rust)
+
+
+def _same_contract(
+    report: Report, where: str, python: dict[str, Any], rust: dict[str, Any]
+) -> None:
+    r"""The two core runners' contract versions, whichever operations each
+    ran."""
+    if python['identity']['contract'] != rust['identity']['contract']:
+        _differ(
+            report,
+            where,
+            'identity.contract',
+            python['identity']['contract'],
+            rust['identity']['contract'],
+            rule='core',
+        )
 
 
 def _core_agree_shared(

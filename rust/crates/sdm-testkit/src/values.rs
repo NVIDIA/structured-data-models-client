@@ -27,7 +27,7 @@
 //! JSON (Arrow's `arrow.json`) as the value it holds, as a driver reads
 //! JSON ([`json_cell`]); a month-day-nano interval of a column tagged as
 //! built from `timedelta`s ([`INTERVAL_TAG`]) as that `timedelta`,
-//! `["dur", nanoseconds]`, a month 30 days ([`folded_interval_cell`]). A
+//! `["dur", nanoseconds]` ([`folded_interval_cell`]). A
 //! value of any other
 //! type (a `date64`, a year-month or day-time interval) is `["?", its
 //! type's name]` and is listed as unencodable, inside a map or a chosen
@@ -76,7 +76,7 @@ pub fn values(fields: &[&Field], batches: &[RecordBatch]) -> Value {
                     if json.get(at).copied().unwrap_or(false) {
                         json_cell(column, row, &mut odd)
                     } else if folded.get(at).copied().unwrap_or(false) {
-                        folded_interval_cell(column, row)
+                        folded_interval_cell(column, row, &mut odd)
                     } else {
                         cell(column, row, &mut odd)
                     }
@@ -109,15 +109,20 @@ fn is_folded_interval(field: &Field) -> bool {
 }
 
 /// One interval of a column built from `timedelta`s, `row` of `array`, in
-/// the canonical cell of the `timedelta` itself, `["dur", nanoseconds]`,
-/// a month counted as 30 days as psycopg counts it; null where it is null.
-fn folded_interval_cell(array: &ArrayRef, row: usize) -> Value {
+/// the canonical cell of the `timedelta` itself, `["dur", nanoseconds]`;
+/// null where it is null. A `timedelta` holds no months (psycopg folds a
+/// month into 30 days and a year into 365, which months alone cannot
+/// tell apart), so an interval holding some is unencodable.
+fn folded_interval_cell(array: &ArrayRef, row: usize, odd: &mut BTreeSet<String>) -> Value {
     if array.is_null(row) {
         return Value::Null;
     }
     let value = array.as_primitive::<IntervalMonthDayNanoType>().value(row);
-    let days = i128::from(value.months) * 30 + i128::from(value.days);
-    let nanos = days * 86_400_000_000_000 + i128::from(value.nanoseconds);
+    if value.months != 0 {
+        odd.insert("arrow:interval months".to_owned());
+        return json!(["?", "arrow:interval months"]);
+    }
+    let nanos = i128::from(value.days) * 86_400_000_000_000 + i128::from(value.nanoseconds);
     tagged("dur", nanos.to_string())
 }
 
@@ -863,9 +868,12 @@ mod tests {
         let digest = crate::case::sha256(format!("[{DELTA_ROW}]").as_bytes());
         let one = IntervalMonthDayNano::new(0, 31, 5_000);
         assert_eq!(intervals(true, &[one])["ordered"], digest);
-        // A month counts as 30 days, as psycopg counts it.
+        // A timedelta holds no months: one that does is unencodable.
         let month = IntervalMonthDayNano::new(1, 1, 5_000);
-        assert_eq!(intervals(true, &[month])["ordered"], digest);
+        assert_eq!(
+            intervals(true, &[month])["unencodable"],
+            json!(["arrow:interval months"])
+        );
         // Untagged, an interval keeps its own cell; another one differs.
         assert_ne!(intervals(false, &[one])["ordered"], digest);
         let other = IntervalMonthDayNano::new(0, 31, 6_000);

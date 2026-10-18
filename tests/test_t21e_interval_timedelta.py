@@ -5,8 +5,8 @@
 r"""T2.1e: a month-day-nano interval column tagged as built from a driver's
 ``timedelta``s (``sdm:interval = timedelta``, the Postgres provider's
 reading of psycopg's) has the ``timedelta``'s own canonical cell, read on
-the Python runner and in ``sdm-testkit``'s ``values`` alike, a month 30
-days as psycopg counts it; an untagged interval keeps its own cell (so
+the Python runner and in ``sdm-testkit``'s ``values`` alike, one holding
+months unencodable; an untagged interval keeps its own cell (so
 DuckDB's committed results are read as before), and another interval
 still differs.
 """
@@ -62,9 +62,13 @@ def test_a_tagged_interval_reads_as_the_timedelta_it_was_built_from() -> None:
     as_rows = rp.result_values(['f'], None, [[delta]], duckdb_types=False)
     one = pa.MonthDayNano([0, 31, 5_000])
     assert _arrow([one], tagged=True)['ordered'] == as_rows['ordered']
-    # A month counts as 30 days, as psycopg folds it.
+    # A timedelta holds no months (psycopg folds a month into 30 days and a
+    # year into 365, which months cannot tell apart): one that does is
+    # unencodable, never equal.
     month = pa.MonthDayNano([1, 1, 5_000])
-    assert _arrow([month], tagged=True)['ordered'] == as_rows['ordered']
+    assert _arrow([month], tagged=True)['unencodable'] == [
+        'arrow:interval months'
+    ]
     # Untagged, the interval keeps its own cell; another interval differs.
     assert _arrow([one], tagged=False)['ordered'] != as_rows['ordered']
     other = pa.MonthDayNano([0, 31, 6_000])

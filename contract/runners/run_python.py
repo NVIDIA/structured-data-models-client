@@ -1760,21 +1760,21 @@ def _is_folded_interval(field: Any) -> bool:
 
 def _folded_intervals(array: Any, odd: list[str]) -> list[Any]:
     r"""The cells of an interval column built from ``timedelta``s, each the
-    ``timedelta``'s own, ``["dur", nanoseconds]``, a month counted as 30
-    days as psycopg counts it."""
-    del odd
-    return [
-        None
-        if value is None
-        else [
-            'dur',
-            str(
-                ((value.months * 30 + value.days) * 86_400 * 10**9)
-                + value.nanoseconds
-            ),
-        ]
-        for value in array.to_pylist()
-    ]
+    ``timedelta``'s own, ``["dur", nanoseconds]``. A ``timedelta`` holds no
+    months (psycopg folds a month into 30 days and a year into 365, which
+    months alone cannot tell apart), so an interval holding some is
+    unencodable."""
+    cells: list[Any] = []
+    for value in array.to_pylist():
+        if value is None:
+            cells.append(None)
+        elif value.months:
+            cells.append(_unencodable('arrow:interval months', odd))
+        else:
+            cells.append(
+                ['dur', str(value.days * 86_400 * 10**9 + value.nanoseconds)]
+            )
+    return cells
 
 
 def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
