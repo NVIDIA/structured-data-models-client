@@ -19,6 +19,19 @@ use sdm_contract::{CoreError, Scalar, Unit};
 
 use crate::not_yet;
 
+/// How the reference's frame holds a float of a source's preview: Arrow-
+/// backed pandas (DuckDB's and SQLite's), where a NaN is a value, every NaN
+/// the one value, and `-0.0` and `0.0` are two; or NumPy-backed pandas
+/// (Postgres's rows), where a NaN is missing, as a null is (`isna`, and
+/// every count drops it), and `-0.0` equals `0.0` (`nunique` counts them
+/// once).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Floats {
+    #[default]
+    NanValue,
+    NanMissing,
+}
+
 /// One value, ordered and compared exactly.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Value {
@@ -26,8 +39,7 @@ pub(crate) enum Value {
     /// Any integer, a decimal's unscaled value (one column has one scale),
     /// or a temporal count (one column has one unit).
     Int(i128),
-    /// A float's bits, `-0.0` as `0.0`'s: pandas counts the two zeros as
-    /// one value. A NaN is never one: it is null, as pandas reads it.
+    /// A float's bits, every NaN one value's; as [`Floats`] reads them.
     Float(u64),
     Text(String),
 }
@@ -36,6 +48,7 @@ pub(crate) enum Value {
 pub(crate) fn column(
     batches: &[RecordBatch],
     index: usize,
+    floats: Floats,
 ) -> Result<Vec<Option<Value>>, CoreError> {
     let mut out = Vec::new();
     for batch in batches {
@@ -81,13 +94,13 @@ pub(crate) fn column(
             DataType::Float32 => {
                 let a = array.as_primitive::<Float32Type>();
                 for i in 0..n {
-                    out.push(float(array.is_null(i), f64::from(a.value(i))));
+                    out.push(float(array.is_null(i), f64::from(a.value(i)), floats));
                 }
             }
             DataType::Float64 => {
                 let a = array.as_primitive::<Float64Type>();
                 for i in 0..n {
-                    out.push(float(array.is_null(i), a.value(i)));
+                    out.push(float(array.is_null(i), a.value(i), floats));
                 }
             }
             DataType::Utf8 => {
@@ -102,14 +115,19 @@ pub(crate) fn column(
     Ok(out)
 }
 
-/// A float as the reference's preview holds it in pandas: a NaN is
-/// missing, as a null is (`isna`, and every count drops it), and `-0.0`
-/// equals `0.0`, so the two count as one distinct value (`nunique`).
-fn float(null: bool, value: f64) -> Option<Value> {
-    if null || value.is_nan() {
+/// A float as the reference's frame holds it (`floats`): a NaN missing,
+/// and `-0.0` as `0.0`, in NumPy-backed pandas; each NaN the one value, the
+/// zeros apart, in Arrow-backed pandas.
+fn float(null: bool, value: f64, floats: Floats) -> Option<Value> {
+    if null {
         return None;
     }
-    let value = if value == 0.0 { 0.0 } else { value };
+    let value = match floats {
+        Floats::NanMissing if value.is_nan() => return None,
+        Floats::NanMissing if value == 0.0 => 0.0,
+        Floats::NanValue if value.is_nan() => f64::NAN,
+        _ => value,
+    };
     Some(Value::Float(value.to_bits()))
 }
 
@@ -258,4 +276,41 @@ pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
         },
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, Float64Array, RecordBatch};
+    use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
+
+    /// A NaN and the two zeros as each reference frame counts them: in
+    /// Arrow-backed pandas (DuckDB's and SQLite's) every NaN is one value
+    /// held and the zeros are two; in NumPy-backed pandas (Postgres's) a
+    /// NaN is missing and the zeros are one (T2.12 fix 3).
+    #[test]
+    fn floats_are_counted_as_each_reference_frame_counts_them() {
+        let values: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(1.0),
+            Some(f64::NAN),
+            Some(-f64::NAN),
+            None,
+            Some(0.0),
+            Some(-0.0),
+        ]));
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("x", DataType::Float64, true)])),
+            vec![values],
+        )
+        .unwrap();
+        let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
+        assert_eq!(arrow.iter().flatten().count(), 5);
+        assert_eq!(distinct(&arrow), 4);
+        let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
+        assert_eq!(numpy.iter().flatten().count(), 3);
+        assert_eq!(distinct(&numpy), 2);
+    }
 }

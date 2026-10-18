@@ -251,6 +251,15 @@ impl Asker {
             .is_some_and(DataAccess::samples_by_key_dtype)
     }
 
+    /// Whether the reference reads the run's provider's floats with a NaN
+    /// missing and `-0.0` as `0.0` (`DataLayer::reads_nan_as_missing`);
+    /// `false` for an operation that names no provider.
+    pub fn reads_nan_as_missing(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(DataAccess::reads_nan_as_missing)
+    }
+
     /// The catalog answer `data` holds, the admitted answer to `request`,
     /// a `describe`: read by the run's data layer into the contract's
     /// dialect-neutral shape (decision E54), so the operation reads no

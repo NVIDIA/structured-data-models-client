@@ -25,6 +25,7 @@ use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, 
 
 use crate::names;
 use crate::not_yet;
+pub use crate::values::Floats;
 use crate::values::{self, Value};
 use sdm_contract::catalog::{CatalogColumn, CatalogKey, KeyKind};
 
@@ -270,7 +271,8 @@ fn invalid_request(refusal: CoreError) -> CoreError {
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
 /// admitted), which holds the catalog's columns in order, reading text as
-/// times by `times`: [`preview`], then [`finish`] with no whole-table read,
+/// times by `times` and floats as Arrow-backed pandas holds them:
+/// [`preview`], then [`finish`] with no whole-table read,
 /// for a preview that holds every row. A preview of [`PREVIEW_ROWS`] rows
 /// that leaves the choice of the time column to the whole table
 /// ([`Previewed::whole_table_columns`]) is an internal error here: the
@@ -285,7 +287,16 @@ pub fn table(
     times: &dyn TextTimes,
 ) -> Result<InferredTable, CoreError> {
     finish(
-        preview(name, source, catalog, constraints, schema, batches, times)?,
+        preview(
+            name,
+            source,
+            catalog,
+            constraints,
+            schema,
+            batches,
+            times,
+            Floats::NanValue,
+        )?,
         None,
     )
 }
@@ -399,9 +410,14 @@ fn choose(
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
 /// admitted), which holds the catalog's columns in order, reading text as
-/// times by `times`, all but its time column ([`finish`] chooses it).
+/// times by `times` and floats as the reference's frame of this source
+/// holds them (`floats`), all but its time column ([`finish`] chooses it).
 /// Inference reads the table by the name the schema gives it, as the
 /// reference's engine does (its key's guess is by that name).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its catalog, its preview and the source's two readings"
+)]
 pub fn preview(
     name: &str,
     source: &Relation,
@@ -410,6 +426,7 @@ pub fn preview(
     schema: &Schema,
     batches: &[RecordBatch],
     times: &dyn TextTimes,
+    floats: Floats,
 ) -> Result<Previewed, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
@@ -472,7 +489,7 @@ pub fn preview(
             });
             continue;
         }
-        let sample = values::column(batches, index)?;
+        let sample = values::column(batches, index, floats)?;
         if dtype == Dtype::Time {
             // The engine reads a time of day's values as times, which none
             // is, and says how many it dropped.
@@ -1156,7 +1173,7 @@ pub fn whole_table(
     }
     let one = std::slice::from_ref(batch);
     let count = |index: usize| -> Result<usize, CoreError> {
-        match values::column(one, index)?.first() {
+        match values::column(one, index, Floats::NanValue)?.first() {
             Some(Some(Value::Int(n))) => usize::try_from(*n)
                 .map_err(|_| internal("a count of the whole table's reading is negative")),
             _ => Err(internal("a count of the whole table's reading is not one")),
@@ -1166,8 +1183,8 @@ pub fn whole_table(
     let mut read = Vec::with_capacity(columns.len());
     for (at, name) in columns.iter().enumerate() {
         let (low, high, held) = (1 + 3 * at, 2 + 3 * at, 3 + 3 * at);
-        let lows = values::column(one, low)?;
-        let highs = values::column(one, high)?;
+        let lows = values::column(one, low, Floats::NanValue)?;
+        let highs = values::column(one, high, Floats::NanValue)?;
         let data_type = batch.column(low).data_type();
         let (scalar, start) = match (data_type, lows.first()) {
             (_, Some(None) | None) => (None, None),

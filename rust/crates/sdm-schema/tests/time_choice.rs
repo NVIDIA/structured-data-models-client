@@ -557,6 +557,7 @@ fn previewed(stamps: &[&str], rows: i64, constant: bool) -> infer::Previewed {
         &schema,
         &[batch],
         &Days,
+        infer::Floats::NanValue,
     )
     .unwrap()
 }
@@ -1079,6 +1080,7 @@ fn a_whole_table_read_that_failed_keeps_what_the_preview_doubts() {
         &schema,
         &[batch],
         &Days,
+        infer::Floats::NanValue,
     )
     .unwrap();
     let table = infer::finish_unchecked(both).unwrap();

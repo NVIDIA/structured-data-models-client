@@ -920,6 +920,17 @@ pub trait DataLayer: Send + Sync {
         let _ = provider;
         false
     }
+
+    /// Whether the reference reads the run's provider's rows into a frame
+    /// of NumPy-backed floats, where a NaN is missing and `-0.0` is `0.0`
+    /// (Postgres's rows, read as Python objects); otherwise it reads them
+    /// as Arrow-backed pandas does (DuckDB's and SQLite's), where a NaN is
+    /// a value and the two zeros are two values. `false`, the default and a
+    /// host provider's (T2.12).
+    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
 }
 
 /// The columns of the answers whose shape the contract fixes (decision

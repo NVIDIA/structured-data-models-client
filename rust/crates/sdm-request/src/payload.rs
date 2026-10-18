@@ -763,7 +763,13 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         columns: vec![int_column(INSTANCE_ID, 0..examples)],
         rows: examples,
     };
-    let reference_dtype = key_dtype(key_array)?;
+    // A float32 key's reference is a float64: the reference builds the
+    // column from the keys as Python floats, which pandas types float64
+    // (T2.12; each value is written widened either way).
+    let reference_dtype = match key_dtype(key_array)? {
+        Dtype::Float32 => Dtype::Float64,
+        dtype => dtype,
+    };
     let reference_cells = first
         .iter()
         .map(|row| match row {
@@ -852,7 +858,8 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
     // Each foreign key once, from the first of its links that gives a row
     // a key; a row given none is null, and an integer key column holding a
-    // null is written as float64, as pandas types such a column.
+    // null, or a float32 key's column, is written as float64, as pandas
+    // types such a column.
     let mut written: Vec<(&str, &str, &str)> = Vec::new();
     for link in &sampled.links {
         let edge = (link.src.as_str(), link.fkey.as_str(), link.dst.as_str());
@@ -895,9 +902,16 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 None => Ok(Value::Null),
             })
             .collect::<Result<_, _>>()?;
+        // A float32 key's foreign key is a float64, as pandas types the
+        // column the reference fills with the keys as Python floats (T2.12;
+        // each value is written widened either way).
         let column = FrameColumn {
             name: link.fkey.clone(),
-            dtype: if as_float { Dtype::Float64 } else { key_dtype },
+            dtype: if as_float || key_dtype == Dtype::Float32 {
+                Dtype::Float64
+            } else {
+                key_dtype
+            },
             cells,
         };
         let frame = &mut frames[src].1;

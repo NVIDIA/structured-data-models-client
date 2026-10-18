@@ -210,6 +210,11 @@ pub(crate) async fn run(
             &preview.schema,
             &preview.batches,
             &reader,
+            if asker.reads_nan_as_missing() {
+                infer::Floats::NanMissing
+            } else {
+                infer::Floats::NanValue
+            },
         )?;
         // A preview that may have left rows unread: the time column's
         // choice reads its timestamps over every row, as the reference's

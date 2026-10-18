@@ -1711,6 +1711,33 @@ fn options_taken(inputs: &Inputs, unseeded: bool) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// The rows of `array` holding a NaN: none but in a float column.
+fn nan_rows(array: &ArrayRef) -> BTreeSet<usize> {
+    use arrow_array::types::{Float32Type, Float64Type};
+    match array.data_type() {
+        DataType::Float32 => array
+            .as_primitive::<Float32Type>()
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.is_some_and(f32::is_nan))
+            .map(|(row, _)| row)
+            .collect(),
+        DataType::Float64 => array
+            .as_primitive::<Float64Type>()
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| v.is_some_and(f64::is_nan))
+            .map(|(row, _)| row)
+            .collect(),
+        _ => BTreeSet::new(),
+    }
+}
+
+/// Whether `array` is a float column holding a NaN.
+fn holds_nan(array: &ArrayRef) -> bool {
+    !nan_rows(array).is_empty()
+}
+
 /// The prefix of the column the reference's engine folds a key of several
 /// columns into (`composite_key.DERIVED_PREFIX`), and the longest name it
 /// gives one (`MAX_DERIVED_NAME`).
@@ -2582,6 +2609,19 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     if sampled.num_rows() == 0 {
         return Err(invalid("the entity table holds no row to sample", "query"));
     }
+    // A NaN key a source hands over, which the reference reads as missing
+    // where it reads floats into NumPy-backed pandas (Postgres's rows), is
+    // a missing key its sampler cannot coerce to seed the next read
+    // (`_coerce_id`'s `int` or `float` of `NA`), which it refuses as the
+    // caller's error before that read (T2.12).
+    if asker.reads_nan_as_missing() && holds_nan(named(&sampled, &key)?) {
+        return Err(invalid(
+            "an entity sampled has no value for its table's primary key",
+            "query",
+        )
+        .with_field("table", Detail::text(&entity.name))
+        .with_field("column", Detail::text(&key)));
+    }
     let sampled_keys = keys::read(named(&sampled, &key)?)?;
     let mut seen = BTreeSet::new();
     let kept: Vec<usize> = (0..sampled_keys.len())
@@ -2645,12 +2685,27 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     .await?;
     // A classification keeps a decimal column's distinct values apart as
     // classes; any other task reads them as numbers (T2.0c, round 1).
-    let labelled = if matches!(asked.task, Task::Multiclass) {
+    let mut labelled = if matches!(asked.task, Task::Multiclass) {
         labels::label_classes(&target)?
     } else {
         labels::label(&target)?
     };
     null_compared(&asked.target, &labelled.mask)?;
+    // An example of an entity whose key is NaN, which a source reading
+    // floats as Arrow-backed pandas hands over as a value, is left out of
+    // the context once labelled, as the reference leaves it out (T2.12; a
+    // NaN key read as missing is refused above).
+    let nan_key = nan_rows(&entity_key);
+    if !nan_key.is_empty() {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| !nan_key.contains(&examples.index[row]))
+            .collect();
+        for row in 0..labelled.mask.len() {
+            labelled.mask[row] &= !nan_key.contains(&examples.index[row]);
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
     // The examples with a label, in order, the first a context holds.
     let labelled_rows: Vec<usize> = (0..labelled.mask.len())
         .filter(|&row| labelled.mask[row])

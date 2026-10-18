@@ -940,6 +940,25 @@
     },
     {
       "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1",
+      "why": "a run-end column whose values carry arrow.bool8 on storage other than int8 (T2.12); DuckDB never hands over a run-end column, so not reached: a boolean feature instead",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE OR REPLACE TABLE users AS SELECT *, user_id % 2 = 0 AS f FROM users"
+        ],
+        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "from_source"
+    },
+    {
+      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#2",
       "why": "a struct holding an interval",
       "input": {
         "base": "shop",

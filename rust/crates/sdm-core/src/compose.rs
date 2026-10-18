@@ -90,6 +90,13 @@ impl DataAccess {
         self.layer.samples_by_key_dtype(&self.provider)
     }
 
+    /// Whether the reference reads the run's provider's floats with a NaN
+    /// missing and `-0.0` as `0.0`, as the data layer says for it
+    /// (`DataLayer::reads_nan_as_missing`).
+    pub fn reads_nan_as_missing(&self) -> bool {
+        self.layer.reads_nan_as_missing(&self.provider)
+    }
+
     /// How the run's provider answers `request`. A request whose fields
     /// contradict each other is refused with `INVALID_REQUEST`, an optional
     /// request the provider did not declare with `UNSUPPORTED_REQUEST`

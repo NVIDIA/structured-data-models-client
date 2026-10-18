@@ -157,6 +157,15 @@ impl DataLayer for Data {
         }
     }
 
+    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Sql { dialect } => {
+                matches!(rendered(dialect), Ok(Rendered::Postgres))
+            }
+        }
+    }
+
     fn read(
         &self,
         request: &DataRequest,

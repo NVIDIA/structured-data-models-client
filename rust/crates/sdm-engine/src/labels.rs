@@ -449,6 +449,24 @@ impl Labels {
         self.len() == 0
     }
 
+    /// The labels whose place `keep` marks, in order (`keep` one flag a
+    /// label).
+    pub fn kept(self, keep: &[bool]) -> Labels {
+        fn only<T>(values: Vec<T>, keep: &[bool]) -> Vec<T> {
+            values
+                .into_iter()
+                .zip(keep)
+                .filter_map(|(value, kept)| kept.then_some(value))
+                .collect()
+        }
+        match self {
+            Labels::Float(v) => Labels::Float(only(v, keep)),
+            Labels::Int(v) => Labels::Int(only(v, keep)),
+            Labels::Bool(v) => Labels::Bool(only(v, keep)),
+            Labels::Text(v) => Labels::Text(only(v, keep)),
+        }
+    }
+
     /// The first `n` labels.
     pub fn truncated(mut self, n: usize) -> Labels {
         match &mut self {
