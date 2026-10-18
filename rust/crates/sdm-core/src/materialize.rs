@@ -72,8 +72,9 @@ use sdm_contract::data::{
 };
 use sdm_contract::ops::Stype;
 use sdm_contract::ops::{
-    ColumnRef, ForecastStep, Materialized, MemoBounds, OperationResult, ProfileName, ProfileSpec,
-    QueryColumn, QuerySchema, QueryTable, RequestState, SamplerMemo, Seed, SourceDescription,
+    ColumnRef, ForecastStep, Materialized, MemoBounds, MemoStoredTime, OperationResult,
+    ProfileName, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestState, SamplerMemo,
+    Seed, SourceDescription,
 };
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
@@ -256,7 +257,8 @@ pub fn check_memo(memo: &SamplerMemo) -> Result<(), CoreError> {
                 _ => false,
             }
     });
-    if sound {
+    let mut spelled = BTreeSet::new();
+    if sound && memo.stored_times.iter().all(|s| spelled.insert(&s.table)) {
         return Ok(());
     }
     Err(invalid(
@@ -610,11 +612,12 @@ fn times_ns_from(
 ///
 /// It also keeps, for a provider whose source compares a window's bounds
 /// with its stored text (`DataLayer::compares_stored_times`, SQLite's),
-/// one stored value of each windowed table's time column, read once in the
-/// run before that table's first windowed read, as the reference's SQLite
-/// sampler reads one per table (`_time_spelling`), and names it on each
-/// window bound's seed column ([`SEED_STORED_TIME`]) for the data layer to
-/// spell the bound by.
+/// one stored value of each windowed table's time column, read once before
+/// that table's first windowed read and kept in the sampler's memo across
+/// the materializer's runs (decision E52), as the reference's SQLite
+/// sampler reads one per table and keeps it (`_time_spelling`), and names
+/// it on each window bound's seed column ([`SEED_STORED_TIME`]) for the
+/// data layer to spell the bound by.
 pub(crate) struct Times {
     reader: Reader,
     text: Option<TextTimes>,
@@ -624,12 +627,32 @@ pub(crate) struct Times {
 }
 
 impl Times {
-    pub(crate) fn new(reader: Reader, text: Option<TextTimes>) -> Self {
+    /// The reading of a run's times, holding the stored values `memo` kept
+    /// from the materializer's earlier runs.
+    pub(crate) fn new(reader: Reader, text: Option<TextTimes>, memo: &SamplerMemo) -> Self {
         Times {
             reader,
             text,
-            stored: Mutex::new(BTreeMap::new()),
+            stored: Mutex::new(
+                memo.stored_times
+                    .iter()
+                    .map(|s| (s.table.clone(), s.value.clone()))
+                    .collect(),
+            ),
         }
+    }
+
+    /// Each table's stored value read so far, for the memo the run leaves.
+    fn stored_times(&self) -> Vec<MemoStoredTime> {
+        self.stored
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .map(|(table, value)| MemoStoredTime {
+                table: table.clone(),
+                value: value.clone(),
+            })
+            .collect()
     }
 
     /// `request`, a windowed `neighbors` of `table`, with each window
@@ -1148,6 +1171,16 @@ impl Memo<'_> {
     /// Keeps the memo as what the run leaves.
     fn keep(&self) {
         self.asker.keep(self.memo.clone());
+    }
+}
+
+/// The stored time values `times` read, kept in the memo the run leaves
+/// where they are new, so the materializer's next run reads none again.
+fn keep_stored_times(memo: &mut Memo<'_>, times: &Times) {
+    let stored = times.stored_times();
+    if stored != memo.memo.stored_times {
+        memo.memo.stored_times = stored;
+        memo.keep();
     }
 }
 
@@ -2149,6 +2182,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     let read_times = Times::new(
         crate::describe::text_reader(&facts)?,
         asker.capabilities()?.text_times,
+        &memo.memo,
     );
 
     // The tables whose times bound the anchor: a temporal query's
@@ -2374,6 +2408,8 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
             .into(),
         });
     }
+    // The stored values the labels' reads spelled their bounds by, kept.
+    keep_stored_times(&mut memo, &read_times);
     // The default mode capped the context at as many examples as it takes:
     // said, as the client says it, the caller having chosen no size.
     if num_context_samples.is_none() && gathered >= options::RunMode::Fast.context_examples() {
@@ -2525,6 +2561,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     }
     .run(entity_rows)
     .await?;
+    keep_stored_times(&mut memo, &read_times);
     // The subgraph carries at most as many tables as the endpoint reads,
     // refused as the reference's engine refuses it (`_get_context`).
     if walked.tables.len() > SUBGRAPH_TABLES {

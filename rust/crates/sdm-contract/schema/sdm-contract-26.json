@@ -1872,6 +1872,13 @@
           "items": {
             "$ref": "#/$defs/MemoBounds"
           }
+        },
+        "stored_times": {
+          "description": "One stored value of each windowed table's time column, read once\nwhere the provider compares a window's bounds with its stored text\n(SQLite's `_time_spelling`), at most one entry per table; left out\nwhere none was read.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemoStoredTime"
+          }
         }
       },
       "additionalProperties": false,
@@ -1911,6 +1918,26 @@
       "required": [
         "table",
         "column"
+      ]
+    },
+    "MemoStoredTime": {
+      "description": "One table's stored time value, as read: the text of one non-null value\nof its time column, or none where that value was not text.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "description": "The table, as the schema names it.",
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "table"
       ]
     },
     "StatePayload": {

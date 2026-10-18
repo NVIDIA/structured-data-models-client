@@ -733,6 +733,22 @@ pub struct SamplerMemo {
     pub indexes_checked: bool,
     /// The time bounds read, at most one entry per table.
     pub bounds: Vec<MemoBounds>,
+    /// One stored value of each windowed table's time column, read once
+    /// where the provider compares a window's bounds with its stored text
+    /// (SQLite's `_time_spelling`), at most one entry per table; left out
+    /// where none was read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stored_times: Vec<MemoStoredTime>,
+}
+
+/// One table's stored time value, as read: the text of one non-null value
+/// of its time column, or none where that value was not text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MemoStoredTime {
+    /// The table, as the schema names it.
+    pub table: String,
+    pub value: Option<String>,
 }
 
 /// The smallest and largest time of one table's time column, as read, in
