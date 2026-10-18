@@ -383,6 +383,8 @@ T28_RANKING = (
     'rank.batched',
     'rank.unscored-candidate',
     'rank.all-unscored',
+    'rank.entities-by-candidates.over',
+    'rank.entities-by-candidates.at',
     'forecast.top-k',
     'forecast.most-parts',
 )
