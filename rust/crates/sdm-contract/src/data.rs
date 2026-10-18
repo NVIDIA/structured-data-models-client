@@ -37,6 +37,15 @@ pub const SEED_KEY: &str = "key";
 /// column to one tier and keeps its declared type.
 pub const BIG_INTEGER_MARKER: &str = "sdm:big_integer";
 pub const BIG_INTEGER_MARKED: &str = "true";
+/// The field metadata key (and its value, [`EXACT_NUMBER_MARKED`]) a host
+/// provider sets on a column of numbers it hands over as their exact
+/// decimal text because their declaration fixes no Arrow decimal (a
+/// Postgres `numeric` without a precision): the core reads such a column
+/// as its reference reads one, by its role, a key (the one column of a
+/// declared primary, unique or foreign key) as that text and any other as
+/// a double, and holds every later fetch of it to the type described.
+pub const EXACT_NUMBER_MARKER: &str = "sdm:exact_number";
+pub const EXACT_NUMBER_MARKED: &str = "true";
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
 /// catalog's `type`, kept in the described schema for a marked big-integer
@@ -926,13 +935,14 @@ pub mod catalog_columns {
     pub const NOT_NULL: &str = "not_null";
     pub const PRIMARY_KEY: &str = "primary_key";
     /// `keys`, for one table: one row per key it declares, its kind
-    /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`] or another the reader leaves
-    /// alone) and its columns. `foreign_keys` and `indexes`: the columns of
+    /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`], [`KIND_FOREIGN`] or another the
+    /// reader leaves alone) and its columns. `foreign_keys` and `indexes`: the columns of
     /// each.
     pub const KIND: &str = "kind";
     pub const COLUMNS: &str = "columns";
     pub const KIND_PRIMARY: &str = "primary";
     pub const KIND_UNIQUE: &str = "unique";
+    pub const KIND_FOREIGN: &str = "foreign";
     /// `foreign_keys`, for one table: one row per column pair of each
     /// foreign key it declares, the key's number naming it, the table it
     /// refers to, and the columns on both sides.

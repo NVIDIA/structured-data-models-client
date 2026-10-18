@@ -13,6 +13,7 @@ pub mod compose;
 mod describe;
 pub mod dispatch;
 mod edit;
+pub mod exact_number;
 pub mod materialize;
 pub mod pql;
 mod predict;

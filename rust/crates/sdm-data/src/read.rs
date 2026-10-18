@@ -236,6 +236,7 @@ pub(crate) fn host(
         DescribePart::Keys => keys(batches, c::KIND, c::COLUMNS, |kind| match kind {
             c::KIND_PRIMARY => KeyKind::Primary,
             c::KIND_UNIQUE => KeyKind::Unique,
+            c::KIND_FOREIGN => KeyKind::Foreign,
             _ => KeyKind::Other,
         }),
         DescribePart::ForeignKeys => foreign_keys(

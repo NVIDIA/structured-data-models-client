@@ -2843,7 +2843,9 @@ fn text_unread(unread: Unread) -> CoreError {
 
 /// `batch`, fetched from `table`, with each big-integer column in the tier
 /// its column was described in, or refused by name (register P1B-43,
-/// [`crate::big_integer::conform`]); and whether any column changed.
+/// [`crate::big_integer::conform`]), and each column of numbers handed over
+/// as their text in the type it was described as
+/// ([`crate::exact_number::conform`]); and whether any column changed.
 fn big_integers(table: &Table, batch: RecordBatch) -> Result<(RecordBatch, bool), CoreError> {
     let schema = batch.schema();
     let mut fields = Vec::with_capacity(schema.fields().len());
@@ -2852,7 +2854,11 @@ fn big_integers(table: &Table, batch: RecordBatch) -> Result<(RecordBatch, bool)
     for (field, array) in schema.fields().iter().zip(batch.columns()) {
         let conformed = match table.column(field.name()) {
             Some(described) => {
-                crate::big_integer::conform(field, array, &described.received.to_arrow())?
+                let described = described.received.to_arrow();
+                match crate::big_integer::conform(field, array, &described)? {
+                    Some(conformed) => Some(conformed),
+                    None => crate::exact_number::conform(field, array, &described)?,
+                }
             }
             None => None,
         };

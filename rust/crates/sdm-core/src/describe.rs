@@ -43,10 +43,10 @@ use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
 use sdm_schema::keys;
 
-use crate::big_integer;
 use crate::run::{
     ArrowData, Ask, Asker, Attachment, FetchResult, Reply, internal, schema_mismatch,
 };
+use crate::{big_integer, exact_number};
 
 /// The reader of text times for a run whose clock is `facts.now`: its
 /// year, in UTC, places a two-digit year, as the date literals' reader
@@ -198,6 +198,9 @@ pub(crate) async fn run(
         }
         // A big integer's tier, the whole column's (P1B-43).
         let preview = whole_column_tiers(&asker, &table.source, preview).await?;
+        // A column of numbers handed over as their text, by its role: a
+        // key's text, any other's doubles (crate::exact_number).
+        let preview = exact_number::settle(preview, &constraints)?;
         big_types.push(big_integer_types(&preview, &declared));
         let previewed = infer::preview(
             &table.name,

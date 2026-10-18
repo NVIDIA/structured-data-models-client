@@ -394,9 +394,10 @@ fn describe(
             table = one()?,
         ),
         DescribePart::Keys => format!(
-            "SELECT CASE k.contype WHEN 'p' THEN {primary} ELSE {unique} END AS {kind},\n       {columns} AS {names}\nFROM pg_catalog.pg_constraint k\nWHERE k.conrelid = {table}\n  AND k.contype IN ('p', 'u')\nORDER BY k.conname",
+            "SELECT CASE k.contype WHEN 'p' THEN {primary} WHEN 'u' THEN {unique} ELSE {foreign} END AS {kind},\n       {columns} AS {names}\nFROM pg_catalog.pg_constraint k\nWHERE k.conrelid = {table}\n  AND k.contype IN ('p', 'u', 'f')\nORDER BY k.conname",
             primary = text(c::KIND_PRIMARY),
             unique = text(c::KIND_UNIQUE),
+            foreign = text(c::KIND_FOREIGN),
             kind = identifier(c::KIND),
             columns = attribute_names("k.conrelid", "k.conkey"),
             names = identifier(c::COLUMNS),
