@@ -1,13 +1,6 @@
 {
  "about": "T2.8c's acceptance tests that failed when the test author wrote them, before the implementation, by case key (contract/tests/test_t28c_multicall.py as py:<key>, its line against python-ref's, py-carried:<key>, its details, answered rows and remedy against contract/t28c-multicall-vectors.json, and py-raised:<key>, its answers kept when a call raises an error that is not the client's own, against that file's raised part; sdm-testkit's tests/t28c_multicall.rs as rust:<key>). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [
-  "py-raised:multicall.rows-per-call-3",
-  "py-raised:multicall.forecast.one-call",
-  "py-raised:multicall.rows-per-call-3@sqlite",
-  "py-raised:multicall.forecast.one-call@sqlite",
-  "py-raised:multicall.rows-per-call-3@postgres",
-  "py-raised:multicall.forecast.one-call@postgres"
- ],
+ "pending": [],
  "authored": [
   "py:multicall.rows-per-call-3",
   "py:multicall.fail-call-2",
