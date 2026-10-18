@@ -35,7 +35,7 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.11 | Sampling options | F | not started | – | |
 | T2.17 | Exact decimals | D | not started | – | KO2-35; first wave |
 | T2.18 | Any column name | E | not started | – | KO2-36; first wave |
-| T2.19 | Two-path sampling | F | not started | – | `main`'s eb6c68eb; first wave |
+| T2.19 | Two-path sampling | F | in progress | – | `main`'s eb6c68eb; first wave; [tracker-T2.19.md](tracker-T2.19.md) |
 | T2.14a | Bridge freeze widened | A | not started | – | |
 | T2.14b | Host clean-up | A | not started | – | |
 | T2.14c | Bridge freeze lowered | A | not started | – | |

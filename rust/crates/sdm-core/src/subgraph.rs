@@ -11,8 +11,12 @@
 //! no row of the table it refers to holds yet for that example looked up
 //! (`_by_pkey`, one `lookup`), then the tables referring to it, their
 //! latest rows up to each example's anchor (`_by_fkey`, one `neighbors` for
-//! each, asked together in one step). A row is told apart by its key and
-//! its example as values (decision E41(d), H22), where the reference's
+//! each, asked together in one step). A table visited reads only the rows
+//! the hop before reached: a table reached by two paths may gain rows while
+//! the hop runs, which the next hop reads (`main`'s eb6c68eb). A column
+//! linking two tables is one column read, and each of its links is looked
+//! up. A row is told apart by its key and its example as values (decision
+//! E41(d), H22), where the reference's
 //! `Mapper` numbers them; each is kept once, numbered in the order first
 //! reached. What each answer adds, and the links it makes, are the
 //! reference's, in its order: so are the order of the tables the payload
@@ -232,9 +236,17 @@ impl Walk<'_> {
             entity.counts[0] = examples;
         }
         for (hop, &neighbors) in self.neighbors.iter().enumerate() {
-            let visiting: Vec<String> = visits.iter().map(|v| v.name.clone()).collect();
-            for name in visiting {
-                self.visit(&mut visits, &mut edges, &name, hop, neighbors)
+            // The frames each table held when this hop began. A table
+            // reached by two paths gains frames for the next hop while this
+            // one runs, through whichever of its neighbors is visited first,
+            // and those wait for the next hop, which counts them (`main`'s
+            // eb6c68eb, `hop_end_dict`).
+            let visiting: Vec<(String, usize)> = visits
+                .iter()
+                .map(|v| (v.name.clone(), v.frames.len()))
+                .collect();
+            for (name, end) in visiting {
+                self.visit(&mut visits, &mut edges, &name, end, hop, neighbors)
                     .await?;
             }
         }
@@ -246,6 +258,7 @@ impl Walk<'_> {
         visits: &mut Vec<Visit>,
         edges: &mut Vec<Edge>,
         name: &str,
+        end: usize,
         hop: usize,
         neighbors: u64,
     ) -> Result<(), CoreError> {
@@ -255,15 +268,17 @@ impl Walk<'_> {
         }
         let table = table_named(self.graph, name)?;
         let visit = &mut visits[at];
-        let frame = concat(&visit.frames[visit.offset..])?;
-        let batch: Vec<usize> = visit.batches[visit.offset..].concat();
+        // The rows the hop before reached: the frames from the last visit's
+        // up to those the table held when this hop began.
+        let frame = concat(&visit.frames[visit.offset..end])?;
+        let batch: Vec<usize> = visit.batches[visit.offset..end].concat();
         // Each row's number is its place among the table's rows, in the
         // order they were reached (the reference's `Mapper` numbers a row
         // reached anew next, and a row of a table without a key, or whose
         // key is null, is always reached anew).
         let start: usize = visit.batches[..visit.offset].iter().map(Vec::len).sum();
         let index: Vec<usize> = (start..start + batch.len()).collect();
-        visit.offset = visit.frames.len();
+        visit.offset = end;
 
         // The foreign keys: each key not yet reached for its example looked
         // up in the table it refers to.
