@@ -53,4 +53,9 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
   The test author's regression vectors (`contract/tests/test_t23_postgres_regressions.py`) pass; probing the review's other types, a negative-scale `numeric` now answers as the reference answers, and a two-dimensional array column is left out where the reference fails (P2C-8).
 - Fix round 1 (the Claude reviewer): a `real` or text seed key, and a window's seed time, read in the joined column's own type by putting it in place of that column in one row of the table, so a fractional `real` key joins and a NOT NULL domain elsewhere in the row is never checked on a null (fix 4); a `timetz` read as its time of day, as the reference reads a time, a `numeric` declared past 76 digits as a double and a `numeric`'s NaN as a null (fix 5); `$1` in a column's name is fix 3's.
   P2C-4 approved by both reviewers under E66(b).
-  The comparator's Postgres vocabulary (T2.1d) names `timetz` a string; it is now built as `time64[us]`, a judging change for the orchestrator.
+  P2C-8 (a two-dimensional array column left out where the reference fails with an unnamed RuntimeError) stays proposed for round 2's reviewers, E66(b)'s class.
+
+## Carry items
+
+- The comparator's Postgres vocabulary (`compare.postgres_arrow_name`, T2.1d) names `timetz` a string, where the provider now builds it as `time64[us]`: for the next judging touch. It cannot fire in the gate today: no S1 case's base or setup, and no committed reference line, holds a `timetz` column (it appears only in DuckDB's type-set vectors and the test author's public-API regression vector `type.timetz`, which the comparator's row types do not judge).
+- A `numeric` declared past 76 digits is read as a double and answers where the reference overflows (`numeric(100,0)` holding 10**90, probed at fix round 1): no case or vector exercises it (`key.hugeint` is `numeric(38,0)` on Postgres), so P2C-3 holds no ref for it.
