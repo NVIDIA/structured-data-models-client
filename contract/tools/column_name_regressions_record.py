@@ -14,7 +14,7 @@ the recorder may create databases on::
     ~/code/sdmc-reference/.venv/bin/python -I contract/tools/column_name_regressions_record.py
 
 Written by T2.18's test author from the round 1 review (Claude's P2-2 and
-P3-3). Each scenario is the ``aggregation`` role of
+P3-3) and the round 2 review (Codex's P2). Each scenario is the ``aggregation`` role of
 ``column_names_record.py`` (orders holding a DOUBLE column named
 ``a<character>b``, or its twin ``a_b``), on DuckDB, SQLite and Postgres:
 
@@ -22,7 +22,11 @@ P3-3). Each scenario is the ``aggregation`` role of
   ``task='regression'``, which every relational query refuses (P2-2);
 - ``typo``: ``PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH
   users.user_id``, a misspelt ordinary column over the same schema, whose
-  diagnostic names the misspelt column (P3-3).
+  diagnostic names the misspelt column (P3-3);
+- ``parts``: the role's query forecast two steps (``FORECAST 2
+  TIMEFRAMES``) with ``sdm_client.decompose.MOST_PARTS`` set to 1 for
+  the call, which the reference refuses for two steps past the caller's
+  limit (Codex's round 2 P2).
 
 The answer is the refusal's class, ``StructuredDataError.code``, the call
 it ended and its message: the message is the diagnostic these vectors
@@ -46,6 +50,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'contract/column-name-regression-vectors.json'
 FORMAT = 'sdm-column-name-regression-vectors/1'
+KINDS = ('task', 'typo', 'parts')
 TYPO = 'PREDICT SUM(orders.pricee, 0, 30, days) FOR EACH users.user_id'
 
 
@@ -72,6 +77,11 @@ def scenario(kind: str, name: str) -> dict[str, Any]:
         return {**base, 'task': 'regression'}
     if kind == 'typo':
         return {**base, 'pql': TYPO}
+    if kind == 'parts':
+        pql = base['pql'].replace(
+            ' FOR EACH ', ' FORECAST 2 TIMEFRAMES FOR EACH '
+        )
+        return {**base, 'pql': pql, 'most_parts': 1}
     raise ValueError(f'no scenario {kind!r}')
 
 
@@ -79,7 +89,7 @@ def vectors() -> list[dict[str, Any]]:
     r"""Every vector and twin, by database, then scenario, the twin first."""
     out = []
     for database in N.DATABASES:
-        for kind in ('task', 'typo'):
+        for kind in KINDS:
             out.append(
                 {
                     'id': f'twin.{kind}@{database}',
@@ -132,7 +142,16 @@ def run(vector: dict[str, Any]) -> dict[str, Any]:
                 arguments = runner._materialize_arguments(vector['materialize'])
                 if 'task' in vector:
                     arguments['task'] = vector['task']
-                PredictiveQuery(vector['pql'], schema).materialize(**arguments)
+                from sdm_client import decompose
+
+                limit = decompose.MOST_PARTS
+                decompose.MOST_PARTS = vector.get('most_parts', limit)
+                try:
+                    request = PredictiveQuery(
+                        vector['pql'], schema
+                    ).materialize(**arguments)
+                finally:
+                    decompose.MOST_PARTS = limit
             except Exception as error:  # noqa: BLE001 - the call's outcome
                 return {
                     'result': 'refusal',
@@ -141,7 +160,11 @@ def run(vector: dict[str, Any]) -> dict[str, Any]:
                     'code': getattr(error, 'code', None),
                     'message': str(error),
                 }
-        return {'result': 'success', 'stage': stage}
+        return {
+            'result': 'success',
+            'stage': stage,
+            'parts': len(list(request.payloads)),
+        }
     finally:
         cleanup()
 

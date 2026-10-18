@@ -15,7 +15,11 @@ tests call):
   class, code, call and message of the twin's refusal;
 - a misspelt ordinary column (``orders.pricee``) over a schema holding
   such a column keeps the reference's diagnostic, the misspelt column
-  named (the review's P3-3).
+  named (the review's P3-3);
+- a forecast of two steps summing such a column, with
+  ``sdm_client.decompose.MOST_PARTS`` set to 1, is refused as its twin is,
+  the caller's limit honoured (Codex's round 2 P2), with S0 on its
+  default route and on the core.
 
 Each runs on DuckDB, SQLite and Postgres, with ``from_source`` and
 ``materialize`` on the core and the query's own validation (S0) on its
@@ -72,14 +76,17 @@ def reachable(database: str) -> bool:
 
 
 def _on_the_core(
-    monkeypatch: pytest.MonkeyPatch, vector: dict[str, Any]
+    monkeypatch: pytest.MonkeyPatch, vector: dict[str, Any], s0: bool = False
 ) -> dict[str, Any]:
     r"""The vector with its database's ``from_source`` and ``materialize``
-    forced onto the core, S0 on its default route."""
+    forced onto the core, S0 on its default route or, with ``s0``, on the
+    core too."""
     from sdm_client import _routing
 
     database = vector['database']
     routes = (*_routing.FROM_SOURCE[database], *_routing.MATERIALIZE[database])
+    if s0:
+        routes = (*routes, *_routing.S0)
     # Not vacuous: the build routes each forced path on the core.
     assert set(routes) <= _routing.CORE_ROUTED
     monkeypatch.setenv(_routing.ENVIRONMENT, ','.join(dict.fromkeys(routes)))
@@ -123,11 +130,11 @@ def test_the_vectors_are_the_reference_s() -> None:
             'INVALID_REQUEST',
         ), vector['id']
         if vector['character'] is None:
-            assert (
-                "task='regression'" in answer['message']
-                if vector['kind'] == 'task'
-                else "Column 'pricee' does not exist" in answer['message']
-            ), vector['id']
+            assert {
+                'task': "task='regression'",
+                'typo': "Column 'pricee' does not exist",
+                'parts': 'past the 1 this will do',
+            }[vector['kind']] in answer['message'], vector['id']
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -159,6 +166,25 @@ def test_a_misspelt_column_keeps_its_diagnostic_beside_any_column_name(
     problems = []
     for vector in _vectors('typo', database):
         got = _on_the_core(monkeypatch, vector)
+        if got != _wanted(vector):
+            problems.append(f'{vector["id"]}: {got}')
+    assert not problems, '\n'.join(problems)
+
+
+@pytest.mark.parametrize('s0', [False, True], ids=['s0-default', 's0-core'])
+@pytest.mark.parametrize('database', DATABASES)
+def test_a_forecast_over_any_column_name_keeps_the_caller_s_call_limit(
+    monkeypatch: pytest.MonkeyPatch, database: str, s0: bool
+) -> None:
+    r"""Codex's round 2 P2: ``FORECAST 2 TIMEFRAMES`` summing a column named
+    with each character, ``sdm_client.decompose.MOST_PARTS`` set to 1, is
+    refused as the twin's forecast is on the reference: two steps past the
+    caller's limit of one, never two requests."""
+    if not reachable(database):
+        return
+    problems = []
+    for vector in _vectors('parts', database):
+        got = _on_the_core(monkeypatch, vector, s0=s0)
         if got != _wanted(vector):
             problems.append(f'{vector["id"]}: {got}')
     assert not problems, '\n'.join(problems)
