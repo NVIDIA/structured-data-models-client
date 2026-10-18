@@ -208,11 +208,14 @@ jobs:
           EOF
       # Building each one proves nothing about installing them together. A pin
       # only one distribution carries makes the set unsatisfiable, and the
-      # resolver is the only thing that says so.
+      # resolver is the only thing that says so. Every one is named by file:
+      # once a version is on PyPI, `--find-links` with `==$VERSION` resolves
+      # the published release as readily as the wheel built here.
       - run: |
           VERSION=$(cat dist/VERSION)
-          pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
+          pip install --dry-run \
+            "$(ls dist/structured_data_models_client-$VERSION-*.whl)[relational,sqlite,duckdb]" \
+            dist/structured_data_models_{api,pql,connectors,relational_engine}-$VERSION-*.whl
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
       # and twine refuses anything that is not a distribution.
       - run: pip install --upgrade twine && twine check dist/*.whl
@@ -277,14 +280,26 @@ jobs:
       - run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
-          pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb]==$VERSION"
+          pip install \
+            "$(ls dist/structured_data_models_client-$VERSION-*.whl)[sqlite,duckdb]" \
+            dist/structured_data_models_{api,pql,connectors}-$VERSION-*.whl
       - name: The installed distribution is what gets imported, and it is typed
         working-directory: /tmp
         run: |
           python - <<'EOF'
-          import pathlib
+          import json, pathlib
+          from importlib.metadata import distribution
           import predictive_query, sdm_api, sdm_client, sdm_connectors
+
+          # The same version on PyPI resolves as readily as the wheel built
+          # here, and then this job tests the published release instead.
+          for name in ('client', 'api', 'pql', 'connectors'):
+              recorded = distribution(f'structured-data-models-{name}').read_text('direct_url.json')
+              source = json.loads(recorded or '{}').get('url', 'an index')
+              assert '/dist/' in source, (
+                  f'structured-data-models-{name} was installed from {source}, '
+                  f'not from the wheel built here'
+              )
 
           for module in (sdm_api, sdm_client, sdm_connectors, predictive_query):
               location = pathlib.Path(module.__file__).resolve()
@@ -322,8 +337,9 @@ jobs:
       - run: |
           pip install --upgrade pip cyclonedx-bom
           VERSION=$(cat dist/VERSION)
-          pip install --find-links "$GITHUB_WORKSPACE/dist" \
-            "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
+          pip install \
+            "$(ls dist/structured_data_models_client-$VERSION-*.whl)[sqlite,duckdb,postgres,databricks,snowflake,s3]" \
+            dist/structured_data_models_{api,pql,connectors}-$VERSION-*.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
