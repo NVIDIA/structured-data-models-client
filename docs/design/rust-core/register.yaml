@@ -6195,7 +6195,7 @@ entries:
   affected_inputs: >-
     Schema.from_source over a SQLite source holding a table with no rows,
     under a forced core route.
-  cases: [empty.fact-table]
+  cases: [empty.fact-table@sqlite]
   refs: [P1B-11]
   status: approved
   approved_by: reviewer
@@ -6229,7 +6229,7 @@ entries:
   affected_inputs: >-
     PredictiveQuery.materialize over a SQLite source whose time column's
     stored text the core's list does not read, under a forced core route.
-  cases: [time.text-one-bad-value]
+  cases: [time.text-one-bad-value@sqlite]
   refs: [DT-7, DT-15]
   status: approved
   approved_by: owner
@@ -6268,7 +6268,7 @@ entries:
     PredictiveQuery.materialize over a SQLite source whose key holds an
     unsigned value past int64 (stored as its digits), under a forced core
     route.
-  cases: [key.uint64-above-int64-max]
+  cases: [key.uint64-above-int64-max@sqlite]
   refs:
   - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.hugeint'
   - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.ubigint'
@@ -6305,7 +6305,7 @@ entries:
   affected_inputs: >-
     Schema.from_source and materialize over a SQLite source with a TIME
     column (stored as text), under a forced core route.
-  cases: [time.feature-time-of-day]
+  cases: [time.feature-time-of-day@sqlite]
   refs: [DT-15]
   status: approved
   approved_by: owner
@@ -6321,9 +6321,14 @@ entries:
     runners: [python-core, rust-host]
     fields:
     - 'public.schema/tables/1/columns/3/stype'
+  - case: time.feature-time-of-day@sqlite
+    runners: [python-core, rust-host]
+    fields:
+    - 'public.schema/tables/1/time_column'
+    null_on_one_side: true
   case_outcomes:
-  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
-  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
 
 - id: P2B-14
   title: On SQLite, a column declared INTERVAL holding text is text, where the reference takes it as an integer by its declared name
@@ -6342,7 +6347,7 @@ entries:
   affected_inputs: >-
     Schema.from_source over a SQLite source with a column declared
     INTERVAL whose values are text.
-  cases: [time.feature-interval]
+  cases: [time.feature-interval@sqlite]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-62}
@@ -6405,7 +6410,7 @@ entries:
   affected_inputs: >-
     PredictiveQuery.materialize over a SQLite source on the core route of a
     query whose target has a WHERE filter or a condition.
-  cases: [s0.boundary.deepest, s0.boundary.digits-4300, s0.boundary.escapes, s0.boundary.start-past-64kb]
+  cases: [s0.boundary.deepest@sqlite, s0.boundary.digits-4300@sqlite, s0.boundary.escapes@sqlite, s0.boundary.start-past-64kb@sqlite]
   refs: [P1B-3]
   status: approved
   approved_by: owner
@@ -6419,14 +6424,14 @@ entries:
     (<case>@sqlite) are the ones it covers. Measured at T2.2 on python-core
     and rust-host.
   case_outcomes:
-  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
 
 - id: P2B-17
   title: On SQLite, a stored time's spelling is read once per call, where the reference reads it once per materializer
