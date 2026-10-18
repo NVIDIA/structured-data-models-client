@@ -275,6 +275,21 @@ T20C_DECIMAL = (
     'decimal.target-regression-collide',
 )
 
+#: T2.19's two-path sampling cases (main's eb6c68eb), none in the inventory.
+T219_SHAPES = (
+    'shape.chain.addresses',
+    'shape.diamond.addresses',
+    'shape.diamond-from-source',
+    'shape.one-column-two-tables',
+    'shape.same-table-twice.buyers',
+    'shape.same-table-twice.customers',
+    'shape.star.customers',
+    'shape.star.products',
+    'shape.star.stores',
+    'shape.two-paths.keyed',
+    'shape.two-paths.keyless',
+)
+
 
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
@@ -297,16 +312,21 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # questions over the AdventureWorks base, no inventory case either.
     # T2.0c adds the exact-decimal cases (KO2-50), no inventory case either;
     # each is an acceptance case carrying its call as far as the reference
-    # goes.
+    # goes. T2.19 adds the two-path sampling cases, acceptance cases through
+    # predict, no inventory case either.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
         'base.adventureworks.color',
         *T20C_DECIMAL,
+        *T219_SHAPES,
     }
     for case_id in T20C_DECIMAL:
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
+    for case_id in T219_SHAPES:
+        assert committed[case_id]['status'] == 'acceptance', case_id
+        assert committed[case_id]['until'] == 'predict', case_id
     # From T1.29 the inventory's three baseline cases are acceptance cases
     # with their routes and paths, keeping its input and expectation; from
     # T1.32 so is each case whose family's admission exit has cleared, and

@@ -1,0 +1,237 @@
+{
+  "format": "sdm-case/1",
+  "id": "shape.chain.addresses",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "client.predict/multiclass/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "utf8/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE addresses AS SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+      "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+      "CREATE TABLE lines AS SELECT i AS lid, i % 40 AS oid, i % 7 AS qty, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts, i AS tag FROM range(120) t(i)",
+      "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+    ],
+    "from_source": {
+      "tables": {
+        "addresses": "addresses",
+        "customers": "customers",
+        "lines": "lines",
+        "orders": "orders"
+      },
+      "primary_keys": {
+        "addresses": "aid",
+        "customers": "cid",
+        "lines": "lid",
+        "orders": "oid"
+      },
+      "time_columns": {
+        "lines": "ts",
+        "orders": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "lines",
+          "source_column": "oid",
+          "target_table": "orders",
+          "target_column": "oid"
+        },
+        {
+          "source_table": "orders",
+          "source_column": "cid",
+          "target_table": "customers",
+          "target_column": "cid"
+        },
+        {
+          "source_table": "customers",
+          "source_column": "aid",
+          "target_table": "addresses",
+          "target_column": "aid"
+        }
+      ]
+    },
+    "pql": "PREDICT addresses.city FOR EACH addresses.aid",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2024-02-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "addresses",
+            "source": {
+              "source": [
+                "addresses"
+              ]
+            }
+          },
+          {
+            "name": "customers",
+            "source": {
+              "source": [
+                "customers"
+              ]
+            }
+          },
+          {
+            "name": "lines",
+            "source": {
+              "source": [
+                "lines"
+              ]
+            }
+          },
+          {
+            "name": "orders",
+            "source": {
+              "source": [
+                "orders"
+              ]
+            }
+          }
+        ],
+        "primary_keys": {
+          "addresses": {
+            "value": [
+              "aid"
+            ]
+          },
+          "customers": {
+            "value": [
+              "cid"
+            ]
+          },
+          "lines": {
+            "value": [
+              "lid"
+            ]
+          },
+          "orders": {
+            "value": [
+              "oid"
+            ]
+          }
+        },
+        "time_columns": {
+          "lines": {
+            "value": "ts"
+          },
+          "orders": {
+            "value": "ts"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "lines",
+              "column": "oid"
+            },
+            {
+              "table": "orders",
+              "column": "oid"
+            }
+          ],
+          [
+            {
+              "table": "orders",
+              "column": "cid"
+            },
+            {
+              "table": "customers",
+              "column": "cid"
+            }
+          ],
+          [
+            {
+              "table": "customers",
+              "column": "aid"
+            },
+            {
+              "table": "addresses",
+              "column": "aid"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1706745600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "multiclass_classification; the request's context rows per table, the same on all three databases: addresses 2, customers 4, orders 12"
+  },
+  "why": "T2.19 (main eb6c68eb): the chain shape sampled from addresses, a table holding no foreign key (the core refuses the others by parent_table until T2.11), compared at the payload; one path to each table, a control",
+  "source": "main's test_sql_sampler_parity.py _SHAPES and _shape_frames (eb6c68eb, the reference at 6298913c), as T2.19 names them"
+}
