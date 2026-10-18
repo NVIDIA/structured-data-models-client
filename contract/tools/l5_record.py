@@ -173,6 +173,8 @@ def drivers() -> dict[str, dict[str, str]]:
 
     loader = _module('databases', ROOT / 'contract/runners/databases.py')
     duck = duckdb.connect()
+    # The test's pinned zone: a TIMESTAMPTZ's Arrow zone is the session's.
+    duck.execute("SET GLOBAL TimeZone = 'Etc/UTC'")
     out: dict[str, dict[str, str]] = {}
     try:
         for statement in SETUP:

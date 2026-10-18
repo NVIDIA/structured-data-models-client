@@ -123,6 +123,12 @@ SETUP = [
 
 REFUSED = 'refused UNSUPPORTED_TYPE'
 
+#: The session zone every connection here reads in, DuckDB's and
+#: Postgres's, as CI's runners have it (a TIMESTAMPTZ's Arrow zone is the
+#: session's on DuckDB).
+ZONE = 'Etc/UTC'
+PINNED = f'-c TimeZone={ZONE}'
+
 #: The conversion table: each column's admitted Arrow type on each
 #: database, as :func:`_arrow_type` spells it, or the core's refusal by
 #: code. Recorded from the three providers through the core, the same in
@@ -262,6 +268,9 @@ class Source:
 
     def __init__(self, tmp: Path, dsn: str | None) -> None:
         self.duck = duckdb.connect()
+        # The zone names a TIMESTAMPTZ's Arrow zone; pinned for every cursor
+        # (GLOBAL), as CI's runners have it, so the table holds anywhere.
+        self.duck.execute(f"SET GLOBAL TimeZone = '{ZONE}'")
         for statement in SETUP:
             self.duck.execute(statement)
         loader = _loader()
@@ -295,7 +304,7 @@ class Source:
                 adbc_driver_sqlite.dbapi.connect(str(self.path))
             ),
             'postgres': PostgresProvider(
-                psycopg.connect(self.scoped, autocommit=True)
+                psycopg.connect(self.scoped, autocommit=True, options=PINNED)
             ),
         }
 
@@ -311,7 +320,7 @@ class Source:
         import psycopg
 
         assert self.scoped is not None
-        with psycopg.connect(self.scoped) as connection:
+        with psycopg.connect(self.scoped, options=PINNED) as connection:
             return [row[0] for row in connection.execute(sql).fetchall()]
 
     def drop(self) -> None:
