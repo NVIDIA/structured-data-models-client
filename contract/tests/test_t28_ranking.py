@@ -111,6 +111,11 @@ CASES = {
     'holds one class left out, unscored, before any call',
     'rank.all-unscored': 'T2.8b: no candidate left to rank, refused before any '
     'call',
+    'rank.entities-by-candidates.over': 'T2.8a: the entities gathered once '
+    'per candidate past the 100,000 one materialize holds (501 by 200), '
+    'refused before anything is read',
+    'rank.entities-by-candidates.at': 'T2.8a: the same at exactly 100,000 '
+    '(500 by 200), not refused by that ceiling',
     'forecast.top-k': "T2.8a: the forecast's top_k refusal in the core",
     'forecast.most-parts': "T2.8a: the forecast's MOST_PARTS refusal in the "
     'core',
@@ -271,6 +276,13 @@ def test_the_cases_are_the_design_rows() -> None:
     assert spec_of('rank.candidates-empty')['candidates'] == []
     assert len(spec_of('rank.most-parts')['candidates']) == 201
     assert len(spec_of('rank.batched')['indices']) == 10_001
+    # The entity ceiling across a ranking's parts: one past it, and at it.
+    for case_id, entities in (
+        ('rank.entities-by-candidates.over', 501),
+        ('rank.entities-by-candidates.at', 500),
+    ):
+        assert spec_of(case_id)['indices'] == list(range(entities))
+        assert spec_of(case_id)['candidates'] == list(range(200))
     assert spec_of('rank.unscored-candidate')['candidates'] == [0, 9, 1]
     assert spec_of('rank.all-unscored')['candidates'] == [9, 8]
     # The cases answered at predict are answered with probabilities, as a
@@ -450,6 +462,13 @@ REFUSED_FOR = {
     'rank.candidates-not-a-ranking': 'does not rank anything',
     'rank.most-parts': '201 candidates means 201 calls',
     'rank.batched': 'A part is not batched',
+    'rank.entities-by-candidates.over': (
+        '501 entities gathered 200 times over, 100,200 in all, is past the '
+        '100,000'
+    ),
+    # At the ceiling the call is gathered, and refused only for the
+    # entities 8 to 499, which name no user.
+    'rank.entities-by-candidates.at': 'The primary keys [8, 9,',
     'forecast.top-k': 'a forecast ranks nothing',
     'forecast.most-parts': '201 forecast steps means 201 calls',
 }
@@ -478,6 +497,9 @@ def test_each_case_is_refused_for_the_argument_it_names() -> None:
         ), case_id
         assert REFUSED_FOR[case_id] in refused['message'], refused['message']
         assert each['change'] == recorder().CONTROLS[case_id]
+        if case_id == 'rank.entities-by-candidates.at':
+            # Not vacuous: at 100,000 the ceiling does not refuse.
+            assert 'in all, is past the' not in refused['message']
         assert each['control']['outcome'] == 'result', (case_id, each)
 
 

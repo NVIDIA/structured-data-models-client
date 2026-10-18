@@ -729,6 +729,10 @@ CONTROLS = {
     'rank.candidates-not-a-ranking': {'set': {'candidates': None}},
     'rank.most-parts': {'set': {'candidates': [0, 1]}},
     'rank.batched': {'set': {'indices': [0, 1]}},
+    # The entity ceiling over a ranking's parts, past it and at it: the
+    # same candidates over the eight users the data holds.
+    'rank.entities-by-candidates.over': {'set': {'indices': list(range(8))}},
+    'rank.entities-by-candidates.at': {'set': {'indices': list(range(8))}},
     'forecast.top-k': {'set': {'top_k': None}},
     'forecast.most-parts': {
         'query': ['FORECAST 201 TIMEFRAMES', 'FORECAST 2 TIMEFRAMES']
