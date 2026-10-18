@@ -6743,6 +6743,8 @@ entries:
   - E66
   - 'contract/composite-key-vectors.json#declared.*@postgres refusal UNNAMED -> success'
   - 'contract/composite-key-vectors.json#foreign.*@postgres refusal UNNAMED -> success'
+  - 'contract/postgres-regression-vectors.json#key.composite-primary refusal UNNAMED -> success'
+  - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> success'
   status: proposed
   approved_by: null
   decision_ref: null
@@ -6753,8 +6755,8 @@ entries:
     The alternative keeps P2C-11's named refusal under a rule outside
     E92's class. Measured at T2.12 on python-core: the two cases answered
     through predict on Postgres, their schema, payload and result as on
-    DuckDB and SQLite. Supersedes P2C-11, which stays approved for the
-    behavior before T2.12. Proposed by T2.12, never self-approved.
+    DuckDB and SQLite. Supersedes P2C-11, retired at T2.12, whose
+    two regression vectors it names. Proposed by T2.12, never self-approved.
     Its matrix vectors: every declared and foreign form of the composite
     key pair matrix on Postgres (contract/composite-key-vectors.json).
   case_outcomes:
@@ -7230,9 +7232,7 @@ entries:
   refs:
   - E66
   - E92
-  - 'contract/postgres-regression-vectors.json#key.composite-primary refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
-  status: approved
+  status: rejected
   approved_by: reviewer
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
   notes: >-
@@ -7246,3 +7246,8 @@ entries:
     key.composite-primary@postgres and key.composite-foreign@postgres
     (contract/postgres-regression-vectors.json, the refs), not corpus
     cases.
+    Retired at T2.12, its ID kept: T2.12 lifts composite_key, and the core
+    reads a Postgres catalog key of several columns as no key, as DuckDB's
+    and SQLite's references read it; P2E-4 (proposed for the owner)
+    supersedes this entry and names its two regression vectors with
+    refusal UNNAMED -> success.

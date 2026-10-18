@@ -508,7 +508,7 @@ pub(crate) fn read(
             // A key of several columns is read as it is declared; the
             // core makes no table's key of one, as DuckDB's and SQLite's
             // references do not (the reference's Postgres graph discovery
-            // fails on one, `_get_source_columns`; register P2C-11).
+            // fails on one, `_get_source_columns`; register P2E-4).
             Ok(CatalogAnswer::Keys(keys))
         }
         DescribePart::ForeignKeys => {
@@ -536,7 +536,7 @@ pub(crate) fn read(
             // A foreign key of several columns is read as it is declared;
             // the core links by none, as DuckDB's and SQLite's references
             // do not (the reference's Postgres graph discovery fails on
-            // one, `_get_source_foreign_keys`; register P2C-11).
+            // one, `_get_source_foreign_keys`; register P2E-4).
             Ok(CatalogAnswer::ForeignKeys(
                 keys.into_values()
                     .zip(0_i64..)

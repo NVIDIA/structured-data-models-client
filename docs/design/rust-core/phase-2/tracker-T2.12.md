@@ -61,3 +61,4 @@ The retirement of the interim edit gate is a later landing of its own and is not
 ### Fix rounds
 
 - Round 1 (the Claude reviewer approved; P3-1): a tied key is said after every table is read, before any left-out column, in the reference's order (`assemble::after_reading`, its unit test and a DuckDB probe).
+- After round 1 (the orchestrator's items): P2C-11 retired (rejected, its ID kept), its two Postgres regression vectors named by P2E-4 as `refusal UNNAMED -> success`; the test author's `rule.key-tie-entity` fix and updated composite-key tests taken.
