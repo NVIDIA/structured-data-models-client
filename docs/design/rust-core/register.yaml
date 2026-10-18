@@ -6492,8 +6492,8 @@ entries:
     from the parser to the request, and is answered on DuckDB, SQLite and
     Postgres as the same data under a name the reference can spell
     (contract/column-name-vectors.json, each vector against its twin
-    a_b). A query a filter makes the core refuse anyway under its
-    not-yet rule target_filter is P2E-2's until T2.10. Two quirk rows of
+    a_b). The filter role is T2.10's, which lifts the core's not-yet
+    rule target_filter (P2E-2, rejected). Two quirk rows of
     the PQL table the reference refuses as syntax (a quoted name holding
     a dot, one holding a line feed) the core refuses by name as an unknown
     table and an unknown column (sdm-core tests/pql/quirks.json,
@@ -6502,7 +6502,7 @@ entries:
     Schema.from_source, PredictiveQuery.materialize and SDMClient.predict on
     the core route over a DuckDB, SQLite or Postgres source with a column
     whose name holds a dot, a backtick, a line feed or a carriage return.
-  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-filter, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-filter, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-filter, name.line-break-target]
+  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-target]
   refs:
   - eb6c68eb
   - P2B-2
@@ -6595,37 +6595,22 @@ entries:
     PredictiveQuery.materialize on the core route over a DuckDB, SQLite or
     Postgres source of a query whose target's aggregation filters on a
     column named with a dot, a backtick or a line break.
-  cases: [name.backtick-filter, name.dot-filter, name.line-break-filter]
+  cases: [T2.18]
   refs: [E92, T2.10, P2E-1]
-  status: approved
+  status: rejected
   approved_by: owner
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-36}
   notes: >-
     Approved under KO2-56's standing approval of a temporary entry naming
     the package that retires it, relayed by the orchestrator; the
     reviewers check this entry fits it. Temporary: it lapses when T2.10
     lands, and the final gate fails while it remains. The rule was read
     from the core's refusal (details rule target_filter), on each database
-    and on both core hosts.
-  case_outcomes:
-  - {case: name.backtick-filter, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.backtick-filter, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.backtick-filter@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.backtick-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.backtick-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.backtick-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.dot-filter, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.dot-filter, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.dot-filter@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.dot-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.dot-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.dot-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.line-break-filter, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.line-break-filter, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.line-break-filter@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.line-break-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.line-break-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
-  - {case: name.line-break-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the core not-yet rule target_filter, as over a column named a_b, until T2.10 (KO2-56)'}
+    and on both core hosts. Rejected, its ID kept: filter role deferred to
+    T2.10 (the orchestrator's decision); the three filter cases and their
+    vectors left T2.18's acceptance for T2.10's
+    (contract/deferred/t210-column-filter), so no case is under this
+    entry.
 
 # --- lane C entries (P2C-1..19) ---
 
