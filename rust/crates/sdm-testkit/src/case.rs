@@ -128,6 +128,12 @@ pub struct Input {
     #[serde(deserialize_with = "text")]
     pub pql: String,
     pub materialize: Materialize,
+    /// The call the scripted endpoint fails, numbered from zero in the
+    /// order received (T2.1a, for `main`'s multi-call `predict`, T2.8c); a
+    /// JSON integer written as one, `1.0` refused as the Python loader
+    /// refuses it.
+    #[serde(default, deserialize_with = "present")]
+    pub fail_call: Option<u64>,
 }
 
 /// Keyword arguments to `Schema.from_source`, each as the case gives it.
@@ -434,6 +440,29 @@ pub struct Materialize {
     /// refuses, is a case's input.
     #[serde(default, deserialize_with = "present")]
     pub top_k: Option<Integer>,
+    /// How many entities one call scores (`main`'s 1fc5a686, T2.8c), kept
+    /// as written, whatever JSON scalar it is, so a value the reference
+    /// refuses is the case's input.
+    #[serde(default, deserialize_with = "present")]
+    pub rows_per_call: Option<Written>,
+}
+
+/// A JSON scalar other than `null` (a number, a bool or a string), kept as
+/// the text the case wrote: a number of any size or form passes through
+/// nothing that would change it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Written(pub String);
+
+impl<'de> Deserialize<'de> for Written {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Written, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let text = raw.get().trim();
+        match text.as_bytes().first() {
+            Some(b'"' | b'-' | b'0'..=b'9') => Ok(Written(text.to_owned())),
+            _ if text == "true" || text == "false" => Ok(Written(text.to_owned())),
+            _ => Err(D::Error::custom("not a number, a bool or a string")),
+        }
+    }
 }
 
 /// One entity key: a JSON integer literal of any size, kept as its

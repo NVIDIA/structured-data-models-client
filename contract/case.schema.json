@@ -54,7 +54,13 @@
         "from_source": {"$ref": "#/$defs/from_source"},
         "edits": {"$ref": "#/$defs/edits"},
         "pql": {"type": "string", "minLength": 1},
-        "materialize": {"$ref": "#/$defs/materialize"}
+        "materialize": {"$ref": "#/$defs/materialize"},
+        "fail_call": {
+          "description": "The call the scripted endpoint fails, numbered from zero in the order the calls are received (T2.1a's serve(fail_call=), for main's multi-call predict, T2.8c): that call is answered 500 scripted_failure and every other by the rule; absent, no call fails. A JSON integer written as one, below 2**64.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 18446744073709551615
+        }
       }
     },
     "until": {
@@ -264,6 +270,10 @@
         "top_k": {
           "description": "How many of the candidates a ranking or forecast answers, a JSON integer written as one; a value the reference refuses (0) is the case's input.",
           "type": "integer"
+        },
+        "rows_per_call": {
+          "description": "How many entities one model call scores (main's 1fc5a686, T2.8c), passed as written: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "type": ["integer", "number", "boolean", "string"]
         }
       }
     },

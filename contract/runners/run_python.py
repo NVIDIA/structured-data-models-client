@@ -153,7 +153,8 @@ def _invalid(validate: Any, document: Any) -> str | None:
 
 def _indices(given: dict[str, Any]) -> str | None:
     r"""An entity key is a JSON integer literal of any size, or a string,
-    in ``indices`` and ``candidates`` alike; ``top_k`` is an integer.
+    in ``indices`` and ``candidates`` alike; ``top_k`` and ``fail_call``
+    are integers (``rows_per_call`` is passed as written, whatever it is).
 
     JSON Schema counts ``1.0`` as an integer; ``json`` reads it as a float,
     and a bool is no index either, so the type read is checked too, as
@@ -166,6 +167,8 @@ def _indices(given: dict[str, Any]) -> str | None:
                 return f'input/materialize/{key}/{position} is not an integer'
     if 'top_k' in spec and type(spec['top_k']) is not int:
         return 'input/materialize/top_k is not an integer'
+    if 'fail_call' in given and type(given['fail_call']) is not int:
+        return 'input/fail_call is not an integer'
     return None
 
 
@@ -2432,6 +2435,10 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         arguments['candidates'] = list(spec['candidates'])
     if 'top_k' in spec:
         arguments['top_k'] = spec['top_k']
+    if 'rows_per_call' in spec:
+        # As written (T2.8c's cases): a value the reference refuses is the
+        # case's input.
+        arguments['rows_per_call'] = spec['rows_per_call']
     return arguments
 
 
@@ -2651,7 +2658,7 @@ def _call(
     if log is not None:
         log.stage = stage
     with (
-        serve() as (url, received),
+        serve(fail_call=given.get('fail_call')) as (url, received),
         warnings.catch_warnings(record=True) as shown,
     ):
         warnings.simplefilter('always')
