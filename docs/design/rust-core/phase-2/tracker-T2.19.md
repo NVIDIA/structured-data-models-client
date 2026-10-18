@@ -21,8 +21,27 @@ Scratch cases in the contract's case format (never committed: the cases are the 
   `same-table-twice` (from `customers` and from `buyers`) and `star` (from `customers` and from `products`) already matched.
 - DuckDB, after: every probe the core answers matches the reference at the payload, the statement count and the outcome.
 - After the change, python-core (the test-ops wheel built from this tree) and rust-host on all three databases (SQLite through rust-host's `rusqlite` provider, Postgres 17 in the pinned image with rust-host replaying python-core's recorded fetches): no differences from python-ref on any probe the core answers; on Postgres only the diagnostic statement-parameter texts every Postgres case shows (KO2-58).
-- `diamond` and `chain` from `customers` are refused by the core's not-yet rule `parent_table` (the entity table has a foreign key), which T2.11 lifts; the reference answers. Out of this package's scope; the orchestrator is told.
+- `diamond` and `chain` from `customers` are refused by the core's not-yet rule `parent_table` (the entity table has a foreign key), which T2.11 lifts; the reference answers.
+  The test author's cases sample each shape from its tables with no foreign key for that reason, and leave those questions to T2.11.
+
+## Acceptance
+
+The test author's three commits (`t219-tests`, 66e44670, 517db2a6, 30efc322) taken onto this package's commit in a scratch combined branch, `t219-combined`, never onto the lane:
+
+- `contract/tests/test_t219_two_paths.py` (python-core, all three databases, Postgres 17 in the pinned image, `SDM_REQUIRE_POSTGRES=1`): 78 passed.
+- `sdm-testkit`'s `tests/t219_two_paths.rs` (rust-host, DuckDB and SQLite): 2 passed.
+- Every key `t219-pending.json` listed (the diamond from `addresses`, the `from_source` diamond and the keyed two-path case: 9 python-core keys, 6 rust-host keys) passed with the change, so `pending` is empty; `authored` is unchanged.
+
+What the new acceptance cases need beside them, each as an earlier package made it for its cases (T2.0c, T2.2), on the combined branch:
+
+- **Baselines**: `ratchet.py accept --checkpoint 68f9b8e4` over python-core's, python-old's and rust-host's DuckDB observations of the eleven cases; every other line kept.
+- **SQLite goldens**: `sdm-data`'s `tests/sqlite_goldens.rs` pins the 96 requests the cases fetch on SQLite that no golden pinned, collected from both hosts' recorded fetches, which agree.
+- **The keys map** (the cases' seam): each case a probe of `contract/refusal-maps/keys.json`, the case as committed, written by `refusal_map.py write` from python-core's and rust-host's runs; every probe answers on both hosts, so no entry; the keys family of `contract/pinned/families.probes.json` regenerated, eleven digests added, none changed.
+
+Checks on the combined branch: `pytest contract/tests -n 4 --dist loadfile` all passed (4,590; the 28 that failed before the three items above were the ratchet's "an acceptance case with no proposed baseline", the SQLite golden check and the keys map's case list, and pass after them); `test_refusal_map.py` 57, `sdm-testkit`'s `refusal_map` 9 and `t22_sqlite` 9, `sdm-data`'s `sqlite_goldens` 1.
+On the lane: `prepush.sh` (cheap tier), `cargo test --workspace --no-fail-fast` (818 passed), `test_refusal_map.py`, `test_wheel_smoke.py`, `test_release_contract.py`, `register.py validate` and `ratchet.py check --checkpoint 68f9b8e4`.
 
 ## Deviations and what is left
 
-- None registered.
+- None registered: on every case and probe the core answers, both hosts match the reference on all three databases.
+- The judging-path files: none touched (`compare.py`, `run_python.py`, `ratchet.py` and the rest unchanged); the baselines, goldens, keys map and pin are data the cases need, as at T2.0c and T2.2.
