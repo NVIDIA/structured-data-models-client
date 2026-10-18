@@ -20,7 +20,11 @@ vectors name, loaded into a database of their own by the contract loader
   every base of ``contract/request-kinds.json``, is the Arrow schema and
   rows that file records for DuckDB, except a seeded sample, whose rows
   are the engine's own draw: as many distinct keys as asked, each a key
-  the table holds.
+  the table holds; and a key lookup, which Postgres answers as the
+  reference's own lookup statement does (``REFERENCE_LOOKUP``, read from
+  the reference's committed ``@postgres`` lines): the batch, the row's
+  columns, then ``__kumo_row__`` (1, the first row of its batch) and
+  ``__kumo_matches__``, the same rows as DuckDB's.
 - Key sets bound as the dialect binds them (``P1 d:131``): keys that
   collide as float64 (an unsigned key past int64, 38-digit and scale-18
   decimals, stored as Postgres ``numeric``) each find their own row, which
@@ -353,6 +357,97 @@ def _canonical(table: pa.Table) -> list[list[Any]]:
     )
 
 
+def _reference_lookups() -> list[tuple[str, list[str], list[str]]]:
+    r"""Each key lookup the reference ran on Postgres, from its committed
+    ``@postgres`` lines (``contract/reference-env.txt``'s file): the
+    statement that keeps the first row of each batch, with its result's
+    column names and Postgres types."""
+    env = (ROOT / 'contract/reference-env.txt').read_text(encoding='utf-8')
+    commit = next(
+        line.split(': ', 1)[1].strip()
+        for line in env.splitlines()
+        if line.startswith('reference: ')
+    )
+    found = []
+    path = ROOT / f'contract/reference/{commit}.jsonl'
+    for line in path.read_text(encoding='utf-8').splitlines():
+        observation = json.loads(line)
+        if not observation['case'].endswith('@postgres'):
+            continue
+        capture = (observation.get('driver') or {}).get('capture') or {}
+        for statement in capture.get('statements') or []:
+            if 'WHERE __KUMO_ROW__ = 1' not in statement['sql']:
+                continue
+            for result in statement['results']:
+                values = result['values']
+                found.append(
+                    (statement['sql'], values['columns'], values['types'])
+                )
+    return found
+
+
+def _helpers(columns: list[str]) -> tuple[list[str], list[str]]:
+    r"""The helper columns (``__kumo_*``) before and after a result's
+    row columns."""
+    before = []
+    for name in columns:
+        if not name.startswith('__kumo_'):
+            break
+        before.append(name)
+    after = []
+    for name in reversed(columns):
+        if not name.startswith('__kumo_'):
+            break
+        after.insert(0, name)
+    return before, after
+
+
+#: The reference's key lookup on Postgres: the helper columns before and
+#: after the row's own, the same in every committed lookup, each an int8.
+REFERENCE_LOOKUP = (['__kumo_batch__'], ['__kumo_row__', '__kumo_matches__'])
+
+
+def test_the_reference_s_postgres_lookup_has_that_layout() -> None:
+    # Not hand-written: every key lookup the reference ran on Postgres in
+    # its committed lines has REFERENCE_LOOKUP's helper columns, as int8,
+    # and keeps only the first row of each batch.
+    lookups = _reference_lookups()
+    assert len(lookups) > 10
+    for sql, columns, types in lookups:
+        assert _helpers(columns) == REFERENCE_LOOKUP, columns
+        typed = dict(zip(columns, types, strict=True))
+        assert all(
+            typed[name] == 'int8' for part in REFERENCE_LOOKUP for name in part
+        ), (columns, types)
+        assert 'ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__' in sql
+
+
+def _as_the_reference_looks_up(fetch: dict[str, Any]) -> dict[str, Any]:
+    r"""A lookup fetch of ``contract/request-kinds.json`` with its schema
+    and rows in :data:`REFERENCE_LOOKUP`'s layout: the batch, the row's
+    columns, ``__kumo_row__`` (1) and ``__kumo_matches__``."""
+    before, after = REFERENCE_LOOKUP
+    names = [name for name, _ in fetch['schema']]
+    typed = dict(fetch['schema'])
+    own = [name for name in names if not name.startswith('__kumo_')]
+    order = before + own + after
+    rows = []
+    for row in fetch['rows']:
+        cells = dict(zip(names, row, strict=True))
+        cells['__kumo_row__'] = '1'
+        rows.append([cells[name] for name in order])
+    return {
+        **fetch,
+        'schema': [[name, typed.get(name, 'int64')] for name in order],
+        'rows': sorted(
+            rows,
+            key=lambda row: json.dumps(
+                row, separators=(',', ':'), ensure_ascii=False
+            ),
+        ),
+    }
+
+
 def _base(name: str) -> list[str]:
     r"""The statements of base ``name`` of ``contract/bases.yaml``: the
     plain list items under its name, comments between them skipped."""
@@ -376,7 +471,8 @@ def test_every_request_kind_runs_on_postgres_as_on_duckdb(
         return
     # L4 executed on Postgres: every request kind the core plans, but the
     # catalog's, on every base, answered by Postgres and admitted, is the
-    # schema and rows contract/request-kinds.json records on DuckDB.
+    # schema and rows contract/request-kinds.json records on DuckDB, a
+    # lookup's in the reference's Postgres layout.
     fetches = [
         f for f in KINDS['fetches'] if f['request']['request'] != 'describe'
     ]
@@ -399,6 +495,8 @@ def test_every_request_kind_runs_on_postgres_as_on_duckdb(
     connections: dict[str, Any] = {}
     problems = []
     for fetch in fetches:
+        if fetch['request']['request'] == 'lookup':
+            fetch = _as_the_reference_looks_up(fetch)
         base = fetch['base']
         if base not in connections:
             connections[base] = server.database(_base(base))
