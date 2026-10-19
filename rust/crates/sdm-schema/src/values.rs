@@ -20,8 +20,9 @@ use sdm_contract::{CoreError, Scalar, Unit};
 use crate::not_yet;
 
 /// How the reference's frame holds a float of a source's preview: Arrow-
-/// backed pandas (DuckDB's and SQLite's), where a NaN is a value, every NaN
-/// the one value, and `-0.0` and `0.0` are two; or NumPy-backed pandas
+/// backed pandas (DuckDB's and SQLite's), where every float is a value of
+/// its own bits, so a NaN is a value, a NaN of each sign (DuckDB's `0.0/0.0`
+/// and `'NaN'`) two, and `-0.0` and `0.0` two; or NumPy-backed pandas
 /// (Postgres's rows), where a NaN is missing, as a null is (`isna`, and
 /// every count drops it), and `-0.0` equals `0.0` (`nunique` counts them
 /// once).
@@ -39,7 +40,7 @@ pub(crate) enum Value {
     /// Any integer, a decimal's unscaled value (one column has one scale),
     /// or a temporal count (one column has one unit).
     Int(i128),
-    /// A float's bits, every NaN one value's; as [`Floats`] reads them.
+    /// A float's bits, as [`Floats`] reads them.
     Float(u64),
     Text(String),
 }
@@ -116,8 +117,8 @@ pub(crate) fn column(
 }
 
 /// A float as the reference's frame holds it (`floats`): a NaN missing,
-/// and `-0.0` as `0.0`, in NumPy-backed pandas; each NaN the one value, the
-/// zeros apart, in Arrow-backed pandas.
+/// and `-0.0` as `0.0`, in NumPy-backed pandas; its own bits in
+/// Arrow-backed pandas, each NaN's sign and the zeros apart.
 fn float(null: bool, value: f64, floats: Floats) -> Option<Value> {
     if null {
         return None;
@@ -125,7 +126,6 @@ fn float(null: bool, value: f64, floats: Floats) -> Option<Value> {
     let value = match floats {
         Floats::NanMissing if value.is_nan() => return None,
         Floats::NanMissing if value == 0.0 => 0.0,
-        Floats::NanValue if value.is_nan() => f64::NAN,
         _ => value,
     };
     Some(Value::Float(value.to_bits()))
@@ -288,9 +288,10 @@ mod tests {
     use super::*;
 
     /// A NaN and the two zeros as each reference frame counts them: in
-    /// Arrow-backed pandas (DuckDB's and SQLite's) every NaN is one value
-    /// held and the zeros are two; in NumPy-backed pandas (Postgres's) a
-    /// NaN is missing and the zeros are one (T2.12 fix 3).
+    /// Arrow-backed pandas (DuckDB's and SQLite's) each float is a value of
+    /// its own bits, a NaN of each sign and each zero apart; in NumPy-backed
+    /// pandas (Postgres's) a NaN is missing and the zeros are one (T2.12
+    /// fixes 3 and 5).
     #[test]
     fn floats_are_counted_as_each_reference_frame_counts_them() {
         let values: ArrayRef = Arc::new(Float64Array::from(vec![
@@ -308,9 +309,35 @@ mod tests {
         .unwrap();
         let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
         assert_eq!(arrow.iter().flatten().count(), 5);
-        assert_eq!(distinct(&arrow), 4);
+        assert_eq!(distinct(&arrow), 5);
         let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
         assert_eq!(numpy.iter().flatten().count(), 3);
         assert_eq!(distinct(&numpy), 2);
+    }
+
+    /// DuckDB's `0.0/0.0` is a NaN of the sign bit set and its `'NaN'` one
+    /// without it; Arrow-backed pandas counts them as two values, as their
+    /// bits differ, and each repeat of one as that one (T2.12 fix 5,
+    /// probed on the reference: `nunique` 3 over `[-NaN, NaN, NaN, 1.0]`).
+    #[test]
+    fn a_nan_of_each_sign_is_two_values_where_floats_keep_their_bits() {
+        let negative = f64::from_bits(0xfff8_0000_0000_0000);
+        let positive = f64::from_bits(0x7ff8_0000_0000_0000);
+        let values: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(negative),
+            Some(positive),
+            Some(positive),
+            Some(1.0),
+        ]));
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("x", DataType::Float64, true)])),
+            vec![values],
+        )
+        .unwrap();
+        let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
+        assert_eq!(distinct(&arrow), 3);
+        let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
+        assert_eq!(numpy.iter().flatten().count(), 1);
+        assert_eq!(distinct(&numpy), 1);
     }
 }
