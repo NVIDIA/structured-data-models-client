@@ -357,6 +357,13 @@ T212_RULES = (
     'rule.float-signed-zero-key-tie',
     'rule.float-nan-key-double',
     'rule.float-nan-key-float',
+    'rule.float-signed-nan-key-tie-double',
+    'rule.float-signed-nan-key-tie-float',
+    'rule.float-signed-nan-category-double',
+    'rule.float-signed-nan-category-float',
+    'rule.float-nan-key-static-double',
+    'rule.float-nan-key-static-float',
+    'rule.float-nan-key-static-linked-double',
 )
 
 

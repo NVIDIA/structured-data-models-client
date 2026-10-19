@@ -116,6 +116,15 @@ RULES = {
         'rule.float-nan-key-tie',
         'rule.float-nan-key-double',
         'rule.float-nan-key-float',
+        # T2.12 round 2: a NaN of each sign, as DuckDB's preview keeps
+        # them, and a static question over a NaN key.
+        'rule.float-signed-nan-key-tie-double',
+        'rule.float-signed-nan-key-tie-float',
+        'rule.float-signed-nan-category-double',
+        'rule.float-signed-nan-category-float',
+        'rule.float-nan-key-static-double',
+        'rule.float-nan-key-static-float',
+        'rule.float-nan-key-static-linked-double',
     ),
     'float_signed_zero': (
         'rule.float-signed-zero-feature',
@@ -367,6 +376,57 @@ def test_each_case_holds_its_rule_s_input() -> None:
             connection.close()
         assert kinds['orders'] == 'BIGINT', case_id
         assert kinds['users'] == case_id.rsplit('-', 1)[1].upper(), case_id
+    # T2.12 round 2: NaNs of both signs, and a static question over a NaN
+    # key.
+    for case_id in (
+        'rule.float-signed-nan-key-tie-double',
+        'rule.float-signed-nan-key-tie-float',
+    ):
+        first = _column(case_id, 'orders', 'order_id')
+        second = _column(case_id, 'orders', 'orderid')
+        assert second == [float(i) for i in range(80)], case_id
+        nans = [i for i, v in enumerate(first) if math.isnan(v)]
+        assert nans == [3, 4], case_id
+        assert [math.copysign(1, first[i]) for i in nans] == [1.0, -1.0]
+        assert [v for i, v in enumerate(first) if i not in nans] == [
+            v for i, v in enumerate(second) if i not in nans
+        ], case_id
+    for case_id in (
+        'rule.float-signed-nan-category-double',
+        'rule.float-signed-nan-category-float',
+    ):
+        values = _column(case_id, 'users', 'feature')
+        finite = {v for v in values if not math.isnan(v)}
+        signs = {math.copysign(1, v) for v in values if math.isnan(v)}
+        assert (len(values), len(finite), signs) == (
+            1000,
+            49,
+            {1.0, -1.0},
+        ), case_id
+    for case_id, tables in (
+        ('rule.float-nan-key-static-double', ['users']),
+        ('rule.float-nan-key-static-float', ['users']),
+        ('rule.float-nan-key-static-linked-double', ['orders', 'users']),
+    ):
+        case, _ = cases()[case_id]
+        assert (
+            case['input']['pql'] == 'PREDICT users.age FOR EACH users.user_id'
+        )
+        assert 'anchor_time' not in case['input']['materialize'], case_id
+        keys = _column(case_id, 'users', 'user_id')
+        assert [i for i, v in enumerate(keys) if math.isnan(v)] == [3], case_id
+        connection = _built(case)
+        try:
+            found = sorted(
+                row[0]
+                for row in connection.execute(
+                    'SELECT table_name FROM duckdb_tables() '
+                    "WHERE schema_name = 'main'"
+                ).fetchall()
+            )
+        finally:
+            connection.close()
+        assert found == tables, case_id
     for case_id, table, pair in (
         ('rule.key-tie-fact', 'orders', ('order_id', 'orderid')),
         ('rule.key-tie-entity', 'users', ('user_id', 'userid')),
