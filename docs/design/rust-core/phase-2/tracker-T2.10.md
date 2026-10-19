@@ -20,7 +20,7 @@ Before writing anything, every target form the language parses was run through t
 - **The labels** (`sdm-engine` `labels`): the executor's conditions in full.
   A condition's constant is now a number, a boolean, text or a time (`Constant`); `IN` (`Target::Member`), `NOT` and `AND`/`OR` (`Target::Not`, `Target::Both`) join `Target`.
   `truth` gives each row whether a condition holds and whether it has every value the condition reads, as `execute_condition` and `execute_logical_operation` give it without dropping rows; a logical target labels only the rows every condition has a value for (`mask & right_mask`), and a `= NULL` inside one keeps only the rows with a value, as there.
-  A condition that is the whole target reads an integer column at numpy's int64, so a float with a fraction in its `IN` list is the caller's error (`INVALID_REQUEST`, "Trying to coerce float values to integers"); inside a filter or a logical target the source's type takes it toward zero, as on DuckDB and SQLite (`int_member`).
+  A condition that is the whole target reads an integer column at numpy's int64, so a float with a fraction in its `IN` list is the caller's error (`INVALID_REQUEST`, "Trying to coerce float values to integers"); inside a filter or a logical target it is compared exactly and matches no integer, a whole float matching its integer and one past int64 none (`int_member`, KO2-73, T2.10 fix 1).
   `aggregate_kept` aggregates the rows a filter keeps (`execute_filter`: the condition's values, a missing value failing a comparison, so `NOT` keeps it).
   Decimals are compared exactly in every condition and `IN` (KO2-35), times as nanoseconds.
 - **materialize** (`sdm-core` `materialize`): the target is a tree (`Shape`: a column, an aggregation with an optional filter, a condition, `NOT`, `AND`/`OR`), built from the validated query; every form the validation refuses is now an internal error naming what got through (`unvalidated`), not a not-yet rule.
@@ -46,7 +46,7 @@ Before writing anything, every target form the language parses was run through t
 - **P2E-19** (owner-only): `LIST_DISTINCT` of a foreign key without `RANK TOP`, a temporal link prediction the reference answers through materialize, stays refused by name until Phase 4.
 
 - **P2E-16**: a logical target over an average, minimum or maximum some example has no value for: the reference packs those values onto the examples that have one and joins them by position, so later labels are other examples' (one generated source), or raises IndexError, INTERNAL_ERROR (two); the core joins each example's own conditions. Same class as KO2-70 #1.
-- **P2E-17**: inside a filter or a logical target, an integer constant past a narrow integer column's type is refused by the reference on DuckDB (pyarrow cast) and a float with a fraction in an `IN` list of an integer column on Postgres (pandas Int64); the core, which reads no database's identity, compares exactly and takes the float toward zero as DuckDB and SQLite do.
+- **P2E-17**: inside a filter or a logical target, an integer constant past a narrow integer column's type is refused by the reference on DuckDB (pyarrow cast) and a float with a fraction in an `IN` list of an integer column on Postgres (pandas Int64); the core, which reads no database's identity, compares exactly on every database: past-width integers as integers, and a float with a fraction matching no row where DuckDB and SQLite read it toward zero (fix 1, the owner's choice, KO2-73).
 - **P2E-18**: a float with a fraction in an `IN` list of a whole-number decimal target: the reference reads the column as int64 and refuses; the core compares decimals exactly (KO2-35).
 - The register IDs are from the top of lane E's block (P2E-16 to P2E-19), since T2.9 and T2.12 share the block; the orchestrator may renumber.
 
@@ -86,3 +86,7 @@ Both DuckDB legs (python-core with python-old, about 95 s; rust-host, about 93 s
 Rebased onto T2.1o's landing (dd285821) with the test author's two fixes cherry-picked unedited (the three logical and filter cases' queries in the canonical text, and their python-ref lines recorded again).
 Both DuckDB gate legs (about 90 s each, under the heavy lock) now differ only on `rank.decimal-key` and `rank.odd-column` (T2.8) and `target.aggregation.list-distinct` (P2E-19); the `inputs` differences are gone.
 P2E-16 to P2E-19 stay proposed until the owner's rows (KO2-72 to KO2-75) land.
+
+## Fix 1
+
+The owner chose exact comparison for a float with a fraction in an `IN` list of an integer column inside a filter or a logical target (KO2-73): `int_member` gives no member for it, nor for a float past int64, and a whole float still matches its integer; a whole-target condition stays refused as the reference refuses it. `labels`' unit test expects `[T, T, F, T]` for `e.ni IN (1, 2.5) OR e.flag = true` and holds 2.0, 1e20 and -2.5 inside `NOT`. P2E-17's text says so. No case, label vector or baseline lists such a float against an integer column, so none moves.

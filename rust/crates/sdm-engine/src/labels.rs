@@ -928,8 +928,8 @@ pub fn truth(target: &Target) -> Result<Truth, CoreError> {
 /// `top` is a condition that is the whole target, whose column the
 /// executor reads without its missing values first (`filter_na=True`), so
 /// an integer column is a numpy int64 that refuses a float with a
-/// fraction in an `IN` list; elsewhere it is read as the source gave it,
-/// which takes such a float toward zero.
+/// fraction in an `IN` list; elsewhere such a float is compared exactly
+/// and matches no integer ([`int_member`], KO2-73).
 fn leaf(target: &Target, test: &Test<'_>, top: bool) -> Result<Truth, CoreError> {
     match target {
         Target::Column(column) => {
@@ -1051,10 +1051,13 @@ fn column_member(column: &Column, values: &[Constant], top: bool) -> Result<Vec<
                 .collect()
         }
         Column::Int(v) => {
-            let set = values
+            let set: Vec<i64> = values
                 .iter()
                 .map(|c| int_member(c, top))
-                .collect::<Result<Vec<_>, _>>()?;
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect();
             within(v, &set)
         }
         Column::Decimal {
@@ -1099,19 +1102,24 @@ fn column_member(column: &Column, values: &[Constant], top: bool) -> Result<Vec<
     })
 }
 
-/// An `IN` list's constant read at an integer column's type: an integer as
-/// written; a float, where the condition is the whole target, only when it
-/// has no fraction (numpy's int64 refuses another, the caller's error,
-/// `INVALID_REQUEST`), and elsewhere taken toward zero, as the source's
-/// integer type reads it (pyarrow's cast through numpy). A float past
-/// int64 is refused as the reference refuses it: as the caller's error
-/// where it is taken toward zero, and by name (`condition_value`) where
-/// numpy's int64 raises an overflow.
-fn int_member(constant: &Constant, top: bool) -> Result<i64, CoreError> {
+/// An `IN` list's constant read at an integer column's type, or none where
+/// it matches no integer: an integer as written. A float, where the
+/// condition is the whole target, only when it has no fraction (numpy's
+/// int64 refuses another, the caller's error, `INVALID_REQUEST`, as the
+/// reference refuses it on every database), a float past int64 refused by
+/// name (`condition_value`) where numpy's int64 raises an overflow.
+/// Elsewhere (a target's filter, a logical target) a float is compared
+/// exactly (KO2-73): a whole one matches its integer, and one with a
+/// fraction or past int64 matches no row, where the reference takes it
+/// toward zero on DuckDB and SQLite and refuses it on Postgres (register
+/// P2E-17).
+fn int_member(constant: &Constant, top: bool) -> Result<Option<i64>, CoreError> {
     // 2**63, the first float past int64.
     const PAST: f64 = 9_223_372_036_854_775_808.0;
     match *constant {
-        Constant::Int(i) => i64::try_from(i).map_err(|_| not_yet("condition_value")),
+        Constant::Int(i) => i64::try_from(i)
+            .map(Some)
+            .map_err(|_| not_yet("condition_value")),
         Constant::Float(f) if top => {
             if f.fract() != 0.0 || !f.is_finite() {
                 return Err(CoreError::new(
@@ -1122,24 +1130,14 @@ fn int_member(constant: &Constant, top: bool) -> Result<i64, CoreError> {
                 .with_field("field", sdm_contract::Detail::text("query")));
             }
             if (-PAST..PAST).contains(&f) {
-                Ok(f as i64)
+                Ok(Some(f as i64))
             } else {
                 Err(not_yet("condition_value"))
             }
         }
-        Constant::Float(f) => {
-            let whole = f.trunc();
-            if whole.is_finite() && (-PAST..PAST).contains(&whole) {
-                Ok(whole as i64)
-            } else {
-                Err(CoreError::new(
-                    ErrorKind::InvalidRequest,
-                    ErrorCode::InvalidRequest,
-                    "an IN list of an integer column holds a float past the column's integers",
-                )
-                .with_field("field", sdm_contract::Detail::text("query")))
-            }
-        }
+        Constant::Float(f) => Ok(
+            (f.is_finite() && f.fract() == 0.0 && (-PAST..PAST).contains(&f)).then_some(f as i64),
+        ),
         _ => Err(unpaired()),
     }
 }
@@ -1825,8 +1823,9 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(refused.code, ErrorCode::InvalidRequest);
-        // `e.ni IN (1, 2.5) OR e.flag = true`: the source's integers take
-        // 2.5 as 2: [T, T, T, T], mask 1 1 1 1 0 0.
+        // `e.ni IN (1, 2.5) OR e.flag = true`: 2.5 is compared exactly and
+        // matches no integer (KO2-73), where the reference takes it as 2:
+        // [T, T, F, T], mask 1 1 1 1 0 0.
         let or = label(&Target::Both {
             op: BoolOp::Or,
             left: Box::new(Target::Member {
@@ -1841,7 +1840,21 @@ mod tests {
         })
         .unwrap();
         assert_eq!(or.mask, [true, true, true, true, false, false]);
-        assert_eq!(or.labels, Labels::Bool(vec![true; 4]));
+        assert_eq!(or.labels, Labels::Bool(vec![true, true, false, true]));
+        // Inside a logical target a whole float matches its integer, and
+        // one past int64 matches no row.
+        for (float, wanted) in [(2.0, true), (1e20, false), (-2.5, false)] {
+            let not = label(&Target::Not(Box::new(Target::Member {
+                target: ni(),
+                values: vec![Constant::Float(float)],
+            })))
+            .unwrap();
+            assert_eq!(
+                not.labels,
+                Labels::Bool(vec![true, true, !wanted, true, true]),
+                "{float}"
+            );
+        }
         // `e.score IN (0.25, 0.5)` at float32: [F, T, T, F, F, F].
         let score = label(&Target::Member {
             target: Box::new(Target::Column(Column::Float(

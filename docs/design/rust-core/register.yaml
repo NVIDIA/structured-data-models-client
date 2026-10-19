@@ -7127,7 +7127,7 @@ entries:
     class.
 
 - id: P2E-17
-  title: A constant past a narrow integer column's type in a filter or a logical target is compared, where the reference casts it and refuses
+  title: A constant past a narrow integer column's type, or a float with a fraction in IN, is compared exactly in a filter or a logical target, where the reference casts it
   kind: change
   old_behavior: >-
     Inside a target's filter or a logical target the reference's executor
@@ -7141,31 +7141,35 @@ entries:
     (TypeError "cannot safely cast"), where DuckDB and SQLite take it
     toward zero.
   new_behavior: >-
-    The core compares an integer constant with an integer column exactly,
-    whatever the column's width, and takes a float with a fraction in such
-    an IN list toward zero on every database, as the reference does on
-    DuckDB and SQLite (sdm-engine labels::int_member). Where the condition
-    is the whole target the reference reads the column as numpy int64 on
-    every database, and both refuse a float with a fraction in the list
-    INVALID_REQUEST.
+    Inside a target's filter or a logical target the core compares exactly
+    on every database (sdm-engine labels::int_member): an integer constant
+    with an integer column whatever the column's width, and a float in an
+    IN list of an integer column, a whole one matching its integer, one
+    with a fraction or past int64 matching no row (1.5 matches no row).
+    Where the condition is the whole target the reference reads the column
+    as numpy int64 on every database, and both refuse a float with a
+    fraction in the list INVALID_REQUEST.
   affected_inputs: >-
     PredictiveQuery.materialize on the core route of a target filter or a
     logical target comparing an integer column narrower than 64 bits with
     an integer past its type (DuckDB), or listing a float with a fraction
-    in IN against an integer column (Postgres).
+    or past int64 in IN against an integer column (all three databases).
   cases: [T2.10]
   refs: [T2.10]
   status: proposed
   approved_by: null
   decision_ref: null
   notes: >-
-    Proposed by T2.10's implementer: the core reads no database's identity
-    (no dialect in the core), so it cannot refuse on one database what it
-    answers on another; answering is the reading two databases of three
-    give. Measured on the route probe: PREDICT e.size > 3000000000 OR
-    e.flag = true over a DuckDB INTEGER (reference INVALID_REQUEST, core
-    answered), and users.age IN (21, 22.5) inside OR on Postgres
-    (reference INVALID_REQUEST, core answered as DuckDB and SQLite are).
+    Proposed by T2.10's implementer; the fraction part decided by the owner
+    as exact comparison (KO2-73, "go with option b"), over keeping the
+    reference's DuckDB and SQLite reading toward zero or refusing
+    everywhere. The core reads no database's identity (no dialect in the
+    core), so it cannot refuse on one database what it answers on another.
+    Measured on the route probe: PREDICT e.size > 3000000000 OR e.flag =
+    true over a DuckDB INTEGER (reference INVALID_REQUEST, core answered),
+    and users.age IN (21, 22.5) inside OR (reference INVALID_REQUEST on
+    Postgres, 22.5 read as 22 on DuckDB and SQLite; the core matches no
+    row for it).
 
 - id: P2E-18
   title: A float with a fraction in an IN list of a whole-number decimal target is compared exactly, where the reference reads the column as int64 and refuses
