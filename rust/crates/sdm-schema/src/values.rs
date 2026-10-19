@@ -92,16 +92,35 @@ pub(crate) fn column(
                     push(i, Value::Int(a.value(i)));
                 }
             }
+            // Each float by its own bits at its own width: widening a float32
+            // would quiet a signaling NaN, making two NaNs the source and
+            // the reference hold apart one (T2.12 fix 7).
             DataType::Float32 => {
                 let a = array.as_primitive::<Float32Type>();
                 for i in 0..n {
-                    out.push(float(array.is_null(i), f64::from(a.value(i)), floats));
+                    let value = a.value(i);
+                    out.push(float(
+                        array.is_null(i),
+                        value.is_nan(),
+                        value == 0.0,
+                        u64::from(value.to_bits()),
+                        u64::from(0.0_f32.to_bits()),
+                        floats,
+                    ));
                 }
             }
             DataType::Float64 => {
                 let a = array.as_primitive::<Float64Type>();
                 for i in 0..n {
-                    out.push(float(array.is_null(i), a.value(i), floats));
+                    let value = a.value(i);
+                    out.push(float(
+                        array.is_null(i),
+                        value.is_nan(),
+                        value == 0.0,
+                        value.to_bits(),
+                        0.0_f64.to_bits(),
+                        floats,
+                    ));
                 }
             }
             DataType::Utf8 => {
@@ -116,19 +135,28 @@ pub(crate) fn column(
     Ok(out)
 }
 
-/// A float as the reference's frame holds it (`floats`): a NaN missing,
-/// and `-0.0` as `0.0`, in NumPy-backed pandas; its own bits in
-/// Arrow-backed pandas, each NaN's sign and the zeros apart.
-fn float(null: bool, value: f64, floats: Floats) -> Option<Value> {
+/// A float as the reference's frame holds it (`floats`), given whether it
+/// is null, a NaN and a zero, its `bits` at its width and that width's
+/// positive zero's (`zero`): a NaN missing, and `-0.0` as `0.0`, in
+/// NumPy-backed pandas; its own bits in Arrow-backed pandas, each NaN
+/// (its sign and payload) and each zero apart.
+fn float(
+    null: bool,
+    nan: bool,
+    is_zero: bool,
+    bits: u64,
+    zero: u64,
+    floats: Floats,
+) -> Option<Value> {
     if null {
         return None;
     }
-    let value = match floats {
-        Floats::NanMissing if value.is_nan() => return None,
-        Floats::NanMissing if value == 0.0 => 0.0,
-        _ => value,
+    let bits = match floats {
+        Floats::NanMissing if nan => return None,
+        Floats::NanMissing if is_zero => zero,
+        _ => bits,
     };
-    Some(Value::Float(value.to_bits()))
+    Some(Value::Float(bits))
 }
 
 /// How many distinct values `values` holds among those not null.
@@ -339,5 +367,39 @@ mod tests {
         let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
         assert_eq!(numpy.iter().flatten().count(), 1);
         assert_eq!(distinct(&numpy), 1);
+    }
+
+    /// A signaling and a quiet NaN are two values where floats keep their
+    /// bits, at each width: DuckDB stores a float32's `0x7f800001` and
+    /// `0x7fc00001` apart and the reference counts them apart, and no
+    /// widening quiets the first (T2.12 fix 7).
+    #[test]
+    fn a_signaling_and_a_quiet_nan_are_two_values_at_each_width() {
+        use arrow_array::Float32Array;
+        let narrow: ArrayRef = Arc::new(Float32Array::from(vec![
+            Some(f32::from_bits(0x7f80_0001)),
+            Some(f32::from_bits(0x7fc0_0001)),
+            Some(f32::from_bits(0x7fc0_0001)),
+        ]));
+        let wide: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(f64::from_bits(0x7ff0_0000_0000_0001)),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+        ]));
+        for values in [narrow, wide] {
+            let batch = RecordBatch::try_new(
+                Arc::new(Schema::new(vec![Field::new(
+                    "x",
+                    values.data_type().clone(),
+                    true,
+                )])),
+                vec![values],
+            )
+            .unwrap();
+            let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
+            assert_eq!(distinct(&arrow), 2, "{:?}", batch.schema());
+            let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
+            assert_eq!(numpy.iter().flatten().count(), 0);
+        }
     }
 }
