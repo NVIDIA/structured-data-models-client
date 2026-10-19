@@ -6770,6 +6770,50 @@ entries:
   - {case: rule.composite-key-declared@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (ValueError)', new: 'success at predict', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
   - {case: rule.composite-key-declared@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'success', statements_differ: [from_source], summary: 'the Postgres line: the catalog key of several columns read as no key, so from_source, materialize and predict answer'}
 
+- id: P2E-5
+  title: A schema keyed by several columns is refused at materialize without the reference's read of the folded key, one statement fewer
+  kind: change
+  old_behavior: >-
+    At materialize, after the query resolves, the reference's engine folds
+    each key of several columns into one identity
+    (Table._set_composite_primary_key): it refuses a float part, a derived
+    name past 200 characters or one a column holds, else reads the
+    source's fold of the first rows (_assert_warehouse_folds_like_pandas,
+    one statement) and compares it with its own of its preview; then its
+    SQL samplers refuse the table (_reject_reserved_columns). Each refusal
+    is a StructuredDataError of code INVALID_REQUEST.
+  new_behavior: >-
+    The core refuses the same tables at the same call with the same code,
+    its float, name and collision checks first, without reading the
+    source's fold: the read only chooses between two refusals of one
+    code. The materialize call runs one statement fewer than the
+    reference's on each database.
+  affected_inputs: >-
+    materialize on the core route with a schema a table of which is keyed
+    by several columns (given to Schema.from_source), on a SQL source.
+  cases: [rule.composite-key-given]
+  refs:
+  - KO2-68
+  - E92
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-68}
+  notes: >-
+    Approver: owner. Approved by the owner on 2026-10-19 as KO2-68 ("M:
+    Yes"), relayed by the orchestrator. The outcome is the reference's on
+    every database; only the materialize call's statements differ, by the
+    one read, which the rows name under statements_differ. Measured at
+    T2.12 fix 8 on rust-host through the gate on DuckDB: the one
+    difference is sql.count at materialize, 0 statements against the
+    reference's 1. Proposed by T2.12.
+  case_outcomes:
+  - {case: rule.composite-key-given, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the DuckDB line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the Postgres line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+  - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
+
 # --- lane G entries (P2G-1..19) ---
 
 - id: P2G-1
