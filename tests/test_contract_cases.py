@@ -326,6 +326,52 @@ T28C_MULTICALL = (
 )
 
 
+#: T2.13's S1 cases, the query and option long tail, none in the
+#: inventory: an entity filter (a ranking's among them), named entities,
+#: ASSUMING, EVALUATE, EXPLAIN, a null target transform and inference
+#: options given as text, an answer carrying an explanation or item
+#: metadata (input.explanation and input.item_metadata), and U1's
+#: day-first warning kept on a refused query.
+T213_OPTIONS = (
+    'assuming.binary',
+    'assuming.no-examples',
+    'assuming.regression',
+    'assuming.static',
+    'config-text.accepted',
+    'config-text.class-shuffle',
+    'config-text.estimators-out-of-range',
+    'config-text.estimators-whole-float',
+    'config-text.estimators-word',
+    'config-text.shuffle-word',
+    'date.day-first-then-packed',
+    'evaluate.binary',
+    'evaluate.regression',
+    'explain.answered',
+    'explain.explanation-only',
+    'explain.forecast',
+    'explain.not-answered',
+    'explain.query',
+    'explain.two-entities',
+    'filter.entity-aggregation',
+    'filter.entity-column',
+    'filter.entity-text',
+    'filter.event-column',
+    'filter.matches-none',
+    'filter.ranking',
+    'ids.absent',
+    'ids.in-list-other-indices',
+    'ids.one',
+    'ids.wrong-type',
+    'metadata.items',
+    'metadata.items-across-calls',
+    'metadata.items-explained',
+    'transforms.null',
+    'transforms.null-beside-a-name',
+    'transforms.null-on-a-classification',
+    'transforms.whole-null',
+)
+
+
 #: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
 #: each of a dot, a backtick and a line break in a column's name, as a
 #: feature the query does not name, the target, the entity (users' declared
@@ -414,8 +460,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # goes. T2.19 adds the two-path sampling cases, acceptance cases through
     # predict, no inventory case either. T2.18 adds the column-name cases
     # (KO2-36), each carrying its call through predict; so does T2.8c its
-    # multi-call cases, each an acceptance case. T2.12 adds the schema
-    # rules' cases, and T2.8 the ranking cases, each carrying its call as
+    # multi-call cases, each an acceptance case, and T2.13 its option
+    # cases. T2.12 adds the schema rules' cases, and T2.8 the ranking cases,
+    # each carrying its call as
     # far as the reference goes.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
@@ -427,8 +474,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T28C_MULTICALL,
         *T212_RULES,
         *T28_RANKING,
+        *T213_OPTIONS,
     }
-    for case_id in T28C_MULTICALL:
+    for case_id in (*T28C_MULTICALL, *T213_OPTIONS):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
     for case_id in (*T20C_DECIMAL, *T218_NAMES, *T212_RULES, *T28_RANKING):
