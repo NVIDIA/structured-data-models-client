@@ -469,6 +469,27 @@ T29_FORECASTING = (
 )
 
 
+#: T2.10's S1 cases for the PQL target rules, none in the inventory: one or
+#: two targets under each rule the core does not take yet (aggregation,
+#: condition, logical_target, target_filter; open_window and static_target
+#: held where the query validator refuses them first), and two rankings
+#: whose questions filter by a DECIMAL key and by a key named with a dot.
+T210_TARGETS = (
+    'rank.decimal-key',
+    'rank.odd-column',
+    'target.aggregation.list-distinct',
+    'target.condition.in',
+    'target.condition.text',
+    'target.filter.and',
+    'target.filter.sum',
+    'target.filter.text-in',
+    'target.logical.and',
+    'target.logical.not',
+    'target.open-window',
+    'target.static.other-table',
+)
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -496,7 +517,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # multi-call cases, each an acceptance case, and T2.13 its option
     # cases. T2.12 adds the schema rules' cases, T2.8 the ranking cases and
     # T2.9 the forecasting cases, each carrying its call as far as the
-    # reference goes.
+    # reference goes, and T2.10 its target cases, each an acceptance case.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -509,8 +530,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T28_RANKING,
         *T213_OPTIONS,
         *T29_FORECASTING,
+        *T210_TARGETS,
     }
-    for case_id in (*T28C_MULTICALL, *T213_OPTIONS):
+    for case_id in (*T28C_MULTICALL, *T213_OPTIONS, *T210_TARGETS):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
     for case_id in (

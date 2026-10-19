@@ -1,0 +1,102 @@
+{
+  "format": "sdm-case/1",
+  "id": "rank.odd-column",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "client.predict/ranking/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE TABLE items (\"i.d\" BIGINT PRIMARY KEY, kind VARCHAR)",
+      "INSERT INTO items SELECT i, ['a', 'b', 'c', 'd'][1 + i] FROM range(4) t(i)",
+      "CREATE TABLE buys (buy_id BIGINT PRIMARY KEY, user_id BIGINT, \"i.d\" BIGINT REFERENCES items (\"i.d\"), ts TIMESTAMP)",
+      "INSERT INTO buys SELECT i, i % 8, (i * 3) % 4, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) FROM range(120) t(i)"
+    ],
+    "pql": "PREDICT LIST_DISTINCT(buys.`i.d`, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-03-01",
+      "candidates": [
+        0,
+        1,
+        2
+      ]
+    },
+    "probabilities": true
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1677628800000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: Schema.from_source leaves the column \"i.d\" out of items and buys with one SDMWarning per table, and the query naming it is refused; its twin, the column named i_d, answers through predict as rank.decimal-key does over an integer key (contract/t210-target-vectors.json's rank.odd-column.twin); the core naming any column (KO2-36) answers as the twin"
+  },
+  "why": "A ranking over a key column named with a dot (\"i.d\", items' declared primary key, which buys.\"i.d\" references), candidates=[0, 1, 2]: each candidate's question filters buys by that column (T2.18's review, P3-1); KO2-36, any column name works, so the core answers it as the reference answers its twin, the column named i_d",
+  "source": "T2.10 PQL targets (the design row: cases per rule), the reference at 6298913c"
+}
