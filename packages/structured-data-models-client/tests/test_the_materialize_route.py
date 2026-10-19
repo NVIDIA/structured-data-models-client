@@ -217,6 +217,42 @@ def test_lag_timesteps_builds_the_request_the_old_route_builds(
     )
 
 
+@pytest.mark.parametrize('per_call', [1, 2])
+def test_each_call_of_a_multi_call_request_takes_its_own_rows_lags(
+    monkeypatch: pytest.MonkeyPatch, per_call: int
+) -> None:
+    # T2.9 with T2.8c's multi-call materialize: the lags are read once for
+    # every entity, and each call's payload carries its own entities' lags,
+    # the same as one call would give each, and the same context's.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    indices = [0, 1, 3, 5, 6]
+    one = _materialize(indices=indices, lag_timesteps=2)._payloads
+    several = _materialize(
+        indices=indices, lag_timesteps=2, rows_per_call=per_call
+    )._payloads
+    assert len(one) == 1
+    assert len(several) == -(-len(indices) // per_call)
+
+    def lags(table: dict[str, Any]) -> list[list[Any]]:
+        at = [
+            i
+            for i, c in enumerate(table['columns'])
+            if c.startswith('__kumo_arl')
+        ]
+        assert len(at) == 2
+        return [[row[i] for i in at] for row in table['rows']]
+
+    assert [
+        cells
+        for payload in several
+        for cells in lags(payload['predict']['instance_table'])
+    ] == lags(one[0]['predict']['instance_table'])
+    for payload in several:
+        assert lags(payload['context']['instance_table']) == lags(
+            one[0]['context']['instance_table']
+        )
+
+
 def test_an_average_s_lag_is_each_row_s_own_window(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
