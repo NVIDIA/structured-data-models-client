@@ -429,6 +429,30 @@ vector(
     **THREE,
 )
 vector('parts.failed-call-1', 'parts', RANK, scores(fail_call=1), **THREE)
+# Round 2: the transport raising an exception that is not the client's own
+# (ValueError, multicall_record._raising) on the second model call made,
+# after one answered part, on each database; with candidate 9 left out
+# unscored first, the second call made is candidate 1's.
+for where in ('duckdb', 'sqlite', 'postgres'):
+    at = '' if where == 'duckdb' else f'@{where}'
+    on = {'database': where} if where != 'duckdb' else {}
+    vector(
+        f'parts.raised-on-call-1{at}',
+        'parts',
+        RANK,
+        scores(raise_call=1),
+        **THREE,
+        **on,
+    )
+    vector(
+        f'parts.raised-on-call-1.after-unscored{at}',
+        'parts',
+        RANK,
+        scores(raise_call=1),
+        indices=[0, 1, 2],
+        candidates=[9, 0, 1],
+        **on,
+    )
 vector(
     'prediction-statistic.ranking',
     'prediction_statistic',
@@ -728,6 +752,24 @@ def _refusal(error: BaseException) -> dict[str, Any]:
     }
 
 
+def _raising_from(client: Any, call: int) -> None:
+    r"""``client``'s transport raising ``ValueError`` on the model call
+    numbered ``call`` from zero, before it is sent
+    (``contract/tools/multicall_record.py``'s ``_raising``)."""
+    import importlib.util
+
+    name = 't28_multicall_record'
+    if name not in sys.modules:
+        found = importlib.util.spec_from_file_location(
+            name, ROOT / 'contract/tools/multicall_record.py'
+        )
+        assert found is not None and found.loader is not None
+        module = importlib.util.module_from_spec(found)
+        sys.modules[name] = module
+        found.loader.exec_module(module)
+    sys.modules[name]._raising(client, call)
+
+
 def _edit(request: Any, edit: dict[str, Any] | None) -> None:
     r"""A caller's edit of the gathered payload (``Request.payloads``)."""
     if edit is None:
@@ -875,11 +917,19 @@ def _observe(spec: dict[str, Any], given: Any) -> dict[str, Any]:
                 _edit(request, spec['edit'])
                 stage = 'predict'
                 with SDMClient(url, max_retries=0) as client:
+                    if spec['script'].get('raise_call') is not None:
+                        _raising_from(client, spec['script']['raise_call'])
                     result = client.predict(
                         request, model=KumoRelational(), **spec['predict']
                     )
             except Exception as error:  # noqa: BLE001 - the outcome is compared
                 out = {'stage': stage, **_refusal(error)}
+                if spec['script'].get('raise_call') is not None:
+                    # What the exception carries of the parts answered
+                    # before it (its details), as the user reads them.
+                    out['details'] = json.loads(
+                        json.dumps(getattr(error, 'details', None), default=str)
+                    )
             else:
                 out = {
                     'stage': 'predict',

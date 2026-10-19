@@ -3362,6 +3362,448 @@
    }
   },
   {
+   "name": "parts.raised-on-call-1",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "raise_call": 1
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "ValueError",
+    "code": null,
+    "mro": [
+     "ValueError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "a failure that is not the client's own (scripted)",
+    "status_code": null,
+    "rule": null,
+    "details": {
+     "parts_answered": 1
+    },
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.raised-on-call-1.after-unscored",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     9,
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "raise_call": 1
+   },
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "ValueError",
+    "code": null,
+    "mro": [
+     "ValueError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "a failure that is not the client's own (scripted)",
+    "status_code": null,
+    "rule": null,
+    "details": {
+     "parts_answered": 1
+    },
+    "notices": [
+     "SDMWarning"
+    ],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.raised-on-call-1@sqlite",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "raise_call": 1
+   },
+   "database": "sqlite",
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "ValueError",
+    "code": null,
+    "mro": [
+     "ValueError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "a failure that is not the client's own (scripted)",
+    "status_code": null,
+    "rule": null,
+    "details": {
+     "parts_answered": 1
+    },
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.raised-on-call-1.after-unscored@sqlite",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     9,
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "raise_call": 1
+   },
+   "database": "sqlite",
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "ValueError",
+    "code": null,
+    "mro": [
+     "ValueError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "a failure that is not the client's own (scripted)",
+    "status_code": null,
+    "rule": null,
+    "details": {
+     "parts_answered": 1
+    },
+    "notices": [
+     "SDMWarning"
+    ],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.raised-on-call-1@postgres",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     0,
+     1,
+     2
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "raise_call": 1
+   },
+   "database": "postgres",
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "ValueError",
+    "code": null,
+    "mro": [
+     "ValueError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "a failure that is not the client's own (scripted)",
+    "status_code": null,
+    "rule": null,
+    "details": {
+     "parts_answered": 1
+    },
+    "notices": [],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
+   "name": "parts.raised-on-call-1.after-unscored@postgres",
+   "covers": "parts",
+   "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",
+   "materialize": {
+    "anchor_time": "2023-06-01",
+    "indices": [
+     0,
+     1,
+     2
+    ],
+    "candidates": [
+     9,
+     0,
+     1
+    ]
+   },
+   "predict": {},
+   "edit": null,
+   "script": {
+    "kind": "scores",
+    "table": [
+     [
+      0.2,
+      0.9,
+      0.5
+     ],
+     [
+      0.7,
+      0.9,
+      0.1
+     ],
+     [
+      0.4,
+      0.3,
+      0.5
+     ]
+    ],
+    "raise_call": 1
+   },
+   "database": "postgres",
+   "expected": {
+    "stage": "predict",
+    "outcome": "refused",
+    "class": "ValueError",
+    "code": null,
+    "mro": [
+     "ValueError",
+     "Exception",
+     "BaseException",
+     "object"
+    ],
+    "message": "a failure that is not the client's own (scripted)",
+    "status_code": null,
+    "rule": null,
+    "details": {
+     "parts_answered": 1
+    },
+    "notices": [
+     "SDMWarning"
+    ],
+    "calls": [
+     {
+      "output": {
+       "fields": [
+        "prediction",
+        "probabilities"
+       ]
+      },
+      "status": 200,
+      "answer": "{\"object\": \"prediction.response\", \"id\": \"r-t28-0\", \"model\": \"kumo-relational\", \"metadata\": {\"served_by\": \"scripted\"}, \"predictions\": [{\"id\": \"40\", \"row_index\": 0, \"prediction\": \"false\", \"probabilities\": {\"false\": 0.8, \"true\": 0.2}}, {\"id\": \"41\", \"row_index\": 1, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.1, \"true\": 0.9}}, {\"id\": \"42\", \"row_index\": 2, \"prediction\": \"true\", \"probabilities\": {\"false\": 0.5, \"true\": 0.5}}]}"
+     }
+    ]
+   }
+  },
+  {
    "name": "prediction-statistic.ranking",
    "covers": "prediction_statistic",
    "query": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) RANK TOP 2 FOR EACH users.user_id",

@@ -170,6 +170,7 @@ def on_rust_host(vector: dict[str, Any]) -> bool:
         and set(vector['materialize'])
         <= {'indices', 'anchor_time', 'candidates', 'top_k'}
         and vector['edit'] is None
+        and 'raise_call' not in vector['script']
         and not vector['predict']
         and 'nan-score' not in vector['name']
     )
@@ -451,6 +452,17 @@ def test_the_vectors_are_the_reference_s_and_not_vacuous() -> None:
     assert by['instance-id.float']['outcome'] == 'result'
     assert by['prediction-type.binary-float']['dtypes'][2] == 'float64'
     assert by['prediction-type.binary-text']['rows'][0][2] == {'str': 'maybe'}
+    # Round 2: an exception the transport raises on the second call made,
+    # after one part answered, re-raised as itself with the parts answered.
+    for at in ('', '@sqlite', '@postgres'):
+        for name in (
+            'parts.raised-on-call-1',
+            'parts.raised-on-call-1.after-unscored',
+        ):
+            raised = by[f'{name}{at}']
+            assert raised['class'] == 'ValueError', name
+            assert raised['details'] == {'parts_answered': 1}, name
+            assert len(raised['calls']) == 1, name
     # Round 1: a date and its spelling are two candidates, both kept; a
     # key past i128, as a Decimal and as an int, and one past 76 digits,
     # each scored as itself, on all three databases.
@@ -730,6 +742,15 @@ def held_to(got: dict[str, Any], want: dict[str, Any], name: str) -> None:
             f'{name}: status {got["status_code"]!r} where the reference '
             f'gives {want["status_code"]!r}'
         )
+        if 'details' in want:
+            # An exception the transport raised that is not the client's
+            # own: re-raised as the same class, carrying the parts answered
+            # before it (round 2).
+            assert got['class'] == want['class'], f'{name}: {got["class"]}'
+            assert got.get('details') == want['details'], (
+                f'{name}: details {got.get("details")!r} where the reference '
+                f'gives {want["details"]!r}'
+            )
         if PART in want['message']:
             said = want['message'][want['message'].index(PART) :]
             assert said in got['message'], (

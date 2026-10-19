@@ -351,6 +351,7 @@ fn on_rust_host(vector: &Value) -> bool {
             .keys()
             .all(|k| allowed.contains(&k.as_str()))
         && vector["edit"].is_null()
+        && vector["script"].get("raise_call").is_none()
         && vector["predict"].as_object().unwrap().is_empty()
         && !vector["name"].as_str().unwrap().contains("nan-score")
 }
