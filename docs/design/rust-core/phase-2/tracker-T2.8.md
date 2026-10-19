@@ -89,9 +89,9 @@ Codex round 1 and CI on 5de80103.
   The landing names `rust/crates/sdm-testkit/src/replay.rs` and `rust/crates/sdm-testkit/src/bin/sdm-contract-run.rs` among its protected paths; the test author writes the test.
 - P2B-16 and P2C-7's narrowing (fix 2) is the orchestrator's call, needing no owner approval: it removes cases that now match the reference.
 
-### Rebase onto T2.8c (34639b61)
+### Rebase onto T2.8c (34639b61), then e1fac9ee
 
-The lane was rebuilt on 34639b61: the test author's commits first, in their order (9c72972c reduced to its `host.rs` hunk, reworded `T2.8: ...`, since T2.1j landed its judging part; bfb8f444 dropped, T2.1h having landed it), then this package's code as one commit and its data as another.
+The lane was rebuilt on 34639b61, where T2.8c landed, then rebased onto e1fac9ee (T2.1k and T2.7 landed; one conflict, the test host's run root beside a ranking's attachments): the test author's commits first, in their order (9c72972c reduced to its `host.rs` hunk, reworded `T2.8: ...`, since T2.1j landed its judging part; bfb8f444 dropped, T2.1h having landed it), then this package's code as one commit and its data as another.
 The lane before the rebase is kept as `t28-lane-d-before-rebase-34639b61`, where fixes 1 to 3 were reviewed.
 
 - Contract v27: v26 is merged and frozen, so `CONTRACT_VERSION` is 27 and the lock holds v27 as the phase's working entry beside the merged v25 and v26 (`contract_lock.py`: 2 merged and unchanged, 1 working).
