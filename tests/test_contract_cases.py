@@ -465,6 +465,7 @@ T29_FORECASTING = (
     'forecast.quantiles-unanswered',
     'quantiles.regression',
     'lag.average-empty-windows',
+    'lag.condition-per-call',
 )
 
 
