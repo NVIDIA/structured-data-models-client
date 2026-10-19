@@ -6674,8 +6674,8 @@ entries:
   affected_inputs: >-
     A predict on rust-host whose model endpoint refuses a call: T2.8c's
     cases failing call 0 or call 2 of a request asked in several calls,
-    and call 1 of a two-step forecast, on DuckDB and SQLite.
-  cases: [multicall.fail-call-0, multicall.fail-call-0@sqlite, multicall.fail-call-2, multicall.fail-call-2@sqlite, multicall.forecast.fail-call-1, multicall.forecast.fail-call-1@sqlite]
+    and call 1 of a two-step forecast, on DuckDB, SQLite and Postgres.
+  cases: [multicall.fail-call-0, multicall.fail-call-0@sqlite, multicall.fail-call-0@postgres, multicall.fail-call-2, multicall.fail-call-2@sqlite, multicall.fail-call-2@postgres, multicall.forecast.fail-call-1, multicall.forecast.fail-call-1@sqlite, multicall.forecast.fail-call-1@postgres]
   refs: [1fc5a686, E45, E47, T2.1g]
   status: approved
   approved_by: reviewer
@@ -6684,12 +6684,22 @@ entries:
     Approved by the reviewer under decision E45, as the orchestrator
     relayed on 2026-10-18; both of T2.8c's reviewers confirm it in round 1.
     Not a refusal of an input the reference accepts: both refuse, and the
-    difference is the code the outcome names. Postgres's rust-host leg
-    replays its fetches and is held by the comparator alone.
+    difference is the code the outcome names. On SQLite and Postgres no
+    baseline holds rust-host: its expectation there is python-ref's line of
+    the key (rust-host observing no stage or class, 'refusal -'), moved by
+    the outcomes below to the core's code (T2.8c fix 3, CI's rust-host on
+    SQLite and cross-host steps).
   case_outcomes:
   - {case: multicall.fail-call-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_RESPONSE', summary: 'first admission (T2.8c): the endpoint refused a call; rust-host has no transport or client class, so its outcome is the core''s INVALID_RESPONSE, which T2.1g''s comparator rule agrees with the reference''s code-less NimRequestError'}
   - {case: multicall.fail-call-2, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_RESPONSE', summary: 'first admission (T2.8c): the endpoint refused a call; rust-host has no transport or client class, so its outcome is the core''s INVALID_RESPONSE, which T2.1g''s comparator rule agrees with the reference''s code-less NimRequestError'}
   - {case: multicall.forecast.fail-call-1, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_RESPONSE', summary: 'first admission (T2.8c): the endpoint refused a call; rust-host has no transport or client class, so its outcome is the core''s INVALID_RESPONSE, which T2.1g''s comparator rule agrees with the reference''s code-less NimRequestError'}
+  - {case: multicall.fail-call-0@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on SQLite, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
+  - {case: multicall.fail-call-2@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on SQLite, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
+  - {case: multicall.forecast.fail-call-1@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on SQLite, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
+  - {case: multicall.fail-call-0@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on Postgres, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
+  - {case: multicall.fail-call-2@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on Postgres, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
+  - {case: multicall.forecast.fail-call-1@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on Postgres, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
+
 
 # --- lane C entries (P2C-1..19) ---
 
