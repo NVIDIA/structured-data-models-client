@@ -240,8 +240,12 @@ impl Memory {
                     d.push(count(held.len()));
                     z.push(count(present.iter().filter(|p| !**p).count()));
                 }
-                let positions = (0..asked.len())
-                    .map(|k| i32::try_from(k).map_err(arrow_failed))
+                // Each row labelled as the dialects label it: the key's
+                // label, where it gives one, else its position (T2.12).
+                let positions = asked
+                    .iter()
+                    .enumerate()
+                    .map(|(k, key)| i32::try_from(key.label_at(k)).map_err(arrow_failed))
                     .collect::<Result<Vec<_>, _>>()?;
                 let schema = Schema::new(vec![
                     Field::new(results::KEY_POSITION, DataType::Int32, false),

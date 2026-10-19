@@ -143,3 +143,16 @@ fn the_swapped_layer_renders_no_sql_dialect() {
         Some(&sdm_contract::Detail::text("duckdb"))
     );
 }
+
+/// The key counts the core asks are labelled as the dialects label them
+/// (T2.12): a source whose enforced key comes before a counted one, so a
+/// counted key's label is not its position, is described as on DuckDB.
+#[test]
+fn a_key_count_is_labelled_as_duckdbs() {
+    let given = case("rule.composite-foreign-key-declared");
+    let bases = bases();
+    let on_duckdb = host::run(&given, &bases).unwrap();
+    let swapped = host::run_memory(&given, &bases, &layer::root()).unwrap();
+    assert!(on_duckdb.described.is_some());
+    assert_eq!(swapped.described, on_duckdb.described);
+}
