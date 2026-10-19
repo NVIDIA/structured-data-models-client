@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::data::{AttachmentId, ProviderChoice};
+use crate::data::{AttachmentId, ProviderChoice, Relation};
 use crate::scalar::Scalar;
 #[cfg(feature = "test-ops")]
 use crate::test_ops::{TestOperation, TestResult};
@@ -98,6 +98,9 @@ impl Operation {
                 for step in p.state.forecast.iter().flatten() {
                     named.push((step.payload, Bytes));
                     named.push((step.query, Bytes));
+                }
+                for batch in p.state.batches.iter().flatten() {
+                    named.push((batch.payload, Bytes));
                 }
                 named
             }
@@ -377,13 +380,14 @@ pub struct SourceSpec {
     pub relationships: Option<Vec<Vec<ColumnRef>>>,
 }
 
-/// A table named for the schema: the name a query uses, and the source's
-/// name of the table it reads.
+/// A table named for the schema: the name a query uses, and the relation
+/// of the source it reads (design choice 12), which a host naming a table
+/// by a string gives as one part.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NamedTable {
     pub name: String,
-    pub source: String,
+    pub source: Relation,
 }
 
 /// `describe_source`'s result.
@@ -410,9 +414,10 @@ pub struct SourceDescription {
 #[serde(deny_unknown_fields)]
 pub struct DescribedTable {
     pub name: String,
-    /// The source's name of the table this one reads: its own name unless
-    /// the caller named it otherwise (decision E59).
-    pub source: String,
+    /// The relation of the source this table reads (design choice 12): its
+    /// own name, one part, unless the caller named it otherwise (decision
+    /// E59).
+    pub source: Relation,
     pub columns: Vec<DescribedColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
@@ -530,8 +535,9 @@ pub struct HeldSchema {
 #[serde(deny_unknown_fields)]
 pub struct HeldTable {
     pub name: String,
-    /// The source's name of the table it reads, as the host holds it.
-    pub source: String,
+    /// The relation of the source it reads, as the host holds it (design
+    /// choice 12).
+    pub source: Relation,
     pub columns: Vec<HeldColumn>,
     pub primary_key: Vec<String>,
     pub time_column: Option<String>,
@@ -652,7 +658,9 @@ pub struct Materialize {
     /// it checks and records; `inference_config`, which it reads by the
     /// engine's rules and writes into the payload (decision E45(a)); and
     /// `random_seed`, in place of `seed` and `unseeded` where it is given
-    /// (`null`, an unseeded sample). The core reads it with `sdm-wire`'s
+    /// (`null`, an unseeded sample); from contract v26, `rows_per_call`,
+    /// the most rows one model call scores, which only lowers the profile's
+    /// (`main`'s multi-call `predict`, read from T2.8c). The core reads it with `sdm-wire`'s
     /// bounded reader and holds each value's type to what the reference's
     /// client takes, so the host checks none of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -673,6 +681,19 @@ pub struct Materialize {
     /// `too_many_parts` (T1.36 fix 21).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub most_parts: Option<u32>,
+    /// The most entities one `materialize` gathers, across the calls it is
+    /// asked in, which the host lets its caller set (`main`'s
+    /// `MOST_ENTITIES`); 100,000 where it names none (design choice 1,
+    /// multi-call `predict`, read from T2.8c, which asks a request of more
+    /// rows than one call scores in several calls; until then the core
+    /// refuses more than one call's rows, a lower bound than either).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub most_entities: Option<u64>,
+    /// The most model calls one request is asked in (`main`'s
+    /// `MOST_CALLS`); 100 where the host names none (read from T2.8c, as
+    /// `most_entities`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub most_calls: Option<u32>,
     /// The sampler state the materializer's last run left, which the host
     /// hands back as it took it (decision E52); none for a materializer's
     /// first run.
@@ -712,6 +733,22 @@ pub struct SamplerMemo {
     pub indexes_checked: bool,
     /// The time bounds read, at most one entry per table.
     pub bounds: Vec<MemoBounds>,
+    /// One stored value of each windowed table's time column, read once
+    /// where the provider compares a window's bounds with its stored text
+    /// (SQLite's `_time_spelling`), at most one entry per table; left out
+    /// where none was read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stored_times: Vec<MemoStoredTime>,
+}
+
+/// One table's stored time value, as read: the text of one non-null value
+/// of its time column, or none where that value was not text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MemoStoredTime {
+    /// The table, as the schema names it.
+    pub table: String,
+    pub value: Option<String>,
 }
 
 /// The smallest and largest time of one table's time column, as read, in
@@ -826,11 +863,34 @@ impl JsonSchema for Seed {
 #[serde(deny_unknown_fields)]
 pub struct Materialized {
     pub state: RequestState,
+    /// What the core resolved of the query it gathered (contract v26,
+    /// T2.18), which a host reads instead of resolving the query itself:
+    /// the core resolves a query naming any column (KO2-36), which a host's
+    /// own validator may not. Absent from a core that does not say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query: Option<QueryFacts>,
+}
+
+/// The facts of a resolved query a host reads: plain values, no tree. Its
+/// text, as the core writes it back, is the state's `query`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct QueryFacts {
+    /// The table whose rows are the entities.
+    pub entity_table: String,
+    pub problem_type: Option<crate::pql::ProblemType>,
+    /// Whether the target carries a time range, so its answer moves with
+    /// the moment it is asked at.
+    pub windowed: bool,
+    /// How many timeframes `FORECAST n TIMEFRAMES` asks for; 1 otherwise.
+    pub num_forecasts: u32,
 }
 
 /// The version of [`RequestState`]'s format this build writes and reads
 /// (decision H23); it is independent of the contract's.
-pub const REQUEST_STATE_VERSION: u32 = 1;
+/// Version 2 (contract v26, design choice 1): the state of a request asked
+/// in several model calls ([`RequestState::batches`]).
+pub const REQUEST_STATE_VERSION: u32 = 2;
 
 /// What `predict` needs of a materialized request: state that outlives the
 /// run that made it. `materialize` answers it; the host takes its
@@ -856,6 +916,31 @@ pub struct RequestState {
     /// answers back as one, each row carrying its step.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub forecast: Option<Vec<ForecastStep>>,
+    /// A request of more rows than one model call scores, asked in several
+    /// calls (`main`'s multi-call `predict`, design choice 1, T2.8c):
+    /// `payload` is the first call's, and this holds every later call's, in
+    /// order, each scoring the rows after the last; `predict` numbers each
+    /// call's rows on from where the previous call's ended and gives the
+    /// answers back as one. Absent for a request of one call; a forecast or
+    /// ranking, already one call per step or candidate, is never batched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batches: Option<Vec<RequestBatch>>,
+}
+
+/// One later call of a request asked in several ([`RequestState::batches`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RequestBatch {
+    /// A bytes attachment of this call's payload as JSON, as
+    /// [`RequestState::payload`].
+    pub payload: AttachmentId,
+    /// The rows this call scores.
+    pub rows: u64,
+    /// The id this call carries in its `metadata.request_id`, which the
+    /// host draws for each call, as [`ForecastStep::request_id`];
+    /// `materialize` writes none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 /// One later step of a forecast's request state: its number, from 2, and
@@ -924,6 +1009,15 @@ pub struct Predicted {
     /// number), `probabilities` where an answer carries them, and
     /// `answer_index`, each answer's place in the endpoint's order
     /// (`sdm_request::predict::table`).
+    ///
+    /// Contract v26 fixes the columns ranking and forecasting add (design
+    /// choice 1; written from T2.8b and T2.9), after `probabilities` and
+    /// before `answer_index`, each where an answer carries it: `scores`
+    /// (list of float64, a ranking's score of each candidate, in the
+    /// endpoint's order), `rankings` (list of utf8, a ranking's candidates,
+    /// best first, each the JSON text of the reference's item value), and
+    /// `quantiles` (list of struct `quantile` float64, `value` float64, a
+    /// forecast's quantiles in the endpoint's order).
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.
     pub model: String,
@@ -983,6 +1077,8 @@ pub struct Attachments {
     pub forecast_step_payload: StatePayload,
     #[schemars(rename = "ForecastStep.query")]
     pub forecast_step_query: String,
+    #[schemars(rename = "RequestBatch.payload")]
+    pub request_batch_payload: StatePayload,
     #[schemars(rename = "Predicted.metadata")]
     pub predicted_metadata: EndpointMetadata,
 }

@@ -155,11 +155,12 @@ fn host() -> ProviderChoice {
                 OptionalRequest::Lookup,
             ]),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: Some(NullOrder::Last),
             index_advice: Some(IndexAdvice::SingleColumn),
             sampling: Determinism::SeededStable,
+            fallback: None,
         },
     }
 }
@@ -203,6 +204,8 @@ fn materialize_start(
         values: None,
         options: vec![],
         most_parts: None,
+        most_entities: None,
+        most_calls: None,
         sampler_state: None,
     });
     let indices = RecordBatch::try_new(
@@ -344,25 +347,21 @@ fn to_the_sample(run: &mut Run) -> (DataRequest, Vec<String>) {
 }
 
 #[test]
-fn a_seed_of_2_to_the_70_reaches_the_sample_as_that_exact_integer() {
+fn a_seed_of_2_to_the_70_is_past_every_range_a_provider_declares() {
+    // Contract v26 (design choice 1): every provider declares its largest
+    // seed, a u64, with no "any seed" default, so a seed of 2**70 is past
+    // the widest range one can declare, refused by RS-7's rule before the
+    // sample, by name, never sampled under another seed.
     let seed = Seed::from(1_u128 << 70);
     assert_eq!(String::from(seed.clone()), "0x400000000000000000");
-    let mut run = materialize(host(), &shop(), QUERY, Some(seed)).unwrap();
-    let (request, warnings) = to_the_sample(&mut run);
-    let DataRequest::SampleEntities { seed, n, .. } = request else {
-        panic!("not the sample: {request:?}");
-    };
+    let run = materialize(host_up_to(u64::MAX), &shop(), QUERY, Some(seed)).unwrap();
+    let err = at_the_sample(run, catalog).unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("seed"));
     assert_eq!(
-        seed,
-        Scalar::Decimal128 {
-            precision: 38,
-            scale: 0,
-            value: 1_i128 << 70,
-        }
+        err.fields["max_seed"],
+        Detail::Scalar(Scalar::UInt64(u64::MAX))
     );
-    assert_eq!(n, 10_000);
-    // The foreign key is not one the source keys, and no index covers it.
-    assert_eq!(warnings, ["MISSING_INDICES"]);
 
     // A seed a u64 holds is one; none is the reference's default, 42.
     for (given, taken) in [
@@ -441,7 +440,7 @@ fn the_core_refuses_a_seed_past_the_largest_duckdb_declares() {
 }
 
 /// A host provider declaring the requests materialize asks, and `max_seed`.
-fn host_up_to(max_seed: Option<u64>) -> ProviderChoice {
+fn host_up_to(max_seed: u64) -> ProviderChoice {
     let ProviderChoice::Host { mut capabilities } = host() else {
         unreachable!()
     };
@@ -452,14 +451,13 @@ fn host_up_to(max_seed: Option<u64>) -> ProviderChoice {
 #[test]
 fn a_host_provider_s_declared_range_is_the_one_the_core_holds_it_to() {
     for (max_seed, seed, refused) in [
-        (Some(100), 100_u128, false),
-        (Some(100), 101, true),
-        (Some(0), 0, false),
-        (Some(0), 1, true),
-        (Some(u64::MAX), u128::from(u64::MAX), false),
-        (Some(u64::MAX), 1 << 64, true),
-        (Some(u64::MAX), 10_u128.pow(38), true),
-        (None, 1 << 70, false),
+        (100, 100_u128, false),
+        (100, 101, true),
+        (0, 0, false),
+        (0, 1, true),
+        (u64::MAX, u128::from(u64::MAX), false),
+        (u64::MAX, 1 << 64, true),
+        (u64::MAX, 10_u128.pow(38), true),
     ] {
         let run =
             materialize(host_up_to(max_seed), &shop(), QUERY, Some(Seed::from(seed))).unwrap();
@@ -471,7 +469,7 @@ fn a_host_provider_s_declared_range_is_the_one_the_core_holds_it_to() {
                 assert_eq!(err.fields["field"], Detail::text("seed"));
                 assert_eq!(
                     err.fields["max_seed"],
-                    Detail::Scalar(Scalar::UInt64(max_seed.unwrap()))
+                    Detail::Scalar(Scalar::UInt64(max_seed))
                 );
             }
         }
@@ -479,13 +477,13 @@ fn a_host_provider_s_declared_range_is_the_one_the_core_holds_it_to() {
 }
 
 /// The shipped data layer, but for the seed range it gives DuckDB, which
-/// it forgets: a seeded fault in the capability.
+/// it widens to every seed: a seeded fault in the capability.
 struct Forgetful(sdm_data::Data);
 
 impl DataLayer for Forgetful {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         let mut capabilities = self.0.capabilities(provider)?;
-        capabilities.max_seed = None;
+        capabilities.max_seed = u64::MAX;
         Ok(capabilities)
     }
 
@@ -509,7 +507,7 @@ impl DataLayer for Forgetful {
 
 #[test]
 fn without_the_capability_no_invalid_request_is_given() {
-    // Seeded: DuckDB's declared range forgotten, a seed of 2**31 is no
+    // Seeded: DuckDB's declared range widened, a seed of 2**31 is no
     // longer the caller's error: it reaches the dialect's rendering, which
     // never renders a seed its parser refuses and calls that the core's
     // error. So the refusal above is the capability's, not a fallback.
@@ -779,13 +777,22 @@ fn tables_to_the_result(run: &mut Run) -> Vec<(&'static str, String)> {
         .into_iter()
         .filter_map(|(request, _)| match request {
             DataRequest::Describe { .. } => None,
-            DataRequest::TimeBounds { columns } => Some(("time_bounds", columns[0].table.clone())),
-            DataRequest::SampleEntities { table, .. } => Some(("sample_entities", table)),
-            DataRequest::Neighbors { table, .. } => Some(("neighbors", table)),
-            DataRequest::Lookup { table, .. } => Some(("lookup", table)),
+            DataRequest::TimeBounds { columns } => Some(("time_bounds", name(&columns[0].table))),
+            DataRequest::SampleEntities { table, .. } => Some(("sample_entities", name(&table))),
+            DataRequest::Neighbors { table, .. } => Some(("neighbors", name(&table))),
+            DataRequest::Lookup { table, .. } => Some(("lookup", name(&table))),
             other => panic!("{other:?}"),
         })
         .collect()
+}
+
+/// The name of a relation of one part, as every request of a host giving
+/// one part names its table (design choice 12).
+fn name(relation: &sdm_contract::data::Relation) -> String {
+    relation
+        .single()
+        .expect("a relation of one part")
+        .to_owned()
 }
 
 /// Every request a run asked with its plan, in order, and the warnings it
@@ -889,8 +896,8 @@ fn a_table_named_otherwise_is_read_by_its_source_name() {
     let tables: Vec<String> = asked
         .iter()
         .filter_map(|request| match request {
-            DataRequest::TimeBounds { columns } => Some(columns[0].table.clone()),
-            DataRequest::SampleEntities { table, .. } => Some(table.clone()),
+            DataRequest::TimeBounds { columns } => Some(name(&columns[0].table)),
+            DataRequest::SampleEntities { table, .. } => Some(name(table)),
             _ => None,
         })
         .collect();

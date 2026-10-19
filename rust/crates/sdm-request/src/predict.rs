@@ -643,9 +643,9 @@ fn predicted_column(query: &str) -> Option<&str> {
 
 /// The call one gathered payload makes of `model`, with `request_id`,
 /// asking `outputs`; `asked` names the inference options the caller set,
-/// of which one the model does not read is refused before the call, as
-/// the adapter refuses it (`_inference`): `UNSUPPORTED_REQUEST` naming the
-/// model and those options.
+/// the only ones sent, of which one the model does not read is refused
+/// before the call, as the adapter refuses it (`_inference`):
+/// `UNSUPPORTED_REQUEST` naming the model and those options.
 pub fn body(
     payload: &Value,
     model: &str,
@@ -698,9 +698,12 @@ pub fn body(
     metadata.set("request_id", Value::text(request_id));
     envelope.set("metadata", metadata);
 
-    // Only the inference options the model reads: one the caller set and
-    // the model does not read is refused; the engine's defaults of the
-    // others are left out.
+    // Only the inference options the caller set, which the model reads: one
+    // the caller set and the model does not read is refused, and the
+    // engine's defaults are left out, the config itself when the caller set
+    // none (the reference's 26ecdd28: a deployment applies its own defaults
+    // to a request that carries none, and the SDM backends refuse any
+    // non-empty `inference_config`).
     match envelope.get("inference") {
         Some(Value::Object(_)) => {
             if let Some(Value::Object(config)) = envelope
@@ -723,15 +726,18 @@ pub fn body(
                     .with_field("model", Detail::text(model))
                     .with_field("unsupported", texts(refused.iter().map(|n| n.as_str()))));
                 }
-                let trimmed = Value::Object(
-                    config
-                        .iter()
-                        .filter(|(name, _)| INFERENCE_OPTIONS.contains(&name.as_str()))
-                        .cloned()
-                        .collect(),
-                );
+                let sent: Vec<(String, Value)> = config
+                    .iter()
+                    .filter(|(name, _)| asked.contains(name))
+                    .filter(|(name, _)| INFERENCE_OPTIONS.contains(&name.as_str()))
+                    .cloned()
+                    .collect();
                 let mut inference = envelope.get("inference").cloned().unwrap_or(Value::Null);
-                inference.set("inference_config", trimmed);
+                if sent.is_empty() {
+                    inference.remove("inference_config");
+                } else {
+                    inference.set("inference_config", Value::Object(sent));
+                }
                 envelope.set("inference", inference);
             }
         }

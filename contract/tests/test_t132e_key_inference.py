@@ -42,17 +42,22 @@ are observed and projected by the same code; ``sdm-testkit``'s
   ``contract/key-inference-vectors.json#<id or glob> <from> -> <to>``); a
   proposed entry excuses nothing. ``register.required`` is derived (the
   reference fails unnamed or with INTERNAL_ERROR) and excuses nothing by
-  itself: at recording it marks ``nulls-1-decimal.200``, a decimal key
-  with a null sampled at ``materialize`` (INTERNAL_ERROR).
+  itself. At b413e9ad it marked ``nulls-1-decimal.200``, a decimal key
+  with a null sampled at ``materialize`` (INTERNAL_ERROR); at 6298913c
+  (main's eb6c68eb reads the decimal key as an integer) the reference
+  materializes it as it does its integer twin, so no vector is marked.
   ``nulls-1-text.200``, the same with a text key, the reference refuses
   with INVALID_REQUEST at ``materialize``: a named code, so not marked.
 
 P1B-40, option (b) (owner, 2026-10-13, relayed):
-``nulls-1-decimal.200`` (INTERNAL_ERROR in the reference) and
-``nulls-1-text.200`` (INVALID_REQUEST: the same mixed text key reached by
+``nulls-1-text.200`` (INVALID_REQUEST: a mixed text key reached by
 sampling) must materialize on the core, describing the tables as the
 reference did, with the twin's warnings (``nulls-1.200``) and exactly one
 more (:func:`test_option_b_materializes_with_one_more_warning`).
+From T2.0c (exact decimals) a null DECIMAL key beside values
+(``nulls-1-decimal.200``) is kept as the reference and its integer twin
+keep it, with no extra warning
+(:func:`test_a_null_decimal_key_is_kept_as_its_integer_twin_s`).
 
 Gating (``contract/tests/t132e_gate.py``): ``t132e-pending.json``'s
 ``pending["key-python-core"]`` and the exit's ``py:`` ids in
@@ -258,14 +263,20 @@ def test_a_key_holding_nulls_refuses_no_table(
 
 
 #: P1B-40, option (b) (owner, 2026-10-13, relayed): sampling reaches a
-#: table whose key mixes a null with real text or decimal values, which
-#: the reference refuses (INVALID_REQUEST) or fails on (INTERNAL_ERROR);
-#: the core leaves the null-key rows out and succeeds, with one warning
-#: per table. Each vector and its twin, the same layout with an integer
-#: key, which the reference answers.
+#: table whose key mixes a null with real text values, which the reference
+#: refuses (INVALID_REQUEST); the core leaves the null-key rows out and
+#: succeeds, with one warning per table. Each vector and its twin, the same
+#: layout with an integer key, which the reference answers. Option (b)
+#: stays for text keys only (T2.0c's exact decimals).
 OPTION_B = {
-    'nulls-1-decimal.200': 'nulls-1.200',
     'nulls-1-text.200': 'nulls-1.200',
+}
+#: A null DECIMAL key beside values: at 6298913c (main's eb6c68eb) the
+#: reference keeps it exactly as its integer twin does, the null-key row's
+#: warning included and no other, and so does the core with exact decimals
+#: (T2.0c), with no option (b) warning.
+DECIMAL_KEPT = {
+    'nulls-1-decimal.200': 'nulls-1.200',
 }
 
 
@@ -302,12 +313,39 @@ def test_option_b_materializes_with_one_more_warning(
     )
 
 
+@pytest.mark.parametrize(
+    'vector_id', [pytest.param(i, id=i) for i in DECIMAL_KEPT]
+)
+def test_a_null_decimal_key_is_kept_as_its_integer_twin_s(
+    vector_id: str, core_runs: dict[str, Any]
+) -> None:
+    r"""The core keeps a null DECIMAL key beside values as the reference
+    and the integer twin do: success at ``materialize``, the reference's
+    description, and exactly the twin's warnings, no option (b) warning."""
+    vector = BY_ID[vector_id]
+    twin = BY_ID[DECIMAL_KEPT[vector_id]]['reference']
+    observation = core_runs[vector_id]
+    assert observation['core'] is not None, 'the core was not reached'
+    got = R.project(observation)
+    assert got['outcome'] == twin['outcome'], got['outcome']
+    assert got['schema'] == vector['reference']['schema']
+    assert Counter(got['warnings']) == Counter(twin['warnings']), got[
+        'warnings'
+    ]
+
+
 def test_option_b_s_vectors_are_the_reference_s_refusals() -> None:
-    for vector_id, twin_id in OPTION_B.items():
+    for vector_id in OPTION_B:
         outcome = BY_ID[vector_id]['reference']['outcome']
         assert outcome['result'] == 'refusal'
         assert outcome['stage'] == 'materialize'
-        assert outcome['code'] in ('INVALID_REQUEST', 'INTERNAL_ERROR')
+        assert outcome['code'] == 'INVALID_REQUEST'
+        assert BY_ID[vector_id]['key']['kind'] == 'text'
+    # The decimal one the reference answers exactly as its integer twin.
+    for vector_id, twin_id in DECIMAL_KEPT.items():
+        assert BY_ID[vector_id]['reference'] == BY_ID[twin_id]['reference']
+        assert BY_ID[vector_id]['key']['kind'] == 'decimal'
+    for vector_id, twin_id in {**OPTION_B, **DECIMAL_KEPT}.items():
         twin = BY_ID[twin_id]
         assert twin['reference']['outcome']['result'] == 'success'
         assert twin['key'] == {
@@ -392,8 +430,20 @@ def test_the_vectors_are_not_vacuous() -> None:
     assert ('success', 'materialize', None) in by_outcome
     assert ('refusal', 'from_source', 'INVALID_REQUEST') in by_outcome
     assert ('refusal', 'materialize', 'INVALID_REQUEST') in by_outcome
+    # At 6298913c the reference fails no vector unnamed or with
+    # INTERNAL_ERROR, so none is marked; the rule that would mark one is
+    # held by test_a_difference_passes_only_under_an_approved_transition's
+    # seeded vector.
     marked = [v['id'] for v in vectors if v['register']['required']]
-    assert 0 < len(marked) < len(vectors)
+    assert marked == []
+    assert not any(
+        v['reference']['outcome']['code'] == 'INTERNAL_ERROR'
+        or (
+            v['reference']['outcome']['result'] == 'refusal'
+            and v['reference']['outcome']['code'] is None
+        )
+        for v in vectors
+    )
     # The threshold, as the reference draws it: kept at exactly 99%,
     # declined at 98.9%, over the whole table at 5,000 rows.
     for rows in (1_000, 5_000):
@@ -474,7 +524,18 @@ def test_a_difference_passes_only_under_an_approved_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = sys.modules[__name__]
-    marked = BY_ID['nulls-1-decimal.200']
+    # nulls-1-decimal.200 as the reference answered it at b413e9ad
+    # (INTERNAL_ERROR at materialize), seeded: no recorded vector fails so
+    # at 6298913c. Its mark is the recorder's own, derived from it.
+    marked = copy.deepcopy(BY_ID['nulls-1-decimal.200'])
+    marked['reference']['outcome'] = {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'StructuredDataError',
+        'code': 'INTERNAL_ERROR',
+    }
+    why = R.register(marked['reference'])
+    marked['register'] = {'required': bool(why), 'why': why}
     assert R.outcome_class(marked['reference']['outcome']) == (
         'refusal INTERNAL_ERROR'
     )

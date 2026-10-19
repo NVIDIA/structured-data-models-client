@@ -439,7 +439,7 @@ fn unaccounted(schema: &Value) -> Result<(), String> {
 
 /// The fields whose attachment is JSON of the contract's, with the entry of
 /// `$defs/Attachments` that locks it.
-const JSON: [(&str, &str); 18] = [
+const JSON: [(&str, &str); 19] = [
     ("Operation/validate_query.query", "ValidateQuery.query"),
     ("Operation/validate_query.schema", "ValidateQuery.schema"),
     ("Operation/describe_source.source", "DescribeSource.source"),
@@ -455,6 +455,7 @@ const JSON: [(&str, &str); 18] = [
     ("RequestState.query", "RequestState.query"),
     ("ForecastStep.payload", "ForecastStep.payload"),
     ("ForecastStep.query", "ForecastStep.query"),
+    ("RequestBatch.payload", "RequestBatch.payload"),
     (
         "OperationResult/describe_source.description",
         "DescribedSource.description",
@@ -464,7 +465,7 @@ const JSON: [(&str, &str); 18] = [
 ];
 
 /// The other fields naming an attachment, and why the lock needs no entry.
-const OTHER: [(&str, &str); 7] = [
+const OTHER: [(&str, &str); 8] = [
     (
         "ControlMessage/attached.attachment",
         "a control message: the root schema",
@@ -475,6 +476,7 @@ const OTHER: [(&str, &str); 7] = [
     ("FetchOutcome/data.data", "Arrow, with its schema"),
     ("KeySet.attachment", "Arrow, with its schema"),
     ("OperationResult/predict.result", "Arrow, with its schema"),
+    ("AnsweredParts.result", "Arrow, with its schema"),
 ];
 
 fn generated() -> Value {
@@ -547,7 +549,8 @@ fn a_field_added_to_an_attachment_fails_the_lock() {
     }
     // A new request state format is a new shape too.
     let mut schema = generated();
-    schema["$defs"]["StatePayload"]["x-request-state-version"] = serde_json::json!(2);
+    schema["$defs"]["StatePayload"]["x-request-state-version"] =
+        serde_json::json!(sdm_contract::ops::REQUEST_STATE_VERSION + 1);
     let changed = serde_json::to_string_pretty(&schema).unwrap();
     assert!(verify(&CONTRACT, &changed, &lock, CONTRACT.version).is_err());
 }

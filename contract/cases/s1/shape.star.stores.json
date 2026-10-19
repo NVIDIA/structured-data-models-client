@@ -1,0 +1,232 @@
+{
+  "format": "sdm-case/1",
+  "id": "shape.star.stores",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+      "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)",
+      "CREATE TABLE products AS SELECT i AS pid, i::DOUBLE AS price, i AS tag FROM range(6) t(i)",
+      "CREATE TABLE stores AS SELECT i AS sid, i AS size, i AS tag FROM range(3) t(i)"
+    ],
+    "from_source": {
+      "tables": {
+        "customers": "customers",
+        "orders": "orders",
+        "products": "products",
+        "stores": "stores"
+      },
+      "primary_keys": {
+        "customers": "cid",
+        "orders": "oid",
+        "products": "pid",
+        "stores": "sid"
+      },
+      "time_columns": {
+        "orders": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "orders",
+          "source_column": "cid",
+          "target_table": "customers",
+          "target_column": "cid"
+        },
+        {
+          "source_table": "orders",
+          "source_column": "pid",
+          "target_table": "products",
+          "target_column": "pid"
+        },
+        {
+          "source_table": "orders",
+          "source_column": "sid",
+          "target_table": "stores",
+          "target_column": "sid"
+        }
+      ]
+    },
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH stores.sid",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2024-02-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "customers",
+            "source": {
+              "source": [
+                "customers"
+              ]
+            }
+          },
+          {
+            "name": "orders",
+            "source": {
+              "source": [
+                "orders"
+              ]
+            }
+          },
+          {
+            "name": "products",
+            "source": {
+              "source": [
+                "products"
+              ]
+            }
+          },
+          {
+            "name": "stores",
+            "source": {
+              "source": [
+                "stores"
+              ]
+            }
+          }
+        ],
+        "primary_keys": {
+          "customers": {
+            "value": [
+              "cid"
+            ]
+          },
+          "orders": {
+            "value": [
+              "oid"
+            ]
+          },
+          "products": {
+            "value": [
+              "pid"
+            ]
+          },
+          "stores": {
+            "value": [
+              "sid"
+            ]
+          }
+        },
+        "time_columns": {
+          "orders": {
+            "value": "ts"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "orders",
+              "column": "cid"
+            },
+            {
+              "table": "customers",
+              "column": "cid"
+            }
+          ],
+          [
+            {
+              "table": "orders",
+              "column": "pid"
+            },
+            {
+              "table": "products",
+              "column": "pid"
+            }
+          ],
+          [
+            {
+              "table": "orders",
+              "column": "sid"
+            },
+            {
+              "table": "stores",
+              "column": "sid"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1706745600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "regression; the request's context rows per table, the same on all three databases: customers 2, orders 2, products 2, stores 3"
+  },
+  "why": "T2.19 (main eb6c68eb): the star shape sampled from stores, a table holding no foreign key (the core refuses the others by parent_table until T2.11), compared at the payload; one path to each table, a control",
+  "source": "main's test_sql_sampler_parity.py _SHAPES and _shape_frames (eb6c68eb, the reference at 6298913c), as T2.19 names them"
+}

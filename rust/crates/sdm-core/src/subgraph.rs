@@ -11,8 +11,12 @@
 //! no row of the table it refers to holds yet for that example looked up
 //! (`_by_pkey`, one `lookup`), then the tables referring to it, their
 //! latest rows up to each example's anchor (`_by_fkey`, one `neighbors` for
-//! each, asked together in one step). A row is told apart by its key and
-//! its example as values (decision E41(d), H22), where the reference's
+//! each, asked together in one step). A table visited reads only the rows
+//! the hop before reached: a table reached by two paths may gain rows while
+//! the hop runs, which the next hop reads (`main`'s eb6c68eb). A column
+//! linking two tables is one column read, and each of its links is looked
+//! up. A row is told apart by its key and its example as values (decision
+//! E41(d), H22), where the reference's
 //! `Mapper` numbers them; each is kept once, numbered in the order first
 //! reached. What each answer adds, and the links it makes, are the
 //! reference's, in its order: so are the order of the tables the payload
@@ -232,9 +236,17 @@ impl Walk<'_> {
             entity.counts[0] = examples;
         }
         for (hop, &neighbors) in self.neighbors.iter().enumerate() {
-            let visiting: Vec<String> = visits.iter().map(|v| v.name.clone()).collect();
-            for name in visiting {
-                self.visit(&mut visits, &mut edges, &name, hop, neighbors)
+            // The frames each table held when this hop began. A table
+            // reached by two paths gains frames for the next hop while this
+            // one runs, through whichever of its neighbors is visited first,
+            // and those wait for the next hop, which counts them (`main`'s
+            // eb6c68eb, `hop_end_dict`).
+            let visiting: Vec<(String, usize)> = visits
+                .iter()
+                .map(|v| (v.name.clone(), v.frames.len()))
+                .collect();
+            for (name, end) in visiting {
+                self.visit(&mut visits, &mut edges, &name, end, hop, neighbors)
                     .await?;
             }
         }
@@ -246,6 +258,7 @@ impl Walk<'_> {
         visits: &mut Vec<Visit>,
         edges: &mut Vec<Edge>,
         name: &str,
+        end: usize,
         hop: usize,
         neighbors: u64,
     ) -> Result<(), CoreError> {
@@ -255,15 +268,17 @@ impl Walk<'_> {
         }
         let table = table_named(self.graph, name)?;
         let visit = &mut visits[at];
-        let frame = concat(&visit.frames[visit.offset..])?;
-        let batch: Vec<usize> = visit.batches[visit.offset..].concat();
+        // The rows the hop before reached: the frames from the last visit's
+        // up to those the table held when this hop began.
+        let frame = concat(&visit.frames[visit.offset..end])?;
+        let batch: Vec<usize> = visit.batches[visit.offset..end].concat();
         // Each row's number is its place among the table's rows, in the
         // order they were reached (the reference's `Mapper` numbers a row
         // reached anew next, and a row of a table without a key, or whose
         // key is null, is always reached anew).
         let start: usize = visit.batches[..visit.offset].iter().map(Vec::len).sum();
         let index: Vec<usize> = (start..start + batch.len()).collect();
-        visit.offset = visit.frames.len();
+        visit.offset = end;
 
         // The foreign keys: each key not yet reached for its example looked
         // up in the table it refers to.
@@ -315,6 +330,7 @@ impl Walk<'_> {
                                 dst_table,
                                 columns.clone(),
                                 key_set(self.asker, sample::seeds(seeds, vec![])?)?,
+                                false,
                             )?,
                         )
                         .await?,
@@ -414,7 +430,21 @@ impl Walk<'_> {
                 self.nulls,
             )?);
         }
-        let answers = ask_all_vec(self.asker, requests).await?;
+        // A source comparing a window's bounds with its stored text reads
+        // one stored value of a table before its first windowed read, as
+        // the reference does table by table (`Times::windowed`): each read
+        // is then asked after its own, in order.
+        let answers = if self.asker.compares_stored_times() {
+            let mut answers = Vec::with_capacity(requests.len());
+            for ((src, _), request) in referring.iter().zip(requests) {
+                let src_table = table_named(self.graph, src)?;
+                let request = self.times.windowed(self.asker, src_table, request).await?;
+                answers.push(ask(self.asker, request).await?);
+            }
+            answers
+        } else {
+            ask_all_vec(self.asker, requests).await?
+        };
         for ((src, fkey), answer) in referring.iter().zip(answers) {
             let src_table = table_named(self.graph, src)?;
             let answer = self
@@ -649,15 +679,16 @@ fn take_array(array: &ArrayRef, rows: &[usize]) -> Result<ArrayRef, CoreError> {
 pub const NULL_KEYS_LEFT_OUT: &str = "NULL_KEYS_LEFT_OUT";
 
 /// Which rows of a keyed table's rows reached to keep, where they hold a
-/// null key of text or of a decimal type beside a key that is not null:
-/// the reference sorts every keyed table's keys reached (`np.unique` in
-/// `_sample_subgraph`), which fails comparing a null with a text value
-/// (an unnamed error its client reports as `INVALID_REQUEST`) or with a
-/// decimal (`INTERNAL_ERROR`), so no request of it exists to match; the
+/// null text key beside a key that is not null: the reference sorts every
+/// keyed table's keys reached (`np.unique` in `_sample_subgraph`), which
+/// fails comparing a null with a text value (an unnamed error its client
+/// reports as `INVALID_REQUEST`), so no request of it exists to match; the
 /// core leaves the rows with a null key out and says so (P1B-40, approved
 /// by the owner). `None` where nothing is left out: keys reached that are
 /// all null sort, as one null alone does (measured on the reference at
-/// b413e9ad), and a null integer or float key sorts.
+/// b413e9ad), and a null integer, float or decimal key sorts (a decimal
+/// since `main`'s eb6c68eb, which reads it as an integer or a float: the
+/// reference keeps such a row as it keeps its integer twin's, T2.0c).
 fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<bool>>, CoreError> {
     let column = named(frame, key)?;
     let unsortable = matches!(
@@ -665,8 +696,6 @@ fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<
         arrow_schema::DataType::Utf8
             | arrow_schema::DataType::LargeUtf8
             | arrow_schema::DataType::Utf8View
-            | arrow_schema::DataType::Decimal128(_, _)
-            | arrow_schema::DataType::Decimal256(_, _)
     );
     let nulls = column.null_count();
     if !unsortable || nulls == 0 || nulls == column.len() {
@@ -756,11 +785,12 @@ mod null_key_tests {
         let decimal = arrow_array::Decimal128Array::from(vec![Some(1), None])
             .with_precision_and_scale(18, 0)
             .unwrap();
+        // A decimal key with a null sorts since eb6c68eb, as an integer
+        // key with a null does, and is read.
         assert_eq!(
             null_keys_beside_values(&frame(Arc::new(decimal)), "k").unwrap(),
-            Some(vec![true, false])
+            None
         );
-        // An integer key with a null sorts, and is read.
         let ints = frame(Arc::new(Int64Array::from(vec![Some(1), None])));
         assert_eq!(null_keys_beside_values(&ints, "k").unwrap(), None);
     }

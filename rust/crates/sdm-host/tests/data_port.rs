@@ -252,6 +252,8 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
         plan: Some(FetchPlan::Host { expect }),
         provider: None,
         echo: true,
+        undeclared: vec![],
+        fallback: None,
     };
     let run = HostRun::start(
         &sdm_host::default_root(),
@@ -274,6 +276,7 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(9),
+                continuation: None,
             },
         }))
         .unwrap(),

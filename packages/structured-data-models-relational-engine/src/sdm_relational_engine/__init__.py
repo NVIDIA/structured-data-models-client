@@ -15,6 +15,7 @@ from sdm_relational_engine.client.state import global_state
 from sdm_relational_engine.exceptions import (
     AuthenticationError,
     ClientInitializationError,
+    EmptyTableError,
     GraphConstructionError,
     HTTPException,
     InvalidResponseError,
@@ -27,6 +28,7 @@ from sdm_relational_engine.exceptions import (
     NoTablesFoundError,
     TableNotFoundError,
     UnknownDatasetError,
+    ViewConversionError,
 )
 from sdm_relational_engine.utils.environment import (
     in_jupyter_notebook as in_jupyter_notebook,
@@ -43,6 +45,7 @@ __all__ = [
     'AuthenticationError',
     'ClientInitializationError',
     'Dtype',
+    'EmptyTableError',
     'GraphConstructionError',
     'HTTPException',
     'InvalidResponseError',
@@ -57,6 +60,7 @@ __all__ = [
     'Stype',
     'TableNotFoundError',
     'UnknownDatasetError',
+    'ViewConversionError',
     '__version__',
     'global_state',
     'init',

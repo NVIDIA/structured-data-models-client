@@ -1,0 +1,194 @@
+{
+  "format": "sdm-case/1",
+  "id": "shape.one-column-two-tables",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+      "CREATE TABLE buyers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+      "CREATE TABLE details AS SELECT i AS did, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+    ],
+    "from_source": {
+      "tables": {
+        "buyers": "buyers",
+        "customers": "customers",
+        "details": "details"
+      },
+      "primary_keys": {
+        "buyers": "cid",
+        "customers": "cid"
+      },
+      "time_columns": {
+        "details": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "details",
+          "source_column": "cid",
+          "target_table": "customers",
+          "target_column": "cid"
+        },
+        {
+          "source_table": "details",
+          "source_column": "cid",
+          "target_table": "buyers",
+          "target_column": "cid"
+        }
+      ]
+    },
+    "pql": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2024-02-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "buyers",
+            "source": {
+              "source": [
+                "buyers"
+              ]
+            }
+          },
+          {
+            "name": "customers",
+            "source": {
+              "source": [
+                "customers"
+              ]
+            }
+          },
+          {
+            "name": "details",
+            "source": {
+              "source": [
+                "details"
+              ]
+            }
+          }
+        ],
+        "primary_keys": {
+          "buyers": {
+            "value": [
+              "cid"
+            ]
+          },
+          "customers": {
+            "value": [
+              "cid"
+            ]
+          }
+        },
+        "time_columns": {
+          "details": {
+            "value": "ts"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "details",
+              "column": "cid"
+            },
+            {
+              "table": "customers",
+              "column": "cid"
+            }
+          ],
+          [
+            {
+              "table": "details",
+              "column": "cid"
+            },
+            {
+              "table": "buyers",
+              "column": "cid"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1706745600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "regression; the request's context rows per table, the same on all three databases: buyers 2, customers 10, details 6"
+  },
+  "why": "T2.19 (main eb6c68eb): one column linking two tables, a keyless event table's customer column referring to customers and to a copy of them, as a role-playing join makes it; the column is read once",
+  "source": "main's test_two_paths.py (eb6c68eb, the reference at 6298913c)"
+}

@@ -113,6 +113,7 @@ pub fn messages() -> Vec<ControlMessage> {
         payload: AttachmentId(1),
         query: AttachmentId(2),
         forecast: None,
+        batches: None,
     };
     vec![
         start(Operation::ValidateQuery(validate)),
@@ -143,6 +144,8 @@ pub fn messages() -> Vec<ControlMessage> {
             values: None,
             options: vec!["num_neighbors".into()],
             most_parts: None,
+            most_entities: None,
+            most_calls: None,
             sampler_state: Some(SamplerState {
                 version: 1,
                 memo: AttachmentId(4),
@@ -206,6 +209,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     }],
                     expect: ExpectedSchema::Discover {},
                 },
+                continuation: None,
             }],
         }),
         ControlMessage::Step(Step::Fetch {
@@ -214,7 +218,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     id: ReplyId(2),
                     request: DataRequest::Neighbors {
                         table: "orders".into(),
-                        key: "user_id".into(),
+                        key: vec!["user_id".into()],
                         columns: vec!["order_id".into(), "ts".into()],
                         seeds: seeds(&["anchor"]),
                         window: Some(Window {
@@ -244,18 +248,20 @@ pub fn messages() -> Vec<ControlMessage> {
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(3),
                     request: DataRequest::Lookup {
                         table: "users".into(),
-                        key: "user_id".into(),
+                        key: vec!["user_id".into()],
                         columns: vec!["age".into()],
                         seeds: seeds(&[]),
                     },
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(4),
@@ -268,10 +274,12 @@ pub fn messages() -> Vec<ControlMessage> {
                         filters: vec![Filter::NotNull {
                             column: "user_id".into(),
                         }],
+                        key_dtype: None,
                     },
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(5),
@@ -284,6 +292,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(6),
@@ -296,6 +305,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(7),
@@ -306,6 +316,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(8),
@@ -316,6 +327,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
                 FetchStep {
                     id: ReplyId(9),
@@ -326,6 +338,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     plan: FetchPlan::Host {
                         expect: ExpectedSchema::Discover {},
                     },
+                    continuation: None,
                 },
             ],
         }),
@@ -333,6 +346,7 @@ pub fn messages() -> Vec<ControlMessage> {
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(4),
+                continuation: None,
             },
         }),
         ControlMessage::FetchReply(FetchReply {
@@ -398,7 +412,7 @@ pub fn messages() -> Vec<ControlMessage> {
             }),
         }),
         ControlMessage::Step(Step::Done {
-            result: OperationResult::Materialize(Materialized { state }),
+            result: OperationResult::Materialize(Materialized { state, query: None }),
         }),
         ControlMessage::Step(Step::Done {
             result: OperationResult::Predict(Predicted {

@@ -28,7 +28,7 @@ use sdm_core::{
 /// fixed, decision E36).
 fn describe(table: &str) -> DataRequest {
     DataRequest::Scan {
-        table: table.to_owned(),
+        table: table.into(),
         columns: vec![],
         filters: vec![],
         limit: None,
@@ -46,11 +46,12 @@ where
         capabilities: ProviderCapabilities {
             optional: BTreeSet::new(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback: None,
         },
     };
     Run::with_data(root.data_access(&host).unwrap(), make)
@@ -548,7 +549,7 @@ fn a_key_set_travels_as_an_attachment() {
         let keys = asker.attach(Attachment::Bytes(vec![1, 2, 3]))?;
         asker
             .fetch(DataRequest::Describe {
-                tables: vec![keys.0.to_string()],
+                tables: vec![keys.0.to_string().into()],
                 part: DescribePart::Columns,
             })?
             .await;
@@ -560,6 +561,124 @@ fn a_key_set_travels_as_an_attachment() {
     let DataRequest::Describe { tables, .. } = &requests[0].request else {
         panic!()
     };
-    let id = sdm_contract::data::AttachmentId(tables[0].parse().unwrap());
+    let id = sdm_contract::data::AttachmentId(tables[0].single().unwrap().parse().unwrap());
     assert!(matches!(run.take_attachment(id), Some(Attachment::Bytes(b)) if b == [1, 2, 3]));
+}
+
+/// One page of `n` rows of `schema`, more following under `continuation`.
+fn page(n: usize, schema: Arc<Schema>, continuation: &str) -> FetchResult {
+    let FetchResult::Data(data) = rows_of(n, schema) else {
+        unreachable!()
+    };
+    FetchResult::Page {
+        data,
+        continuation: continuation.into(),
+    }
+}
+
+fn rows_of(n: usize, schema: Arc<Schema>) -> FetchResult {
+    let columns: Vec<arrow_array::ArrayRef> = schema
+        .fields()
+        .iter()
+        .map(|f| arrow_array::new_null_array(f.data_type(), n))
+        .collect();
+    let batch = RecordBatch::try_new_with_options(
+        Arc::clone(&schema),
+        columns,
+        &arrow_array::RecordBatchOptions::new().with_row_count(Some(n)),
+    )
+    .unwrap();
+    FetchResult::Data(ArrowData::new(schema, vec![batch]))
+}
+
+/// A run that reads one scan, and says how many rows its answer held.
+fn one_scan() -> Run {
+    data_run(|asker: Asker| async move {
+        let reply = asker.fetch(describe("t"))?.await;
+        Ok(done(vec![format!("ROWS_{}", row_count(&reply))]))
+    })
+}
+
+#[test]
+fn a_paged_answer_is_asked_for_page_by_page_and_read_as_one() {
+    // Contract v26 (design choice 1, paging): a page with a continuation
+    // is asked after, the same request with that continuation, until a
+    // page without one; the body reads the pages as one answer.
+    let mut run = one_scan();
+    let schema = Arc::new(Schema::empty());
+    let mut asked = Vec::new();
+    for answer in [
+        page(2, Arc::clone(&schema), "after-2"),
+        page(0, Arc::clone(&schema), "after-2-again"),
+        rows_of(3, Arc::clone(&schema)),
+    ] {
+        let Step::Fetch { requests } = run.next().unwrap() else {
+            panic!("not a fetch")
+        };
+        let [request] = requests.as_slice() else {
+            panic!("{requests:?}")
+        };
+        assert_eq!(request.request, describe("t"));
+        asked.push(request.continuation.clone());
+        run.submit_fetch(request.id, answer).unwrap();
+    }
+    assert_eq!(
+        asked,
+        [None, Some("after-2".into()), Some("after-2-again".into())]
+    );
+    let Step::Done {
+        result: OperationResult::ValidateQuery(QueryValidation { diagnostics, .. }),
+    } = run.next().unwrap()
+    else {
+        panic!("not done")
+    };
+    assert_eq!(diagnostics[0].code, "ROWS_5");
+}
+
+#[test]
+fn a_page_of_another_schema_ends_the_run_by_name() {
+    let mut run = one_scan();
+    let first = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+        "a",
+        arrow_schema::DataType::Int64,
+        true,
+    )]));
+    let other = Arc::new(Schema::new(vec![arrow_schema::Field::new(
+        "a",
+        arrow_schema::DataType::Utf8,
+        true,
+    )]));
+    for answer in [page(1, first, "next"), rows_of(1, other)] {
+        let Step::Fetch { requests } = run.next().unwrap() else {
+            panic!("not a fetch")
+        };
+        run.submit_fetch(requests[0].id, answer).unwrap();
+    }
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{err:?}");
+    assert_eq!(run.state(), RunState::Finished);
+}
+
+#[test]
+fn a_page_s_provider_error_is_the_fetch_s() {
+    let mut run = data_run(|asker: Asker| async move {
+        let reply = asker.fetch(describe("t"))?.await;
+        Ok(done(vec![match reply {
+            Reply::Fetch(FetchResult::Error(_)) => "FAILED".into(),
+            other => format!("{other:?}"),
+        }]))
+    });
+    for answer in [page(1, Arc::new(Schema::empty()), "next"), failed()] {
+        let Step::Fetch { requests } = run.next().unwrap() else {
+            panic!("not a fetch")
+        };
+        run.submit_fetch(requests[0].id, answer).unwrap();
+    }
+    let Step::Done {
+        result: OperationResult::ValidateQuery(QueryValidation { diagnostics, .. }),
+    } = run.next().unwrap()
+    else {
+        panic!("not done")
+    };
+    assert_eq!(diagnostics[0].code, "FAILED");
 }

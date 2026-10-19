@@ -29,11 +29,10 @@
 //! - Exit "`python-core` and `rust-host` agree on `core` fields for the
 //!   family", this host's half: each case's outcome is the `python-ref`
 //!   observation's (`success`, or the refusal's code), or an approved entry
-//!   other than P1B-1 lists the case. `decimal.class-target-38-18` (the
-//!   reference's INTERNAL_ERROR, the core's `target_type`) passes only once
-//!   P1B-18, which lists it, is approved (a success<->refusal or clearer
-//!   code change is E66(b)'s; the owner's or a reviewer's under it, never
-//!   the implementer's). `contract/tests/test_t132b_decimal_family.py`
+//!   other than P1B-1 lists the case. The family is T1.32b's three cases
+//!   and T2.0c's ten exact-decimal ones; where the core answers otherwise
+//!   than the reference, the approved entry listing the case (P2B-1) is what
+//!   lets it differ. `contract/tests/test_t132b_decimal_family.py`
 //!   holds `python-core` the same way, and `tests/t132b_decimal_vectors.rs`
 //!   this host over the family's vectors.
 //!
@@ -88,14 +87,25 @@ fn family_cases() -> (Vec<Case>, bases::Bases) {
         .filter(|c| FAMILY.iter().any(|p| c.id.starts_with(p)))
         .collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
+    // T1.32b's three cases and T2.0c's ten (exact decimals, KO2-50).
     assert_eq!(
         cases.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
         [
             "decimal.class-target-38-18",
+            "decimal.compare-finer-eq",
+            "decimal.compare-finer-gt",
+            "decimal.compare-finer-negative",
+            "decimal.compare-past-precision",
+            "decimal.compare-past-precision-gt",
+            "decimal.compare-same-scale",
             "decimal.feature-38-0-wide",
+            "decimal.feature-inexact-38-18",
+            "decimal.key-wide",
+            "decimal.sum-10-2",
             "decimal.target-38-18",
+            "decimal.target-regression-collide",
         ],
-        "the family's three cases"
+        "the family's thirteen cases"
     );
     (cases, bases::load(&contract.join("bases.yaml")).unwrap())
 }

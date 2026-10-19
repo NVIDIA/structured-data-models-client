@@ -10,7 +10,7 @@
 r"""``materialize`` on the core: the request (T1.11c, T1.28a).
 
 ``PredictiveQuery.materialize`` with ``indices`` over the schema of a DuckDB
-source comes here on the core route, in place of the relational
+or, from T2.2, a SQLite source comes here on the core route, in place of the relational
 materializer's own rules and gathering (``RelationalMaterializer
 .materialize``), once the client has checked the option names. From T1.28a the core holds the
 request's rules (design, "Host-held semantics"): the context size's bound
@@ -23,8 +23,8 @@ passes the call's values as the caller gave them, each refused by the core
 where the client would refuse its type, and hands back the payload, from
 which ``RelationalMaterializer.materialize`` builds the ``Request``.
 
-The core's ``materialize`` samples the source through the DuckDB provider
-(:mod:`.providers.duckdb`) and lays out the payload the engine lays out;
+The core's ``materialize`` samples the source through its backend's
+provider (:mod:`.providers`) and lays out the payload the engine lays out;
 this module hands it the description the core last answered of the
 schema and the schema as it stands (from T1.24b, decision E67), which the
 core reads together: what the schema says now, with what the description
@@ -59,6 +59,8 @@ from typing import TYPE_CHECKING, Any
 from sdm_client._routing import RouteError
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers.postgres import PostgresProvider
+from sdm_client._rust.providers.sqlite import SqliteProvider
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -124,7 +126,7 @@ def description(schema: Schema) -> tuple[dict[str, Any], dict[str, Any]]:
         tables.append(
             {
                 'name': name,
-                'source': getattr(table, 'source_name', name),
+                'source': codec.relation(getattr(table, 'source_name', name)),
                 'columns': [
                     {
                         'name': column_name,
@@ -252,9 +254,10 @@ def gather(
     schema = materializer.schema
     anchor = options.get('anchor_time')
     described, held = description(schema)
+    choice, provider = _provider(schema.source)
     operation = {
         'op': 'materialize',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': choice,
         'schema': 1,
         'held': 4,
         'query': 2,
@@ -287,28 +290,36 @@ def gather(
             }
         ),
     }
-    if str(getattr(query, 'problem_type', '')).endswith('FORECAST'):
+    if isinstance(query, Unresolved) or str(
+        getattr(query, 'problem_type', '')
+    ).endswith('FORECAST'):
         # How many steps the caller lets a forecast be asked as, which the
-        # core holds it to (T1.36 fix 21).
+        # core holds it to (T1.36 fix 21); for a query only the core
+        # resolves, whose kind only the core knows, always, as the core
+        # reads it of a forecast alone (T2.18).
         from sdm_client import decompose
 
         operation['most_parts'] = max(
             0, min(int(decompose.MOST_PARTS), 2**32 - 1)
         )
-    source: Any = schema.source
     # The sampler state the core's last run on this materializer left,
     # handed back, so a run skips what the reference's sampler reads once
     # (decision E52); the run leaves its own in its place, done or failed.
     finished = run(
         operation,
         attachments,
-        provider=DuckDBProvider(source.connection),
+        provider=provider,
         state=materializer._core_sampler_state,
     )
     state = finished.result['state']
     payload = json.loads(finished.take(state['payload']))
     query = json.loads(finished.take(state['query']))
-    kept: dict[str, Any] = {'version': state['version']}
+    # What the core resolved of the query (T2.18), which asked() reads and
+    # takes out before the request keeps the state.
+    kept: dict[str, Any] = {
+        'version': state['version'],
+        'facts': finished.result.get('query'),
+    }
     if state.get('forecast') is not None:
         # A forecast, which the core asked as one regression per step (T1.36
         # fix 21): step 1's query, and each later step's number, payload
@@ -323,3 +334,55 @@ def gather(
             for step in state['forecast']
         ]
     return (payload,), kept
+
+
+class Unresolved:
+    r"""A query only the core resolves: one naming a column whose name holds
+    a dot, a backtick or a line break, which the old validator refuses and
+    the core holds apart from its table (KO2-36, T2.18). It is gathered as
+    the caller wrote it, and the core answers what it resolved of it
+    (``Materialized.query``, contract v26). ``refusal`` is the old
+    validator's, for a call the core does not answer (a ranking over
+    candidates, which this client asks one part per candidate)."""
+
+    def __init__(self, text: str, refusal: StructuredDataError) -> None:
+        self.text = text
+        self.refusal = refusal
+
+    def to_string(self) -> str:
+        r"""The query as the caller wrote it, which materialize sends."""
+        return self.text
+
+
+def asked(query: Any, state: dict[str, Any]) -> tuple[bool, str]:
+    r"""Whether the target of ``query`` moves with time, and its entity
+    table: as the core resolved them (``state``'s ``facts``, taken out of
+    it) for a query only the core resolves (:class:`Unresolved`), else as
+    the old validator resolved them."""
+    facts = state.pop('facts', None)
+    if isinstance(query, Unresolved):
+        if facts is None:
+            raise StructuredDataError(
+                'the core gathered a query and said nothing of it',
+                code='INTERNAL_ERROR',
+            )
+        return bool(facts['windowed']), str(facts['entity_table'])
+    from predictive_query.validator.utils import table_name
+
+    return (
+        getattr(query.target_ast, 'date_offset_range', None) is not None,
+        table_name(query.entity_column),
+    )
+
+
+def _provider(source: Any) -> tuple[dict[str, Any], Any]:
+    r"""The provider choice a run over ``source`` names, and the provider
+    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
+    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
+    backend = source.backend
+    made = {
+        'duckdb': DuckDBProvider,
+        'sqlite': SqliteProvider,
+        'postgres': PostgresProvider,
+    }[backend]
+    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

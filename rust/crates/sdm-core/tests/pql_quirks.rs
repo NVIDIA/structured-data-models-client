@@ -15,6 +15,12 @@
 //! (D8) is held to the core's refusal by name (`date_literal_packed`)
 //! instead, whatever the reference read; its recorded reading stays in the
 //! table as evidence of the old behaviour.
+//!
+//! From T2.18 a query row marked `core_only` is held to the core's own
+//! answer there (its `errors`), where the reference refuses a spelling the
+//! core reads (KO2-36, register P2E-1); the reference's answer stays in the
+//! row, and the core must differ from it, so a mark that no longer differs
+//! fails.
 
 #![allow(
     clippy::disallowed_methods,
@@ -68,11 +74,14 @@ fn every_quirk_has_a_row() {
 /// reference refuses as `PQL_VALUE_INVALID_LITERAL`): from T1.6c the core
 /// refuses it by name (brief: "update the quirk expectations for D8
 /// literals from read to refused").
+/// The two rows marked `core_only` (T2.18) are held to the core's answer
+/// instead, and to differing from the reference's.
 #[test]
 fn every_query_row_answers_as_the_reference_does() {
     let table = table();
     let mut failures = Vec::new();
     let mut packed = Vec::new();
+    let mut core_only = Vec::new();
     for row in rows(&table, "queries") {
         let schema = query_schema(&table["schemas"][row["schema"].as_str().unwrap()]);
         let profile = profile(row["profile"].as_str().unwrap());
@@ -85,11 +94,30 @@ fn every_query_row_answers_as_the_reference_does() {
             }
             continue;
         }
+        if let Some(core) = row.get("core_only") {
+            core_only.push(row["id"].as_str().unwrap());
+            if differences(row, &schema, &profile).is_empty() {
+                failures.push(format!(
+                    "{}: marked core_only and answers as the reference",
+                    row["id"]
+                ));
+            }
+            let mut held = row.clone();
+            held["errors"] = core["errors"].clone();
+            for (part, how) in differences(&held, &schema, &profile) {
+                failures.push(format!("{}: core_only: {part}: {how}", row["id"]));
+            }
+            continue;
+        }
         for (part, how) in differences(row, &schema, &profile) {
             failures.push(format!("{}: {part}: {how}", row["id"]));
         }
     }
     assert_eq!(packed, ["date-digit-counts/long-year"]);
+    assert_eq!(
+        core_only,
+        ["backticks/unknown-with-dot", "backticks/newline-inside"]
+    );
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 

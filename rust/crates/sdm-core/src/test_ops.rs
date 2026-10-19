@@ -40,14 +40,21 @@ pub(crate) fn run(
             // The test's own plan, or the one the root's data layer makes
             // for the provider named, through the run's data access, as an
             // operation's body asks.
+            let declaring = !fetch.undeclared.is_empty() || fetch.fallback.is_some();
             let (plan, access) = match (fetch.plan, &fetch.provider) {
-                (Some(plan), None) => (Some(plan), None),
-                (None, Some(provider)) => (None, Some(root.data_access(provider)?)),
+                (Some(plan), None) if !declaring => (Some(plan), None),
+                (None, Some(provider)) => (
+                    None,
+                    Some(
+                        root.data_access(provider)?
+                            .declaring(&fetch.undeclared, fetch.fallback),
+                    ),
+                ),
                 _ => {
                     return Err(CoreError::new(
                         ErrorKind::InvalidRequest,
                         ErrorCode::InvalidRequest,
-                        "a test fetch names a plan or a provider, and not both",
+                        "a test fetch names a plan or a provider, and not both, and what a provider declares only with a provider",
                     ));
                 }
             };
@@ -84,6 +91,9 @@ pub(crate) fn run(
                     }
                     Reply::Fetch(FetchResult::Error(error)) => Err(CoreError::provider(&error)),
                     Reply::Model(_) => Err(internal("a fetch was answered by the model")),
+                    Reply::Fetch(FetchResult::Page { .. }) => {
+                        Err(internal("a page reached the body"))
+                    }
                 }
             };
             match access {

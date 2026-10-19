@@ -16,6 +16,7 @@
 //! Arrow.
 
 use crate::data::DescribePart;
+use crate::ops::Dtype;
 
 /// One part of the catalog, read.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,8 +30,11 @@ pub enum CatalogAnswer {
     /// `foreign_keys`: each column pair of each foreign key the one table
     /// asked for declares.
     ForeignKeys(Vec<CatalogForeignKey>),
-    /// `indexes`: each index of the source.
+    /// `indexes`: each index of the source, or of the one table asked for.
     Indexes(Vec<CatalogIndex>),
+    /// `index_columns`: the columns of the one index asked for, in its
+    /// order, `None` for an expression.
+    IndexColumns(Vec<Option<String>>),
 }
 
 impl CatalogAnswer {
@@ -42,6 +46,7 @@ impl CatalogAnswer {
             CatalogAnswer::Keys(_) => DescribePart::Keys,
             CatalogAnswer::ForeignKeys(_) => DescribePart::ForeignKeys,
             CatalogAnswer::Indexes(_) => DescribePart::Indexes,
+            CatalogAnswer::IndexColumns(_) => DescribePart::IndexColumns,
         }
     }
 }
@@ -57,6 +62,24 @@ pub struct CatalogColumn {
     pub not_null: bool,
     /// Part of the declared primary key.
     pub primary_key: bool,
+    /// Part of the primary key and still free to hold a null: SQLite's
+    /// primary key, unless it is the rowid alias or declared `NOT NULL`
+    /// (`not_null` says which), so its nullability is the catalog's; every
+    /// other source's primary key holds none.
+    pub key_nullable: bool,
+    /// Kept unique by the source itself, beside any key it declares: a
+    /// SQLite rowid alias (an `INTEGER PRIMARY KEY`), which no index
+    /// lists.
+    pub unique: bool,
+    /// The data type the declared type fixes, where the dialect's reader
+    /// reads one from it: SQLite's, which stores any value in any column,
+    /// so the reference types a column by its declaration first
+    /// (`_to_dtype`: `INT` an integer, `TEXT`, `CHAR` or `CLOB` text,
+    /// `REAL`, `FLOA` or `DOUB` a float), whatever its values, and a column
+    /// holding none reads as integers by its driver whatever it declares.
+    /// `None` where the values' type is the column's (another declaration,
+    /// an `INTERVAL` by the owner's KO2-62, every other source).
+    pub dtype: Option<Dtype>,
 }
 
 /// What a key the catalog declares is.
@@ -64,6 +87,14 @@ pub struct CatalogColumn {
 pub enum KeyKind {
     Primary,
     Unique,
+    /// A unique index over only the rows its condition covers (SQLite's
+    /// partial index): the reference holds a column it keeps unique so
+    /// (`unique_keys`), but no constraint of several columns.
+    PartialUnique,
+    /// A foreign key, by this table's columns: a key only to a column of
+    /// numbers handed over as its exact text
+    /// ([`crate::data::EXACT_NUMBER_MARKER`]), which it keeps as text.
+    Foreign,
     /// A constraint of another kind, which the reader leaves alone.
     Other,
 }
@@ -72,7 +103,12 @@ pub enum KeyKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogKey {
     pub kind: KeyKind,
+    /// The key's columns; none where they are read by `index`.
     pub columns: Vec<String>,
+    /// The index the key is, where its columns are read by its name
+    /// (`index_columns`), as SQLite's catalog lists a unique index; the
+    /// key is read whatever its kind, as the reference reads it.
+    pub index: Option<String>,
 }
 
 /// One row of a declared foreign key, as the dialect's reader gives it:
@@ -107,4 +143,7 @@ pub enum IndexColumns {
     /// a list naming a column it does not give. It covers no column the
     /// core counts, never a guess at its pieces.
     Unresolved,
+    /// The index's name only: its columns are read by it
+    /// (`index_columns`), as SQLite's catalog lists a table's indexes.
+    Named(String),
 }

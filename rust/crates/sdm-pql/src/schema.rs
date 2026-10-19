@@ -24,7 +24,8 @@ pub struct TableDefinition {
     pub end_time_col: Option<String>,
 }
 
-/// A column within a schema.
+/// A column within a schema, and a column a query names: its table and its
+/// column held apart, so either may hold a dot (Phase 2 decision KO2-36).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ColumnKey {
     pub table_name: String,
@@ -37,6 +38,19 @@ impl ColumnKey {
             table_name: table_name.to_string(),
             col_name: col_name.to_string(),
         }
+    }
+
+    /// `table.*`, the rows of a table rather than a column of it.
+    pub fn is_wildcard(&self) -> bool {
+        self.col_name == "*"
+    }
+}
+
+/// `table.column`, unquoted, as a message names a column; a query's text
+/// quotes it with [`crate::names::fqn`].
+impl std::fmt::Display for ColumnKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.table_name, self.col_name)
     }
 }
 

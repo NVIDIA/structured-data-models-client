@@ -669,16 +669,25 @@ fn a_forecast_of_many_steps_is_refused_at_once() {
     // Past the grammar's most (10,000) the query itself is refused, at
     // validation and at materialize; at 10,000 and at 201, past the default
     // most_parts (200), materialize refuses it. Each INVALID_REQUEST within
-    // two seconds: no step is built for a refused forecast's count.
+    // two seconds of the same run at 201 steps, timed just before it: no
+    // step is built for a refused forecast's count. A materialize run loads
+    // its base and describes it first, which takes a second or more of a
+    // debug build on a loaded machine, so the bound is over that run's own
+    // time, three times over, not a fixed one.
+    let (floor_case, _) = many_steps("201");
     for n in ["1000000000", "4294967297", "10001", "10000", "201"] {
         let (materialize, validate) = many_steps(n);
+        let (_, floor) = timed(&floor_case);
         let (got, took) = timed(&materialize);
         assert_eq!(
             got,
             json!(["refusal", "INVALID_REQUEST"]),
             "materialize, {n} steps"
         );
-        assert!(took < QUICK, "materialize, {n} steps: {took:?}");
+        assert!(
+            took < floor * 3 + QUICK,
+            "materialize, {n} steps: {took:?}, at 201 steps {floor:?}"
+        );
         let (got, took) = timed(&validate);
         let accepted = matches!(n, "10000" | "201");
         let want = if accepted {

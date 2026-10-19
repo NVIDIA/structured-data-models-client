@@ -18,8 +18,9 @@ file is the design's, T2.0a, not this package's):
   half;
 - seeded: one of its cases diagnostic at the checkpoint fails the half,
   naming exactly that case;
-- seeded: a half the file does not name (``2z``), and ``2a`` at a
-  checkpoint with no Phase 2 file, are usage errors naming the half;
+- seeded: a half the file does not name (``2z``), and a half of a phase
+  with no locked-set file (``3a``: Phase 3 has none; Phase 2's is the
+  design's, T2.0a) are usage errors naming the half;
 - Phase 1's ``1a`` and ``1b`` stay as they are: ``test_gate_modes.py``'s
   own tests hold them, unchanged.
 
@@ -184,19 +185,26 @@ def test_a_half_the_locked_set_does_not_name_is_a_usage_error(
     assert 'gate summary' not in done.stdout
 
 
-def test_a_phase_2_half_without_its_locked_set_is_a_usage_error(
+#: A phase with no locked-set file yet, and a half of it.
+NO_SET_PHASE = 3
+NO_SET_HALF = '3a'
+
+
+def test_a_half_of_a_phase_without_its_locked_set_is_a_usage_error(
     stubbed: Path,
     tmp_path: Path,
     observed: Any,
     stubs: dict[str, Any],
 ) -> None:
-    r"""Seeded: before the design lands Phase 2's file, ``--locked 2a`` is
-    refused naming the half: no locked set, no locked checks."""
+    r"""Seeded: a half of a phase whose locked-set file does not exist
+    (Phase 3's, before its design lands one) is refused naming the half:
+    no locked set, no locked checks. Written for Phase 2 until T2.0a
+    landed its file; Phase 3 keeps the premise true."""
     commit(stubbed)
-    assert not (stubbed / LOCKED_SET(2)).exists()
-    done = run_locked(stubbed, stubs, observed, tmp_path, HALF)
+    assert not (stubbed / LOCKED_SET(NO_SET_PHASE)).exists()
+    done = run_locked(stubbed, stubs, observed, tmp_path, NO_SET_HALF)
     assert done.returncode == 2, done.stdout + done.stderr
-    assert HALF in done.stdout + done.stderr
+    assert NO_SET_HALF in done.stdout + done.stderr
     assert 'gate summary' not in done.stdout
 
 

@@ -366,6 +366,9 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add("CONTRACT_VERSION", CONTRACT_VERSION)?;
     module.add("TEST_OPS", cfg!(feature = "test-ops"))?;
+    // The databases the core provides for, the staging rule's private
+    // marker (T2.1a); never public API.
+    module.add("PROVIDERS", PyTuple::new(py, sdm_host::providers())?)?;
     module.add(
         "ERROR_CODES",
         PyTuple::new(py, ErrorCode::ALL.map(ErrorCode::as_str))?,

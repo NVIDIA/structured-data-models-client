@@ -14,7 +14,13 @@ publish.workspace = true
 
 [features]
 # Operations only tests reach (`test_ops`); a shipped build leaves it off.
-test-ops = []
+# Their tests check JSON against the schema, so it brings `schema-check`.
+test-ops = ["schema-check"]
+# The check of a JSON value against a definition of the contract's schema
+# (`schema_check`), for a producer's tests: no operation, so a crate's tests
+# can take it without the test-only operations, which a crate matching on
+# every operation would then have to match (M2, T2.1b).
+schema-check = []
 
 [dependencies]
 arrow-array.workspace = true

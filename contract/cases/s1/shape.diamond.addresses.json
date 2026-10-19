@@ -1,0 +1,216 @@
+{
+  "format": "sdm-case/1",
+  "id": "shape.diamond.addresses",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE addresses AS SELECT i AS aid, ['a', 'b', 'c', 'd', 'e'][1 + i] AS city, i AS tag FROM range(5) t(i)",
+      "CREATE TABLE customers AS SELECT i AS cid, i % 5 AS aid, ['x', 'y'][1 + i % 2] AS seg, i AS tag FROM range(10) t(i)",
+      "CREATE TABLE orders AS SELECT i AS oid, i % 10 AS cid, (i + 2) % 5 AS aid, i % 6 AS pid, i % 3 AS sid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts, i AS tag FROM range(40) t(i)"
+    ],
+    "from_source": {
+      "tables": {
+        "addresses": "addresses",
+        "customers": "customers",
+        "orders": "orders"
+      },
+      "primary_keys": {
+        "addresses": "aid",
+        "customers": "cid",
+        "orders": "oid"
+      },
+      "time_columns": {
+        "orders": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "orders",
+          "source_column": "cid",
+          "target_table": "customers",
+          "target_column": "cid"
+        },
+        {
+          "source_table": "customers",
+          "source_column": "aid",
+          "target_table": "addresses",
+          "target_column": "aid"
+        },
+        {
+          "source_table": "orders",
+          "source_column": "aid",
+          "target_table": "addresses",
+          "target_column": "aid"
+        }
+      ]
+    },
+    "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH addresses.aid",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2024-02-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "addresses",
+            "source": {
+              "source": [
+                "addresses"
+              ]
+            }
+          },
+          {
+            "name": "customers",
+            "source": {
+              "source": [
+                "customers"
+              ]
+            }
+          },
+          {
+            "name": "orders",
+            "source": {
+              "source": [
+                "orders"
+              ]
+            }
+          }
+        ],
+        "primary_keys": {
+          "addresses": {
+            "value": [
+              "aid"
+            ]
+          },
+          "customers": {
+            "value": [
+              "cid"
+            ]
+          },
+          "orders": {
+            "value": [
+              "oid"
+            ]
+          }
+        },
+        "time_columns": {
+          "orders": {
+            "value": "ts"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "orders",
+              "column": "cid"
+            },
+            {
+              "table": "customers",
+              "column": "cid"
+            }
+          ],
+          [
+            {
+              "table": "customers",
+              "column": "aid"
+            },
+            {
+              "table": "addresses",
+              "column": "aid"
+            }
+          ],
+          [
+            {
+              "table": "orders",
+              "column": "aid"
+            },
+            {
+              "table": "addresses",
+              "column": "aid"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1706745600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "regression; the request's context rows per table, the same on all three databases: addresses 5, customers 12, orders 4"
+  },
+  "why": "T2.19 (main eb6c68eb): the diamond shape sampled from addresses, a table holding no foreign key (the core refuses the others by parent_table until T2.11), compared at the payload; addresses are reached from orders directly and through customers, so a table is reached by two paths in one hop, and a hop's reads must stop at the slices it held when the hop began",
+  "source": "main's test_sql_sampler_parity.py _SHAPES and _shape_frames (eb6c68eb, the reference at 6298913c), as T2.19 names them"
+}

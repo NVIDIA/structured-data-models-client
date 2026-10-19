@@ -8,7 +8,7 @@
   "required": ["format", "case", "identity", "outcome", "host", "core"],
   "properties": {
     "format": {"const": "sdm-observation/1"},
-    "case": {"$ref": "urn:sdm:case:1#/$defs/id"},
+    "case": {"$ref": "#/$defs/key"},
     "identity": {"$ref": "#/$defs/identity"},
     "outcome": {
       "description": "Where the public call ended. For rust-host, which makes no public call, the outcome is the core's answer as the route maps it: an accepted query, a description or a materialized request is a success, a refused query INVALID_REQUEST, and a core error a refusal with its code.",
@@ -111,7 +111,7 @@
           }
         },
         "query_log": {
-          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped.",
+          "description": "How many QueryLog entries DuckDB wrote after setup: statements (with text) and relations bound (on a Python runner through the API, logged without text; on rust-host the statements creating its temporary tables). Their text is not kept: DuckDB rewrites some statements (a PRAGMA as its table function), and binding names are execution-scoped. On SQLite and Postgres (T2.1a), the driver's own statement log: every statement its cursors executed, and every relation bound by name (ADBC's adbc_ingest), counted alike.",
           "type": "object",
           "additionalProperties": false,
           "required": ["statements", "bindings", "compared", "differing"],
@@ -266,6 +266,7 @@
           "required": ["body", "model", "request_id", "metadata", "result"],
           "properties": {
             "body": {"type": "object"},
+            "calls": {"description": "Where predict made more than one call (a forecast's steps, a request asked in several calls), every call's body in the order sent, body the last's (T2.1g); absent for one call.", "type": "array", "minItems": 2, "items": {"type": "object"}},
             "model": {"type": "string"},
             "request_id": {"type": "string"},
             "metadata": {"type": "object"},
@@ -322,6 +323,11 @@
     }
   },
   "$defs": {
+    "key": {
+      "description": "The case a line is of, and the database it ran on (design choice 2, T2.0f): a DuckDB line is keyed by the bare case ID (case.schema.json's id), a SQLite or Postgres line by <case>@sqlite or <case>@postgres. Observations, reference lines and baselines use the same keys.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres))?$"
+    },
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "typed": {
       "description": "A value the capture recorded, as its Python type and repr: the capture's own text, never compared as a value.",

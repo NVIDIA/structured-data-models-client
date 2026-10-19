@@ -263,8 +263,8 @@ def check_request_against_model(
         )
 
     cap = spec.runtime.limits.get('context_rows_max')
-    rows = request.context_rows
-    if cap is not None and rows is not None and rows > cap:
+    rows = request._context_rows_per_call()
+    if cap is not None and rows > cap:
         raise UnsupportedRequestError(
             f'this request carries {rows:,} context rows and {spec.model_id} '
             f'reads at most {cap:,}. A request built directly is sent as it '

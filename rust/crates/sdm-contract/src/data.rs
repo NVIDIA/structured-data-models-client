@@ -37,6 +37,15 @@ pub const SEED_KEY: &str = "key";
 /// column to one tier and keeps its declared type.
 pub const BIG_INTEGER_MARKER: &str = "sdm:big_integer";
 pub const BIG_INTEGER_MARKED: &str = "true";
+/// The field metadata key (and its value, [`EXACT_NUMBER_MARKED`]) a host
+/// provider sets on a column of numbers it hands over as their exact
+/// decimal text because their declaration fixes no Arrow decimal (a
+/// Postgres `numeric` without a precision): the core reads such a column
+/// as its reference reads one, by its role, a key (the one column of a
+/// declared primary, unique or foreign key) as that text and any other as
+/// a double, and holds every later fetch of it to the type described.
+pub const EXACT_NUMBER_MARKER: &str = "sdm:exact_number";
+pub const EXACT_NUMBER_MARKED: &str = "true";
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
 /// catalog's `type`, kept in the described schema for a marked big-integer
@@ -53,8 +62,52 @@ pub const SEED_BATCH: &str = "batch";
 /// answers, by its batch position: the reference's own name.
 pub const BATCH_COLUMN: &str = "__kumo_batch__";
 /// The column of a `lookup` result counting the rows that hold the seed's
-/// key: the reference's own name.
+/// key: the reference's own name. A dialect may leave it out of an answer
+/// whose seeds say the count is not read ([`SEED_COUNT_UNREAD`]) or that
+/// the source enforces the key unique ([`SEED_KEY_UNIQUE`]), each key then
+/// held by one row.
 pub const MATCHES_COLUMN: &str = "__kumo_matches__";
+/// The metadata key, on a `lookup`'s seed [`SEED_KEY`] column, saying the
+/// source enforces the looked-up key unique (the described column's
+/// `unique`), with the value [`MARKED`]: set by the core so a SQL layer
+/// whose reference reads such a key by a plain join, counting nothing,
+/// renders that join (SQLite's `_by_pkey`); a host provider may ignore it.
+pub const SEED_KEY_UNIQUE: &str = "sdm:key_unique";
+/// The metadata key, on a `lookup`'s [`SEED_BATCH`] column, saying the
+/// core does not read how many rows hold each seed's key, with the value
+/// [`MARKED`]: set by the core on the lookups of the walk, which the
+/// reference counts on none of its SQL sources but DuckDB; a provider may
+/// still count.
+pub const SEED_COUNT_UNREAD: &str = "sdm:count_unread";
+/// The metadata key, on a window bound's seed column, holding one value
+/// of the window's column as the source stores it, as text, which the
+/// core read before the table's first windowed read (a `scan` of one
+/// non-null value): set only for a provider whose data layer says its
+/// source compares a bound with that stored text
+/// (`DataLayer::compares_stored_times`, SQLite's, which has no time type),
+/// so the layer spells each bound as that value is spelled.
+pub const SEED_STORED_TIME: &str = "sdm:stored_time";
+/// The value of a metadata flag the core sets ([`SEED_KEY_UNIQUE`],
+/// [`SEED_COUNT_UNREAD`]).
+pub const MARKED: &str = "true";
+
+/// A sample's seed as an integer, when the scalar it travels as is one:
+/// the narrowest exact scalar `materialize` writes, a `u64` or a decimal
+/// of scale 0, or any other integer scalar; `None` for any other scalar.
+/// The one reading of a seed the core's checks and every dialect's
+/// rendering share (carried row U12).
+pub fn seed_integer(seed: &Scalar) -> Option<i128> {
+    Some(match seed {
+        Scalar::Int32(v) => i128::from(*v),
+        Scalar::Int64(v) => i128::from(*v),
+        Scalar::UInt32(v) => i128::from(*v),
+        Scalar::UInt64(v) => i128::from(*v),
+        Scalar::Decimal128 {
+            scale: 0, value, ..
+        } => *value,
+        _ => return None,
+    })
+}
 
 /// Names an attachment that travels beside a control message: Arrow data
 /// (a fetch's result, a key set, a predict result) or bytes (a model
@@ -71,6 +124,105 @@ pub struct AttachmentId(pub u32);
 pub struct KeySet {
     pub attachment: AttachmentId,
     pub columns: Vec<Field>,
+}
+
+/// What a request reads: a relation of the source, by its name's parts,
+/// each quoted alone and never split on a dot, so `["a.b"]` is one table
+/// named `a.b` and `["main", "t"]` the table `t` of `main` (design choice
+/// 12). Plain data, a list of strings, as easily built by a host in any
+/// language as a name is. How many parts a source takes is its dialect's:
+/// `sdm-data` renders every dialect's `FROM` from a relation through one
+/// function and refuses one of no part, or of more parts than its dialect
+/// accepts, by name (rule `relation`); a host provider refuses one it
+/// cannot read the same way. Two schema tables over one source are two
+/// equal relations.
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct Relation {
+    pub source: Vec<String>,
+}
+
+impl Relation {
+    /// The relation of one part, `name`, as a host that names a table by a
+    /// string gives it.
+    pub fn named(name: impl Into<String>) -> Self {
+        Relation {
+            source: vec![name.into()],
+        }
+    }
+
+    /// The one part of a relation of one part; `None` for any other.
+    pub fn single(&self) -> Option<&str> {
+        match self.source.as_slice() {
+            [name] => Some(name),
+            _ => None,
+        }
+    }
+}
+
+impl From<&str> for Relation {
+    fn from(name: &str) -> Self {
+        Relation::named(name)
+    }
+}
+
+impl From<String> for Relation {
+    fn from(name: String) -> Self {
+        Relation::named(name)
+    }
+}
+
+/// The rule a refusal of a relation names: one of no part, or of more
+/// parts than the dialect or provider reading it accepts.
+pub const RELATION_RULE: &str = "relation";
+
+/// The refusal of `relation`, of `field` of `request`, by a reader that
+/// takes from one to `most` parts (rule [`RELATION_RULE`]): `INVALID_REQUEST`
+/// for a relation of no part, which no source reads, and
+/// `UNSUPPORTED_REQUEST` for more parts than the reader takes; `None` for
+/// a relation it reads. Each names the parts given and the most it takes,
+/// never a part's text.
+pub fn refuse_relation(
+    request: &DataRequest,
+    field: &str,
+    relation: &Relation,
+    most: usize,
+) -> Option<CoreError> {
+    let parts = relation.source.len();
+    let (kind, code, message) = match parts {
+        0 => (
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "a relation names no part",
+        ),
+        n if n > most => (
+            ErrorKind::Unsupported,
+            ErrorCode::UnsupportedRequest,
+            "a relation has more name parts than its source reads",
+        ),
+        _ => return None,
+    };
+    Some(
+        CoreError::new(kind, code, message)
+            .with_field("request", Detail::text(request.name()))
+            .with_field("field", Detail::text(field))
+            .with_field("rule", Detail::text(RELATION_RULE))
+            .with_field("parts", Detail::Scalar(Scalar::UInt64(parts as u64)))
+            .with_field("most", Detail::Scalar(Scalar::UInt64(most as u64))),
+    )
+}
+
+/// The columns of a seed key set holding each seed's key, in the order of
+/// the key's columns ([`SEED_KEY`] for a key of one column, `key_1` to
+/// `key_<n>` for a key of `n` columns), beside [`SEED_BATCH`] (design
+/// choice 1: multi-column keys in `neighbors` and `lookup`).
+pub fn seed_key_columns(columns: usize) -> Vec<String> {
+    match columns {
+        1 => vec![SEED_KEY.to_owned()],
+        n => (1..=n).map(|i| format!("{SEED_KEY}_{i}")).collect(),
+    }
 }
 
 /// One bound of a time range.
@@ -123,15 +275,22 @@ pub enum DescribePart {
     /// Each table's declared foreign keys.
     ForeignKeys,
     /// The tables' indexes, which feed the reference's "Missing N indices"
-    /// warning.
+    /// warning: the source's whole, or one table's where the provider's
+    /// index advice reads them so ([`IndexAdvice::LeadingColumn`]).
     Indexes,
+    /// The columns of one index, named by a relation as a table is (an
+    /// index is its schema's object): one row per column, in the index's
+    /// order, its name, null for an expression. Asked for an index whose
+    /// columns the catalog's list of keys or indexes does not give
+    /// (SQLite's `index_info`, as the reference reads it).
+    IndexColumns,
 }
 
 /// A column of a table.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TableColumn {
-    pub table: String,
+    pub table: Relation,
     pub column: String,
 }
 
@@ -139,7 +298,7 @@ pub struct TableColumn {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TableKey {
-    pub table: String,
+    pub table: Relation,
     pub columns: Vec<String>,
 }
 
@@ -192,75 +351,76 @@ pub enum DataRequest {
     /// the provider returns is in the shape its plan expects, which the
     /// data layer reads into a [`CatalogAnswer`].
     Describe {
-        tables: Vec<String>,
+        tables: Vec<Relation>,
         part: DescribePart,
     },
     /// Every matching row of `table`, `columns` in order, paged through to
     /// the end; `limit` asks for any `limit` rows instead.
     Scan {
-        table: String,
+        table: Relation,
         columns: Vec<String>,
         filters: Vec<Filter>,
         limit: Option<u64>,
     },
     /// The first rows of `table`, for inference.
     Preview {
-        table: String,
+        table: Relation,
         columns: Vec<String>,
         limit: u64,
     },
     CountRows {
-        table: String,
+        table: Relation,
         filters: Vec<Filter>,
     },
     /// For each key, in order, one row: its position, the table's rows, the
     /// key's distinct values among rows holding all of it, and the rows
     /// missing any part of it, as the reference's single `UNION ALL` reads
     /// them.
-    KeyCounts {
-        keys: Vec<TableKey>,
-    },
+    KeyCounts { keys: Vec<TableKey> },
     /// For each time column, in order, one row: its position and the
     /// smallest and largest `CAST(column AS TIMESTAMP)`, as the reference's
     /// single `UNION ALL` reads them.
-    TimeBounds {
-        columns: Vec<TableColumn>,
-    },
+    TimeBounds { columns: Vec<TableColumn> },
     /// One row: the rows of `table`, then, for each of `columns` in order,
     /// its smallest and largest value, each of the column's own type and
     /// null when no row holds one, and the rows holding a value, read over
     /// every row in one statement, as the reference's time column choice
     /// reads a table its preview may not hold whole (`_full_range`).
     ColumnRanges {
-        table: String,
+        table: Relation,
         columns: Vec<String>,
     },
     /// At most one row: a value of `key` that more than one row of `table`
     /// holds, among the rows holding every part of it, as the reference
     /// reads one to show a repeated key (`_repeated_key_sql`).
-    RepeatedKey {
-        table: String,
-        key: Vec<String>,
-    },
+    RepeatedKey { table: Relation, key: Vec<String> },
     /// A seeded sample of `n` entities of `table` by `key`: `columns` in
-    /// order, from the rows meeting every filter.
+    /// order, from the rows meeting every filter. `key_dtype`, where given,
+    /// is the data type of a key of one column the draw orders by: the type
+    /// the source declares it where its catalog fixes one, else the
+    /// schema's; a dialect that hashes only some types (SQLite's, which
+    /// hashes an integer key and the `rowid` otherwise) chooses by it once
+    /// for the column. Left out, the dialect decides by itself.
     SampleEntities {
-        table: String,
+        table: Relation,
         key: Vec<String>,
         n: u64,
         seed: Scalar,
         columns: Vec<String>,
         filters: Vec<Filter>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key_dtype: Option<crate::ops::Dtype>,
     },
     /// The rows of `table` whose `key` equals a seed's key, `columns` in
-    /// order after the seed's batch position (decision H15). `seeds` holds
-    /// the columns `key` and `batch` and the seed time columns `window`
-    /// names. With `per_seed`, at most that many rows per seed, first in
+    /// order after the seed's batch position (decision H15). `key` names the
+    /// table's key columns in order, one or several (design choice 1);
+    /// `seeds` holds the key's columns ([`seed_key_columns`]), `batch` and
+    /// the seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in
     /// `order`, and the result is ordered by `(batch, order)`; without it,
     /// there is no `order` and the result is unordered.
     Neighbors {
-        table: String,
-        key: String,
+        table: Relation,
+        key: Vec<String>,
         columns: Vec<String>,
         seeds: KeySet,
         window: Option<Window>,
@@ -269,10 +429,11 @@ pub enum DataRequest {
     },
     /// One row per seed whose key `table` holds, `columns` in order after
     /// the seed's batch position and the count of rows holding its key;
-    /// which row of a key several rows hold is not defined.
+    /// which row of a key several rows hold is not defined. `key` and
+    /// `seeds` as `neighbors`'.
     Lookup {
-        table: String,
-        key: String,
+        table: Relation,
+        key: Vec<String>,
         columns: Vec<String>,
         seeds: KeySet,
     },
@@ -336,13 +497,14 @@ impl DataRequest {
                 return Err(refused(self, "key", "a key names no columns"));
             }
             DataRequest::Neighbors {
+                key,
                 seeds,
                 window,
                 per_seed,
                 order,
                 ..
             } => {
-                check_seeds(self, seeds)?;
+                check_seeds(self, key, seeds)?;
                 match (per_seed, order) {
                     (Some(_), None) => {
                         return Err(refused(
@@ -386,16 +548,24 @@ impl DataRequest {
                     }
                 }
             }
-            DataRequest::Lookup { seeds, .. } => check_seeds(self, seeds)?,
+            DataRequest::Lookup { key, seeds, .. } => check_seeds(self, key, seeds)?,
             _ => {}
         }
         Ok(())
     }
 }
 
-/// Seeds hold the role-named `key` and `batch` columns (decision H15).
-fn check_seeds(request: &DataRequest, seeds: &KeySet) -> Result<(), CoreError> {
-    for role in [SEED_KEY, SEED_BATCH] {
+/// A key names some columns, and seeds hold the role-named columns of each
+/// of its columns ([`seed_key_columns`]) and `batch` (decision H15).
+fn check_seeds(request: &DataRequest, key: &[String], seeds: &KeySet) -> Result<(), CoreError> {
+    if key.is_empty() {
+        return Err(refused(request, "key", "a key names no columns"));
+    }
+    for role in seed_key_columns(key.len())
+        .iter()
+        .map(String::as_str)
+        .chain([SEED_BATCH])
+    {
         if !seeds.columns.iter().any(|f| f.name == role) {
             return Err(refused(
                 request,
@@ -511,6 +681,12 @@ pub enum IndexAdvice {
     /// An index over exactly that one column, its coverage resolved; one
     /// over several columns, or one the reader cannot resolve, serves none.
     SingleColumn,
+    /// The reference's SQLite sampler's: each table's indexes read one
+    /// table at a time, each index's columns by its name; a read wants an
+    /// index on the key, and on each foreign key with its table's time
+    /// column, and any index whose first column is the read's first serves
+    /// it.
+    LeadingColumn,
 }
 
 /// What a provider answers: a host provider declares it, and the data
@@ -522,12 +698,13 @@ pub struct ProviderCapabilities {
     /// The most keys one request may carry; `None` is no limit.
     pub max_keys_per_request: Option<u64>,
     pub sampling: Determinism,
-    /// The largest seed the provider samples with (register entry RS-7);
-    /// `None` takes any non-negative integer. The core refuses a sample
-    /// with a larger seed, `INVALID_REQUEST` naming the seed, before the
-    /// sample is planned; which seeds a provider takes is the provider's
-    /// to declare, never a name the core matches.
-    pub max_seed: Option<u64>,
+    /// The largest seed the provider samples with (register entry RS-7),
+    /// which every provider declares: there is no "any seed" default
+    /// (design choice 1). The core refuses a sample with a larger seed,
+    /// `INVALID_REQUEST` naming the seed, before the sample is planned;
+    /// which seeds a provider takes is the provider's to declare, never a
+    /// name the core matches.
+    pub max_seed: u64,
     /// How the source reads a time it stores as text (register DT-7);
     /// `None` declares no reading, and the core refuses to read text times
     /// from it (`UNSUPPORTED_REQUEST`, rule `text_times`).
@@ -540,6 +717,26 @@ pub struct ProviderCapabilities {
     /// declares no meaningful index advice: the core neither reads the
     /// source's indexes nor warns of missing ones.
     pub index_advice: Option<IndexAdvice>,
+    /// The limits within which the core answers an optional request the
+    /// provider does not declare itself, in memory, from the rows a `scan`
+    /// reads (design choice 1, the in-memory fallback, T2.6); left out,
+    /// the provider declares none, and such a request is refused,
+    /// `UNSUPPORTED_REQUEST`, as before. A declared request that fails is
+    /// the provider's error either way, never answered by the fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<FallbackLimits>,
+}
+
+/// The in-memory fallback's limits, as a provider declares them
+/// ([`ProviderCapabilities::fallback`]): past either, the fallback fails
+/// by name rather than read on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FallbackLimits {
+    /// The most rows the fallback reads to answer one request.
+    pub max_rows: u64,
+    /// The most bytes of Arrow data it holds to answer one request.
+    pub max_bytes: u64,
 }
 
 /// A built-in SQL dialect, by the name the host gives it. The contract
@@ -666,6 +863,30 @@ pub trait DataLayer: Send + Sync {
         let _ = provider;
         None
     }
+
+    /// Whether the run's provider compares a window's bounds with the
+    /// stored text of the window's column, as a source with no time type
+    /// does (SQLite's reference spells each bound as one stored value is
+    /// spelled, `_time_spelling`): the core then reads one non-null value
+    /// of a table's time column (a `scan` of one row) before that table's
+    /// first windowed read in a run, and names it on each bound's seed
+    /// column ([`SEED_STORED_TIME`]), for the layer to spell the bounds by.
+    /// `false`, the default and a host provider's: the bounds are compared
+    /// as times.
+    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
+
+    /// Whether the run's provider orders a seeded sample by the key's data
+    /// type, as SQLite's does (it hashes an integer key and the `rowid`
+    /// otherwise): the core then names the schema's type of a key of one
+    /// column on each `sample_entities` (`key_dtype`). `false`, the default
+    /// and a host provider's: the request leaves it out.
+    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
 }
 
 /// The columns of the answers whose shape the contract fixes (decision
@@ -707,18 +928,21 @@ pub mod catalog_columns {
     /// `columns`, for one table: one row per column, in the table's order:
     /// its name, its declared type as the source spells it, whether it is
     /// declared `NOT NULL` and whether it is part of the primary key.
+    /// `index_columns`, for one index: one row per column, in the index's
+    /// order, its name, null for an expression.
     pub const NAME: &str = "name";
     pub const TYPE: &str = "type";
     pub const NOT_NULL: &str = "not_null";
     pub const PRIMARY_KEY: &str = "primary_key";
     /// `keys`, for one table: one row per key it declares, its kind
-    /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`] or another the reader leaves
-    /// alone) and its columns. `foreign_keys` and `indexes`: the columns of
+    /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`], [`KIND_FOREIGN`] or another the
+    /// reader leaves alone) and its columns. `foreign_keys` and `indexes`: the columns of
     /// each.
     pub const KIND: &str = "kind";
     pub const COLUMNS: &str = "columns";
     pub const KIND_PRIMARY: &str = "primary";
     pub const KIND_UNIQUE: &str = "unique";
+    pub const KIND_FOREIGN: &str = "foreign";
     /// `foreign_keys`, for one table: one row per column pair of each
     /// foreign key it declares, the key's number naming it, the table it
     /// refers to, and the columns on both sides.
@@ -772,6 +996,7 @@ impl DataRequest {
                     field(c::TABLE, Utf8, false),
                     field(c::COLUMNS, names(), false),
                 ],
+                DescribePart::IndexColumns => vec![field(c::NAME, Utf8, true)],
             },
             DataRequest::KeyCounts { .. } => vec![
                 field(results::KEY_POSITION, Int32, false),

@@ -32,36 +32,59 @@
 
 #![forbid(unsafe_code)]
 
+mod blake2b;
 mod duckdb;
+mod keys;
+mod mt19937;
+mod postgres;
+mod quote;
 mod read;
+mod sqlite;
+
+pub use keys::canonical_decimal_text;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice,
+    DataLayer, DataRequest, Dialect, FetchPlan, ProviderCapabilities, ProviderChoice, Relation,
+    refuse_relation,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
-/// The SQL dialects this build knows by name. It renders DuckDB's; the
-/// others are refused by name, as a dialect it has no rendering for, and a
-/// name it does not know is refused without being repeated.
+/// The SQL dialects this build knows by name. It renders DuckDB's,
+/// SQLite's and Postgres's (T2.2, T2.3); the others are refused by name,
+/// as a dialect it has no rendering for, and a name it does not know is
+/// refused without being repeated.
 const KNOWN: &[&str] = &[
     duckdb::NAME,
-    "sqlite",
-    "postgres",
+    sqlite::NAME,
+    postgres::NAME,
     "databricks",
     "snowflake",
 ];
 
+/// The databases this build's data layer provides for, by the names the
+/// case format and the contract runners use (T2.1a): the dialects it
+/// renders. The private, plain-data marker of the staging rule
+/// (`contract/runners/run_python.py`'s `check_legs`): the Python host's
+/// native module reports it as `PROVIDERS`, and a database's core legs run
+/// exactly when it is listed. A dialect's package adds its name with its
+/// rendering.
+pub const PROVIDERS: &[&str] = &[duckdb::NAME, sqlite::NAME, postgres::NAME];
+
 /// A dialect this build renders.
 enum Rendered {
     Duckdb,
+    Sqlite,
+    Postgres,
 }
 
 /// The dialect `dialect` names, if this build renders it.
 fn rendered(dialect: &Dialect) -> Result<Rendered, CoreError> {
     match dialect.name() {
         duckdb::NAME => Ok(Rendered::Duckdb),
+        sqlite::NAME => Ok(Rendered::Sqlite),
+        postgres::NAME => Ok(Rendered::Postgres),
         _ => Err(no_dialect(dialect)),
     }
 }
@@ -82,6 +105,8 @@ impl DataLayer for Data {
             ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => Ok(duckdb::capabilities()),
+                Rendered::Sqlite => Ok(sqlite::capabilities()),
+                Rendered::Postgres => Ok(postgres::capabilities()),
             },
         }
     }
@@ -97,6 +122,8 @@ impl DataLayer for Data {
             }),
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::plan(request),
+                Rendered::Sqlite => sqlite::plan(request),
+                Rendered::Postgres => postgres::plan(request),
             },
         }
     }
@@ -106,7 +133,27 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => None,
             ProviderChoice::Sql { dialect } => match rendered(dialect).ok()? {
                 Rendered::Duckdb => Some(duckdb::OPAQUE_VENDOR),
+                Rendered::Sqlite => None,
+                Rendered::Postgres => None,
             },
+        }
+    }
+
+    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Sql { dialect } => {
+                matches!(rendered(dialect), Ok(Rendered::Sqlite))
+            }
+        }
+    }
+
+    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Sql { dialect } => {
+                matches!(rendered(dialect), Ok(Rendered::Sqlite))
+            }
         }
     }
 
@@ -128,11 +175,40 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => read::host(*part, batches)?,
             ProviderChoice::Sql { dialect } => match rendered(dialect)? {
                 Rendered::Duckdb => duckdb::read(*part, batches)?,
+                Rendered::Sqlite => sqlite::read(request, *part, batches)?,
+                Rendered::Postgres => postgres::read(*part, batches)?,
             },
         };
         debug_assert_eq!(answer.part(), *part);
         Ok(answer)
     }
+}
+
+/// The one rendering of a relation every dialect's `FROM` goes through
+/// (design choice 12): each part of `relation` quoted alone by the
+/// dialect's `quote`, never split on a dot, joined by dots. A relation of
+/// no part, or of more than `most`, the parts the dialect accepts, is
+/// refused by name (rule `relation`, [`refuse_relation`]) as `field` of
+/// `request`. The design gives each dialect its count: DuckDB 1 to 3
+/// (database, schema, table); SQLite 1 or 2, the first naming `main` or an
+/// attached database; Postgres 1 or 2, schema and table; each declared
+/// with its dialect's rendering.
+pub(crate) fn relation(
+    request: &DataRequest,
+    field: &str,
+    relation: &Relation,
+    most: usize,
+    quote: fn(&str) -> String,
+) -> Result<String, CoreError> {
+    if let Some(refusal) = refuse_relation(request, field, relation, most) {
+        return Err(refusal);
+    }
+    Ok(relation
+        .source
+        .iter()
+        .map(|part| quote(part))
+        .collect::<Vec<_>>()
+        .join("."))
 }
 
 /// The refusal of a SQL dialect this build renders nothing for, naming it

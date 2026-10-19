@@ -11,7 +11,8 @@ all-features = true
 
 [advisories]
 # RustSec advisories fail the check; an exception is a reviewed entry here,
-# with a decision row in docs/design/rust-core/phase-1/decisions.md.
+# with a decision row in docs/design/rust-core/phase-<N>/decisions.md, cited
+# at the end of each entry's reason.
 ignore = [
     # pyo3 0.28 is pinned because arrow-pyarrow 58 needs it (decision B-D2);
     # both are fixed in pyo3 0.29, which arrives with the next Arrow bump.
@@ -23,6 +24,16 @@ ignore = [
     # one thread (decision E1).
     { id = "RUSTSEC-2026-0176", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; nth/nth_back on list and tuple iterators unused (E1)" },
     { id = "RUSTSEC-2026-0177", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; PyCFunction::new_closure unused (E1)" },
+    # zip 6 is a build-dependency of libduckdb-sys 1.10506.0 (`zip = "6"`),
+    # so the fixed zip 9 is out of reach. Its build script calls
+    # ZipArchive::extract only in `mod build_linked`, under
+    # #[cfg(not(feature = "bundled"))], to unpack a downloaded libduckdb; the
+    # workspace builds duckdb with `bundled`, so that code is not compiled.
+    # They leave with the next DuckDB upgrade, or once libduckdb-sys moves to
+    # zip >= 9 (KO2-49).
+    { id = "RUSTSEC-2026-0367", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
+    { id = "RUSTSEC-2026-0368", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
+    { id = "RUSTSEC-2026-0369", reason = "zip 6 in libduckdb-sys's build script; extract is compiled only without `bundled` (KO2-49)" },
 ]
 
 [licenses]

@@ -9,7 +9,7 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
 
     ratchet.py checkpoint [--repo DIR] (--base REV | --phase-push BEFORE)
         [--epic] [--epic-ref REF]
-    ratchet.py check [--repo DIR] --checkpoint SHA [--epic]
+    ratchet.py check [--repo DIR] --checkpoint SHA [--epic] [--locked]
         [--protected-paths TEXT]
         [--observations FILE]... [--effective-out FILE]
     ratchet.py accept [--repo DIR] [--checkpoint SHA] --observations FILE...
@@ -64,7 +64,9 @@ checkpoint's files, read from git at ``--checkpoint``:
   still there, its semantic projection unchanged (:func:`semantic`); a line
   may be added; a changed or removed line passes only under an approved
   register entry naming its case on ``python-ref``, or with its case's
-  approved removal; a new reference commit is the owner's;
+  approved removal; a new reference commit is the owner's: a reference
+  file added is refused, naming it, unless a row of the checkpoint's
+  decisions approves its name (T2.0e, below);
 - ``cases``: a case removed, demoted from acceptance to diagnostic, or with
   its file changed passes only under an approved entry naming the case (for
   a removal or demotion, each baselined runner's exact old outcome and
@@ -89,6 +91,11 @@ checkpoint's files, read from git at ``--checkpoint``:
   owner (a row the package writes itself never authorizes);
 - ``known-differing``: the candidate's ``KNOWN_DIFFERING`` file a subset of
   the checkpoint's;
+- ``temporary``: with ``--locked`` (the locked run's ratchet step, as
+  ``gate.sh --locked`` passes it), each approved entry whose
+  ``decision_ref`` row approves only until a package lands (``register.py``'s
+  ``TEMPORARY``) fails by name (T2.1a; :func:`check_temporary`); a landing's
+  own gate lets them stand until their packages land;
 - with observations, ``baselines``: each checkpoint baseline
   (``contract/baselines/<cell>/<runner>.jsonl``) of a given runner equals the
   observation's projection (``compare-policy.yaml``'s ``baseline`` fields, the
@@ -145,10 +152,43 @@ the base as given, never the head's own trailers, and refuses any base but
 that landing; a harness that predates it refuses the flag, so ``rust-core``
 holding T2.0 but judged by an older landing fails closed.
 
-The decisions the rules read (owner approvals of relaxations) are every
-phase's: each ``docs/design/rust-core/phase-N/decisions.md`` of the
-checkpoint, Phase 1's rows in force and each later phase's added; a file
-missing, unreadable or malformed fails the ``decisions`` rule by name
+A new reference commit (T2.0e): a candidate that adds a reference file
+passes only when a row of the checkpoint's decisions approves its name
+(:func:`approved_references`): its status is the owner's approval as
+:func:`owner_approved` reads it, and its Decision cell, the second, holds
+the word "reference" and exactly one full 40-hex SHA in backticks, ``NEW``
+(the form the Phase 2 decisions file's header states; KO2-1 begins
+``Reference: `<NEW>```). Only the checkpoint's rows count, never one the
+candidate adds, as for a relaxation: the owner's row lands before the
+package that re-records. Then, each named when it fails: the file is exactly
+``contract/reference/<NEW>.jsonl``, which the gate reads; ``NEW`` is no
+recorded reference's name; it is the only file added, and the only one left
+(the old one removed); ``contract/reference-env.txt`` names ``NEW`` in its
+one ``reference:`` line; no file outside ``docs/`` (history),
+``contract/reference/`` and the frozen snapshots (:data:`FROZEN`) cites the
+old SHA in full; each file
+:data:`CITATIONS` lists, the files and fields the reference SHA consistency
+tests read, is there, is not empty, parses as JSON (each line of a
+JSON-lines file), and its listed field equals ``NEW`` (on every line of a
+JSON-lines file), each failure named by file and line; any other file that
+cited the old SHA and is still there names ``NEW`` (provenance prose, never
+a third commit in its place); every line of the new file, read as written
+before any is indexed, names a case, names it once (a second line of a case
+is refused by file and line) and records ``NEW`` as its reference commit;
+and the new recording carries every case the old one did, but one whose
+removal is approved. The per-case comparison does not apply across the
+change: instead every case whose semantic projection differs from its
+recorded line is listed in the notes, by case and with the fields that
+differ (named, never their values), for the reviewers, with the move itself
+and the row approving it; a case recorded alike is not listed. The landed
+file is then the one the per-case rules hold, and the row admits no further
+file: another commit needs its own row.
+
+The decisions the rules read (owner approvals of relaxations and of a new
+reference commit) are every phase's: each
+``docs/design/rust-core/phase-N/decisions.md`` of the checkpoint, Phase 1's
+rows in force and each later phase's added; a file missing, unreadable or
+malformed fails the ``decisions`` rule by name
 (``capture_check.phase_decisions``, T2.0).
 
 Exit status 1 on any problem. Each problem names its rule and its case;
@@ -179,6 +219,8 @@ AVAILABILITY = 'contract/availability.yaml'
 PROTECTED = 'contract/protected-paths.txt'
 BASELINES = 'contract/baselines'
 REFERENCE = 'contract/reference'
+#: The reference environment, naming the reference commit (T1.13).
+ENV = 'contract/reference-env.txt'
 CASES = 'contract/cases'
 BASES = 'contract/bases.yaml'
 REGISTER = 'docs/design/rust-core/register.yaml'
@@ -190,6 +232,9 @@ KNOWN_DIFFERING = 'rust/crates/sdm-core/tests/pql/known-differing.json'
 #: is held to them.
 CELL = 'ref-pandas3'
 RUNNERS = ('python-ref', 'python-core', 'python-old', 'rust-host')
+#: The runners a SQLite or Postgres line is observed on: the core's
+#: (python-old, the old route, runs on DuckDB only; T2.1a fix 4).
+DATABASE_RUNNERS = ('python-core', 'rust-host')
 PYTHON = ('python-ref', 'python-core', 'python-old')
 #: The core operations that read data, whose case has a driver record on
 #: rust-host.
@@ -754,6 +799,22 @@ def reference_lines(tree: Tree) -> dict[str, dict[str, Any]]:
     return found
 
 
+def key_form() -> re.Pattern[str]:
+    r"""The form of a line's key, as this harness's observation schema
+    holds it (its ``key``)."""
+    schema = json.loads(
+        (REPO / 'contract/observation.schema.json').read_text(encoding='utf-8')
+    )
+    return re.compile(schema['$defs']['key']['pattern'])
+
+
+def case_of(key: str) -> str:
+    r"""The case a line's key names: a DuckDB line's key is the bare case
+    ID, a SQLite or Postgres line's ``<case>@sqlite`` or ``<case>@postgres``
+    (design choice 2; the observation schema's ``key`` holds the form)."""
+    return key.partition('@')[0]
+
+
 def projection(
     observation: dict[str, Any], fields: list[str]
 ) -> dict[str, Any]:
@@ -922,7 +983,9 @@ def authorized(
     owner: bool = False,
 ) -> bool:
     r"""An approved entry states this case's change, by the owner where
-    ``owner``; a None part matches any."""
+    ``owner``; a None part matches any. ``case`` is a line's key, and an
+    outcome item names it as the line does (``X``, ``X@sqlite``,
+    ``X@postgres``), so approving one database's line moves no other's."""
     for entry in entries:
         if owner and entry.get('approved_by') != 'owner':
             continue
@@ -1004,7 +1067,11 @@ def effective(
     ``INTERNAL_ERROR``; and on a first admission, a runner no baseline holds
     the case for, the reference's outcome (``reference``, the committed
     python-ref lines) moved the same way by an entry from ``none`` (E110),
-    with no expectation where none does, so the reference holds it. The
+    with no expectation where none does, so the reference holds it. A
+    SQLite or Postgres line (``<case>@<database>``), which no baseline
+    holds, has python-ref's committed line of that key as its baseline for
+    each core runner, moved the same way by an entry from that line's
+    outcome (T2.1e); a DuckDB line's is the held baseline as before. The
     reference plus approved deviations (design, "Reference observations
     and the gate"), for the comparator's outcome rule and for
     :func:`accept`."""
@@ -1012,6 +1079,23 @@ def effective(
     for runner, by_case in held.items():
         for case, line in by_case.items():
             want = dict(line['projection'])
+            found.setdefault(case, {})[runner] = (
+                moved(entries, case, runner, outcome_text(want), want) or want
+            )
+    for case, line in reference.items():
+        if case_of(case) == case:
+            continue
+        for runner in DATABASE_RUNNERS:
+            if case in held.get(runner, {}):
+                continue
+            # A runner's baseline holds only the fields it observes, as an
+            # accepted one does: rust-host's no stage and no error.
+            want = {
+                name: None if name in UNOBSERVED.get(runner, ()) else value
+                for name, value in projection(
+                    line, list(OUTCOME_FIELDS)
+                ).items()
+            }
             found.setdefault(case, {})[runner] = (
                 moved(entries, case, runner, outcome_text(want), want) or want
             )
@@ -1133,15 +1217,18 @@ def moves(
     case's reference line changes in this change (``after``, in semantic
     projection), the new line's refusal and outcome are the ones judged
     (fix 2, the comparator relaxing from it) and only the entries this
-    change adds or changes count (``this_change``); a case with no line at
-    either side relaxes nothing. A move made now and one held since in a
-    baseline are held to the same rule."""
+    change adds or changes count (``this_change``); a case new in this
+    change, with no line at the checkpoint, starts from its new line the
+    same way (T2.0g); a case with no line now relaxes nothing. A move made
+    now and one held since in a baseline are held to the same rule."""
     found: dict[str, list[str]] = {}
     for case, by_runner in sorted(projected.items()):
         line, now = before.get(case), after.get(case)
-        if line is None or now is None:
+        if now is None:
             continue
-        changed = semantic(line, ordered) != semantic(now, ordered)
+        changed = line is None or semantic(line, ordered) != semantic(
+            now, ordered
+        )
         # Where this change re-records the line, its stop and outcome are
         # the new line's, the one the comparator relaxes from (fix 2).
         stop = projection(now if changed else line, list(OUTCOME_FIELDS))
@@ -1210,7 +1297,8 @@ def effective_document(
 
 
 def proposal(case: str, runner: str, old: str, new: str) -> str:
-    r"""The ``case_outcomes`` item an entry would need, as generated text."""
+    r"""The ``case_outcomes`` item an entry would need, as generated text;
+    ``case`` is the line's key (:func:`authorized`)."""
     return (
         f'{{case: {case}, cell: {CELL}, runner: {runner}, '
         f"old: '{old}', new: '{new}', summary: ...}}"
@@ -1314,23 +1402,323 @@ def check_protected(
             )
 
 
+#: A full commit SHA in backticks, as a reference approval names it.
+APPROVED_SHA = re.compile(r'`([0-9a-f]{40})`')
+#: The word a reference approval's Decision cell holds.
+REFERENCE_WORD = re.compile(r'\breference\b', re.IGNORECASE)
+#: ``reference-env.txt``'s line naming the reference commit.
+ENV_LINE = re.compile(r'(?m)^reference: (.*)$')
+#: Where a citation of the reference SHA is history, never moved with it.
+HISTORY = ('docs/', f'{REFERENCE}/')
+
+
+def approved_references(decisions: str) -> dict[str, str]:
+    r"""The new reference commits the owner approved, each with its row's
+    ID (T2.0e): a row of a phase's decisions file whose status is the
+    owner's approval (:func:`owner_approved`) and whose Decision cell, its
+    second, holds the word "reference" and exactly one full SHA in backticks
+    (the form the Phase 2 decisions file's header states; KO2-1 begins
+    ``Reference: `<40 hex>```). An abbreviated SHA, a row naming two, or any
+    other status approves nothing."""
+    found: dict[str, str] = {}
+    for ident, (line, status) in (
+        capture_check().decision_rows(decisions).items()
+    ):
+        cells = [cell.strip() for cell in line.strip().strip('|').split('|')]
+        if len(cells) < 3 or not owner_approved(status):
+            continue
+        shas = set(APPROVED_SHA.findall(cells[1]))
+        if len(shas) == 1 and REFERENCE_WORD.search(cells[1]):
+            found.setdefault(shas.pop(), ident)
+    return found
+
+
+def citing(tree: Tree, sha: str) -> list[str]:
+    r"""The files of ``tree`` that cite ``sha`` in full, but those under
+    :data:`HISTORY`."""
+    done = subprocess.run(
+        ['git', '-C', str(tree.repo), 'grep', '-l', '-z', '-F', '-e', sha,
+         tree.sha, '--', '.', *(f':(exclude){p}' for p in HISTORY)],
+        capture_output=True,
+        encoding='utf-8',
+        check=False,
+    )  # fmt: skip
+    if done.returncode not in (0, 1):
+        raise Unreadable(f'git grep: {done.stderr.strip()}')
+    prefix = f'{tree.sha}:'
+    return sorted(
+        name.removeprefix(prefix) for name in done.stdout.split('\0') if name
+    )
+
+
+def listed(names: list[str], most: int = 10) -> str:
+    return ', '.join(names[:most]) + (
+        f' and {len(names) - most} more' if len(names) > most else ''
+    )
+
+
+#: The files that cite the reference commit, each with the field that
+#: names it in full: the fields the reference SHA consistency tests read
+#: (the vector files' ``reference``, ``tests/test_contract_reference.py``'s
+#: and the goldens' line identities). A JSON-lines file (``.jsonl``) holds
+#: the field on every line. ``contract/reference-env.txt`` is checked apart
+#: (:data:`ENV_LINE`). A new citing file joins this table; until it does,
+#: the rule that no file outside ``docs/`` keeps the old SHA still moves it.
+CITATIONS: dict[str, tuple[str, ...]] = {
+    'contract/decimal-vectors.json': ('reference',),
+    'contract/empty-null-vectors.json': ('reference',),
+    'contract/fixtures/pickles/expected.json': ('reference',),
+    'contract/float-multiclass-vectors.json': ('reference',),
+    'contract/given-vectors.json': ('reference',),
+    'contract/key-cast-vectors.json': ('reference',),
+    'contract/key-inference-vectors.json': ('reference',),
+    'contract/multicategorical-vectors.json': ('reference',),
+    'contract/nested-type-vectors.json': ('reference',),
+    'contract/sampled-null-key-vectors.json': ('reference',),
+    'contract/t136-average-null-vectors.json': ('reference',),
+    'contract/t136-forecast-vectors.json': ('reference',),
+    'contract/t136-host2-vectors.json': ('recorded', 'reference'),
+    'contract/t136-host2-zone-vectors.json': ('recorded', 'reference'),
+    'contract/time-inference-vectors.json': ('reference',),
+    'contract/type-set-vectors.json': ('recorded', 'reference'),
+    'packages/structured-data-models-client/tests/labels_reference.json': (
+        'reference',
+    ),
+    'packages/structured-data-models-client/tests/t128a-payload-rules.json': (
+        'reference',
+    ),
+    'packages/structured-data-models-client/tests/t128b-predict-result.json': (
+        'reference',
+    ),
+}
+
+#: Citing files frozen as historical snapshots (the orchestrator's decision
+#: at T2.0f's rebase onto T2.0e), each with its reason: they keep naming
+#: the reference they were recorded at when the reference moves. Frozen is
+#: exempt from the reference rules only (out of :data:`CITATIONS`, and from
+#: the rule that no file outside ``docs/`` keeps the old SHA), not
+#: immutable; a file :data:`CITATIONS` lists is checked there whatever
+#: this says.
+FROZEN: dict[str, str] = {
+    'tests/golden/t132g-fixture-cases/python-ref.jsonl': (
+        "a snapshot of one gate run's reference lines (T1.32g's fixture "
+        'cases), as recorded at the reference it was taken from'
+    ),
+    'tests/golden/t132g-later-stage/python-ref.jsonl': (
+        "a snapshot of one gate run's reference lines (T1.32g's later "
+        'stage), as recorded at the reference it was taken from'
+    ),
+}
+
+
+def citation_problems(name: str, text: str | None, new: str) -> list[str]:
+    r"""Why the citing file ``name`` (:data:`CITATIONS`), as ``text``,
+    does not name the reference commit ``new`` in its field: it is gone,
+    empty, not JSON (a line of a JSON-lines file included), or the field
+    (keys taken as written, never as a path) is missing or not ``new``."""
+    keys = CITATIONS[name]
+    field_name = '.'.join(keys)
+    if text is None:
+        return [f'{name}: removed; it cites the reference, in {field_name}']
+    if not text.strip():
+        return [f'{name}: empty; it cites the reference, in {field_name}']
+    if name.endswith('.jsonl'):
+        documents = list(enumerate(text.splitlines(), 1))
+    else:
+        documents = [(0, text)]
+    found = []
+    for number, raw in documents:
+        where = f'{name}:{number}' if number else name
+        try:
+            value: Any = json.loads(raw)
+        except (ValueError, RecursionError):
+            found.append(f'{where}: not JSON')
+            continue
+        for key in keys:
+            value = value.get(key) if isinstance(value, dict) else None
+        if value != new:
+            found.append(
+                f'{where}: {field_name} does not name the new reference {new}'
+            )
+    return found
+
+
+def _differing(old: Any, new: Any, at_path: str = '') -> list[str]:
+    r"""The paths at which two semantic projections differ, by name only
+    (values are never printed)."""
+    if isinstance(old, dict) and isinstance(new, dict):
+        found: list[str] = []
+        for key in sorted(set(old) | set(new), key=str):
+            found += _differing(
+                old.get(key), new.get(key), f'{at_path}.{key}'.lstrip('.')
+            )
+        return found
+    return [] if old == new else [at_path or 'the line']
+
+
+def check_new_reference(
+    report: Report,
+    checkpoint: Tree,
+    candidate: Tree,
+    added: list[str],
+    removed: set[str],
+    decisions: str,
+) -> None:
+    r"""A candidate that adds a reference file: a new reference commit,
+    which only the owner's approval at the checkpoint admits (T2.0e)."""
+    before = checkpoint.files(REFERENCE)
+    after = candidate.files(REFERENCE)
+    olds = sorted(Path(path).stem for path in before)
+    approved = approved_references(decisions)
+    refused = [
+        path
+        for path in added
+        if Path(path).stem not in approved or Path(path).stem in olds
+    ]
+    for path in refused:
+        report.fail(
+            'reference',
+            f"a new reference commit replaces the recorded one: the owner's; "
+            f"{path} is named for a commit no row of the checkpoint's "
+            'decisions approved by the owner names as the reference '
+            '(Reference: `<its full SHA>`)',
+        )
+    if refused:
+        return
+    misnamed = [
+        path for path in added if path != f'{REFERENCE}/{Path(path).stem}.jsonl'
+    ]
+    for path in misnamed:
+        report.fail(
+            'reference',
+            f'{path}: a new reference recording is exactly '
+            f'{REFERENCE}/<the approved full SHA>.jsonl, which the gate reads',
+        )
+    if misnamed:
+        return
+    if len(added) != 1:
+        report.fail(
+            'reference',
+            f'{len(added)} new reference files ({listed(added)}): a new '
+            'reference commit is one recording',
+        )
+        return
+    (path,) = added
+    new = Path(path).stem
+    report.note(
+        'reference',
+        f'the reference moves from {listed(olds)} to {new}, approved by '
+        f'{approved[new]} at the checkpoint; each case is compared with its '
+        'recorded line below, and a case recorded differently is listed, '
+        'with the fields that differ, for the reviewers',
+    )
+    for left in after:
+        if left != path:
+            report.fail(
+                'reference',
+                f'{left}: left beside the new reference {path}; a new '
+                'reference replaces the recorded one, one reference file '
+                'remains',
+            )
+    env = candidate.read(ENV)
+    named_env = ENV_LINE.findall(env or '')
+    if named_env != [new]:
+        report.fail(
+            'reference',
+            f'{ENV}: names {listed(named_env) or "no reference"}, not the new '
+            f'reference {new}',
+        )
+    for name in sorted(CITATIONS):
+        for problem in citation_problems(name, candidate.read(name), new):
+            report.fail('reference', problem)
+    for old in olds:
+        # A file outside the table that cited the old SHA (provenance prose)
+        # names the new one now, never a third commit in its place.
+        for name in citing(checkpoint, old):
+            if name in CITATIONS or name == ENV or name in FROZEN:
+                continue
+            text = candidate.read(name)
+            if text is not None and new not in text:
+                report.fail(
+                    'reference',
+                    f'{name}: cited the recorded reference {old[:12]} and '
+                    f'does not name the new one {new}',
+                )
+        for name in citing(candidate, old):
+            if name in FROZEN and name not in CITATIONS:
+                continue
+            report.fail(
+                'reference',
+                f'{name}: still cites the recorded reference {old[:12]}; every '
+                f'file citing the reference outside docs/ names the new one '
+                f'{new}',
+            )
+    # Every line read and judged as written, before any is indexed: a
+    # case on two lines is refused by file and line, never one of them
+    # silently kept.
+    lines: dict[Any, dict[str, Any]] = {}
+    first: dict[Any, int] = {}
+    for number, line in enumerate(jsonl(candidate.read(path), path), 1):
+        case = line.get('case')
+        if not isinstance(case, str) or not case:
+            report.fail('reference', f'{path}:{number}: names no case')
+            continue
+        if at(line, 'identity.reference.commit.sha') != new:
+            report.fail(
+                'reference',
+                f'{path}:{number}: {case}: records another reference commit '
+                f"than {new}, the file's name",
+            )
+        if case in first:
+            report.fail(
+                'reference',
+                f'{path}:{number}: {case}: a second line of the case (its '
+                f'first is line {first[case]}); a recording holds each case '
+                'once',
+            )
+            continue
+        first[case] = number
+        lines[case] = line
+    policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
+    ordered = policy.get('ordered') if isinstance(policy, dict) else None
+    recorded = reference_lines(checkpoint)
+    for case, line in sorted(recorded.items(), key=lambda item: str(item[0])):
+        if case not in lines:
+            if not isinstance(case, str) or case_of(case) not in removed:
+                report.fail(
+                    'reference',
+                    f'{case}: its line removed: the new recording carries '
+                    'every case the recorded one did',
+                )
+            continue
+        then, now = semantic(line, ordered), semantic(lines[case], ordered)
+        if then != now:
+            report.note(
+                'reference',
+                f'{case}: recorded differently at the new reference {new[:12]}'
+                f', in {listed(_differing(then, now), 6)}: for the reviewers',
+            )
+    fresh = len(set(lines) - set(recorded))
+    if fresh:
+        report.note('reference', f'{fresh} case(s) recorded for the first time')
+
+
 def check_reference(
     report: Report,
     checkpoint: Tree,
     candidate: Tree,
     entries: list[dict[str, Any]],
     removed: set[str],
+    decisions: str = '',
 ) -> None:
     before = checkpoint.files(REFERENCE)
     if not before:
         return
     after = candidate.files(REFERENCE)
-    if [p for p in after if p not in before] and not [
-        p for p in before if p in after
-    ]:
-        report.fail(
-            'reference',
-            "a new reference commit replaces the recorded one: the owner's",
+    added = [p for p in after if p not in before]
+    if added:
+        check_new_reference(
+            report, checkpoint, candidate, added, removed, decisions
         )
         return
     policy = _yaml(checkpoint.read(POLICY), POLICY) or {}
@@ -1347,7 +1735,7 @@ def check_reference(
             if new.get(case) == line:
                 continue
             if case not in new:
-                if case not in removed:
+                if not isinstance(case, str) or case_of(case) not in removed:
                     report.fail('reference', f'{case}: its line removed')
             elif semantic(line, ordered) != semantic(new[case], ordered):
                 if not authorized(entries, case, 'python-ref', None, None):
@@ -1358,6 +1746,36 @@ def check_reference(
                     )
             else:
                 report.note('reference', f'{case}: re-recorded, identity only')
+
+
+def check_keys(report: Report, candidate: Tree) -> None:
+    r"""Every reference line and baseline is keyed by a case of the
+    candidate's corpus, bare or with a known database (``<case>@sqlite``,
+    ``<case>@postgres``), so removing a case removes its lines on every
+    database."""
+    corpus, form = cases(candidate), key_form()
+    found = [
+        (path, line.get('case'))
+        for path in candidate.files(REFERENCE)
+        for line in jsonl(candidate.read(path), path)
+    ]
+    found += [
+        (f'{BASELINES}/{CELL}/{runner}.jsonl', key)
+        for runner, by_case in baselines(candidate).items()
+        for key in by_case
+    ]
+    for path, key in found:
+        if not isinstance(key, str):
+            report.fail(
+                'cases', f'a key of type {type(key).__name__}, in {path}'
+            )
+        elif not form.fullmatch(key):
+            report.fail(
+                'cases',
+                f'{key!r}: not a case or <case>@<database> key, in {path}',
+            )
+        elif case_of(key) not in corpus:
+            report.fail('cases', f'{key}: a line of no case, in {path}')
 
 
 def check_cases(
@@ -1695,6 +2113,23 @@ def check_register(
     return mine
 
 
+def check_temporary(report: Report, entries: list[dict[str, Any]]) -> None:
+    r"""The locked run fails, naming each, while an approved entry cites a
+    decision row that approves only until a package lands (register.py's
+    ``TEMPORARY``; T2.1a): the package it waits for has not retired it."""
+    temporary = register_module().TEMPORARY
+    for entry in entries:
+        ref = entry.get('decision_ref')
+        row = ref.get('row') if isinstance(ref, dict) else None
+        if row in temporary:
+            report.fail(
+                'temporary',
+                f'{entry.get("id")} is approved under {row}, which approves '
+                'it only until its package lands; the locked run needs it '
+                'retired (rejected, or citing a permanent row)',
+            )
+
+
 def check_availability(
     report: Report,
     fields: Any,
@@ -1713,7 +2148,7 @@ def check_availability(
             report.fail('availability', f'{runner}: not in {AVAILABILITY}')
             continue
         for case, observation in sorted(by_case.items()):
-            spec = corpus.get(case, ({}, ''))[0]
+            spec = corpus.get(case_of(case), ({}, ''))[0]
             for name, value in marked.items():
                 found = at(observation, name)
                 if value == 'unavailable':
@@ -1764,7 +2199,7 @@ def check_baselines(
             )
         }
         for case, line in sorted(held.get(runner, {}).items()):
-            if case in gone:
+            if case_of(case) in gone:
                 continue
             observation = by_case.get(case)
             if observation is None:
@@ -1801,6 +2236,8 @@ def check_baselines(
                 )
         mine = proposed.get(runner, {})
         for case, line in sorted(mine.items()):
+            if case_of(case) not in corpus:
+                continue  # a line of no case: check_keys names it
             observation = by_case.get(case)
             if (
                 line['projection'].get('outcome.code') == PANIC
@@ -1821,12 +2258,12 @@ def check_baselines(
                     f'{case}: {runner}: the proposed baseline is not the '
                     'observation (ratchet.py accept writes it)',
                 )
-        for case, (spec, _) in sorted(corpus.items()):
-            if (
-                spec.get('status') == 'acceptance'
-                and case in by_case
-                and case not in mine
-            ):
+        # An acceptance case needs a baseline on each database it is
+        # observed on: each key observed (the bare ID on DuckDB,
+        # <case>@<database> on another).
+        for case in sorted(by_case):
+            spec = corpus.get(case_of(case), ({}, ''))[0]
+            if spec.get('status') == 'acceptance' and case not in mine:
                 report.fail(
                     'baselines',
                     f'{case}: {runner}: an acceptance case with no proposed baseline',
@@ -1847,9 +2284,11 @@ def check(
     bootstrap: bool = False,
     effective_out: Path | None = None,
     epic: bool = False,
+    locked: bool = False,
 ) -> Report:
     r"""Every rule's problems; ``effective_out`` receives the effective
-    expectations (:func:`effective`) for the comparator."""
+    expectations (:func:`effective`) for the comparator. ``locked``, the
+    locked run's ratchet step, adds :func:`check_temporary`."""
     report = Report()
     checkpoint = Tree(repo, checkpoint_sha)
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
@@ -1877,6 +2316,8 @@ def check(
     try:
         mine = check_register(report, checkpoint, candidate, repo)
         entries = approved(mine)
+        if locked:
+            check_temporary(report, entries)
         held = baselines(checkpoint)
         if effective_out is not None:
             effective_out.write_text(
@@ -1903,8 +2344,11 @@ def check(
         check_protected(
             report, checkpoint, candidate, changed, trailer, bootstrap
         )
-        check_reference(report, checkpoint, candidate, entries, removed)
         decisions = checkpoint_decisions(report, checkpoint)
+        check_reference(
+            report, checkpoint, candidate, entries, removed, decisions
+        )
+        check_keys(report, candidate)
         if epic:
             found_merge = epic_merge(repo, head)
             if (
@@ -2045,7 +2489,16 @@ def accept(
     marks = (_yaml(tree.read(AVAILABILITY), AVAILABILITY) or {})['runners']
     observed = observations(observation_files)
     found: dict[str, list[dict[str, Any]]] = {runner: [] for runner in observed}
-    for case in sorted(cases(tree)):
+    corpus = cases(tree)
+    # Each key observed of a corpus case: the bare ID on DuckDB, and
+    # <case>@<database> on another database.
+    keys = {
+        key
+        for by_case in observed.values()
+        for key in by_case
+        if case_of(key) in corpus
+    }
+    for case in sorted(keys):
         ref = reference.get(case)
         for runner, by_case in observed.items():
             observation = by_case.get(case)
@@ -2192,6 +2645,7 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--observations', type=Path, action='append', default=[])
     judge.add_argument('--effective-out', type=Path)
     judge.add_argument('--epic', action='store_true')
+    judge.add_argument('--locked', action='store_true')
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
     expect = commands.add_parser('effective')
@@ -2271,6 +2725,7 @@ def main(argv: list[str] | None = None) -> int:
             arguments.bootstrap,
             arguments.effective_out,
             arguments.epic,
+            arguments.locked,
         )
     except Unreadable as error:
         print(f'ratchet: {error}\nratchet: FAIL')

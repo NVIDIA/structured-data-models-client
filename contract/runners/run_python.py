@@ -8,7 +8,13 @@ r"""The Python runner of the contract cases, in three modes.
 Run with ``python -I``, from the interpreter of the environment under test:
 
     python -I contract/runners/run_python.py --mode MODE [--reference DIR]
-        [--no-capture] [--inventory ID]... --out FILE [CASE_OR_DIRECTORY...]
+        [--database DATABASE] [--no-capture] [--inventory ID]... --out FILE
+        [CASE_OR_DIRECTORY...]
+    python -I contract/runners/run_python.py legs --database DATABASE
+        --providers FILE OBSERVATIONS...
+
+``legs`` holds a database job's observations to the staging rule
+(:func:`check_legs`), each core leg's providers given as JSON in FILE.
 
 - ``python-ref``: the reference, the oracle. ``--reference`` names the
   reference checkout, whose environment must be the interpreter's. Its guard
@@ -23,8 +29,12 @@ Run with ``python -I``, from the interpreter of the environment under test:
 - ``python-old``: the candidate on its default routes, a smoke runner that
   must complete every case (decision H10).
 
-Each case builds its DuckDB base on a fresh in-memory connection, then makes
-the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
+Each case builds its DuckDB base on a fresh in-memory connection; with
+``--database sqlite`` or ``postgres`` (T2.1a), the contract loader
+(``databases.py``) loads its tables into a new SQLite file or a new
+Postgres database's public schema, and the source is given a driver connection to that, its
+observation keyed ``<case>@<database>``; a case whose ``databases`` leave
+the database out is not run. Then it makes the public calls: ``Schema.from_source``, then ``materialize`` (the S0 call),
 then ``SDMClient.predict`` against the scripted endpoint
 (``scripted_endpoint.py``), served on localhost and reached through the
 client's real transport, as far as the case's ``until``.
@@ -81,12 +91,26 @@ SCHEMAS = {
     'observation': CONTRACT / 'observation.schema.json',
 }
 MODES = ('python-ref', 'python-core', 'python-old')
+
+#: A cell's earlier pins, still that cell of ``CELLS``: the floor's before
+#: T2.0c moved it to pandas 2.2.2 and NumPy 1.23.5 (KO2-37). The phase
+#: branch's ci.yml installs these until that landing, so the floor job
+#: records its cell on either side of it.
+EARLIER_PINS = {
+    ('3.10', '2.2.0', '14.0.1', '1.26.4'): 'floor-pandas2.2',
+}
+
+#: The databases every case runs on unless its file says otherwise (design
+#: choice 2, KO2-19), in this order. DuckDB's observations keep the bare
+#: case ID; the others are keyed ``<case>@<database>``.
+DATABASES = ('duckdb', 'sqlite', 'postgres')
+
 #: The runtime cells (design, "Runtime cells"): Python, pandas, pyarrow and
 #: NumPy versions. An environment with exactly one's versions is that cell.
 CELLS = {
     'ref-pandas3': ('3.12', '3.0.6', '25.0.1', '2.5.3'),
     'dbr17-pandas2': ('3.12', '2.2.3', '19.0.1', '2.1.3'),
-    'floor-pandas2.2': ('3.10', '2.2.0', '14.0.1', '1.26.4'),
+    'floor-pandas2.2': ('3.10', '2.2.2', '14.0.1', '1.23.5'),
 }
 
 
@@ -128,16 +152,129 @@ def _invalid(validate: Any, document: Any) -> str | None:
 
 
 def _indices(given: dict[str, Any]) -> str | None:
-    r"""An entity key is a JSON integer literal of any size, or a string.
+    r"""An entity key is a JSON integer literal of any size, or a string,
+    in ``indices`` and ``candidates`` alike; ``top_k`` and ``fail_call``
+    are integers (``rows_per_call`` is passed as written, whatever it is).
 
     JSON Schema counts ``1.0`` as an integer; ``json`` reads it as a float,
     and a bool is no index either, so the type read is checked too, as
     sdm-testkit's loader refuses any number with a fraction or exponent.
     """
-    for position, value in enumerate(given['materialize']['indices']):
-        if type(value) not in (int, str):
-            return f'input/materialize/indices/{position} is not an integer'
+    spec = given['materialize']
+    for key in ('indices', 'candidates'):
+        for position, value in enumerate(spec.get(key, ())):
+            if type(value) not in (int, str):
+                return f'input/materialize/{key}/{position} is not an integer'
+    if 'top_k' in spec and type(spec['top_k']) is not int:
+        return 'input/materialize/top_k is not an integer'
+    if 'fail_call' in given and type(given['fail_call']) is not int:
+        return 'input/fail_call is not an integer'
     return None
+
+
+def on_database(path: str, database: str) -> str:
+    r"""A case's DuckDB route or path as the same operation and mode over
+    ``database``'s source; any other is itself."""
+    head, _, backend = path.rpartition('/')
+    return f'{head}/{database}' if backend == 'duckdb' else path
+
+
+def routes_on(case: dict[str, Any], database: str) -> list[str]:
+    r"""The routes python-core forces for ``case`` on ``database``: on DuckDB
+    the case's own; elsewhere the case's own over ``database``
+    (:func:`on_database`) and every route of each public call the case
+    makes, through its ``until`` (T2.1d). Off DuckDB the old route is not
+    the reference's (python-old runs on DuckDB only, T2.1a fix 4), so no
+    call of a core leg takes it: a case that routes only its DuckDB stop
+    (S0's validation, a source refused at ``from_source``) still runs on
+    the core where the database lets the call go further."""
+    routes = [on_database(route, database) for route in case['routes']]
+    if database == 'duckdb':
+        return routes
+    from sdm_client import _routing
+
+    named = bool((case['input'].get('from_source') or {}).get('tables'))
+    calls = list(
+        _routing.FROM_SOURCE_DUCKDB_TABLES
+        if named
+        else _routing.FROM_SOURCE_DUCKDB
+    )
+    if case['until'] != 'from_source':
+        calls += _routing.MATERIALIZE_DUCKDB
+    if case['until'] == 'predict':
+        calls += _routing.PREDICT_DUCKDB
+    for path in calls:
+        if on_database(path, database) not in routes:
+            routes.append(on_database(path, database))
+    return routes
+
+
+def case_key(case_id: str, database: str) -> str:
+    r"""An observation's key on ``database``: DuckDB's the bare case ID,
+    another's ``<case>@<database>``."""
+    return case_id if database == 'duckdb' else f'{case_id}@{database}'
+
+
+def check_legs(
+    database: str,
+    providers: Mapping[str, Iterable[str]],
+    observations: Iterable[Mapping[str, Any]],
+) -> list[str]:
+    r"""The staging rule (design choice 2, "CI"; T2.1a), one definition for
+    ``gate.sh`` and CI: a database job runs cases, and each core leg runs
+    on ``database`` exactly when it reports a provider for it.
+
+    ``providers`` maps each core leg (``python-core``, ``rust-host``) to
+    the databases it reports (``sdm_client._native.PROVIDERS``,
+    ``sdm-contract-run --providers``); ``observations`` are the job's, each
+    keyed as :func:`case_key` keys it. The problems, each naming what
+    fails: no case observed on ``database``; a leg reporting a provider for
+    it with no observation there; a leg without a case the reference side
+    observed there (``python-ref``'s committed lines, or on DuckDB
+    ``python-old``'s), named by its key. A leg reporting no
+    provider for ``database`` is not required there."""
+    on = [
+        line
+        for line in observations
+        if isinstance(line.get('case'), str)
+        and (
+            '@' not in line['case']
+            if database == 'duckdb'
+            else line['case'].endswith(f'@{database}')
+        )
+    ]
+    if not on:
+        return [f'{database}: the job observed no case on {database}']
+    observed: dict[str, set[str]] = {}
+    for line in on:
+        runner = (line.get('identity') or {}).get('runner')
+        observed.setdefault(str(runner), set()).add(line['case'])
+    reference = observed.get('python-ref', set()) | observed.get(
+        'python-old', set()
+    )
+    problems = []
+    for leg in sorted(providers):
+        if database not in tuple(providers[leg]):
+            continue
+        made = observed.get(leg, set())
+        if not made:
+            problems.append(
+                f'{database}: {leg} reports a {database} provider and made '
+                f'no observation on {database} (missing)'
+            )
+            continue
+        problems.extend(
+            f'{database}: {leg} reports a {database} provider and skipped {key}'
+            for key in sorted(reference - made)
+        )
+    return problems
+
+
+def case_databases(case: dict[str, Any]) -> tuple[str, ...]:
+    r"""The databases a loaded case runs on, in :data:`DATABASES` order:
+    all three unless its ``databases`` (with its exclusion) narrows them."""
+    named = case.get('databases', DATABASES)
+    return tuple(database for database in DATABASES if database in named)
 
 
 def digest(data: bytes) -> str:
@@ -360,7 +497,10 @@ def _cell(versions: dict[str, str]) -> str | None:
         versions.get('pyarrow'),
         versions.get('numpy'),
     )
-    return next((name for name, want in CELLS.items() if want == have), None)
+    return next(
+        (name for name, want in CELLS.items() if want == have),
+        EARLIER_PINS.get(have),
+    )
 
 
 def _environment() -> str:
@@ -420,7 +560,11 @@ class _Capture:
     ``predict`` with is recorded where it reaches the endpoint, in the
     call's ``metadata.request_id``, and a call that does not carry it is a
     runner failure; a forecast's later calls each carry the id the host gave
-    its step (T1.36 fix 24)."""
+    its step (T1.36 fix 24), and a request asked in several calls
+    (``RequestState.batches``) each the id the host gave that call. Where
+    predict makes more than one call, every call's body is kept in order,
+    ``core.predicted.calls``, beside ``body``, the last's (T2.1g); a request
+    of one call records ``body`` alone, as before."""
 
     def __init__(self) -> None:
         self.operations: list[str] = []
@@ -429,6 +573,11 @@ class _Capture:
         #: schema, in order (T1.24b).
         self.edits: list[dict[str, Any]] = []
         self.fetches: list[dict[str, Any]] = []
+        #: Each fetch with the answer the host replied with, in the order
+        #: replied, for ``--record-fetches`` (the replay's recording, T2.3).
+        self.answered: list[dict[str, Any]] = []
+        self.recording = False
+        self._asked: dict[int, dict[str, Any]] = {}
         self.accepted: bool | None = None
         self.described: dict[str, Any] | None = None
         self.materialized: dict[str, Any] | None = None
@@ -442,8 +591,10 @@ class _Capture:
         self._state: dict[str, Any] | None = None
         self._request_id: str | None = None
         self._request_ids: list[str] = []
+        self._skippable: set[str] = set()
         self._call: int | None = None
         self._body: dict[str, Any] | None = None
+        self._bodies: list[dict[str, Any]] = []
         self._answer: dict[str, Any] | None = None
 
     def warned(self, message: bytes) -> None:
@@ -459,21 +610,42 @@ class _Capture:
         self._state = None
         self._call = None
         self._answer = None
+        self._bodies = []
         if operation['op'] == 'predict':
             state = operation['state']
             self._request_id = operation['request_id']
             # The id each call carries: one call per step with rows to
             # score, in step order, each with its own step's id (T1.36 fixes
             # 24 and 27); a step with none makes no call, as in the core.
-            steps = [(operation['request_id'], state['payload'])] + [
-                (step['request_id'], step['payload'])
-                for step in state.get('forecast') or ()
-            ]
+            steps = (
+                [(operation['request_id'], state['payload'])]
+                + [
+                    (step['request_id'], step['payload'])
+                    for step in state.get('forecast') or ()
+                ]
+                + [
+                    (batch['request_id'], batch['payload'])
+                    for batch in state.get('batches') or ()
+                ]
+                # A ranking's later questions (T2.8), each the id the host
+                # gave it, in order.
+                + [
+                    (part['request_id'], part['payload'])
+                    for part in (state.get('ranking') or {}).get('parts', ())
+                ]
+            )
             self._request_ids = [
                 request_id
                 for request_id, payload in steps
                 if not _nothing_to_score(json.loads(attachments[payload]))
             ]
+            # A ranking's question whose context holds one answer is asked
+            # no call (T2.8): its id may be passed over, in order.
+            self._skippable = (
+                {request_id for request_id, _ in steps}
+                if state.get('ranking') is not None
+                else set()
+            )
             self.inputs.append(
                 {
                     'op': 'predict',
@@ -553,8 +725,47 @@ class _Capture:
                 {'request': asked['request'], 'plan': asked['plan']}
                 for asked in step['requests']
             )
+            for asked in step['requests']:
+                self._asked[asked['id']] = {
+                    'request': asked['request'],
+                    'plan': asked['plan'],
+                }
         if step.get('step') == 'call_model':
             self._call = step['body']
+
+    def replied(self, message: bytes, attachments: Any) -> None:
+        r"""A fetch's answer as the host replies with it, kept beside the
+        fetch: its rows as an Arrow IPC stream in base64, or the provider's
+        error, as the replay's recording holds it (``sdm-testkit``'s
+        ``replay``)."""
+        if not self.recording:
+            return
+        reply = json.loads(message)
+        if reply.get('message') != 'fetch_reply':
+            return
+        asked = self._asked.pop(reply['id'], None)
+        if asked is None:
+            raise RunnerFailure('a fetch replied to that was never asked')
+        outcome = reply['outcome']
+        if outcome['outcome'] == 'error':
+            self.answered.append({**asked, 'error': outcome['error']})
+            return
+        import base64
+
+        import pyarrow as pa
+
+        table = pa.RecordBatchReader._import_from_c_capsule(
+            attachments[outcome['data']].__arrow_c_stream__()
+        ).read_all()
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, table.schema) as writer:
+            writer.write_table(table)
+        self.answered.append(
+            {
+                **asked,
+                'data': base64.b64encode(sink.getvalue().to_pybytes()).decode(),
+            }
+        )
 
     def failed(self, error: Any) -> None:
         self.error = {'kind': str(error.kind), 'code': str(error.code)}
@@ -568,6 +779,7 @@ class _Capture:
             self._state = result['state']
             self.materialized = {'version': result['state']['version']}
         if result.get('op') == 'predict':
+            self._passed_over()
             if self._request_ids:
                 raise RunnerFailure(
                     'predict answered without calling the model for a step '
@@ -576,6 +788,7 @@ class _Capture:
             self._answer = result
             self.predicted = {
                 'body': self._body,
+                **({'calls': self._bodies} if len(self._bodies) > 1 else {}),
                 'model': result['model'],
                 'request_id': result['request_id'],
                 'metadata': None,
@@ -587,8 +800,10 @@ class _Capture:
             self._body = json.loads(
                 value, parse_int=_number, parse_float=_number
             )
+            self._bodies.append(self._body)
             # The next step with rows to score's id, and no call past them.
             carried = self._body.get('metadata', {}).get('request_id')
+            self._passed_over(carried)
             if not self._request_ids or carried != self._request_ids.pop(0):
                 raise RunnerFailure(
                     'the model call does not carry the request id predict '
@@ -612,6 +827,16 @@ class _Capture:
         if attachment == state['query'] and isinstance(value, bytes):
             self.materialized['query'] = json.loads(value)
 
+    def _passed_over(self, carried: str | None = None) -> None:
+        r"""Drops the ids of a ranking's questions asked no call before the
+        call carrying ``carried``, or, with none, all that are left."""
+        while (
+            self._request_ids
+            and self._request_ids[0] != carried
+            and self._request_ids[0] in self._skippable
+        ):
+            self._request_ids.pop(0)
+
     def core(self) -> dict[str, Any]:
         core: dict[str, Any] = {
             'inputs': self.inputs,
@@ -634,7 +859,9 @@ def _result_rows(stream: Any) -> dict[str, Any]:
     hex digits, so no text form of a float is compared) or text
     (``utf8``); from T1.28b a boolean (``bool``) and a class's
     probabilities (``map``: each class and its probability's bits, in
-    order)."""
+    order); from T2.8 a list (``list``: a ranking's scores and rankings, an
+    item's own, each member a cell as above, a null ``None``), as the
+    pure-Rust host records one."""
     import pyarrow as pa
 
     table = pa.RecordBatchReader._import_from_c_capsule(
@@ -650,13 +877,22 @@ def _result_rows(stream: Any) -> dict[str, Any]:
     def kind_of(field: Any) -> str:
         if pa.types.is_map(field.type):
             return 'map'
+        if pa.types.is_list(field.type) or pa.types.is_large_list(field.type):
+            return 'list'
         return kinds.get(field.type, 'other')
 
     columns = [
         {'name': field.name, 'type': kind_of(field)} for field in table.schema
     ]
+    # Each list column's members' kind, as a cell of their type records.
+    members = [
+        kinds.get(field.type.value_type, 'other')
+        if kind_of(field) == 'list'
+        else None
+        for field in table.schema
+    ]
 
-    def cell(kind: str, value: Any) -> Any:
+    def cell(kind: str, value: Any, member: str | None = None) -> Any:
         if value is None:
             return None
         if kind == 'int64':
@@ -671,14 +907,16 @@ def _result_rows(stream: Any) -> dict[str, Any]:
             return {
                 'map': [[key, struct.pack('>d', p).hex()] for key, p in value]
             }
+        if kind == 'list' and member is not None:
+            return {'list': [cell(member, item) for item in value]}
         raise RunnerFailure(
             'a result column of a type this runner does not record'
         )
 
     rows = [
         [
-            cell(column['type'], value)
-            for column, value in zip(columns, row, strict=True)
+            cell(column['type'], value, member)
+            for column, value, member in zip(columns, row, members, strict=True)
         ]
         for row in zip(
             *(table.column(i).to_pylist() for i in range(table.num_columns)),
@@ -855,6 +1093,7 @@ class _Handle:
         return taken
 
     def reply(self, message: bytes, attachments: Any) -> None:
+        self._capture.replied(message, attachments)
         try:
             self._handle.reply(message, attachments)
         except self._native.CoreError as error:
@@ -1019,6 +1258,15 @@ def _nanos(days: int, seconds: int, micros: int, nanos: int = 0) -> str:
     return str(((days * 86400 + seconds) * 1_000_000 + micros) * 1000 + nanos)
 
 
+def _month_day_nano(value: Any) -> bool:
+    r"""Whether ``value`` is pyarrow's month-day-nano interval."""
+    if not isinstance(value, tuple):
+        return False
+    import pyarrow as pa
+
+    return isinstance(value, pa.MonthDayNano)
+
+
 def canonical_cell(value: Any, odd: list[str]) -> Any:
     r"""One value of a result in its canonical form (decision H9; design,
     "Observations and comparator"): the value itself, never its Python
@@ -1036,7 +1284,8 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
     ...]]``; read from Arrow (:func:`_arrow_cells`), a map is ``["map",
     [[key, value], ...]]`` in Arrow's entry order, a union ``["union",
     type code, member name, cell]`` and a month-day-nano interval
-    ``["interval", months, days, nanoseconds as digits]``. A value of any
+    ``["interval", months, days, nanoseconds as digits]``, as is pyarrow's
+    ``MonthDayNano`` read as a row's value. A value of any
     other kind is ``["?",
     its type's name]`` and is listed as unencodable, which the comparator
     never takes as equal. This
@@ -1095,6 +1344,11 @@ def canonical_cell(value: Any, odd: list[str]) -> Any:
             'dur',
             _nanos(value.days, value.seconds, value.microseconds),
         ]
+    elif _month_day_nano(value):
+        # pyarrow's month-day-nano interval, a named tuple, which a driver
+        # hands over for an interval read whole (T2.1d): the cell Arrow
+        # gives the same interval, never a list.
+        return ['interval', value.months, value.days, str(value.nanoseconds)]
     elif isinstance(value, (list, tuple)):
         return ['list', [canonical_cell(item, odd) for item in value]]
     elif isinstance(value, dict) and all(isinstance(k, str) for k in value):
@@ -1269,7 +1523,10 @@ def _values(
 
 
 def result_values(
-    columns: list[str], types: list[str] | None, rows: Iterable[Any]
+    columns: list[str],
+    types: list[str] | None,
+    rows: Iterable[Any],
+    duckdb_types: bool = True,
 ) -> dict[str, Any]:
     r"""A result read as Python rows (``fetchall``), its columns and rows in
     canonical form (:func:`canonical_cell`): the SHA-256 of the rows in the
@@ -1279,9 +1536,12 @@ def result_values(
     the columns' types where the driver gives them (``description``), and
     ``unencodable`` names every value of a kind the canonical form does not
     hold, and every value of a column whose type the driver reads with less
-    than its precision (:data:`_LOSSY_AS_ROWS`)."""
+    than its precision (:data:`_LOSSY_AS_ROWS`; DuckDB's types alone,
+    ``duckdb_types``: another driver's types are its own)."""
     odd: list[str] = []
-    lossy = [_lossy_as_rows(kind) for kind in types or []]
+    lossy = (
+        [_lossy_as_rows(kind) for kind in types or []] if duckdb_types else []
+    )
     cells = []
     for row in rows:
         cells.append(
@@ -1308,6 +1568,19 @@ def _unencodable(name: str, odd: list[str]) -> list[str]:
 _UNIT_NANOS = {'s': 10**9, 'ms': 10**6, 'us': 10**3, 'ns': 1}
 
 
+def _json_cell(text: str | None, odd: list[str]) -> Any:
+    r"""A JSON text as the value it holds, the canonical cell of a driver's
+    reading of it; a text that is not JSON is unencodable."""
+    if text is None:
+        return None
+    try:
+        value = json.loads(text)
+    except ValueError:
+        odd.append('arrow:json')
+        return ['?', 'arrow:json']
+    return canonical_cell(value, odd)
+
+
 def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     r"""The canonical cells of one Arrow array, read from Arrow itself, as
     ``sdm-testkit``'s ``values`` reads them: temporal values from their
@@ -1316,7 +1589,9 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
     entries in Arrow's order, duplicate keys kept), a union as its chosen
     member's cell under its type code and name (:func:`_union_cells`), a
     month-day-nano interval as ``["interval", months, days, nanoseconds
-    as digits]``, a dictionary as its values; a type outside that set (a
+    as digits]``, a dictionary as its values, text Arrow marks as JSON
+    (``arrow.json``) as the value it holds, as a driver reads JSON
+    (``json.loads``, then :func:`canonical_cell`); a type outside that set (a
     ``date64``, Arrow's year-month and day-time intervals) is unencodable,
     its non-null values ``["?", "arrow:<type>"]``."""
     import pyarrow as pa
@@ -1324,6 +1599,12 @@ def _arrow_cells(array: Any, odd: list[str]) -> list[Any]:
 
     kind = array.type
     valid = [not null for null in array.is_null().to_pylist()]
+    if (
+        isinstance(kind, pa.BaseExtensionType)
+        and kind.extension_name == 'arrow.json'
+        and is_.is_string(kind.storage_type)
+    ):
+        return [_json_cell(text, odd) for text in array.storage.to_pylist()]
     if is_.is_dictionary(kind):
         return _arrow_cells(array.dictionary_decode(), odd)
     if is_.is_time(kind) or is_.is_timestamp(kind) or is_.is_duration(kind):
@@ -1487,6 +1768,72 @@ def _chosen_odd(cell: Any, odd: list[str]) -> None:
         _chosen_odd(cell[3], odd)
 
 
+#: The field metadata key, and its value, marking a month-day-nano interval
+#: column built from a driver's ``timedelta``s (the Postgres provider's,
+#: psycopg's reading of an ``interval``); ``sdm-testkit``'s ``INTERVAL_TAG``.
+_INTERVAL_TAG = (b'sdm:interval', b'timedelta')
+
+
+def _is_json_field(field: Any) -> bool:
+    r"""Whether ``field`` holds JSON text, Arrow's ``arrow.json`` over a
+    string: as the extension type a newer pyarrow builds, or as a string
+    field carrying the extension's metadata, as pyarrow before the type
+    (the 14 floor) keeps it."""
+    import pyarrow as pa
+    import pyarrow.types as is_
+
+    kind = field.type
+    if isinstance(kind, pa.BaseExtensionType):
+        return kind.extension_name == 'arrow.json' and is_.is_string(
+            kind.storage_type
+        )
+    return (
+        is_.is_string(kind)
+        and (field.metadata or {}).get(b'ARROW:extension:name') == b'arrow.json'
+    )
+
+
+def _json_texts(array: Any, odd: list[str]) -> list[Any]:
+    r"""The cells of a JSON column (:func:`_is_json_field`), each the value
+    its text holds (:func:`_json_cell`)."""
+    import pyarrow as pa
+
+    if isinstance(array.type, pa.BaseExtensionType):
+        array = array.storage
+    return [_json_cell(text, odd) for text in array.to_pylist()]
+
+
+def _is_folded_interval(field: Any) -> bool:
+    r"""Whether ``field`` is a month-day-nano interval column built from
+    ``timedelta``s (:data:`_INTERVAL_TAG`)."""
+    import pyarrow as pa
+
+    key, value = _INTERVAL_TAG
+    return (
+        field.type == pa.month_day_nano_interval()
+        and (field.metadata or {}).get(key) == value
+    )
+
+
+def _folded_intervals(array: Any, odd: list[str]) -> list[Any]:
+    r"""The cells of an interval column built from ``timedelta``s, each the
+    ``timedelta``'s own, ``["dur", nanoseconds]``. A ``timedelta`` holds no
+    months (psycopg folds a month into 30 days and a year into 365, which
+    months alone cannot tell apart), so an interval holding some is
+    unencodable."""
+    cells: list[Any] = []
+    for value in array.to_pylist():
+        if value is None:
+            cells.append(None)
+        elif value.months:
+            cells.append(_unencodable('arrow:interval months', odd))
+        else:
+            cells.append(
+                ['dur', str(value.days * 86_400 * 10**9 + value.nanoseconds)]
+            )
+    return cells
+
+
 def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
     r"""An Arrow table's columns and rows in canonical form, read from
     Arrow (:func:`_arrow_cells`) column by column, so two columns of one
@@ -1495,13 +1842,19 @@ def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
 
     odd: list[str] = []
     columns = [
-        _arrow_cells(
+        (
+            _json_texts
+            if _is_json_field(field)
+            else _folded_intervals
+            if _is_folded_interval(field)
+            else _arrow_cells
+        )(
             column.combine_chunks()
             if column.num_chunks
             else pa.array([], type=column.type),
             odd,
         )
-        for column in table.columns
+        for field, column in zip(table.schema, table.columns, strict=True)
     ]
     rows = (
         [list(row) for row in zip(*columns, strict=True)]
@@ -1511,16 +1864,29 @@ def arrow_values(table: Any, types: list[str] | None = None) -> dict[str, Any]:
     return _values(table.schema.names, types, _texts(rows), odd)
 
 
-def _description(driver: Any) -> tuple[list[str], list[str]] | None:
+def _description(
+    driver: Any, names: Mapping[int, str] | None = None
+) -> tuple[list[str], list[str]] | None:
     r"""The columns of the result a driver holds, as its ``description``
-    names them and their DuckDB types, or None when it gives none."""
+    names them and their types (DuckDB's names; off DuckDB the driver's
+    own: ADBC's Arrow type, psycopg's display of the Postgres type), or
+    None when it gives none. A type the driver knows only by the number
+    the server gave it (a composite type the loader created) is named by
+    ``names``, never by that number, which differs from run to run."""
     try:
         described = driver.description
     except Exception:  # noqa: BLE001 - the capture's own reading
         return None
     if not described:
         return None
-    return [str(c[0]) for c in described], [str(c[1]) for c in described]
+    types = []
+    for column in described:
+        code = column[1]
+        named = (names or {}).get(code) if isinstance(code, int) else None
+        types.append(
+            str(named or getattr(column, 'type_display', None) or code)
+        )
+    return [str(c[0]) for c in described], types
 
 
 class DriverLog:
@@ -1540,6 +1906,9 @@ class DriverLog:
         self.handles = 0
         #: The public call the runner is making, set by it before each.
         self.stage: str | None = None
+        #: The names of the types the server numbers per run (Postgres's
+        #: composite types), by number, for the results' type names.
+        self.type_names: dict[int, str] = {}
 
     def handle(self) -> int:
         number = self.handles
@@ -1574,6 +1943,9 @@ class _Captured:
     """
 
     __slots__ = ('_driver', '_log', '_handle', '_statement')
+    #: Whether the driver's ``description`` names DuckDB's types, whose
+    #: reads as rows may lose precision (:data:`_LOSSY_AS_ROWS`).
+    _DUCKDB_TYPES = True
 
     def __init__(self, driver: Any, log: DriverLog) -> None:
         object.__setattr__(self, '_driver', driver)
@@ -1594,7 +1966,7 @@ class _Captured:
     def cursor(self) -> Any:
         derived = self._driver.cursor()
         self._log.events.append({'event': 'cursor', 'handle': self._handle})
-        return _Captured(derived, self._log)
+        return type(self)(derived, self._log)
 
     def execute(self, *arguments: Any, **keywords: Any) -> Any:
         # Bound as the driver binds them: execute(query, parameters=None).
@@ -1619,6 +1991,17 @@ class _Captured:
         except BaseException as error:
             statement['error'] = type(error).__name__
             raise
+        if (
+            answer is not None
+            and answer is not self._driver
+            and hasattr(answer, 'fetchall')
+        ):
+            # A connection's execute that gives a new cursor (psycopg's):
+            # that cursor is derived, and reads the statement's result.
+            self._log.events.append({'event': 'cursor', 'handle': self._handle})
+            derived = type(self)(answer, self._log)
+            object.__setattr__(derived, '_statement', statement)
+            return derived
         return self._same(answer)
 
     def _read(self, method: str, *arguments: Any, **keywords: Any) -> Any:
@@ -1629,7 +2012,7 @@ class _Captured:
             return answer
         # The result's columns and DuckDB's types for them, read from the
         # driver's description, which runs nothing.
-        described = _description(self._driver)
+        described = _description(self._driver, self._log.type_names)
         names, types = described if described else ([], None)
         if method in _ROWS or method in _ROW:
             if method in _ROWS:
@@ -1640,7 +2023,9 @@ class _Captured:
             result['digest'] = _rows_digest(rows)
             if described is None:
                 self._log.incomplete.append(f'{method}:no_description')
-            result['values'] = result_values(names, types, rows)
+            result['values'] = result_values(
+                names, types, rows, duckdb_types=self._DUCKDB_TYPES
+            )
         else:
             # The DuckDB types are recorded for an Arrow read too, and the
             # comparator requires them from every Python driver's read.
@@ -1696,6 +2081,32 @@ class _Captured:
         self._log.bindings.append(binding)
         return self._same(self._driver.register(name, value))
 
+    def adbc_ingest(
+        self, name: Any, data: Any, *arguments: Any, **keywords: Any
+    ) -> Any:
+        r"""ADBC's bulk load of an Arrow table under a name, recorded as a
+        relation bound by name, as DuckDB's ``register`` is."""
+        binding: dict[str, Any] = {
+            'handle': self._handle,
+            'stage': self._log.stage,
+            'name': name,
+            'type': f'{type(data).__module__}.{type(data).__qualname__}',
+        }
+        if type(data).__module__.startswith('pyarrow') and hasattr(
+            data, 'combine_chunks'
+        ):
+            binding['rows'] = data.num_rows
+            binding['schema'] = [
+                {'name': field.name, 'type': str(field.type)}
+                for field in data.schema
+            ]
+            binding['digest'] = _arrow_digest(data)
+            binding['values'] = arrow_values(data)
+        else:
+            self._log.incomplete.append('adbc_ingest:not_arrow')
+        self._log.bindings.append(binding)
+        return self._driver.adbc_ingest(name, data, *arguments, **keywords)
+
     def unregister(self, name: Any) -> Any:
         self._log.events.append(
             {'event': 'unregister', 'handle': self._handle, 'name': name}
@@ -1746,9 +2157,36 @@ class _Captured:
 _Captured.__module__ = 'duckdb.sdm_capture'
 
 
-def capture(connection: Any, log: DriverLog) -> Any:
-    r"""``connection`` as the capture hands it to a source."""
-    return _Captured(connection, log)
+class _CapturedSQLite(_Captured):
+    r"""The capture of an ADBC SQLite connection (T2.1a), under that
+    driver's package, which the reference's dispatch reads."""
+
+    __slots__ = ()
+    _DUCKDB_TYPES = False
+
+
+class _CapturedPostgres(_Captured):
+    r"""The capture of a psycopg connection (T2.1a), under that driver's
+    package, which the reference's dispatch reads."""
+
+    __slots__ = ()
+    _DUCKDB_TYPES = False
+
+
+_CapturedSQLite.__module__ = 'adbc_driver_sqlite.sdm_capture'
+_CapturedPostgres.__module__ = 'psycopg.sdm_capture'
+#: The capture's class for each database's driver.
+_CAPTURES = {
+    'duckdb': _Captured,
+    'sqlite': _CapturedSQLite,
+    'postgres': _CapturedPostgres,
+}
+
+
+def capture(connection: Any, log: DriverLog, database: str = 'duckdb') -> Any:
+    r"""``connection``, a driver connection to ``database``, as the capture
+    hands it to a source."""
+    return _CAPTURES[database](connection, log)
 
 
 def _logged_texts(
@@ -1793,6 +2231,74 @@ def query_log(connection: Any) -> list[str]:
     return [row[0] for row in rows]
 
 
+class StatementLog:
+    r"""The query log of a SQLite or Postgres run (T2.1a fix 4), DuckDB's
+    own log's twin: every statement the driver itself executes, by its
+    cursor's ``execute`` and ``executemany`` (ADBC's and psycopg's), in
+    order, with ``''`` for a relation bound by name (ADBC's
+    ``adbc_ingest``), whatever object called it, the capture's proxy or
+    not. It wraps the driver's own cursor class for one case, restored
+    after; test-only, as the capture is. :func:`_logged_texts` holds the
+    capture's statements to it, as to DuckDB's."""
+
+    #: The driver's cursor class and the methods logged, per database.
+    TARGETS = {
+        'sqlite': ('adbc_driver_manager.dbapi', 'Cursor'),
+        'postgres': ('psycopg', 'Cursor'),
+    }
+
+    def __init__(self, database: str) -> None:
+        self.database = database
+        self.texts: list[str] = []
+        self._saved: list[tuple[Any, str, Any]] = []
+
+    def __enter__(self) -> StatementLog:
+        import importlib
+
+        module, name = self.TARGETS[self.database]
+        cls = getattr(importlib.import_module(module), name)
+        log = self.texts
+
+        def text(query: Any) -> str:
+            # A statement composed by the driver's own SQL builder logs its
+            # kind; the capture records no text for it either.
+            return (
+                query if isinstance(query, str) else f'<{type(query).__name__}>'
+            )
+
+        def wrap(method: str, binding: bool) -> None:
+            original = getattr(cls, method, None)
+            if original is None:
+                return
+
+            def logged(self: Any, *arguments: Any, **keywords: Any) -> Any:
+                if binding:
+                    log.append('')
+                else:
+                    query = keywords.get(
+                        'query',
+                        keywords.get(
+                            'operation', arguments[0] if arguments else None
+                        ),
+                    )
+                    log.append(text(query))
+                return original(self, *arguments, **keywords)
+
+            self._saved.append((cls, method, original))
+            setattr(cls, method, logged)
+
+        wrap('execute', False)
+        wrap('executemany', False)
+        if self.database == 'sqlite':
+            wrap('adbc_ingest', True)
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        while self._saved:
+            cls, method, original = self._saved.pop()
+            setattr(cls, method, original)
+
+
 # --- one case --------------------------------------------------------------------
 
 
@@ -1813,6 +2319,105 @@ def _connection(case: dict[str, Any], bases: dict[str, list[str]]) -> Any:
     return connection
 
 
+def _open(
+    case: dict[str, Any], bases: dict[str, list[str]], database: str
+) -> tuple[Any, Any, dict[int, str]]:
+    r"""The case's data on ``database``, and what removes it after: on
+    DuckDB the in-memory connection its base and setup build; elsewhere
+    that connection's tables loaded by the contract loader
+    (``databases.py``) into a new SQLite file or the public schema of a new
+    database on ``SDM_POSTGRES_TEST_DSN``'s server, and a driver connection
+    to it opened
+    as a user opens one (``adbc_driver_sqlite.dbapi.connect``,
+    ``psycopg.connect``). Setup is everything before it reaches the source.
+    The third item names each type the server numbered (Postgres's
+    composite types and their arrays), read on a connection of the loader's
+    own, outside the capture."""
+    duck = _connection(case, bases)
+    types: dict[int, str] = {}
+    if database == 'duckdb':
+        return duck, duck.close, types
+    loader = _sibling('databases')
+    undo: list[Any] = []
+
+    def cleanup() -> None:
+        while undo:
+            undo.pop()()
+
+    try:
+        if database == 'sqlite':
+            import tempfile
+
+            import adbc_driver_sqlite.dbapi
+
+            directory = tempfile.TemporaryDirectory(prefix='sdm-case-')
+            undo.append(directory.cleanup)
+            path = Path(directory.name) / 'case.sqlite'
+            loader.load(duck, 'sqlite', path)
+            connection = adbc_driver_sqlite.dbapi.connect(str(path))
+        else:
+            import uuid
+
+            import psycopg
+            from psycopg.conninfo import make_conninfo
+
+            dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+            if not dsn:
+                raise RunnerFailure(
+                    'a Postgres run needs SDM_POSTGRES_TEST_DSN, its server'
+                )
+            # A database of its own, so the tables are in its public schema
+            # as a user's are, and what a source reads of its catalog
+            # (current_schema()) is the same on every run.
+            name = f'sdm_case_{uuid.uuid4().hex[:16]}'
+            with psycopg.connect(dsn, autocommit=True) as admin:
+                admin.execute(f'CREATE DATABASE {name}')
+
+            def drop() -> None:
+                with psycopg.connect(dsn, autocommit=True) as admin:
+                    admin.execute(f'DROP DATABASE {name} WITH (FORCE)')
+
+            undo.append(drop)
+            scoped = make_conninfo(dsn, dbname=name)
+            loader.load(duck, 'postgres', scoped)
+            with psycopg.connect(scoped) as side:
+                types = {
+                    int(oid): str(typname)
+                    for oid, typname in side.execute(
+                        'SELECT t.oid, t.typname FROM pg_type t '
+                        'JOIN pg_namespace n ON n.oid = t.typnamespace '
+                        "WHERE n.nspname = 'public'"
+                    ).fetchall()
+                }
+            connection = psycopg.connect(scoped)
+        undo.append(connection.close)
+    except RunnerFailure:
+        cleanup()
+        raise
+    except Exception as error:  # noqa: BLE001 - loading is not the call
+        cleanup()
+        raise RunnerFailure(
+            f'{case["id"]}: its data could not be loaded on {database} '
+            f'({type(error).__name__}'
+            + (f': {error}' if isinstance(error, loader.Unloadable) else '')
+            + ')'
+        ) from None
+    finally:
+        duck.close()
+    return connection, cleanup, types
+
+
+def _source(database: str, connection: Any) -> Any:
+    r"""The public source a user builds over ``connection``."""
+    import sdm_connectors
+
+    return {
+        'duckdb': sdm_connectors.DuckDBSource,
+        'sqlite': sdm_connectors.SQLiteSource,
+        'postgres': sdm_connectors.PostgresSource,
+    }[database](connection)
+
+
 def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
     from decimal import Decimal
 
@@ -1826,6 +2431,14 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         arguments['anchor_time'] = pd.Timestamp(spec['anchor_time'])
     if 'inference_config' in spec:
         arguments['inference_config'] = copy.deepcopy(spec['inference_config'])
+    if 'candidates' in spec:
+        arguments['candidates'] = list(spec['candidates'])
+    if 'top_k' in spec:
+        arguments['top_k'] = spec['top_k']
+    if 'rows_per_call' in spec:
+        # As written (T2.8c's cases): a value the reference refuses is the
+        # case's input.
+        arguments['rows_per_call'] = spec['rows_per_call']
     return arguments
 
 
@@ -2006,11 +2619,12 @@ def _call(
     case: dict[str, Any],
     bases: dict[str, list[str]],
     driver_capture: bool = True,
+    database: str = 'duckdb',
 ) -> tuple[dict[str, Any], list[str], dict[str, Any], dict[str, Any]]:
-    r"""Makes the case's public calls, with the driver capture on or off:
-    its outcome, warning classes, driver record and public projection."""
+    r"""Makes the case's public calls on ``database``, with the driver
+    capture on or off: its outcome, warning classes, driver record and
+    public projection."""
     from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-    from sdm_connectors import DuckDBSource
 
     serve = _sibling('scripted_endpoint').serve
 
@@ -2024,26 +2638,39 @@ def _call(
         raise RunnerFailure(
             f'{case["id"]}: its materialize arguments could not be built'
         ) from None
-    connection = _connection(case, bases)
+    connection, cleanup, types = _open(case, bases, database)
     # Setup is everything run before the connection reaches the source; the
-    # query log and the capture start after it.
-    enable_query_log(connection)
+    # query log (DuckDB's own, or the driver's statement log off DuckDB)
+    # and the capture start after it.
+    statements = None
+    if database == 'duckdb':
+        enable_query_log(connection)
+    else:
+        statements = StatementLog(database).__enter__()
     log = DriverLog() if driver_capture else None
+    if log is not None:
+        log.type_names = types
     given_to_source = (
-        capture(connection, log) if log is not None else connection
+        capture(connection, log, database) if log is not None else connection
     )
     public: dict[str, Any] = {'schema': None, 'payloads': [], 'result': None}
     stage = 'from_source'
     if log is not None:
         log.stage = stage
     with (
-        serve() as (url, received),
+        # The scripted endpoint, failing the case's chosen call and
+        # answering a classification with its probabilities where the case
+        # says so (T2.8's ranking cases).
+        serve(
+            fail_call=given.get('fail_call'),
+            probabilities=given.get('probabilities', False),
+        ) as (url, received),
         warnings.catch_warnings(record=True) as shown,
     ):
         warnings.simplefilter('always')
         try:
             schema = Schema.from_source(
-                DuckDBSource(given_to_source), **from_source
+                _source(database, given_to_source), **from_source
             )
             _require_presented(schema)
             public['schema'] = _schema_projection(schema)
@@ -2076,9 +2703,13 @@ def _call(
             outcome = _outcome('refusal', stage, error)
         finally:
             try:
-                logged = query_log(connection)
+                if statements is not None:
+                    statements.__exit__(None, None, None)
+                    logged = statements.texts
+                else:
+                    logged = query_log(connection)
             finally:
-                connection.close()
+                cleanup()
         public['payloads'] = [
             {'method': method, 'path': path, **_payload(body)}
             for method, path, body in received.requests
@@ -2086,6 +2717,7 @@ def _call(
     compared, differing = _logged_texts(log, logged)
     driver = {
         'capture': log.record() if log is not None else None,
+        # DuckDB's own query log, or off DuckDB the driver's statement log.
         'query_log': {
             'statements': sum(1 for text in logged if text),
             'bindings': sum(1 for text in logged if not text),
@@ -2163,8 +2795,27 @@ def run(
     cases: list[tuple[dict[str, Any], str]],
     reference: Path | None,
     driver_capture: bool = True,
+    database: str = 'duckdb',
+    record_fetches: Path | None = None,
 ) -> list[dict[str, Any]]:
-    r"""Every case's observation, or :class:`RunnerFailure`."""
+    r"""Every case's observation on ``database``, keyed by :func:`case_key`,
+    or :class:`RunnerFailure`. A case that does not run on ``database``
+    (its ``databases``) is left out; python-core runs on SQLite or
+    Postgres only when the core reports a provider for it
+    (``sdm_client._native.PROVIDERS``), as it does for DuckDB from the
+    start."""
+    if mode == 'python-old' and database != 'duckdb':
+        # The orchestrator's decision (T2.1a fix 4): off DuckDB the
+        # reference side is python-ref's committed lines until the core's
+        # providers land; the old route, deleted in Phase 5, is not run
+        # there.
+        raise RunnerFailure(
+            f'python-old runs on DuckDB only; the {database} reference side '
+            'is python-ref, its lines committed'
+        )
+    cases = [pair for pair in cases if database in case_databases(pair[0])]
+    if not cases:
+        raise RunnerFailure(f'no case runs on {database}')
     os.environ.pop('SDM_CORE_ROUTES', None)
     guard = _Guard(reference) if reference is not None else None
     if guard is not None:
@@ -2177,14 +2828,24 @@ def run(
     versions = _versions()
     if 'duckdb' not in versions:
         raise RunnerFailure('duckdb is not installed')
+    if mode == 'python-core' and database != 'duckdb':
+        from sdm_client import _native
+
+        if database not in _native.PROVIDERS:
+            raise RunnerFailure(
+                f'the core reports no {database} provider: the {database} '
+                'job runs the reference side only'
+            )
     recorded = []
     for case, case_digest in cases:
         capture = boundary.reset() if boundary is not None else None
+        if capture is not None:
+            capture.recording = record_fetches is not None
         if mode == 'python-core':
-            os.environ['SDM_CORE_ROUTES'] = ','.join(case['routes'])
+            os.environ['SDM_CORE_ROUTES'] = ','.join(routes_on(case, database))
         try:
             outcome, shown, driver, public, origins = _call(
-                case, bases, driver_capture
+                case, bases, driver_capture, database
             )
         finally:
             os.environ.pop('SDM_CORE_ROUTES', None)
@@ -2229,7 +2890,7 @@ def run(
     ) in recorded:
         observation = {
             'format': 'sdm-observation/1',
-            'case': case['id'],
+            'case': case_key(case['id'], database),
             'identity': {
                 'runner': mode,
                 'cell': _cell(versions),
@@ -2264,10 +2925,96 @@ def run(
                 f'{case["id"]}: its observation is not valid: {problem}'
             )
         observations.append(observation)
+    if record_fetches is not None:
+        # The replay's recording (T2.3, KO2-20): each case's fetches, with
+        # the answers the Postgres provider replied with, in order, and the
+        # statements the driver ran for each, so the replay's record of what
+        # ran is python-core's.
+        record_fetches.write_text(
+            ''.join(
+                json.dumps(
+                    {
+                        'format': 'sdm-replay/1',
+                        'case': case_key(case['id'], database),
+                        'fetches': _with_statements(case, capture, driver),
+                    },
+                    sort_keys=True,
+                )
+                + '\n'
+                for case, _, _, _, capture, _, driver, *_ in recorded
+                if capture is not None and capture.answered
+            ),
+            encoding='utf-8',
+        )
     return observations
 
 
+def _with_statements(
+    case: dict[str, Any], capture: Any, driver: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    r"""Each fetch the core asked ``case``, with its answer and the text of
+    each statement the driver ran for it (``statements``), in order: the
+    driver capture's first statements, one per statement of each fetch's
+    plan (the core's calls come first; a call the case leaves on the old
+    route runs after them); a capture holding fewer is a runner failure."""
+    ran = [
+        statement['sql']
+        for statement in ((driver or {}).get('capture') or {}).get(
+            'statements', []
+        )
+    ]
+    planned = sum(
+        len(fetch['plan'].get('statements', [])) for fetch in capture.answered
+    )
+    if len(ran) < planned:
+        raise RunnerFailure(
+            f'{case["id"]}: the driver ran {len(ran)} statements for '
+            f'{planned} planned, so the recording cannot name them'
+        )
+    fetches = []
+    for fetch in capture.answered:
+        count = len(fetch['plan'].get('statements', []))
+        fetches.append({**fetch, 'statements': ran[:count]})
+        ran = ran[count:]
+    return fetches
+
+
+def legs_main(argv: list[str]) -> int:
+    r"""``run_python.py legs --database D --providers FILE OBSERVATIONS...``:
+    :func:`check_legs` over the observations files, ``FILE`` the JSON
+    object of each core leg's providers; exit 1 naming each problem."""
+    parser = argparse.ArgumentParser(prog='run_python.py legs')
+    parser.add_argument('--database', choices=DATABASES, required=True)
+    parser.add_argument('--providers', type=Path, required=True)
+    parser.add_argument('observations', type=Path, nargs='*')
+    arguments = parser.parse_args(argv)
+    try:
+        providers = json.loads(arguments.providers.read_text(encoding='utf-8'))
+        if not isinstance(providers, dict) or not all(
+            isinstance(listed, list)
+            and all(isinstance(name, str) for name in listed)
+            for listed in providers.values()
+        ):
+            raise ValueError('not an object of lists of names')
+        lines = [
+            json.loads(text)
+            for path in arguments.observations
+            for text in path.read_text(encoding='utf-8').splitlines()
+        ]
+    except (OSError, ValueError, RecursionError) as error:
+        print(f'legs: unreadable: {type(error).__name__}: {error}')
+        return 1
+    problems = check_legs(arguments.database, providers, lines)
+    for problem in problems:
+        print(f'FAILS legs: {problem}')
+    print(f'legs: {"FAIL" if problems else "ok"} on {arguments.database}')
+    return 1 if problems else 0
+
+
 def main(argv: list[str] | None = None) -> int:
+    given = sys.argv[1:] if argv is None else argv
+    if given[:1] == ['legs']:
+        return legs_main(given[1:])
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--mode', choices=MODES, required=True)
     parser.add_argument('--reference', type=Path)
@@ -2285,8 +3032,26 @@ def main(argv: list[str] | None = None) -> int:
         help='hand the source the driver connection itself (the capture '
         "conservation control); DuckDB's query log is still read",
     )
+    parser.add_argument(
+        '--database',
+        choices=DATABASES,
+        default='duckdb',
+        help='the database each case runs on (default duckdb): the others '
+        "are loaded from the case's DuckDB tables (databases.py), Postgres "
+        "in a new database on SDM_POSTGRES_TEST_DSN's server",
+    )
+    parser.add_argument(
+        '--record-fetches',
+        type=Path,
+        metavar='FILE',
+        help="python-core only: write each case's fetches with the answers "
+        "the provider gave, the recording rust-host's Postgres replay reads "
+        '(T2.3, KO2-20)',
+    )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
+    if arguments.record_fetches is not None and arguments.mode != 'python-core':
+        parser.error('--record-fetches is given in python-core mode only')
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):
         parser.error('--reference is given in python-ref mode, and only there')
     # A failed run leaves no output, not an earlier run's.
@@ -2303,6 +3068,8 @@ def main(argv: list[str] | None = None) -> int:
             cases,
             arguments.reference,
             driver_capture=not arguments.no_capture,
+            database=arguments.database,
+            record_fetches=arguments.record_fetches,
         )
     except RunnerFailure as failure:
         print(f'runner failure: {failure}', file=sys.stderr)

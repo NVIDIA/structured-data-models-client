@@ -33,17 +33,32 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
 ]
-# The floors every distribution that names these shares on the Rust core's
-# epic branch (decision E16).
+# The pandas floor every distribution that names it shares on the Rust
+# core's epic branch (decision E16, raised to main's 2.2.2 by the owner on
+# 2026-10-16); pyarrow is left unbounded here, as main has it, and the
+# client floors it wherever the core is installed.
 dependencies = [
-    "pandas>=2.2",
-    "pyarrow>=14.0.1",
+    # 2.2.2 is the first pandas built against NumPy 2. Below it pip resolves
+    # cleanly and `pip check` passes, and the import fails with
+    # "numpy.dtype size changed", because the break is an ABI the metadata
+    # does not describe. pandas declares the NumPy it needs, so this floor
+    # still leaves pip free to pick a release fitting a NumPy already there.
+    "pandas>=2.2.2",
+    # pyarrow is deliberately unbounded. It does not declare that 16 and
+    # above need NumPy 2, so a floor here is not satisfied by resolution
+    # alone: where NumPy is held at 1, as a Databricks runtime holds it and
+    # `docs/get-started/installation.md` says to, a floor evicts that
+    # runtime's working pyarrow 14 or 15 for a 26 that refuses to import.
+    # Unbounded, the preinstalled one satisfies this and is left alone, and
+    # a fresh install still resolves the newest.
+    "pyarrow",
 ]
 
 [project.urls]
 Homepage = "https://github.com/NVIDIA/structured-data-models-client"
 Source = "https://github.com/NVIDIA/structured-data-models-client"
 Issues = "https://github.com/NVIDIA/structured-data-models-client/issues"
+Changelog = "https://github.com/NVIDIA/structured-data-models-client/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 sqlite = [
@@ -53,7 +68,12 @@ duckdb = [
     "duckdb>=1.5.0",
 ]
 snowflake = [
-    "snowflake-connector-python",
+    # 5.0 empties `DEFAULT_CONFIGURATION` and rewrites keyword names through
+    # several maps, leaving the set it accepts unreadable: `network_timeout`
+    # is accepted but named nowhere. This package checks a caller's keywords
+    # against that set to catch a typo. 5.0 also deprecates the `_paramstyle`
+    # the server-side binding sets. Lifting this wants a live Snowflake.
+    "snowflake-connector-python>=4.8,<5",
 ]
 databricks = [
     # 4.1.3 is the first release whose SEA route sends a session's
@@ -63,7 +83,11 @@ databricks = [
     # A metric view's definition is YAML, and reading one fails without a
     # parser. Databricks Runtime 14.3 LTS ships none, so the client's
     # `databricks` extra, which points here, has to bring it.
-    "pyyaml>=5.4",
+    #
+    # 6.0.1 is the first release with a 3.12 wheel. Below it only the 6.0
+    # sdist remains, and it does not build against a current Cython, so a
+    # resolver backtracking this far stops at a compile error.
+    "pyyaml>=6.0.1",
     # For `sdm_connectors.databricks.warehouse`, which looks the warehouse up as
     # the caller's workspace client.
     "databricks-sdk>=0.89,<1.0",

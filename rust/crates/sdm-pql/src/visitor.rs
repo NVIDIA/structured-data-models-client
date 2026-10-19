@@ -149,10 +149,7 @@ fn visit(
         let at = format!("row {}, column {}", e.line, e.column);
         ParseError::syntax(match e.found {
             '\'' | '"' => format!("The string that starts at {at} is never closed."),
-            '`' => format!(
-                "The quoted name that starts at {at} is never closed, or is empty or spans \
-                 lines."
-            ),
+            '`' => format!("The quoted name that starts at {at} is never closed, or is empty."),
             c if is_plain(&c.to_string()) => format!(
                 "Unexpected character {} at {at}; no part of a predictive query starts with it.",
                 crate::syntax::quoted(&c.to_string())
@@ -251,12 +248,12 @@ impl Visitor<'_> {
     }
 
     fn column(&self, index: usize) -> Visited<NodeRef> {
-        let fqn = names::canonical_fqn(self.text(index)).map_err(ParseError::syntax)?;
+        let name = names::split_column(self.text(index));
         let location = self.interval(Span {
             start: index,
             stop: index,
         });
-        Ok(ast::column(fqn, location)?)
+        Ok(ast::column(name, location)?)
     }
 
     /// The entity, and the entity IDs when the query names some.

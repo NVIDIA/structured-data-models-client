@@ -19,6 +19,7 @@ use crate::escapes::unescape;
 use crate::literal::{Literal, read_float};
 use crate::names;
 use crate::pyint::PyInt;
+use crate::schema::ColumnKey;
 use crate::types::{AggregationType, BoolOp, Dtype, Op, RelOp, StrOp, Stype};
 
 pub type NodeRef = Rc<RefCell<Node>>;
@@ -211,7 +212,8 @@ pub enum ConstValue {
 #[derive(Debug)]
 pub enum Kind {
     Column {
-        fqn: String,
+        /// The table and the column, apart (KO2-36).
+        name: ColumnKey,
         /// Whether a `COUNT` aggregates this column (`_count_col`).
         count_col: bool,
     },
@@ -241,13 +243,13 @@ pub enum Kind {
         target: NodeRef,
         aggr: AggregationType,
         aggr_time_range: Option<DorRef>,
-        group_by: Option<String>,
-        time_col: Option<String>,
+        group_by: Option<ColumnKey>,
+        time_col: Option<ColumnKey>,
     },
     Join {
         rhs_target: NodeRef,
-        lhs_key: String,
-        rhs_key: String,
+        lhs_key: ColumnKey,
+        rhs_key: ColumnKey,
     },
 }
 
@@ -305,18 +307,14 @@ fn base_at(location: Option<Location>) -> Base {
     }
 }
 
-/// `Column(fqn=..., location=...)`.
-pub fn column(fqn: String, location: Option<Location>) -> Built {
-    if fqn.split('.').count() != 2 {
-        return Err(BuildError::Syntax(format!(
-            "The column name {fqn} was not given in its fully-qualified name form. Format it \
-             as \"table.column\"."
-        )));
-    }
+/// `Column(fqn=..., location=...)`: the table and the column held apart,
+/// so neither is split on a dot (KO2-36), where the reference splits
+/// `fqn` and refuses one that is not two parts.
+pub fn column(name: ColumnKey, location: Option<Location>) -> Built {
     finish(wrap(
         base_at(location),
         Kind::Column {
-            fqn,
+            name,
             count_col: false,
         },
     ))
@@ -505,7 +503,7 @@ pub fn aggregation(
 
 /// `Join(rhs_target=..., lhs_key=..., rhs_key=...)`, which takes its types
 /// and location from what it joins.
-pub fn join(rhs_target: NodeRef, lhs_key: String, rhs_key: String) -> Built {
+pub fn join(rhs_target: NodeRef, lhs_key: ColumnKey, rhs_key: ColumnKey) -> Built {
     let node = finish(wrap(
         Base::default(),
         Kind::Join {
@@ -621,12 +619,18 @@ pub fn is_logical(node: &NodeRef) -> bool {
     matches!(node.borrow().kind, Kind::Logical { .. })
 }
 
-/// A column's fully qualified name; empty for any other node.
-pub fn fqn(node: &NodeRef) -> String {
+/// A column's table and column; `None` for any other node.
+pub fn column_name(node: &NodeRef) -> Option<ColumnKey> {
     match &node.borrow().kind {
-        Kind::Column { fqn, .. } => fqn.clone(),
-        _ => String::new(),
+        Kind::Column { name, .. } => Some(name.clone()),
+        _ => None,
     }
+}
+
+/// A column's fully qualified name, `table.column` unquoted, as a message
+/// gives it; empty for any other node.
+pub fn fqn(node: &NodeRef) -> String {
+    column_name(node).map(|n| n.to_string()).unwrap_or_default()
 }
 
 /// The node a filter, aggregation, condition or join is about.
@@ -676,14 +680,12 @@ pub fn is_static(node: &NodeRef) -> bool {
 
 /// `Aggregation.get_target_column_name`: the aggregated column, through a
 /// filter if there is one.
-pub fn get_target_column_name(node: &NodeRef) -> String {
-    let Some(target) = target(node) else {
-        return String::new();
-    };
+pub fn get_target_column_name(node: &NodeRef) -> Option<ColumnKey> {
+    let target = target(node)?;
     if is_column(&target) {
-        return fqn(&target);
+        return column_name(&target);
     }
-    self::target(&target).map(|t| fqn(&t)).unwrap_or_default()
+    self::target(&target).and_then(|t| column_name(&t))
 }
 
 /// `str(node)`, the query text that would build it.
@@ -705,10 +707,7 @@ pub fn maybe_bold(text: &str, rich: bool) -> String {
 pub fn render(node: &NodeRef, rich: bool) -> String {
     let n = node.borrow();
     match &n.kind {
-        Kind::Column { fqn, .. } => {
-            let (table, column) = fqn.split_once('.').unwrap_or((fqn, ""));
-            names::fqn(table, column).unwrap_or_else(|_| fqn.clone())
-        }
+        Kind::Column { name, .. } => names::fqn(name),
         Kind::Constant { value, .. } => match value {
             ConstValue::Text(text) => text.clone(),
             ConstValue::List(items) => format!(
@@ -835,7 +834,7 @@ pub fn typed_value(node: &NodeRef) -> Result<Literal, String> {
 /// where. Python collects them into a set, whose order follows string
 /// hashing and changes from run to run; here they come in the order the
 /// tree holds them, each once.
-pub fn all_query_columns_with_locations(node: &NodeRef) -> Vec<(String, Location)> {
+pub fn all_query_columns_with_locations(node: &NodeRef) -> Vec<(ColumnKey, Location)> {
     let mut out = Vec::new();
     collect_columns(node, &mut out);
     let mut seen = Vec::new();
@@ -850,8 +849,8 @@ pub fn all_query_columns_with_locations(node: &NodeRef) -> Vec<(String, Location
     out
 }
 
-fn collect_columns(node: &NodeRef, out: &mut Vec<(String, Location)>) {
-    if let Kind::Column { fqn, .. } = &node.borrow().kind {
+fn collect_columns(node: &NodeRef, out: &mut Vec<(ColumnKey, Location)>) {
+    if let Kind::Column { name, .. } = &node.borrow().kind {
         let location = node.borrow().base.location.unwrap_or(Location {
             start_row: 0,
             start_col: 0,
@@ -859,7 +858,7 @@ fn collect_columns(node: &NodeRef, out: &mut Vec<(String, Location)>) {
             end_col: 0,
             data_available: false,
         });
-        out.push((fqn.clone(), location));
+        out.push((name.clone(), location));
         return;
     }
     for child in children(node) {
@@ -869,20 +868,20 @@ fn collect_columns(node: &NodeRef, out: &mut Vec<(String, Location)>) {
 
 /// `all_query_columns`: every column the subtree names, each once, in the
 /// order the tree holds them.
-pub fn all_query_columns(node: &NodeRef) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for (fqn, _) in all_query_columns_with_locations(node) {
-        if !out.contains(&fqn) {
-            out.push(fqn);
+pub fn all_query_columns(node: &NodeRef) -> Vec<ColumnKey> {
+    let mut out: Vec<ColumnKey> = Vec::new();
+    for (name, _) in all_query_columns_with_locations(node) {
+        if !out.contains(&name) {
+            out.push(name);
         }
     }
     out
 }
 
 /// `all_join_columns`: the keys of every join in the subtree, each once.
-pub fn all_join_columns(node: &NodeRef) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut push = |key: String| {
+pub fn all_join_columns(node: &NodeRef) -> Vec<ColumnKey> {
+    let mut out: Vec<ColumnKey> = Vec::new();
+    let mut push = |key: ColumnKey| {
         if !out.contains(&key) {
             out.push(key);
         }
@@ -910,8 +909,8 @@ pub fn all_join_columns(node: &NodeRef) -> Vec<String> {
 
 /// `all_time_columns`: the time column of every windowed aggregation in the
 /// subtree, each once.
-pub fn all_time_columns(node: &NodeRef) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
+pub fn all_time_columns(node: &NodeRef) -> Vec<ColumnKey> {
+    let mut out: Vec<ColumnKey> = Vec::new();
     for child in children(node) {
         for column in all_time_columns(&child) {
             if !out.contains(&column) {
@@ -985,7 +984,12 @@ mod tests {
     }
 
     fn col(name: &str) -> NodeRef {
-        column(name.to_string(), Some(Location::new(1, 0, 1, 0))).unwrap()
+        let (table, column_name) = name.split_once('.').unwrap();
+        column(
+            ColumnKey::new(table, column_name),
+            Some(Location::new(1, 0, 1, 0)),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -1010,8 +1014,13 @@ mod tests {
         let window = DateOffsetRange::from_i64(None, 3, TimeUnit::Days).unwrap();
         let count = aggregation(col("t.*"), AggregationType::Count, Some(window), None).unwrap();
         assert_eq!(to_string(&count), "COUNT(t.*, -INF, 3, days)");
-        assert_eq!(get_target_column_name(&count), "t.*");
-        assert!(column("a.b.c".into(), None).is_err());
+        assert_eq!(
+            get_target_column_name(&count),
+            Some(ColumnKey::new("t", "*"))
+        );
+        let dotted = column(ColumnKey::new("a", "b.c"), None).unwrap();
+        assert_eq!(to_string(&dotted), "a.`b.c`");
+        assert_eq!(fqn(&dotted), "a.b.c");
     }
 
     #[test]
@@ -1046,10 +1055,18 @@ mod tests {
 
     #[test]
     fn joins_and_locations() {
-        let joined = join(col("b.x"), "a.id".into(), "b.a_id".into()).unwrap();
+        let joined = join(
+            col("b.x"),
+            ColumnKey::new("a", "id"),
+            ColumnKey::new("b", "a_id"),
+        )
+        .unwrap();
         let mut keys = all_join_columns(&joined);
         keys.sort();
-        assert_eq!(keys, ["a.id", "b.a_id"]);
+        assert_eq!(
+            keys,
+            [ColumnKey::new("a", "id"), ColumnKey::new("b", "a_id")]
+        );
         let a = Location::new(1, 5, 2, 3);
         let b = Location::new(2, 1, 1, 9);
         assert_eq!(Location::merge(a, b), a);

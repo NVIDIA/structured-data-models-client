@@ -212,11 +212,12 @@ fn every_operation_dispatches_to_a_run() {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::new(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback: None,
         },
     };
     // A table named is read by its source name, with no listing of the
@@ -276,11 +277,12 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
     ProviderCapabilities {
         optional: optional.iter().copied().collect(),
         max_keys_per_request: None,
-        max_seed: None,
+        max_seed: u64::MAX,
         text_times: None,
         null_order: None,
         index_advice: None,
         sampling: Determinism::SeededStable,
+        fallback: None,
     }
 }
 
@@ -354,16 +356,18 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
     assert!(matches!(expect, ExpectedSchema::Schema { .. }));
     assert_ne!(expect, tables.expected());
 
-    let sqlite = ProviderChoice::Sql {
-        dialect: Dialect::new("sqlite"),
+    // A dialect this build knows but renders nothing for (Snowflake's;
+    // SQLite's and Postgres's are served from T2.2 and T2.3).
+    let snowflake = ProviderChoice::Sql {
+        dialect: Dialect::new("snowflake"),
     };
-    let err = root.data_access(&sqlite).err().unwrap();
+    let err = root.data_access(&snowflake).err().unwrap();
     assert_eq!(
         (err.kind, err.code),
         (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
     );
-    assert_eq!(named(&err, "dialect"), "sqlite");
-    assert!(run_of(&root, describe(sqlite)).is_err());
+    assert_eq!(named(&err, "dialect"), "snowflake");
+    assert!(run_of(&root, describe(snowflake)).is_err());
     // A name the data layer does not know is refused the same way, and
     // not repeated: the contract names no dialect, so it lets any through.
     let unknown = ProviderChoice::Sql {
@@ -611,11 +615,12 @@ fn materialize(seed: Option<Seed>) -> Operation {
             capabilities: ProviderCapabilities {
                 optional: BTreeSet::new(),
                 max_keys_per_request: None,
-                max_seed: None,
+                max_seed: u64::MAX,
                 text_times: None,
                 null_order: None,
                 index_advice: None,
                 sampling: Determinism::SeededStable,
+                fallback: None,
             },
         },
         schema: AttachmentId(1),
@@ -629,6 +634,8 @@ fn materialize(seed: Option<Seed>) -> Operation {
         values: None,
         options: vec![],
         most_parts: None,
+        most_entities: None,
+        most_calls: None,
         sampler_state: None,
     })
 }

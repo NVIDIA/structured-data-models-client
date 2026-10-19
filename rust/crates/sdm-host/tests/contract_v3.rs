@@ -239,6 +239,8 @@ fn wide_fetch(pad: usize) -> TestFetch {
         .collect();
     TestFetch {
         echo: false,
+        undeclared: vec![],
+        fallback: None,
         request: DataRequest::Scan {
             table: "orders".into(),
             columns: (0..200).map(|i| format!("column_{i:03}")).collect(),
@@ -263,6 +265,7 @@ fn fetch_step(fetch: &TestFetch) -> ControlMessage {
             id: ReplyId(1),
             request: fetch.request.clone(),
             plan: fetch.plan.clone().expect("the test fetch's own plan"),
+            continuation: None,
         }],
     })
 }
@@ -297,6 +300,7 @@ fn a_fetch_step_with_a_wide_plan_arrives_whole_either_side_of_the_cap() {
                 id: ReplyId(1),
                 outcome: FetchOutcome::Data {
                     data: AttachmentId(1),
+                    continuation: None,
                 },
             }))
             .unwrap(),

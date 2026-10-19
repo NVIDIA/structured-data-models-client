@@ -406,7 +406,9 @@ def projection(observation: dict[str, Any]) -> dict[str, Any]:
         'schema': public['schema'],
         'payloads': _payloads(public),
         'result': public['result'],
-        'query_log': {
+        'query_log': None
+        if observation['driver']['query_log'] is None
+        else {
             key: observation['driver']['query_log'][key]
             for key in ('statements', 'bindings')
         },
@@ -421,6 +423,11 @@ def complete(observation: dict[str, Any]) -> list[str]:
     if capture is None:
         return ['the capture was off']
     problems = [f'could not record: {what}' for what in capture['incomplete']]
+    if logged is None:
+        # Every line has its log: DuckDB's own, or off DuckDB the driver's
+        # statement log (T2.1a fix 4); a capture held to none is incomplete.
+        problems.append('an observation without its query log')
+        return problems
     if len(capture['statements']) != logged['statements']:
         problems.append(
             f'{len(capture["statements"])} statements captured, '
@@ -551,6 +558,12 @@ def _summary(item: dict[str, Any]) -> str | None:
     logged = item['driver']['query_log']
     if capture is None:
         return None
+    if logged is None:
+        return (
+            f'{item["case"]}: {len(capture["statements"])} statements and '
+            f'{len(capture["bindings"])} bindings captured on '
+            f'{capture["cursors"]} derived cursors; no query log'
+        )
     return (
         f'{item["case"]}: {len(capture["statements"])} statements and '
         f'{len(capture["bindings"])} bindings captured on '

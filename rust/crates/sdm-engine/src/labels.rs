@@ -13,19 +13,19 @@
 //!   each example, the rows whose value is present and whose time is after
 //!   its window's start, when it has one, and not after its end, in row
 //!   order: `SUM` of a float at float32 with Kahan's compensation (register
-//!   PK-2), of an integer in int64, of a decimal exactly, its total held to
-//!   the column's declared precision; `COUNT` the rows; `AVG` a float's
+//!   PK-2), of an integer in int64, of a decimal exactly at any size
+//!   (T2.0c); `COUNT` the rows; `AVG` a float's
 //!   Kahan sum at float32 over the count, an integer's at float64, a
-//!   decimal's exact sum over the count at the column's scale, rounded half
-//!   away from zero; `MIN` and `MAX` exactly; then each read at float32, a
-//!   decimal by Arrow's conversion to float64 first, as pandas' `astype`
-//!   takes it.
+//!   decimal's exact sum over the count, at any size; `MIN` and `MAX`
+//!   exactly; then each read at float32, a decimal's exact value rounded
+//!   once to the nearest float32 (T2.0c).
 //!   An example with no row is 0 for `SUM` and `COUNT` and has no label
 //!   for the others.
 //! - A condition ([`compare`], `execute_rel_op`) compares the values its
 //!   target has with a constant read at the target's type: at float32 for a
 //!   float32 target, at float64 for an integer target and a float constant,
-//!   at int64 for an integer target and an integer constant.
+//!   at int64 for an integer target and an integer constant; a decimal
+//!   target exactly, at no scale but their own (T2.0c, KO2-50).
 //! - [`label`] puts them together as `execute` does: the examples whose
 //!   target has a value keep their label, in order; the rest have none.
 //!
@@ -108,7 +108,7 @@ pub struct Aggregated {
 /// decimal takes this, then narrows it.
 pub fn decimal_to_f64(value: i128, scale: i8) -> f64 {
     fn no_split(magnitude: u128, scale: i32) -> f64 {
-        let high = (magnitude >> 64) as u64 as i64;
+        let high = (magnitude >> 64) as u64;
         let low = magnitude as u64;
         let mut x = (high as f64) * 18_446_744_073_709_551_616.0;
         x += low as f64;
@@ -128,64 +128,145 @@ pub fn decimal_to_f64(value: i128, scale: i8) -> f64 {
     if value < 0 { -positive } else { positive }
 }
 
-/// A decimal sum past the digits its column's type holds: the reference's
-/// grouped sum fails on it (pyarrow's `hash_sum`, whose total keeps the
-/// column's `decimal128(p, s)`), which its client reports as
-/// `INVALID_REQUEST`; the core names the field the query is.
-fn decimal_overflow() -> CoreError {
-    CoreError::new(
-        ErrorKind::InvalidRequest,
-        ErrorCode::InvalidRequest,
-        "a decimal sum is past the digits its column's type holds",
+/// The exact sum of decimals' unscaled values, in 256 bits, two's
+/// complement (`high * 2**128 + low`): no sum of `i128`s a request holds
+/// passes it, so nothing wraps and nothing is refused (T2.0c, exact
+/// decimals: the reference since `main`'s eb6c68eb sums a decimal column
+/// as float64 and answers a sum past 38 digits).
+#[derive(Clone, Copy, Default)]
+struct ExactSum {
+    high: i128,
+    low: u128,
+}
+
+impl ExactSum {
+    fn of(values: impl Iterator<Item = i128>) -> Self {
+        values.fold(Self::default(), |sum, value| {
+            let (low, carry) = sum.low.overflowing_add(value as u128);
+            let high = sum.high + if value < 0 { -1 } else { 0 } + i128::from(carry);
+            Self { high, low }
+        })
+    }
+
+    /// Whether the sum is negative, and its magnitude as four 64-bit limbs,
+    /// the most significant first.
+    fn magnitude(self) -> (bool, [u64; 4]) {
+        let negative = self.high < 0;
+        let (mut high, mut low) = (self.high as u128, self.low);
+        if negative {
+            low = !low;
+            high = !high;
+            let (sum, carry) = low.overflowing_add(1);
+            low = sum;
+            high = high.wrapping_add(u128::from(carry));
+        }
+        (
+            negative,
+            [
+                (high >> 64) as u64,
+                high as u64,
+                (low >> 64) as u64,
+                low as u64,
+            ],
+        )
+    }
+}
+
+/// `limbs / divisor` and the remainder.
+fn divided(limbs: [u64; 4], divisor: u64) -> ([u64; 4], u64) {
+    let mut quotient = [0_u64; 4];
+    let mut remainder = 0_u128;
+    for (at, limb) in limbs.iter().enumerate() {
+        let current = (remainder << 64) | u128::from(*limb);
+        quotient[at] = (current / u128::from(divisor)) as u64;
+        remainder = current % u128::from(divisor);
+    }
+    (quotient, remainder as u64)
+}
+
+/// The limbs' decimal digits.
+fn digits(mut limbs: [u64; 4]) -> String {
+    const CHUNK: u64 = 10_000_000_000_000_000_000;
+    let mut chunks = Vec::new();
+    while limbs != [0; 4] {
+        let (quotient, remainder) = divided(limbs, CHUNK);
+        chunks.push(remainder);
+        limbs = quotient;
+    }
+    match chunks.split_last() {
+        None => "0".to_owned(),
+        Some((first, rest)) => {
+            let mut text = first.to_string();
+            for chunk in rest.iter().rev() {
+                text.push_str(&format!("{chunk:019}"));
+            }
+            text
+        }
+    }
+}
+
+/// `sign * limbs / (divisor * 10**scale)`, exactly, rounded once to the
+/// nearest float32 (ties to even): the quotient's digits, then enough of
+/// its fraction's for any float32, then a last nonzero digit where any of
+/// it is left, so the one rounding Rust's parse makes sees the exact value
+/// on the right side of every midpoint.
+fn exact_to_f32(negative: bool, limbs: [u64; 4], divisor: u64, scale: i8) -> f32 {
+    let divisor = divisor.max(1);
+    let (quotient, mut remainder) = divided(limbs, divisor);
+    let mut fraction = String::new();
+    // The divisor is under 2**64, so the fraction's first nonzero digit is
+    // within its first 20, and 40 more are past what a float32 resolves.
+    for _ in 0..60 {
+        if remainder == 0 {
+            break;
+        }
+        let next = u128::from(remainder) * 10;
+        fraction.push(char::from(b'0' + (next / u128::from(divisor)) as u8));
+        remainder = (next % u128::from(divisor)) as u64;
+    }
+    if remainder != 0 {
+        fraction.push('1');
+    }
+    if fraction.is_empty() {
+        fraction.push('0');
+    }
+    let sign = if negative { "-" } else { "" };
+    format!(
+        "{sign}{}.{fraction}e{}",
+        digits(quotient),
+        -i32::from(scale)
     )
-    .with_field("field", sdm_contract::Detail::text("query"))
+    .parse()
+    .unwrap_or(f32::NAN)
 }
 
-/// The exact sum of `values`, wrapping as Arrow's `Decimal128` adds them.
-fn decimal_total(values: impl Iterator<Item = i128>) -> i128 {
-    values.fold(0_i128, i128::wrapping_add)
+/// A decimal of unscaled `value` at `scale`, rounded once to the nearest
+/// float32.
+fn decimal_to_f32(value: i128, scale: i8) -> f32 {
+    let (negative, limbs) = ExactSum::of(std::iter::once(value)).magnitude();
+    exact_to_f32(negative, limbs, 1, scale)
 }
 
-/// The exact sum of `values`, refused when the total is past the
-/// `precision` digits its column declares, as the reference's grouped sum
-/// checks only its total (T1.27's fix round 3; T1.32b, at the declared
-/// precision: `DECIMAL(4, 0)`'s 9999 + 1 refused, 9999 + 1 - 1 taken): a
-/// running sum past them, or past `i128`, that comes back within them is
-/// the reference's answer.
-fn decimal_sum(values: impl Iterator<Item = i128>, precision: u8) -> Result<i128, CoreError> {
-    let sum = decimal_total(values);
-    // 10**p - 1, the largest unscaled magnitude `DECIMAL(p, _)` holds; past
-    // 38 digits, which Arrow's `Decimal128` does not declare, `DECIMAL(38)`'s.
-    let largest = 10_u128.pow(u32::from(precision.clamp(1, 38))) - 1;
-    if sum.unsigned_abs() > largest {
-        return Err(decimal_overflow());
-    }
-    Ok(sum)
+/// The exact sum of decimals of `scale`, at any size, rounded once to the
+/// nearest float32. A sum past the column's declared digits is a sum like
+/// any other (T2.0c).
+fn decimal_sum(values: impl Iterator<Item = i128>, scale: i8) -> f32 {
+    let (negative, limbs) = ExactSum::of(values).magnitude();
+    exact_to_f32(negative, limbs, 1, scale)
 }
 
-/// The mean of `n` decimals whose exact total is `sum`, at their scale, as
-/// Arrow's grouped mean of a `Decimal128` gives it: the quotient, moved one
-/// away from zero, by the total's sign, where the remainder is at least
-/// half the count. The total is not held to the column's precision, as the
-/// reference's mean does not hold it.
-fn decimal_mean(sum: i128, n: usize) -> i128 {
-    let n = n as i128;
-    let quotient = sum / n;
-    let remainder = (sum % n).unsigned_abs();
-    if remainder * 2 >= n.unsigned_abs() {
-        if sum >= 0 { quotient + 1 } else { quotient - 1 }
-    } else {
-        quotient
-    }
+/// The exact mean of `n` decimals of `scale`, their exact sum over the
+/// count, at any size, rounded once to the nearest float32: never first at
+/// the column's scale (T2.0c, round 1).
+fn decimal_mean(values: impl Iterator<Item = i128>, n: usize, scale: i8) -> f32 {
+    let (negative, limbs) = ExactSum::of(values).magnitude();
+    exact_to_f32(negative, limbs, n as u64, scale)
 }
 
 /// `aggregation` of `values` for each of `examples` examples: the rows of
 /// example `batch[row]` whose value is present and whose time is in its
-/// window ([`Bounds`]), in row order. A decimal's sum whose total is past
-/// its column's declared precision is the caller's error,
-/// `INVALID_REQUEST`, as the reference's grouped sum fails it and its
-/// client reports it; a decimal's average is taken whatever its total, as
-/// the reference averages values whose sum would not fit.
+/// window ([`Bounds`]), in row order. A decimal's sum and average are
+/// exact whatever their size ([`decimal_sum`], [`decimal_mean`]).
 pub fn aggregate(
     aggregation: Aggregation,
     examples: usize,
@@ -235,13 +316,8 @@ pub fn aggregate(
                     as f32,
                 Values::Ones(_) => rows.len() as i64 as f32,
                 Values::Decimal {
-                    values: v,
-                    precision,
-                    scale,
-                } => {
-                    let sum = decimal_sum(rows.iter().map(|&r| v[r].unwrap_or(0)), *precision)?;
-                    decimal_to_f64(sum, *scale) as f32
-                }
+                    values: v, scale, ..
+                } => decimal_sum(rows.iter().map(|&r| v[r].unwrap_or(0)), *scale),
             },
             Aggregation::Avg => match values {
                 Values::Float(v) => {
@@ -256,10 +332,7 @@ pub fn aggregate(
                 // A decimal's mean, at its scale, whatever the total.
                 Values::Decimal {
                     values: v, scale, ..
-                } => {
-                    let sum = decimal_total(rows.iter().map(|&r| v[r].unwrap_or(0)));
-                    decimal_to_f64(decimal_mean(sum, rows.len()), *scale) as f32
-                }
+                } => decimal_mean(rows.iter().map(|&r| v[r].unwrap_or(0)), rows.len(), *scale),
             },
             Aggregation::Min | Aggregation::Max => {
                 let max = aggregation == Aggregation::Max;
@@ -289,7 +362,7 @@ pub fn aggregate(
                     } => {
                         let picked = rows.iter().filter_map(|&r| v[r]);
                         let best = if max { picked.max() } else { picked.min() };
-                        decimal_to_f64(best.unwrap_or(0), *scale) as f32
+                        decimal_to_f32(best.unwrap_or(0), *scale)
                     }
                 }
             }
@@ -437,154 +510,73 @@ fn apply<T: PartialOrd>(a: T, op: RelOp, b: T) -> bool {
     }
 }
 
-/// A float's exact value times ten to the `scale`, rounded half to even,
-/// as an integer, or `None` when it is not finite or the integer is past
-/// `i128`: the value pyarrow gives a float read at a decimal of that scale
-/// (Arrow's `Decimal128::FromReal`, exact while the scale is small enough
-/// for the float's digits and the power of ten to fit together; measured on
-/// the reference's pyarrow: 0.5, 2.5 and 0.25 round to even, 0.15 and
-/// 2.675, whose doubles are under the half, down). The product of the
-/// float's 53-bit mantissa and a power of ten up to 10**38 is held in 256
-/// bits ([`Wide`]), so every scale of a `decimal128` is exact.
-fn float_at_scale(value: f64, scale: u32) -> Option<i128> {
-    if !value.is_finite() {
-        return None;
-    }
-    // value = mantissa * 2**exponent, exactly.
-    let bits = value.abs().to_bits();
-    let biased = ((bits >> 52) & 0x7ff) as i32;
-    let fraction = bits & ((1_u64 << 52) - 1);
-    let (mantissa, exponent) = if biased == 0 {
-        (fraction, -1074)
-    } else {
-        (fraction | (1 << 52), biased - 1075)
-    };
-    let scaled = Wide::product(10_u128.checked_pow(scale)?, mantissa);
-    let magnitude = if exponent >= 0 {
-        if scaled.high != 0 {
-            return None;
+/// A condition's constant as a decimal, `digits * 10**exponent`: an
+/// integer as written; a float as the shortest decimal that names its
+/// double, which is the constant the query wrote whenever it wrote no more
+/// than a double's 17 significant digits; `None` for a float that is not
+/// finite.
+fn constant_decimal(constant: Constant) -> Option<(i128, i32)> {
+    match constant {
+        Constant::Int(value) => Some((value, 0)),
+        Constant::Float(value) if value.is_finite() => {
+            // `{:e}` writes the shortest such decimal: `1.5e0`, `-1e308`.
+            let text = format!("{value:e}");
+            let (mantissa, exponent) = text.split_once('e')?;
+            let exponent: i32 = exponent.parse().ok()?;
+            let fraction = mantissa.split_once('.').map_or(0, |(_, f)| f.len());
+            let digits: i128 = mantissa.replace('.', "").parse().ok()?;
+            Some((digits, exponent - fraction as i32))
         }
-        scaled
-            .low
-            .checked_mul(1_u128.checked_shl(exponent as u32)?)?
-    } else {
-        let shift = exponent.unsigned_abs();
-        if shift >= 256 {
-            // Under 2**180 shifted past 256 bits: nearer zero than one.
-            0
-        } else {
-            let quotient = scaled.shifted(shift);
-            let half = scaled.bit(shift - 1);
-            let past_half = half && scaled.any_below(shift - 1);
-            let up = past_half || (half && quotient.low % 2 == 1);
-            if quotient.high != 0 {
-                return None;
-            }
-            quotient.low.checked_add(u128::from(up))?
-        }
-    };
-    let magnitude = i128::try_from(magnitude).ok()?;
-    Some(if value < 0.0 { -magnitude } else { magnitude })
-}
-
-/// An unsigned 256-bit integer, `high * 2**128 + low`: just what
-/// [`float_at_scale`] needs to hold a mantissa times a power of ten.
-#[derive(Clone, Copy)]
-struct Wide {
-    high: u128,
-    low: u128,
-}
-
-impl Wide {
-    /// `a * b`, exactly.
-    fn product(a: u128, b: u64) -> Self {
-        let b = u128::from(b);
-        let lower = (a & u128::from(u64::MAX)) * b;
-        let upper = (a >> 64) * b;
-        let (low, carry) = lower.overflowing_add(upper << 64);
-        Self {
-            high: (upper >> 64) + u128::from(carry),
-            low,
-        }
-    }
-
-    /// `self >> shift`, for a shift under 256.
-    fn shifted(self, shift: u32) -> Self {
-        match shift {
-            0 => self,
-            1..=127 => Self {
-                high: self.high >> shift,
-                low: (self.low >> shift) | (self.high << (128 - shift)),
-            },
-            _ => Self {
-                high: 0,
-                low: self.high >> (shift - 128),
-            },
-        }
-    }
-
-    /// Whether bit `at` (under 256) is set.
-    fn bit(self, at: u32) -> bool {
-        if at < 128 {
-            (self.low >> at) & 1 == 1
-        } else {
-            (self.high >> (at - 128)) & 1 == 1
-        }
-    }
-
-    /// Whether any bit under `at` (under 256) is set.
-    fn any_below(self, at: u32) -> bool {
-        if at <= 128 {
-            at > 0 && self.low & (u128::MAX >> (128 - at)) != 0
-        } else {
-            self.low != 0 || self.high & (u128::MAX >> (256 - at)) != 0
-        }
+        Constant::Float(_) => None,
     }
 }
 
-/// A condition's constant read at a decimal column's `decimal128(precision,
-/// scale)`, as `execute_rel_op` reads it (`pd.Series([value],
-/// dtype=left.dtype)`), as an unscaled value at the scale: an integer of
-/// int64 exactly; a float from its exact binary value, rounded half to
-/// even, at any scale ([`float_at_scale`]; the owner's decision on register
-/// P1B-71, 2026-10-13). Arrow's `Decimal128::FromReal` reads a double so
-/// through scale 22 and, measured, through scale 27; from scale 28 its
-/// approximation can differ in the last digits, where this stays exact
-/// (P1B-71). A constant the type does not hold is the caller's error,
-/// `INVALID_REQUEST`, as pyarrow refuses it (`ArrowInvalid`) and the
-/// reference's client reports it. A float that is not finite (a constant
-/// past a double, `1e999`) no DECIMAL holds: the same `INVALID_REQUEST`, as
-/// pyarrow refuses it ("Cannot convert inf to Decimal128"). Refused by name
-/// (`condition_value`): an integer past int64, which the PQL validator
-/// refuses before it reaches here; a negative scale.
-fn decimal_constant(constant: Constant, precision: u8, scale: i8) -> Result<i128, CoreError> {
-    let refused = || not_yet("condition_value");
-    let not_held = || {
-        CoreError::new(
-            ErrorKind::InvalidRequest,
-            ErrorCode::InvalidRequest,
-            "a condition's constant is past the digits its column's type holds",
-        )
-        .with_field("field", sdm_contract::Detail::text("query"))
+/// How a decimal of unscaled `value` at `scale` orders against `constant`,
+/// exactly, at no scale but their own (T2.0c, KO2-50: `d > 1.5` holds for
+/// a `DECIMAL(38, 0)` `d` of 2): the constant is never rounded to the
+/// column's scale, and one past the column's digits orders by its sign.
+/// An infinite constant orders past every value; a NaN, which the PQL
+/// validator refuses before it reaches here, orders against none.
+fn decimal_order(value: i128, scale: i8, constant: Constant) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+    let Some((digits, exponent)) = constant_decimal(constant) else {
+        return match constant {
+            Constant::Float(f) if f == f64::INFINITY => Some(Ordering::Less),
+            Constant::Float(f) if f == f64::NEG_INFINITY => Some(Ordering::Greater),
+            _ => None,
+        };
     };
-    let scale = u32::try_from(scale).map_err(|_| refused())?;
-    let unscaled = match constant {
-        Constant::Int(value) => {
-            let value = i64::try_from(value).map_err(|_| refused())?;
-            // Under 10**38 for any scale that holds it; past i128, held by
-            // no DECIMAL(38).
-            10_i128
-                .checked_pow(scale)
-                .and_then(|unit| i128::from(value).checked_mul(unit))
-                .ok_or_else(not_held)?
-        }
-        Constant::Float(value) => float_at_scale(value, scale).ok_or_else(not_held)?,
+    // value * 10**-scale against digits * 10**exponent: the constant at the
+    // value's scale is digits * 10**shift.
+    let shift = exponent + i32::from(scale);
+    // Past every value a 38-digit decimal holds.
+    let beyond = || {
+        Some(match digits.signum() {
+            1 => Ordering::Less,
+            -1 => Ordering::Greater,
+            _ => value.cmp(&0),
+        })
     };
-    let largest = 10_u128.pow(u32::from(precision.clamp(1, 38))) - 1;
-    if unscaled.unsigned_abs() > largest {
-        return Err(not_held());
+    if shift >= 0 {
+        return match 10_i128
+            .checked_pow(shift as u32)
+            .and_then(|unit| digits.checked_mul(unit))
+        {
+            Some(scaled) => Some(value.cmp(&scaled)),
+            None => beyond(),
+        };
     }
-    Ok(unscaled)
+    // The constant at the value's scale lies in [floor, floor + 1), at floor
+    // exactly when nothing is left over.
+    let (floor, exact) = match 10_i128.checked_pow(shift.unsigned_abs()) {
+        Some(unit) => (digits.div_euclid(unit), digits.rem_euclid(unit) == 0),
+        // A unit past i128: the constant's digits are all below it.
+        None => (if digits < 0 { -1 } else { 0 }, digits == 0),
+    };
+    Some(match value.cmp(&floor) {
+        Ordering::Equal if !exact => Ordering::Less,
+        other => other,
+    })
 }
 
 /// `= NULL` and `!= NULL` over the examples `has` says have a value: each
@@ -621,12 +613,10 @@ fn aggregated_null(present: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError>
     })
 }
 
-/// A static decimal column compared with a constant, as `execute_rel_op`
-/// compares it: exactly, the constant read at the column's type
-/// ([`decimal_constant`]); the examples with a value keep their answer.
+/// A static decimal column compared with a constant: exactly
+/// ([`decimal_order`]); the examples with a value keep their answer.
 fn decimal_condition(
     values: &[Option<i128>],
-    precision: u8,
     scale: i8,
     op: RelOp,
     constant: Option<Constant>,
@@ -635,13 +625,21 @@ fn decimal_condition(
     let Some(constant) = constant else {
         return null_condition(mask, op);
     };
-    let value = decimal_constant(constant, precision, scale)?;
     Ok(Labelled {
         labels: Labels::Bool(
             values
                 .iter()
                 .flatten()
-                .map(|&v| apply(v, op, value))
+                .map(|&v| {
+                    decimal_order(v, scale, constant).is_some_and(|order| match op {
+                        RelOp::Eq => order.is_eq(),
+                        RelOp::Ne => order.is_ne(),
+                        RelOp::Lt => order.is_lt(),
+                        RelOp::Le => order.is_le(),
+                        RelOp::Gt => order.is_gt(),
+                        RelOp::Ge => order.is_ge(),
+                    })
+                })
                 .collect(),
         ),
         mask,
@@ -656,15 +654,71 @@ pub enum Column {
     Bool(Vec<Option<bool>>),
     Text(Vec<Option<String>>),
     /// A decimal column's unscaled values, its declared precision and its
-    /// scale: compared in a condition ([`decimal_condition`]); asked for
-    /// itself, a target the reference's task table refuses ("unsupported
-    /// data type ... for column 'TARGET'"), refused by name (`target_type`,
-    /// register P1B-18).
+    /// scale: compared in a condition ([`decimal_condition`]), or a target
+    /// ([`decimal_target`]).
     Decimal {
         values: Vec<Option<i128>>,
         precision: u8,
         scale: i8,
     },
+}
+
+/// A decimal column as a target. At scale 0, where every value fits, an
+/// int64, as the reference reads it since `main`'s eb6c68eb. Otherwise:
+/// - a regression's labels are numbers, each value rounded once to the
+///   nearest float32 (round 1: a regression has no classes to keep apart);
+/// - a classification's are spelled as the reference spells its classes
+///   (float64, then float32, as [`decimal_to_f64`] reads it), and where two
+///   distinct values meet at one float32, each value's own digits instead,
+///   so no two values become one class (T2.0c).
+fn decimal_target(values: &[Option<i128>], scale: i8, classes: bool) -> (Vec<bool>, Labels) {
+    let mask: Vec<bool> = values.iter().map(Option::is_some).collect();
+    let present: Vec<i128> = values.iter().flatten().copied().collect();
+    if scale == 0
+        && let Ok(ints) = present
+            .iter()
+            .map(|&v| i64::try_from(v))
+            .collect::<Result<Vec<_>, _>>()
+    {
+        return (mask, Labels::Int(ints));
+    }
+    if !classes {
+        let floats = present.iter().map(|&v| decimal_to_f32(v, scale)).collect();
+        return (mask, Labels::Float(floats));
+    }
+    let floats: Vec<f32> = present
+        .iter()
+        .map(|&v| decimal_to_f64(v, scale) as f32)
+        .collect();
+    let mut seen: std::collections::BTreeMap<u32, i128> = std::collections::BTreeMap::new();
+    let merged = present.iter().zip(&floats).any(|(&value, float)| {
+        // Adding zero makes a negative zero positive.
+        *seen.entry((float + 0.0).to_bits()).or_insert(value) != value
+    });
+    let labels = if merged {
+        Labels::Text(present.iter().map(|&v| decimal_text(v, scale)).collect())
+    } else {
+        Labels::Float(floats)
+    };
+    (mask, labels)
+}
+
+/// A decimal's own digits: its unscaled `value` at `scale`.
+fn decimal_text(value: i128, scale: i8) -> String {
+    let digits = value.unsigned_abs().to_string();
+    let sign = if value < 0 { "-" } else { "" };
+    let Ok(scale) = usize::try_from(scale) else {
+        return format!(
+            "{sign}{digits}{}",
+            "0".repeat(usize::from(scale.unsigned_abs()))
+        );
+    };
+    if scale == 0 {
+        return format!("{sign}{digits}");
+    }
+    let padded = format!("{digits:0>width$}", width = scale + 1);
+    let (whole, fraction) = padded.split_at(padded.len() - scale);
+    format!("{sign}{whole}.{fraction}")
 }
 
 /// A query's target over the examples.
@@ -690,8 +744,19 @@ pub struct Labelled {
     pub labels: Labels,
 }
 
-/// `target`'s labels, as the executor's `execute` gives them.
+/// `target`'s labels, as the executor's `execute` gives them, for any task
+/// but a classification of a column ([`label_classes`]).
 pub fn label(target: &Target) -> Result<Labelled, CoreError> {
+    labelled(target, false)
+}
+
+/// `target`'s labels for a classification: a decimal column's distinct
+/// values are kept as distinct classes ([`decimal_target`]).
+pub fn label_classes(target: &Target) -> Result<Labelled, CoreError> {
+    labelled(target, true)
+}
+
+fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
     match target {
         Target::Column(column) => {
             fn kept<T: Clone>(
@@ -727,7 +792,7 @@ pub fn label(target: &Target) -> Result<Labelled, CoreError> {
                     let (m, l) = kept(v, |_| true);
                     (m, Labels::Text(l))
                 }
-                Column::Decimal { .. } => return Err(not_yet("target_type")),
+                Column::Decimal { values, scale, .. } => decimal_target(values, *scale, classes),
             };
             Ok(Labelled { mask, labels })
         }
@@ -748,13 +813,8 @@ pub fn label(target: &Target) -> Result<Labelled, CoreError> {
             op,
             constant,
         } => {
-            if let Target::Column(Column::Decimal {
-                values,
-                precision,
-                scale,
-            }) = target.as_ref()
-            {
-                return decimal_condition(values, *precision, *scale, *op, *constant);
+            if let Target::Column(Column::Decimal { values, scale, .. }) = target.as_ref() {
+                return decimal_condition(values, *scale, *op, *constant);
             }
             let inner = label(target)?;
             match constant {
@@ -864,71 +924,54 @@ mod tests {
     }
 
     #[test]
-    fn a_decimal_sum_past_38_digits_is_the_caller_s_error() {
+    fn a_decimal_sum_past_38_digits_is_summed_exactly() {
+        // Past the column's 38 digits, and past i128, the total is exact
+        // and read once at float32 (T2.0c; the reference since eb6c68eb
+        // answers these as float64 sums).
         let big = 60_000_000_000_000_000_000_000_000_000_000_000_000_i128;
-        let values = Values::Decimal {
-            values: vec![Some(big), Some(big)],
-            precision: 38,
-            scale: 18,
-        };
-        let err = aggregate(
-            Aggregation::Sum,
-            1,
-            &[0, 0],
-            &values,
-            &[Some(0); 2],
-            bounds(&[0]),
-        )
-        .unwrap_err();
-        assert_eq!(err.code, sdm_contract::ErrorCode::InvalidRequest);
-        // One of them alone fits.
-        let one = Values::Decimal {
-            values: vec![Some(big)],
-            precision: 38,
-            scale: 18,
-        };
-        assert!(aggregate(Aggregation::Sum, 1, &[0], &one, &[Some(0)], bounds(&[0])).is_ok());
-        // Only the total is checked, as the reference checks it: a running
-        // sum past 38 digits, or past i128, that comes back is summed (fix
-        // round 3; the reference's labels 6.000000208206194e19 and
-        // 8.999999813669171e37), in any order.
         let nine = 90_000_000_000_000_000_000_000_000_000_000_000_000_i128;
         for (terms, scale, wanted) in [
-            (vec![big, big, -big], 18, 6.000_000_208_206_194e19_f64),
-            (vec![big, -big, big], 18, 6.000_000_208_206_194e19),
+            (vec![big, big], 18, 1.2e20_f32),
+            (vec![big, big, big, big], 18, 2.4e20),
+            (vec![-big, -big, -big], 18, -1.8e20),
+            (vec![big, big, -big], 18, 6e19),
+            (vec![big, -big, big], 18, 6e19),
             (vec![big, big, -big, -big], 18, 0.0),
-            (vec![nine, nine, -nine], 0, 8.999_999_813_669_171e37),
+            (vec![nine, nine, -nine], 0, 9e37),
+            (vec![nine, nine], 0, 1.8e38),
         ] {
-            let n = terms.len();
-            let values = Values::Decimal {
-                values: terms.into_iter().map(Some).collect(),
-                precision: 38,
-                scale,
-            };
-            let out = aggregate(
-                Aggregation::Sum,
-                1,
-                &vec![0; n],
-                &values,
-                &vec![Some(0); n],
-                bounds(&[0]),
-            )
-            .unwrap();
-            assert_eq!(f64::from(out.values[0]), wanted);
+            assert_eq!(
+                decimal_aggregate(Aggregation::Sum, &terms, 38, scale).unwrap(),
+                wanted,
+                "{terms:?}"
+            );
         }
-        // An average of the same values is not the caller's error: the
-        // reference averages them (T1.27's fix round 2), whatever the total
-        // (T1.32b).
-        let out = aggregate(
-            Aggregation::Avg,
-            1,
-            &[0, 0],
-            &values,
-            &[Some(0); 2],
-            bounds(&[0]),
-        )
-        .unwrap();
-        assert_eq!(out.values[0], decimal_to_f64(big, 18) as f32);
+        // Past the column's declared digits, within i128: summed.
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[9_999, 1], 4, 0).unwrap(),
+            10_000.0
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[9_999, 1], 4, 2).unwrap(),
+            100.0
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[-9_999, -1], 4, 0).unwrap(),
+            -10_000.0
+        );
+        // Their means are exact whatever the total: past i128 too.
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[big, big], 38, 18).unwrap(),
+            decimal_to_f64(big, 18) as f32
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[nine, nine, -nine], 38, 0).unwrap(),
+            3e37
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[9_999, 1], 4, 0).unwrap(),
+            5_000.0
+        );
     }
 
     fn decimal_aggregate(
@@ -955,98 +998,7 @@ mod tests {
     }
 
     #[test]
-    fn a_decimal_sum_is_held_to_its_column_s_declared_precision() {
-        // As the reference's grouped sum of a decimal128(p, s) column
-        // (pyarrow 25, measured): DECIMAL(4, 0)'s 9999 + 1 fails, 9998 + 1
-        // and 9999 + 1 - 1 are taken; at DECIMAL(4, 2), 99.99 + 0.01 fails.
-        for (terms, precision, scale) in [
-            (vec![9_999, 1], 4, 0),
-            (vec![-9_999, -1], 4, 0),
-            (vec![9_999, 1], 4, 2),
-            (vec![999_999_999, 1], 9, 0),
-        ] {
-            let err = decimal_aggregate(Aggregation::Sum, &terms, precision, scale).unwrap_err();
-            assert_eq!(
-                err.code,
-                sdm_contract::ErrorCode::InvalidRequest,
-                "{terms:?}"
-            );
-            assert_eq!(err.fields["field"], sdm_contract::Detail::text("query"));
-        }
-        assert_eq!(
-            decimal_aggregate(Aggregation::Sum, &[9_998, 1], 4, 0).unwrap(),
-            9_999.0
-        );
-        assert_eq!(
-            decimal_aggregate(Aggregation::Sum, &[9_999, 1, -1], 4, 0).unwrap(),
-            9_999.0
-        );
-        // Neither the mean nor the largest of the same values is held to it.
-        assert_eq!(
-            decimal_aggregate(Aggregation::Avg, &[9_999, 1], 4, 0).unwrap(),
-            5_000.0
-        );
-        assert_eq!(
-            decimal_aggregate(Aggregation::Max, &[9_999, 1], 4, 0).unwrap(),
-            9_999.0
-        );
-    }
-
-    #[test]
-    fn a_float_constant_reads_at_a_decimal_s_scale_as_pyarrow_reads_it() {
-        // Measured on the reference's pyarrow: pd.Series([value],
-        // dtype=decimal128(10, scale)).
-        for (value, scale, wanted) in [
-            (0.5, 0, 0),
-            (1.5, 0, 2),
-            (2.5, 0, 2),
-            (-0.5, 0, 0),
-            (-1.5, 0, -2),
-            (0.7, 0, 1),
-            (-0.7, 0, -1),
-            (0.15, 1, 1),
-            (0.25, 1, 2),
-            (0.35, 1, 3),
-            (0.1, 1, 1),
-            (2.675, 2, 267),
-            (1.005, 2, 100),
-            (0.045, 2, 4),
-            (0.255, 2, 26),
-            (1e-40, 2, 0),
-            (5e-324, 0, 0),
-        ] {
-            assert_eq!(
-                float_at_scale(value, scale),
-                Some(wanted),
-                "{value} at {scale}"
-            );
-        }
-        assert_eq!(
-            float_at_scale(1e30, 0),
-            Some(1_000_000_000_000_000_019_884_624_838_656)
-        );
-        // At scale 22, the largest Arrow reads exactly (pyarrow 25,
-        // decimal128(38, 22)).
-        assert_eq!(float_at_scale(0.1, 22), Some(1_000_000_000_000_000_055_511));
-        assert_eq!(
-            float_at_scale(2.0 / 3.0, 22),
-            Some(6_666_666_666_666_666_296_592)
-        );
-        assert_eq!(
-            float_at_scale(-0.7, 22),
-            Some(-6_999_999_999_999_999_555_911)
-        );
-        assert_eq!(
-            decimal_constant(Constant::Float(0.1), 38, 22).unwrap(),
-            1_000_000_000_000_000_055_511
-        );
-        assert_eq!(float_at_scale(f64::NAN, 0), None);
-        assert_eq!(float_at_scale(f64::INFINITY, 0), None);
-        assert_eq!(float_at_scale(1e300, 0), None);
-    }
-
-    #[test]
-    fn a_static_decimal_is_compared_exactly_and_refused_as_a_target() {
+    fn a_static_decimal_is_compared_exactly_and_answered_as_a_target() {
         let column = Column::Decimal {
             values: vec![Some(-250), None, Some(0), Some(25), Some(100)],
             precision: 4,
@@ -1071,92 +1023,235 @@ mod tests {
             is_null.labels,
             Labels::Bool(vec![false, true, false, false, false])
         );
-        // A constant DECIMAL(4, 2) does not hold is the caller's error, as
-        // the reference refuses it (measured: users.f > 100, INVALID_REQUEST
-        // at materialize), and so is an infinite float (T1.36 fix 9, the
-        // reference's "Cannot convert inf"); an integer past int64 is refused
-        // by name. A float at a scale past 22 is read, not refused (the
-        // owner's decision on P1B-71, 2026-10-13):
-        // `tests/t132b_float_constants.rs` holds that.
-        for (constant, precision, scale, code) in [
-            (Constant::Int(100), 4, 2, ErrorCode::InvalidRequest),
-            (Constant::Float(100.0), 4, 2, ErrorCode::InvalidRequest),
-            (Constant::Float(1e300), 4, 2, ErrorCode::InvalidRequest),
-            (
-                Constant::Float(f64::INFINITY),
-                38,
-                0,
-                ErrorCode::InvalidRequest,
-            ),
-            (
-                Constant::Float(f64::NEG_INFINITY),
-                4,
-                2,
-                ErrorCode::InvalidRequest,
-            ),
-            (Constant::Int(5), 38, 38, ErrorCode::InvalidRequest),
-            (
-                Constant::Int(i128::from(i64::MAX) + 1),
-                38,
-                0,
-                ErrorCode::UnsupportedRequest,
-            ),
-        ] {
-            let column = Column::Decimal {
-                values: vec![Some(1)],
-                precision,
-                scale,
-            };
-            let err = label(&Target::Condition {
-                target: Box::new(Target::Column(column)),
-                op: RelOp::Gt,
-                constant: Some(constant),
-            })
-            .unwrap_err();
-            assert_eq!(err.code, code, "{constant:?}");
-            if code == ErrorCode::UnsupportedRequest {
-                assert_eq!(
-                    err.fields["rule"],
-                    sdm_contract::Detail::text("condition_value")
-                );
-            } else {
-                assert_eq!(err.fields["field"], sdm_contract::Detail::text("query"));
-            }
-        }
-        // Asked for itself, a static decimal target is refused by name, as
-        // the reference's task table refuses it.
-        let err = label(&Target::Column(column)).unwrap_err();
-        assert_eq!(err.code, sdm_contract::ErrorCode::UnsupportedRequest);
+        // Asked for itself, each value at float32, as the reference reads
+        // it since eb6c68eb (at scale 0, an int64); distinct values meeting
+        // at one float32 keep their own digits instead, one class each.
         assert_eq!(
-            err.fields["rule"],
-            sdm_contract::Detail::text("target_type")
+            label(&Target::Column(column.clone())).unwrap(),
+            Labelled {
+                mask: vec![true, false, true, true, true],
+                labels: Labels::Float(vec![-2.5, 0.0, 0.25, 1.0]),
+            }
+        );
+        let whole = Column::Decimal {
+            values: vec![Some(3), Some(-1), None],
+            precision: 4,
+            scale: 0,
+        };
+        assert_eq!(
+            label(&Target::Column(whole)).unwrap().labels,
+            Labels::Int(vec![3, -1])
+        );
+        let close = Column::Decimal {
+            values: vec![Some(100_000_000_000), Some(100_000_000_001), None],
+            precision: 38,
+            scale: 18,
+        };
+        assert_eq!(
+            label_classes(&Target::Column(close)).unwrap().labels,
+            Labels::Text(vec![
+                "0.000000100000000000".to_owned(),
+                "0.000000100000000001".to_owned(),
+            ])
         );
     }
 
     #[test]
-    fn a_decimal_mean_is_rounded_half_away_from_zero_at_its_scale() {
-        // The reference's grouped means (pyarrow 25, measured), then read at
-        // float32 as pandas' astype reads them.
+    fn a_decimal_regression_target_meeting_at_one_float32_stays_numbers() {
+        // Round 1 (Claude P1-1): a regression has no classes to keep apart,
+        // so values meeting at one float32 are numbers, each rounded once to
+        // the nearest float32, never text (which a regression's payload
+        // refuses as an internal error). DECIMAL(12, 2) amounts past
+        // 1,000,000 with cents meet at float32's step of 0.125 there.
+        let amounts = Column::Decimal {
+            values: vec![
+                Some(123_456_701),
+                Some(123_456_702),
+                None,
+                Some(-123_456_703),
+            ],
+            precision: 12,
+            scale: 2,
+        };
+        let regression = label(&Target::Column(amounts.clone())).unwrap();
+        assert_eq!(regression.mask, vec![true, true, false, true]);
+        assert_eq!(
+            regression.labels,
+            Labels::Float(vec![1_234_567.0, 1_234_567.0, -1_234_567.0])
+        );
+        // As a classification, the same values stay three classes.
+        assert_eq!(
+            label_classes(&Target::Column(amounts)).unwrap().labels,
+            Labels::Text(vec![
+                "1234567.01".to_owned(),
+                "1234567.02".to_owned(),
+                "-1234567.03".to_owned(),
+            ])
+        );
+        // Rounded once: a hair above a float32 midpoint rounds up.
+        let above = Column::Decimal {
+            values: vec![Some(1_000_000_059_604_644_775_390_625_000_001)],
+            precision: 38,
+            scale: 30,
+        };
+        assert_eq!(
+            label(&Target::Column(above)).unwrap().labels,
+            Labels::Float(vec![1.0 + f32::EPSILON])
+        );
+    }
+
+    /// `d op constant` over one `DECIMAL(38, scale)` value of unscaled `d`.
+    fn holds(d: i128, scale: i8, op: RelOp, constant: Constant) -> bool {
+        let labelled = label(&Target::Condition {
+            target: Box::new(Target::Column(Column::Decimal {
+                values: vec![Some(d)],
+                precision: 38,
+                scale,
+            })),
+            op,
+            constant: Some(constant),
+        })
+        .unwrap();
+        labelled.labels == Labels::Bool(vec![true])
+    }
+
+    #[test]
+    fn a_decimal_is_compared_with_a_constant_of_any_scale_exactly() {
+        use Constant::{Float, Int};
+        use RelOp::{Eq, Ge, Gt, Le, Lt, Ne};
+        // KO2-50: the constant is never rounded to the column's scale.
+        assert!(holds(2, 0, Gt, Float(1.5)));
+        assert!(!holds(1, 0, Gt, Float(1.5)));
+        assert!(holds(1, 0, Lt, Float(1.5)));
+        assert!(!holds(2, 0, Eq, Float(1.5)) && holds(2, 0, Ne, Float(1.5)));
+        assert!(holds(-1, 0, Gt, Float(-1.5)) && !holds(-2, 0, Gt, Float(-1.5)));
+        assert!(holds(-2, 0, Lt, Float(-1.5)) && holds(-2, 0, Le, Float(-1.5)));
+        // At the column's scale, and finer: the literal the query wrote.
+        assert!(holds(15, 1, Eq, Float(1.5)) && holds(15, 1, Ge, Float(1.5)));
+        assert!(holds(1, 1, Eq, Float(0.1)));
+        assert!(holds(100_000_000_000_000_000, 18, Eq, Float(0.1)));
+        assert!(holds(15, 2, Lt, Float(0.155)) && holds(16, 2, Gt, Float(0.155)));
+        assert!(holds(0, 0, Lt, Float(5e-324)) && holds(0, 0, Gt, Float(-5e-324)));
+        assert!(holds(5, 38, Gt, Float(4.9e-38)) && holds(5, 38, Lt, Float(5.1e-38)));
+        // Integers, exactly, past the column's digits and past int64.
+        assert!(holds(100, 2, Eq, Int(1)) && holds(100, 2, Le, Int(1)));
+        assert!(holds(99_999, 0, Lt, Int(i128::from(i64::MAX) + 1)));
+        // A constant past every value the column holds orders by its sign.
+        let largest = 10_i128.pow(38) - 1;
+        assert!(holds(largest, 0, Lt, Float(1e308)) && holds(-largest, 0, Gt, Float(-1e308)));
+        assert!(holds(largest, 0, Lt, Float(1e39)) && !holds(largest, 0, Ge, Float(1e39)));
+        assert!(holds(1, 0, Lt, Float(f64::INFINITY)));
+        assert!(holds(1, 0, Gt, Float(f64::NEG_INFINITY)));
+        assert!(!holds(1, 0, Eq, Float(f64::INFINITY)));
+        // A NaN, which the validator refuses first, holds no comparison.
+        for op in [Eq, Ne, Lt, Le, Gt, Ge] {
+            assert!(!holds(1, 0, op, Float(f64::NAN)));
+        }
+    }
+
+    #[test]
+    fn a_decimal_mean_is_exact_and_rounded_once() {
+        // Round 1 (Codex P1): the mean is the exact sum over the count, never
+        // first rounded to the column's scale: 1 and 2 at scale 0 average
+        // 1.5, not 2.
         for (terms, scale, wanted) in [
-            (vec![1, 2], 0, 2.0_f32),
-            (vec![-1, -2], 0, -2.0),
-            (vec![1, 2, 2], 0, 2.0),
-            (vec![1, 1, 2], 0, 1.0),
-            (vec![1, 2], 2, decimal_to_f64(2, 2) as f32),
-            (vec![10, 20, 20], 2, decimal_to_f64(17, 2) as f32),
-            (vec![-10, -20, -20], 2, decimal_to_f64(-17, 2) as f32),
+            (vec![1, 2], 0, 1.5_f32),
+            (vec![-1, -2], 0, -1.5),
+            (vec![1, 2, 1, 2], 0, 1.5),
+            (vec![1, 2, 2], 0, 5.0 / 3.0),
+            (vec![1, 1, 2], 0, 4.0 / 3.0),
+            (vec![-1, -1, -2], 0, -4.0 / 3.0),
+            (vec![1, 2], 2, 0.015),
+            (vec![10, 20, 20], 2, 50.0 / 300.0),
+            (vec![-10, -20, -20], 2, -50.0 / 300.0),
         ] {
             assert_eq!(
-                decimal_aggregate(Aggregation::Avg, &terms, 4, scale).unwrap(),
+                decimal_aggregate(Aggregation::Avg, &terms, 10, scale).unwrap(),
                 wanted,
-                "{terms:?}"
+                "{terms:?} at {scale}"
             );
         }
-        // A total past DECIMAL(38) is averaged: (10**38 - 1 + 1) / 2.
+        // A total past DECIMAL(38) and past i128 is averaged exactly.
         let nines = 99_999_999_999_999_999_999_999_999_999_999_999_999_i128;
         assert_eq!(
             decimal_aggregate(Aggregation::Avg, &[nines, 1], 38, 0).unwrap(),
-            decimal_to_f64(50_000_000_000_000_000_000_000_000_000_000_000_000, 0) as f32
+            5e37
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[nines, nines, nines], 38, 0).unwrap(),
+            1e38
+        );
+    }
+
+    #[test]
+    fn a_decimal_sum_never_wraps_nor_flips_its_sign() {
+        // Round 1 (Codex P1): two values of -2**126 sum to i128::MIN, whose
+        // magnitude is 2**127, which read as an i64 high half flipped sign.
+        let half = -85_070_591_730_234_615_865_843_651_857_942_052_864_i128;
+        assert_eq!(half * 2, i128::MIN);
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half], 38, 0).unwrap(),
+            -1.701_411_8e38
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[-half, -half], 38, 0).unwrap(),
+            1.701_411_8e38
+        );
+        // And its neighbours: past i128 on both sides, and back within it.
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half, half], 38, 0).unwrap(),
+            -2.552_117_8e38
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half, -1], 38, 0).unwrap(),
+            -1.701_411_8e38
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[half, half, -half], 38, 0).unwrap(),
+            -8.507_059e37
+        );
+        assert_eq!(decimal_to_f64(i128::MIN, 0), -1.701_411_834_604_692_3e38);
+        assert_eq!(
+            decimal_aggregate(Aggregation::Min, &[i128::MIN + 1, 0], 38, 0).unwrap(),
+            -1.701_411_8e38
+        );
+    }
+
+    #[test]
+    fn a_decimal_aggregate_is_rounded_once_to_float32() {
+        // Round 1 (Codex P1): 1 + 2**-24 is a float32 midpoint; a hair above
+        // it rounds up, a hair below rounds down, where rounding first to
+        // float64 lands on the midpoint and then to even, 1.0.
+        let above = 1_000_000_059_604_644_775_390_625_000_001_i128;
+        let below = 1_000_000_059_604_644_775_390_624_999_999_i128;
+        let exact = 1_000_000_059_604_644_775_390_625_000_000_i128;
+        let up = 1.0_f32 + f32::EPSILON;
+        for aggregation in [Aggregation::Sum, Aggregation::Avg, Aggregation::Max] {
+            assert_eq!(
+                decimal_aggregate(aggregation, &[above], 38, 30).unwrap(),
+                up,
+                "{aggregation:?}"
+            );
+            assert_eq!(
+                decimal_aggregate(aggregation, &[below], 38, 30).unwrap(),
+                1.0,
+                "{aggregation:?}"
+            );
+            // On the midpoint itself, to even.
+            assert_eq!(
+                decimal_aggregate(aggregation, &[exact], 38, 30).unwrap(),
+                1.0,
+                "{aggregation:?}"
+            );
+        }
+        // Split over two rows, as a sum of two values and as their mean.
+        assert_eq!(
+            decimal_aggregate(Aggregation::Sum, &[above - 1, 1], 38, 30).unwrap(),
+            up
+        );
+        assert_eq!(
+            decimal_aggregate(Aggregation::Avg, &[above * 2 - 1, 1], 38, 30).unwrap(),
+            up
         );
     }
 

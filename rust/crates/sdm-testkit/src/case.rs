@@ -34,6 +34,12 @@ pub struct Case {
     pub id: String,
     pub status: Status,
     pub slice: String,
+    /// The databases the case runs on when not all three (design choice
+    /// 2, KO2-19); only beside `exclusion`, the owner's decision row.
+    #[serde(default, deserialize_with = "some_databases")]
+    pub databases: Option<Vec<Database>>,
+    #[serde(default, deserialize_with = "some_text")]
+    pub exclusion: Option<String>,
     pub paths: Vec<String>,
     pub routes: Vec<String>,
     #[serde(default, deserialize_with = "present")]
@@ -50,6 +56,43 @@ pub struct Case {
     pub why: String,
     #[serde(deserialize_with = "text")]
     pub source: String,
+}
+
+/// A database the corpus runs on, in the order every case runs on them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Database {
+    Duckdb,
+    Sqlite,
+    Postgres,
+}
+
+impl Database {
+    /// Every database, in order: a case without `databases` runs on each.
+    pub const ALL: [Database; 3] = [Database::Duckdb, Database::Sqlite, Database::Postgres];
+
+    /// The name the case format and the observations' keys use.
+    pub fn name(self) -> &'static str {
+        match self {
+            Database::Duckdb => "duckdb",
+            Database::Sqlite => "sqlite",
+            Database::Postgres => "postgres",
+        }
+    }
+}
+
+impl Case {
+    /// The databases the case runs on, in [`Database::ALL`]'s order.
+    pub fn databases(&self) -> Vec<Database> {
+        Database::ALL
+            .into_iter()
+            .filter(|database| {
+                self.databases
+                    .as_ref()
+                    .is_none_or(|named| named.contains(database))
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -85,6 +128,16 @@ pub struct Input {
     #[serde(deserialize_with = "text")]
     pub pql: String,
     pub materialize: Materialize,
+    /// The call the scripted endpoint fails, numbered from zero in the
+    /// order received (T2.1a, for `main`'s multi-call `predict`, T2.8c); a
+    /// JSON integer written as one, `1.0` refused as the Python loader
+    /// refuses it.
+    #[serde(default, deserialize_with = "present")]
+    pub fail_call: Option<u64>,
+    /// Whether the scripted endpoint answers a classification call asking
+    /// for probabilities with them (T2.8's ranking cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub probabilities: Option<bool>,
 }
 
 /// Keyword arguments to `Schema.from_source`, each as the case gives it.
@@ -262,6 +315,33 @@ fn some_text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String
     text(deserializer).map(Some)
 }
 
+/// `databases`, when given: at least one, none twice, and not all three,
+/// since an exclusion leaves one out (`minItems`, `uniqueItems`,
+/// `maxItems`).
+fn some_databases<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<Database>>, D::Error> {
+    let databases = Vec::<Database>::deserialize(deserializer)?;
+    let distinct: BTreeSet<Database> = databases.iter().copied().collect();
+    if databases.is_empty()
+        || distinct.len() != databases.len()
+        || distinct.len() == Database::ALL.len()
+    {
+        return Err(D::Error::custom(
+            "databases is empty, names a database twice or leaves none out",
+        ));
+    }
+    Ok(Some(databases))
+}
+
+/// Whether `text` names a decision row, `KO<phase>-<n>`.
+fn is_decision_row(text: &str) -> bool {
+    let numbers = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    text.strip_prefix("KO")
+        .and_then(|rest| rest.split_once('-'))
+        .is_some_and(|(phase, row)| numbers(phase) && numbers(row))
+}
+
 /// `input.setup`, when given: at least one statement, none empty, as the
 /// schema's `statements` says (`minItems`, `minLength`).
 fn some_statements<'de, D: Deserializer<'de>>(
@@ -356,6 +436,37 @@ pub struct Materialize {
     /// The inference options passed, kept as written, free-form (T1.21b).
     #[serde(default, deserialize_with = "some_options")]
     pub inference_config: Option<serde_json::Map<String, Value>>,
+    /// The rows a ranking is over, each read as an index is (E153).
+    #[serde(default, deserialize_with = "present")]
+    pub candidates: Option<Vec<Index>>,
+    /// A JSON integer of any size, written as one, as the case schema's
+    /// `integer` and the Python loader take it; `0`, which the reference
+    /// refuses, is a case's input.
+    #[serde(default, deserialize_with = "present")]
+    pub top_k: Option<Integer>,
+    /// How many entities one call scores (`main`'s 1fc5a686, T2.8c), kept
+    /// as written, whatever JSON scalar it is, so a value the reference
+    /// refuses is the case's input.
+    #[serde(default, deserialize_with = "present")]
+    pub rows_per_call: Option<Written>,
+}
+
+/// A JSON scalar other than `null` (a number, a bool or a string), kept as
+/// the text the case wrote: a number of any size or form passes through
+/// nothing that would change it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Written(pub String);
+
+impl<'de> Deserialize<'de> for Written {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Written, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let text = raw.get().trim();
+        match text.as_bytes().first() {
+            Some(b'"' | b'-' | b'0'..=b'9') => Ok(Written(text.to_owned())),
+            _ if text == "true" || text == "false" => Ok(Written(text.to_owned())),
+            _ => Err(D::Error::custom("not a number, a bool or a string")),
+        }
+    }
 }
 
 /// One entity key: a JSON integer literal of any size, kept as its
@@ -390,6 +501,24 @@ impl<'de> Deserialize<'de> for Index {
             Err(D::Error::custom(
                 "an index is a JSON integer literal or a string",
             ))
+        }
+    }
+}
+
+/// A JSON integer literal of any size, kept as its digits: a number with a
+/// fraction or an exponent, `3.0` included, is refused, and nothing passes
+/// through a fixed width.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Integer(pub String);
+
+impl<'de> Deserialize<'de> for Integer {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Integer, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        let text = raw.get().trim();
+        if is_integer_literal(text) {
+            Ok(Integer(text.to_owned()))
+        } else {
+            Err(D::Error::custom("not a JSON integer literal"))
         }
     }
 }
@@ -582,6 +711,18 @@ pub fn load(paths: &[PathBuf]) -> Result<Vec<Loaded>> {
         })?;
         if case.format != FORMAT {
             bail!("{name}: not {FORMAT}");
+        }
+        // `dependentRequired`: a case leaves a database out only under the
+        // owner's exclusion, and an exclusion only leaves one out.
+        if case.databases.is_some() != case.exclusion.is_some() {
+            bail!("{name}: not a case: databases and exclusion come together");
+        }
+        if case
+            .exclusion
+            .as_deref()
+            .is_some_and(|row| !is_decision_row(row))
+        {
+            bail!("{name}: not a case: exclusion is not a decision row");
         }
         if !ids.insert(case.id.clone()) {
             bail!("{name}: case id {} repeats", case.id);

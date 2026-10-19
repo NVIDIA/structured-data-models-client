@@ -257,3 +257,37 @@ def test_sanitization_reason_precedence_and_reference_count() -> None:
         )
 
     assert exc_info.value.unresolved_rows == 1
+
+
+def test_a_decimal_identifier_keeps_every_digit() -> None:
+    """A `DECIMAL(38, 0)` column, as one read through Arrow from a warehouse
+    arrives, is an integer by its scale, and keeps the exact digits when
+    declared a string rather than becoming a float, which holds only about
+    16 of them.
+    """
+    import decimal
+
+    import pyarrow as pa
+
+    ids = [123456789012345678, 123456789012345679]
+    decimals = pa.array([decimal.Decimal(i) for i in ids], pa.decimal128(38, 0))
+    prices = pa.array([decimal.Decimal('1.25'), None], pa.decimal128(10, 2))
+    df = pd.DataFrame(
+        {
+            'id': pd.Series(decimals, dtype=pd.ArrowDtype(decimals.type)),
+            'code': pd.Series(decimals, dtype=pd.ArrowDtype(decimals.type)),
+            'price': pd.Series(prices, dtype=pd.ArrowDtype(prices.type)),
+        }
+    )
+    graph = Graph.from_data({'u': df}, edges=[], verbose=False)
+    table = graph['u']
+    table.primary_key = 'id'
+    table.remove_column('code')
+    table.add_column(dict(name='code', dtype='string', stype='ID'))
+
+    store = LocalGraphStore(graph)
+
+    out = store.df_dict['u']
+    assert out['id'].tolist() == ids
+    assert out['code'].tolist() == [str(i) for i in ids]
+    assert out['price'].tolist()[0] == 1.25

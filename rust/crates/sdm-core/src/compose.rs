@@ -19,7 +19,10 @@ use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderCapabilities, ProviderChoice};
+use sdm_contract::data::{
+    DataLayer, DataRequest, FallbackLimits, FetchPlan, ProviderCapabilities, ProviderChoice,
+    seed_integer,
+};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 /// What a binding starts its runs with.
@@ -74,6 +77,19 @@ impl DataAccess {
         self.layer.opaque_vendor(&self.provider)
     }
 
+    /// Whether the run's provider compares a window's bounds with the
+    /// stored text of the window's column, as the data layer says for it
+    /// (`DataLayer::compares_stored_times`).
+    pub fn compares_stored_times(&self) -> bool {
+        self.layer.compares_stored_times(&self.provider)
+    }
+
+    /// Whether the run's provider orders a seeded sample by the key's data
+    /// type, as the data layer says for it (`DataLayer::samples_by_key_dtype`).
+    pub fn samples_by_key_dtype(&self) -> bool {
+        self.layer.samples_by_key_dtype(&self.provider)
+    }
+
     /// How the run's provider answers `request`. A request whose fields
     /// contradict each other is refused with `INVALID_REQUEST`, an optional
     /// request the provider did not declare with `UNSUPPORTED_REQUEST`
@@ -82,19 +98,63 @@ impl DataAccess {
     /// provider's declared capability is never replaced by a fallback
     /// (design, "Data access").
     pub fn plan(&self, request: &DataRequest) -> Result<FetchPlan, CoreError> {
+        match self.route(request)? {
+            Route::Plan(plan) => Ok(plan),
+            Route::Fallback(_) => Err(undeclared(request.name())),
+        }
+    }
+
+    /// How `request` is answered: the data layer's plan for the run's
+    /// provider, as [`DataAccess::plan`] gives it, or, for an optional
+    /// request the provider did not declare while it declares the
+    /// in-memory fallback's limits, the fallback within them (design
+    /// choice 1, T2.6), which the core answers from the rows `scan`s read.
+    /// Refused as [`DataAccess::plan`] refuses, but for the fallback's
+    /// request; a request the provider declared is never the fallback's.
+    pub fn route(&self, request: &DataRequest) -> Result<Route, CoreError> {
         request.check()?;
         if let Some(optional) = request.optional()
             && !self.capabilities.optional.contains(&optional)
         {
-            return Err(undeclared(optional.name()));
+            let Some(limits) = self.capabilities.fallback else {
+                return Err(undeclared(optional.name()));
+            };
+            self.seeded_within(request)?;
+            return Ok(Route::Fallback(limits));
         }
+        self.seeded_within(request)?;
+        Ok(Route::Plan(self.layer.plan(request, &self.provider)?))
+    }
+
+    /// Refuses a sample seeded past the largest seed the provider declares
+    /// (RS-7).
+    fn seeded_within(&self, request: &DataRequest) -> Result<(), CoreError> {
         if let DataRequest::SampleEntities { seed, .. } = request
-            && let Some(max) = self.capabilities.max_seed
-            && integer(seed).is_some_and(|seed| seed > i128::from(max))
+            && seed_integer(seed).is_some_and(|seed| seed > i128::from(self.capabilities.max_seed))
         {
-            return Err(past_seed_range(request.name(), max));
+            return Err(past_seed_range(request.name(), self.capabilities.max_seed));
         }
-        self.layer.plan(request, &self.provider)
+        Ok(())
+    }
+
+    /// This access with `undeclared` taken out of what the provider
+    /// declares and, where given, the fallback's `limits` declared in place
+    /// of its own: for the test-only fetch, so the conformance kit asks any
+    /// provider, a SQL one included, a request it then does not declare
+    /// (T2.5, T2.6).
+    #[cfg(feature = "test-ops")]
+    pub(crate) fn declaring(
+        mut self,
+        undeclared: &[sdm_contract::data::OptionalRequest],
+        limits: Option<FallbackLimits>,
+    ) -> Self {
+        for request in undeclared {
+            self.capabilities.optional.remove(request);
+        }
+        if limits.is_some() {
+            self.capabilities.fallback = limits;
+        }
+        self
     }
 
     /// The catalog answer the run's provider returned to `request`, a
@@ -110,6 +170,15 @@ impl DataAccess {
     }
 }
 
+/// How one request is answered ([`DataAccess::route`]).
+#[derive(Debug, Clone)]
+pub enum Route {
+    /// As the data layer plans it for the run's provider.
+    Plan(FetchPlan),
+    /// By the in-memory fallback, within the provider's declared limits.
+    Fallback(FallbackLimits),
+}
+
 /// The refusal of an optional request the provider did not declare.
 pub(crate) fn undeclared(request: &str) -> CoreError {
     CoreError::new(
@@ -118,22 +187,6 @@ pub(crate) fn undeclared(request: &str) -> CoreError {
         "the provider did not declare this request",
     )
     .with_field("request", Detail::text(request))
-}
-
-/// A seed's value, when the scalar it travels as is an integer: the
-/// narrowest exact scalar `materialize` writes, a `u64` or a decimal of
-/// scale 0, or any other integer scalar.
-fn integer(seed: &Scalar) -> Option<i128> {
-    Some(match seed {
-        Scalar::Int32(v) => i128::from(*v),
-        Scalar::Int64(v) => i128::from(*v),
-        Scalar::UInt32(v) => i128::from(*v),
-        Scalar::UInt64(v) => i128::from(*v),
-        Scalar::Decimal128 {
-            scale: 0, value, ..
-        } => *value,
-        _ => return None,
-    })
 }
 
 /// The refusal of a sample whose seed is past the largest the provider

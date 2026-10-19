@@ -1,0 +1,95 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.target-regression-collide",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "decimal",
+  "cells": [
+    "decimal128/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, (1234567.00 + user_id * 0.01)::DECIMAL(12, 2) AS t FROM users"
+    ],
+    "pql": "PREDICT users.t FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    },
+    "edits": [
+      {
+        "op": "set_stype",
+        "table": "users",
+        "column": "t",
+        "stype": "numerical"
+      }
+    ]
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c: task regression; context labels by entity: {\"number\": \"2\"}: {\"number\": \"1234567.0\"}, {\"number\": \"3\"}: {\"number\": \"1234567.0\"}, {\"number\": \"4\"}: {\"number\": \"1234567.0\"}, {\"number\": \"5\"}: {\"number\": \"1234567.0\"}, {\"number\": \"6\"}: {\"number\": \"1234567.0\"}, {\"number\": \"7\"}: {\"number\": \"1234567.125\"}"
+  },
+  "why": "A static DECIMAL(12, 2) regression target (users.t, set numerical) whose distinct values, 1234567.00 + user_id * 0.01, land on two float32 values (1234567.0 and 1234567.125)",
+  "source": "T2.0c exact decimals (KO2-50); the Claude review's request, made a static target by Codex's round 2"
+}

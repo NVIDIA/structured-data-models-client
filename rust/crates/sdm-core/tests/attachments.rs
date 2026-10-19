@@ -8,6 +8,12 @@
 //! lock names for that attachment, and every attachment the lock names on
 //! the way in is decoded there, so a change to either fails here. Seeded:
 //! a retyped decode and a dropped one.
+//!
+//! A decode is read as a statement, however rustfmt breaks it over lines,
+//! and from whichever value names the attachment: the operation's request,
+//! the request state, a forecast's later step or the sampler state (M1,
+//! T2.1b: the two-line decode of `SamplerState.memo` and the decode of
+//! `ForecastStep.query` were not read before).
 
 #![allow(
     clippy::disallowed_methods,
@@ -17,7 +23,7 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 10] = [
+const READ: [&str; 12] = [
     "ValidateQuery.query",
     "ValidateQuery.schema",
     "DescribeSource.source",
@@ -28,6 +34,16 @@ const READ: [&str; 10] = [
     "Materialize.held",
     "Materialize.query",
     "RequestState.query",
+    "ForecastStep.query",
+    "SamplerState.memo",
+];
+
+/// The values dispatch reads an attachment's id from, other than an
+/// operation's `request`, and the contract type each is.
+const HOLDERS: [(&str, &str); 3] = [
+    ("request.state.", "RequestState"),
+    ("step.", "ForecastStep"),
+    ("state.", "SamplerState"),
 ];
 
 /// Each `take_json` of `source` (dispatch's text) as the lock's name of the
@@ -37,7 +53,15 @@ const READ: [&str; 10] = [
 fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
     let mut found = Vec::new();
     let mut arm: Option<&str> = None;
-    for line in source.lines() {
+    // Each statement on one line: a line ending in `=` continues on the
+    // next, as rustfmt breaks a long `let`.
+    let joined = source
+        .lines()
+        .map(str::trim)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .replace("=\n", "= ");
+    for line in joined.lines() {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("Operation::")
             && let Some((name, _)) = rest.split_once("(request)")
@@ -46,15 +70,14 @@ fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
         }
         // An attachment a message may leave out is read by `take_json_if`
         // into an `Option` of the type the lock names.
-        let (left, right, optional) = if let Some((l, r)) =
-            line.split_once(" = take_json(&mut attachments, request.")
-        {
-            (l, r, false)
-        } else if let Some((l, r)) = line.split_once(" = take_json_if(&mut attachments, request.") {
-            (l, r, true)
-        } else {
-            continue;
-        };
+        let (left, right, optional) =
+            if let Some((l, r)) = line.split_once(" = take_json(&mut attachments, ") {
+                (l, r, false)
+            } else if let Some((l, r)) = line.split_once(" = take_json_if(&mut attachments, ") {
+                (l, r, true)
+            } else {
+                continue;
+            };
         let decoded = left
             .rsplit_once(": ")
             .map(|(_, ty)| ty.to_owned())
@@ -72,12 +95,16 @@ fn decodes(source: &str) -> Result<Vec<(String, String)>, String> {
             .split_once(')')
             .map(|(field, _)| field)
             .ok_or_else(|| format!("a take_json not read: {line}"))?;
-        let name = match field.strip_prefix("state.") {
-            Some(part) => format!("RequestState.{part}"),
-            None => format!(
-                "{}.{field}",
+        let held = HOLDERS
+            .iter()
+            .find_map(|(prefix, ty)| field.strip_prefix(prefix).map(|part| (*ty, part)));
+        let name = match (held, field.strip_prefix("request.")) {
+            (Some((ty, part)), _) => format!("{ty}.{part}"),
+            (None, Some(part)) => format!(
+                "{}.{part}",
                 arm.ok_or_else(|| format!("a take_json outside an arm: {line}"))?
             ),
+            (None, None) => return Err(format!("a take_json of no known value: {line}")),
         };
         found.push((name, decoded));
     }
@@ -149,5 +176,22 @@ fn a_retyped_or_dropped_decode_fails() {
     assert_eq!(
         mismatches(&dropped),
         ["RequestState.query: in the lock, not decoded by dispatch"]
+    );
+    // M1: the decodes read before T2.1b missed, the two-line one and the
+    // one from a forecast's step, are each held too.
+    let retyped = source.replace("let memo: SamplerMemo =", "let memo: SamplerState =");
+    assert_ne!(retyped, source);
+    assert_eq!(
+        mismatches(&retyped),
+        ["SamplerState.memo: dispatch decodes SamplerState, the lock SamplerMemo"]
+    );
+    let dropped = source.replace(
+        "let query: String = take_json(&mut attachments, step.query)?;",
+        "",
+    );
+    assert_ne!(dropped, source);
+    assert_eq!(
+        mismatches(&dropped),
+        ["ForecastStep.query: in the lock, not decoded by dispatch"]
     );
 }

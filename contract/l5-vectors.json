@@ -1,0 +1,279 @@
+{
+ "by": {
+  "dbr17-pandas2": {
+   "pandas": "2.2.3",
+   "python": "3.12.15",
+   "runner": "python-old"
+  },
+  "ref-pandas3": {
+   "pandas": "3.0.6",
+   "python": "3.12.13",
+   "runner": "python-ref"
+  }
+ },
+ "drivers": {
+  "dbr17-pandas2": {
+   "b": {
+    "duckdb": "bool",
+    "sqlite": "int64"
+   },
+   "bin": {
+    "duckdb": "binary",
+    "sqlite": "binary"
+   },
+   "d": {
+    "duckdb": "date32[day]",
+    "sqlite": "string"
+   },
+   "dec": {
+    "duckdb": "decimal128(38, 10)",
+    "sqlite": "string"
+   },
+   "f32": {
+    "duckdb": "float",
+    "sqlite": "double"
+   },
+   "f64": {
+    "duckdb": "double",
+    "sqlite": "double"
+   },
+   "i16": {
+    "duckdb": "int16",
+    "sqlite": "int64"
+   },
+   "i32": {
+    "duckdb": "int32",
+    "sqlite": "int64"
+   },
+   "i64": {
+    "duckdb": "int64",
+    "sqlite": "int64"
+   },
+   "i8": {
+    "duckdb": "int8",
+    "sqlite": "int64"
+   },
+   "iv": {
+    "duckdb": "month_day_nano_interval",
+    "sqlite": "string"
+   },
+   "li": {
+    "duckdb": "list<l: int32>",
+    "sqlite": "string"
+   },
+   "mp": {
+    "duckdb": "map<string, int32>",
+    "sqlite": "string"
+   },
+   "s": {
+    "duckdb": "string",
+    "sqlite": "string"
+   },
+   "st": {
+    "duckdb": "struct<a: int32, b: string>",
+    "sqlite": "string"
+   },
+   "tm": {
+    "duckdb": "time64[us]",
+    "sqlite": "string"
+   },
+   "ts": {
+    "duckdb": "timestamp[us]",
+    "sqlite": "string"
+   },
+   "tstz": {
+    "duckdb": "timestamp[us, tz=Etc/UTC]",
+    "sqlite": "string"
+   },
+   "u16": {
+    "duckdb": "uint16",
+    "sqlite": "int64"
+   },
+   "u32": {
+    "duckdb": "uint32",
+    "sqlite": "int64"
+   },
+   "u64": {
+    "duckdb": "uint64",
+    "sqlite": "string"
+   },
+   "u8": {
+    "duckdb": "uint8",
+    "sqlite": "int64"
+   },
+   "un": {
+    "duckdb": "sparse_union<n: int32=0, s: string=1>",
+    "sqlite": "string"
+   }
+  },
+  "ref-pandas3": {
+   "b": {
+    "duckdb": "bool",
+    "sqlite": "int64"
+   },
+   "bin": {
+    "duckdb": "binary",
+    "sqlite": "binary"
+   },
+   "d": {
+    "duckdb": "date32[day]",
+    "sqlite": "string"
+   },
+   "dec": {
+    "duckdb": "decimal128(38, 10)",
+    "sqlite": "string"
+   },
+   "f32": {
+    "duckdb": "float",
+    "sqlite": "double"
+   },
+   "f64": {
+    "duckdb": "double",
+    "sqlite": "double"
+   },
+   "i16": {
+    "duckdb": "int16",
+    "sqlite": "int64"
+   },
+   "i32": {
+    "duckdb": "int32",
+    "sqlite": "int64"
+   },
+   "i64": {
+    "duckdb": "int64",
+    "sqlite": "int64"
+   },
+   "i8": {
+    "duckdb": "int8",
+    "sqlite": "int64"
+   },
+   "iv": {
+    "duckdb": "month_day_nano_interval",
+    "sqlite": "string"
+   },
+   "li": {
+    "duckdb": "list<l: int32>",
+    "sqlite": "string"
+   },
+   "mp": {
+    "duckdb": "map<string, int32>",
+    "sqlite": "string"
+   },
+   "s": {
+    "duckdb": "string",
+    "sqlite": "string"
+   },
+   "st": {
+    "duckdb": "struct<a: int32, b: string>",
+    "sqlite": "string"
+   },
+   "tm": {
+    "duckdb": "time64[us]",
+    "sqlite": "string"
+   },
+   "ts": {
+    "duckdb": "timestamp[us]",
+    "sqlite": "string"
+   },
+   "tstz": {
+    "duckdb": "timestamp[us, tz=Etc/UTC]",
+    "sqlite": "string"
+   },
+   "u16": {
+    "duckdb": "uint16",
+    "sqlite": "int64"
+   },
+   "u32": {
+    "duckdb": "uint32",
+    "sqlite": "int64"
+   },
+   "u64": {
+    "duckdb": "uint64",
+    "sqlite": "string"
+   },
+   "u8": {
+    "duckdb": "uint8",
+    "sqlite": "int64"
+   },
+   "un": {
+    "duckdb": "sparse_union<n: int32=0, s: string=1>",
+    "sqlite": "string"
+   }
+  }
+ },
+ "format": "sdm-l5-vectors/1",
+ "presentation": {
+  "2": {
+   "binary classification, text ids": {
+    "id": "object",
+    "prediction": "object",
+    "probability_False": "float64",
+    "probability_True": "float64",
+    "row_index": "int64"
+   },
+   "forecast, a step per row": {
+    "forecast_step": "float64",
+    "id": "int64",
+    "prediction": "float64",
+    "row_index": "int64"
+   },
+   "multiclass, ids of mixed types": {
+    "id": "object",
+    "prediction": "object",
+    "row_index": "int64"
+   },
+   "regression, an integer widened among floats": {
+    "id": "int64",
+    "prediction": "float64",
+    "row_index": "int64"
+   },
+   "regression, float answers": {
+    "id": "float64",
+    "prediction": "float64",
+    "row_index": "int64"
+   },
+   "regression, integer answers": {
+    "id": "int64",
+    "prediction": "int64",
+    "row_index": "int64"
+   }
+  },
+  "3": {
+   "binary classification, text ids": {
+    "id": "str",
+    "prediction": "object",
+    "probability_False": "float64",
+    "probability_True": "float64",
+    "row_index": "int64"
+   },
+   "forecast, a step per row": {
+    "forecast_step": "float64",
+    "id": "int64",
+    "prediction": "float64",
+    "row_index": "int64"
+   },
+   "multiclass, ids of mixed types": {
+    "id": "object",
+    "prediction": "str",
+    "row_index": "int64"
+   },
+   "regression, an integer widened among floats": {
+    "id": "int64",
+    "prediction": "float64",
+    "row_index": "int64"
+   },
+   "regression, float answers": {
+    "id": "float64",
+    "prediction": "float64",
+    "row_index": "int64"
+   },
+   "regression, integer answers": {
+    "id": "int64",
+    "prediction": "int64",
+    "row_index": "int64"
+   }
+  }
+ },
+ "recorded_by": "contract/tools/l5_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc"
+}

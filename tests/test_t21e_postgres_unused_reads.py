@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""T2.1e: on Postgres the reference's two reads whose results it never
+uses, ``SELECT current_schema()`` and each table's
+``SELECT COUNT(*) FROM "schema"."table"``, are not expected of a core
+runner (KO2-58); every other statement is, count by count and statement
+by statement, and DuckDB and SQLite lines are held to every one.
+"""
+
+from __future__ import annotations
+
+import copy
+import importlib.util
+import json
+import sys
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+REFERENCE = (
+    ROOT / 'contract/reference/6298913c3b66da9459bb605d0127f8493adaa1fc.jsonl'
+)
+LINE = 's0.accept.sum-window@postgres'
+
+
+def _compare() -> ModuleType:
+    name = 't21e_compare_unused'
+    if name not in sys.modules:
+        path = ROOT / 'scripts/rust_core/compare.py'
+        spec = importlib.util.spec_from_file_location(name, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def _reference() -> dict[str, Any]:
+    for line in REFERENCE.read_text(encoding='utf-8').splitlines():
+        observation = json.loads(line)
+        if observation['case'] == LINE:
+            return dict(observation)
+    raise AssertionError(f'no reference line {LINE}')
+
+
+def _failures(
+    ours: dict[str, Any], theirs: dict[str, Any], database: str
+) -> list[tuple[str, str]]:
+    c = _compare()
+    report = c.Report()
+    c._sql(
+        report, {'id': LINE}, 'python-core', ours, theirs, {}, database=database
+    )
+    return [(rule, text) for rule, text in report.failures]
+
+
+def _without(observation: dict[str, Any], drop: Any) -> dict[str, Any]:
+    changed = copy.deepcopy(observation)
+    capture = changed['driver']['capture']
+    capture['statements'] = [s for s in capture['statements'] if not drop(s)]
+    return changed
+
+
+def test_only_the_two_unused_reads_are_not_expected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    c = _compare()
+    # The record's completeness is its own rule; here only what is expected.
+    monkeypatch.setattr(c, '_complete', lambda *_: True)
+    theirs = _reference()
+    unused = [
+        s['sql']
+        for s in theirs['driver']['capture']['statements']
+        if s['sql'] == 'SELECT current_schema()'
+        or s['sql'].startswith('SELECT COUNT(*) FROM "public".')
+    ]
+    assert len(unused) == 3, unused
+    ours = _without(theirs, lambda s: s['sql'] in unused)
+    # The core's run without them is every other statement, as expected.
+    assert _failures(ours, theirs, 'postgres') == []
+    # On another database every statement is expected.
+    assert any(
+        rule == 'sql.count' for rule, _ in _failures(ours, theirs, 'sqlite')
+    )
+    # Any other statement missing still fails.
+    setseed = _without(ours, lambda s: s['sql'].startswith('SELECT setseed'))
+    assert any(
+        rule == 'sql.count'
+        for rule, _ in _failures(setseed, theirs, 'postgres')
+    )
+    # And so does one more: the unused read run where none is expected.
+    extra = copy.deepcopy(ours)
+    statements = extra['driver']['capture']['statements']
+    statements.append({**statements[-1], 'sql': 'SELECT 1'})
+    assert any(
+        rule == 'sql.count' for rule, _ in _failures(extra, theirs, 'postgres')
+    )
+    # A count with a condition is no unused read.
+    counted = copy.deepcopy(theirs)
+    for each in counted['driver']['capture']['statements']:
+        if each['sql'].startswith('SELECT COUNT(*) FROM "public".'):
+            each['sql'] += ' WHERE true'
+    assert any(
+        rule == 'sql.count' for rule, _ in _failures(ours, counted, 'postgres')
+    )

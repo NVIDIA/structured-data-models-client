@@ -1,7 +1,7 @@
 {
  "format": "sdm-key-cast-vectors/1",
  "recorded_by": "contract/tools/key_cast_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cell": "ref-pandas3",
  "environment": {
   "python": "3.12.13",
@@ -8236,12 +8236,7 @@
     },
     "cast": {
      "dtype": "int64[pyarrow]",
-     "values": [
-      [
-       "i",
-       "9223372036854775807"
-      ]
-     ]
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
@@ -31534,20 +31529,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -31556,8 +31558,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host gives the core the same column as decimal128-18-0.numpy.int64, which the reference answers differently"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31586,13 +31587,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "8"
       ]
      ]
@@ -31601,7 +31602,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31630,13 +31631,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "-1"
       ]
      ]
@@ -31645,7 +31646,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31674,13 +31675,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "128"
       ]
      ]
@@ -31689,7 +31690,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31718,13 +31719,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "256"
       ]
      ]
@@ -31733,7 +31734,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31762,13 +31763,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "32768"
       ]
      ]
@@ -31777,7 +31778,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31806,13 +31807,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "65536"
       ]
      ]
@@ -31821,7 +31822,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31850,13 +31851,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "2147483648"
       ]
      ]
@@ -31865,7 +31866,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31894,13 +31895,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "4294967296"
       ]
      ]
@@ -31909,7 +31910,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31938,13 +31939,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "9007199254740993"
       ]
      ]
@@ -31953,7 +31954,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -31985,13 +31986,20 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "9223372036854775807"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32022,14 +32030,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32061,7 +32070,7 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "OverflowError"
     }
    },
@@ -32069,6 +32078,7 @@
     "required": true,
     "why": [
      "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-18-0.text.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -32101,14 +32111,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32142,20 +32153,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -32164,7 +32182,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32190,17 +32208,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
-       "2"
+       "i",
+       "1"
       ]
      ]
     }
@@ -32208,7 +32229,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32234,16 +32256,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "0"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "0"
       ]
      ]
@@ -32252,7 +32277,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32284,13 +32309,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32321,13 +32348,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32358,13 +32387,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32397,20 +32428,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -32419,7 +32457,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-18-0.mixed.int-text, decimal128-18-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
@@ -32449,22 +32488,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "1"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32496,13 +32530,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32533,13 +32569,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32564,16 +32602,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ]
      ]
@@ -32582,7 +32623,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32614,13 +32656,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32651,13 +32695,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32685,22 +32731,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "1"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32729,13 +32770,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "-1"
       ]
      ]
@@ -32744,7 +32785,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -32770,19 +32811,30 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32813,13 +32865,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -32850,13 +32904,14 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-18-0.int.2pow64, which the reference answers differently"
     ],
     "disposition": null
@@ -32897,20 +32952,28 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-18-0.text.digits, decimal128-18-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
@@ -32945,20 +33008,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -32967,7 +33037,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33001,20 +33071,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -33023,7 +33100,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33063,20 +33141,28 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-18-0.text.digits, decimal128-18-0.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
@@ -33114,10 +33200,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
@@ -33130,10 +33216,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host hands the core the text column ['True', '1'], the same as that text given as text, which the reference answers otherwise (refusal INVALID_REQUEST)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "as_text"
+    "disposition": null
    }
   },
   {
@@ -33166,13 +33251,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ],
       null
@@ -33182,7 +33267,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33217,13 +33302,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ],
       null
@@ -33233,7 +33318,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33270,13 +33355,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ],
       null
@@ -33286,7 +33371,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33320,20 +33405,37 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "0"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "0"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a bool entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33360,10 +33462,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       null
      ]
@@ -33372,7 +33474,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33401,10 +33503,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       null
      ]
@@ -33413,7 +33515,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33440,10 +33542,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       null
      ]
@@ -33452,7 +33554,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33486,20 +33588,36 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host gives the core the same column as decimal128-18-0.int.present, which the reference answers differently"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33525,17 +33643,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
-       "2"
+       "i",
+       "1"
       ]
      ]
     }
@@ -33543,7 +33664,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33571,16 +33693,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ]
      ]
@@ -33589,7 +33714,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33617,19 +33742,30 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33661,17 +33797,22 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1704067200000000"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33701,20 +33842,29 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a time entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33747,17 +33897,22 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1704067200000000"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33789,14 +33944,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowNotImplementedError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33822,16 +33978,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ]
      ]
@@ -33840,7 +33999,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a bytes entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -33872,7 +34032,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -33882,8 +34042,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33914,7 +34076,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -33924,8 +34086,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33956,7 +34120,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -33966,8 +34130,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -33998,7 +34164,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -34008,8 +34174,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34040,7 +34208,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -34050,8 +34218,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34082,7 +34252,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -34092,8 +34262,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34124,7 +34296,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -34134,8 +34306,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34166,7 +34340,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -34176,8 +34350,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34208,7 +34384,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -34218,8 +34394,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -34244,15 +34422,10 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "unfinished",
+     "within_seconds": 300
     },
-    "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
-    }
+    "cast": null
    },
    "expected": {
     "outcome": "refusal",
@@ -34260,9 +34433,12 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the reference did not finish within 300 seconds (the owner's approval of 2026-10-16 for a reference timeout outcome): any answer in its place is a change to register",
+     "the expectation derived from the exact value is not the reference's answer"
+    ],
+    "disposition": "expected"
    }
   },
   {
@@ -34286,14 +34462,22 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "0"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(18, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "0"
+      ]
+     ]
     }
    },
    "expected": {
@@ -34302,9 +34486,13 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
+    "disposition": "expected"
    }
   },
   {
@@ -34339,18 +34527,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       [
-       "d",
-       "2.0000000000"
+       "f",
+       "4000000000000000"
       ]
      ]
     }
@@ -34358,7 +34546,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34387,14 +34575,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "8.0000000000"
+       "f",
+       "4020000000000000"
       ]
      ]
     }
@@ -34402,7 +34590,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34431,14 +34619,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "-1.0000000000"
+       "f",
+       "bff0000000000000"
       ]
      ]
     }
@@ -34446,7 +34634,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34475,14 +34663,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "128.0000000000"
+       "f",
+       "4060000000000000"
       ]
      ]
     }
@@ -34490,7 +34678,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34519,14 +34707,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "256.0000000000"
+       "f",
+       "4070000000000000"
       ]
      ]
     }
@@ -34534,7 +34722,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34563,14 +34751,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "32768.0000000000"
+       "f",
+       "40e0000000000000"
       ]
      ]
     }
@@ -34578,7 +34766,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34607,14 +34795,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "65536.0000000000"
+       "f",
+       "40f0000000000000"
       ]
      ]
     }
@@ -34622,7 +34810,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34651,14 +34839,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "2147483648.0000000000"
+       "f",
+       "41e0000000000000"
       ]
      ]
     }
@@ -34666,7 +34854,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34695,14 +34883,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "4294967296.0000000000"
+       "f",
+       "41f0000000000000"
       ]
      ]
     }
@@ -34710,7 +34898,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34739,22 +34927,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "9007199254740993.0000000000"
-      ]
-     ]
+     "dtype": "double[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34783,22 +34966,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "9223372036854775807.0000000000"
-      ]
-     ]
+     "dtype": "double[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34830,19 +35008,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "9223372036854775808.0000000000"
-      ]
-     ]
+     "dtype": "double[pyarrow]",
+     "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34874,19 +35048,16 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "18446744073709551616.0000000000"
-      ]
-     ]
+     "dtype": "double[pyarrow]",
+     "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host gives the core the same column as decimal128-38-10.text.2pow64, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -34918,19 +35089,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "-9223372036854775809.0000000000"
-      ]
-     ]
+     "dtype": "double[pyarrow]",
+     "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -34967,18 +35134,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       [
-       "d",
-       "2.0000000000"
+       "f",
+       "4000000000000000"
       ]
      ]
     }
@@ -34986,7 +35153,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35012,17 +35179,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -35030,7 +35200,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35059,14 +35229,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "0E-10"
+       "f",
+       "8000000000000000"
       ]
      ]
     }
@@ -35074,7 +35244,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35103,14 +35273,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "100000000000000000000.0000000000"
+       "f",
+       "4415af1d78b58c40"
       ]
      ]
     }
@@ -35118,7 +35288,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35150,13 +35320,20 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "7ff0000000000000"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35184,14 +35361,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "9223372036854775808.0000000000"
+       "f",
+       "43e0000000000000"
       ]
      ]
     }
@@ -35199,7 +35376,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35236,18 +35413,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       [
-       "d",
-       "2.0000000000"
+       "f",
+       "4000000000000000"
       ]
      ]
     }
@@ -35255,8 +35432,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host gives the core the same column as decimal128-38-10.mixed.int-text, decimal128-38-10.mixed.float-text, which the reference answers differently"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35285,14 +35461,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ]
      ]
     }
@@ -35300,7 +35476,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35326,17 +35502,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -35344,7 +35523,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35376,13 +35556,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35410,14 +35592,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ]
      ]
     }
@@ -35425,7 +35607,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35457,13 +35639,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35494,13 +35678,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35528,14 +35714,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ]
      ]
     }
@@ -35543,7 +35729,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35572,14 +35758,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "-1.0000000000"
+       "f",
+       "bff0000000000000"
       ]
      ]
     }
@@ -35587,7 +35773,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35619,13 +35805,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35656,13 +35844,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -35690,14 +35880,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "18446744073709551616.0000000000"
+       "f",
+       "43f0000000000000"
       ]
      ]
     }
@@ -35705,7 +35895,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host gives the core the same column as decimal128-38-10.int.2pow64, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -35745,23 +35936,22 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
-     "the host gives the core the same column as decimal128-38-10.text.digits, decimal128-38-10.mixed.float-text, which the reference answers differently"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "as_text"
+    "disposition": null
    }
   },
   {
@@ -35796,18 +35986,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       [
-       "d",
-       "2.0000000000"
+       "f",
+       "4000000000000000"
       ]
      ]
     }
@@ -35815,7 +36005,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35852,18 +36042,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       [
-       "d",
-       "2.5000000000"
+       "f",
+       "4004000000000000"
       ]
      ]
     }
@@ -35871,7 +36061,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -35911,23 +36101,22 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
-     "the host gives the core the same column as decimal128-38-10.text.digits, decimal128-38-10.mixed.int-text, which the reference answers differently"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "as_text"
+    "disposition": null
    }
   },
   {
@@ -35962,11 +36151,20 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "3ff0000000000000"
+      ],
+      [
+       "f",
+       "3ff0000000000000"
+      ]
+     ]
     },
     "as_text": {
      "outcome": "refusal",
@@ -35978,10 +36176,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host hands the core the text column ['True', '1'], the same as that text given as text, which the reference answers otherwise (refusal INVALID_REQUEST)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "as_text"
+    "disposition": null
    }
   },
   {
@@ -36014,14 +36211,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       null
      ]
@@ -36030,7 +36227,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36065,14 +36262,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       null
      ]
@@ -36081,7 +36278,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36118,14 +36315,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       null
      ]
@@ -36134,7 +36331,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36171,17 +36368,26 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "3ff0000000000000"
+      ],
+      [
+       "f",
+       "0000000000000000"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36208,10 +36414,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       null
      ]
@@ -36220,7 +36426,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36249,10 +36455,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       null
      ]
@@ -36261,7 +36467,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36288,10 +36494,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       null
      ]
@@ -36300,7 +36506,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36337,18 +36543,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ],
       [
-       "d",
-       "2.0000000000"
+       "f",
+       "4000000000000000"
       ]
      ]
     }
@@ -36356,7 +36562,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36382,17 +36588,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -36400,7 +36609,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36431,14 +36640,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ]
      ]
     }
@@ -36446,7 +36655,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36474,17 +36683,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -36492,7 +36704,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36528,14 +36740,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowNotImplementedError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36571,14 +36784,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowNotImplementedError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36614,14 +36828,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowNotImplementedError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36653,14 +36868,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowNotImplementedError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36689,14 +36905,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.0000000000"
+       "f",
+       "3ff0000000000000"
       ]
      ]
     }
@@ -36704,7 +36920,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36732,17 +36948,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -36750,7 +36969,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36776,17 +36995,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -36794,7 +37016,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36820,17 +37043,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff8000000000000"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.5000000000"
+       "f",
+       "3ff8000000000000"
       ]
      ]
     }
@@ -36838,7 +37064,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -36870,8 +37096,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "7ff0000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -36880,8 +37111,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36912,8 +37145,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "fff0000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -36922,8 +37160,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36954,8 +37194,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "7ff0000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -36964,8 +37209,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -36996,8 +37243,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "7ff0000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -37006,8 +37258,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37038,8 +37292,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "0000000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -37048,8 +37307,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37080,8 +37341,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "0000000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -37090,8 +37356,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37122,8 +37390,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "0000000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -37132,8 +37405,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37164,8 +37439,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "7ff0000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -37174,8 +37454,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37206,8 +37488,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "0000000000000000"
+      ]
+     ]
     }
    },
    "expected": {
@@ -37216,8 +37503,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37248,7 +37537,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -37258,8 +37547,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37290,7 +37581,7 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
@@ -37300,8 +37591,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -37334,20 +37627,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -37356,7 +37656,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37385,13 +37685,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "8"
       ]
      ]
@@ -37400,7 +37700,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37429,13 +37729,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "-1"
       ]
      ]
@@ -37444,7 +37744,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37473,13 +37773,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "128"
       ]
      ]
@@ -37488,7 +37788,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37517,13 +37817,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "256"
       ]
      ]
@@ -37532,7 +37832,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37561,13 +37861,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "32768"
       ]
      ]
@@ -37576,7 +37876,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37605,13 +37905,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "65536"
       ]
      ]
@@ -37620,7 +37920,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37649,13 +37949,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "2147483648"
       ]
      ]
@@ -37664,7 +37964,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37693,13 +37993,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "4294967296"
       ]
      ]
@@ -37708,7 +38008,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37737,13 +38037,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "9007199254740993"
       ]
      ]
@@ -37752,7 +38052,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37781,13 +38081,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "9223372036854775807"
       ]
      ]
@@ -37796,7 +38096,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37828,19 +38128,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "9223372036854775808"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37872,19 +38168,16 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "18446744073709551616"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host gives the core the same column as decimal128-38-0.text.2pow64, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -37916,19 +38209,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "-9223372036854775809"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "OverflowError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -37962,20 +38251,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -37984,7 +38280,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38010,17 +38306,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
-       "2"
+       "i",
+       "1"
       ]
      ]
     }
@@ -38028,7 +38327,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38054,16 +38354,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "0"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "0"
       ]
      ]
@@ -38072,7 +38375,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38101,22 +38404,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "100000000000000000000"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38148,13 +38446,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38182,22 +38482,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "9223372036854775808"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38231,20 +38526,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -38253,7 +38555,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
      "the host gives the core the same column as decimal128-38-0.mixed.int-text, decimal128-38-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": null
@@ -38283,22 +38586,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "1"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38330,13 +38628,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38367,13 +38667,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38398,16 +38700,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ]
      ]
@@ -38416,7 +38721,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38448,13 +38754,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38485,13 +38793,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38519,22 +38829,17 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "1"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38563,13 +38868,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "-1"
       ]
      ]
@@ -38578,7 +38883,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38604,19 +38909,30 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38647,13 +38963,15 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -38681,22 +38999,18 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
-      [
-       "d",
-       "18446744073709551616"
-      ]
-     ]
+     "dtype": "int64[pyarrow]",
+     "raised": "ArrowInvalid"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host gives the core the same column as decimal128-38-0.int.2pow64, which the reference answers differently"
     ],
     "disposition": null
    }
@@ -38736,20 +39050,28 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-38-0.text.digits, decimal128-38-0.mixed.float-text, which the reference answers differently"
     ],
     "disposition": "as_text"
@@ -38784,20 +39106,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -38806,7 +39135,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38840,20 +39169,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -38862,7 +39198,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -38902,20 +39239,28 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "2"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host hands the core the text column ['1', '2'], the same as that text given as text, which the reference answers otherwise (success)",
      "the host gives the core the same column as decimal128-38-0.text.digits, decimal128-38-0.mixed.int-text, which the reference answers differently"
     ],
     "disposition": "as_text"
@@ -38953,10 +39298,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
@@ -38969,10 +39314,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the host hands the core the text column ['True', '1'], the same as that text given as text, which the reference answers otherwise (refusal INVALID_REQUEST)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "as_text"
+    "disposition": null
    }
   },
   {
@@ -39005,13 +39349,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ],
       null
@@ -39021,7 +39365,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39056,13 +39400,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ],
       null
@@ -39072,7 +39416,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39109,13 +39453,13 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ],
       null
@@ -39125,7 +39469,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39159,20 +39503,37 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "0"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
+       "0"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a bool entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39199,10 +39560,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       null
      ]
@@ -39211,7 +39572,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39240,10 +39601,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       null
      ]
@@ -39252,7 +39613,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39279,10 +39640,10 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       null
      ]
@@ -39291,7 +39652,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39325,20 +39686,27 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
-    },
-    "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "values": [
+     "outcome": "success",
+     "entities": [
       [
-       "d",
+       "i",
        "1"
       ],
       [
-       "d",
+       "i",
+       "2"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ],
+      [
+       "i",
        "2"
       ]
      ]
@@ -39347,7 +39715,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39373,17 +39741,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
-       "2"
+       "i",
+       "1"
       ]
      ]
     }
@@ -39391,7 +39762,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39419,16 +39791,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ]
      ]
@@ -39437,7 +39812,7 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39465,19 +39840,30 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     }
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -39509,17 +39895,22 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1704067200000000"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39549,20 +39940,29 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a time entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39595,17 +39995,22 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
-     "raised": "ArrowNotImplementedError"
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1704067200000000"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39637,14 +40042,15 @@
      "code": "INTERNAL_ERROR"
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "raised": "ArrowNotImplementedError"
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -39670,16 +40076,19 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 0)[pyarrow]",
+     "dtype": "int64[pyarrow]",
      "values": [
       [
-       "d",
+       "i",
        "1"
       ]
      ]
@@ -39688,7 +40097,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)"
+     "the reference accepts a bytes entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as int64[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": null
    }
@@ -44316,10 +44726,13 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "12345678901234567890123456789012345671"
+      ]
+     ]
     },
     "cast": {
      "dtype": "decimal128(38, 0)[pyarrow]",
@@ -44343,10 +44756,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
     ],
-    "disposition": "expected"
+    "disposition": null
    }
   },
   {
@@ -44370,10 +44782,13 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "12345678901234567890123456789012345671"
+      ]
+     ]
     },
     "cast": {
      "dtype": "decimal128(38, 0)[pyarrow]",
@@ -44395,12 +44810,9 @@
     ]
    },
    "register": {
-    "required": true,
-    "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
-    ],
-    "disposition": "expected"
+    "required": false,
+    "why": [],
+    "disposition": null
    }
   },
   {
@@ -44424,10 +44836,13 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "12345678901234567890123456789012345671"
+      ]
+     ]
     },
     "cast": {
      "dtype": "decimal128(38, 0)[pyarrow]",
@@ -44451,10 +44866,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
     ],
-    "disposition": "expected"
+    "disposition": null
    }
   },
   {
@@ -44480,10 +44894,13 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "12345678901234567890123456789012345671"
+      ]
+     ]
     },
     "cast": {
      "dtype": "decimal128(38, 0)[pyarrow]",
@@ -44507,10 +44924,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
     ],
-    "disposition": "expected"
+    "disposition": null
    }
   },
   {
@@ -44536,10 +44952,13 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "s",
+       "12345678901234567890123456789012345671"
+      ]
+     ]
     },
     "cast": {
      "dtype": "decimal128(38, 0)[pyarrow]",
@@ -44563,10 +44982,9 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the reference accepts a number entity as a text key (pandas' cast changes its kind)"
     ],
-    "disposition": "expected"
+    "disposition": null
    }
   },
   {
@@ -44681,14 +45099,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1234567890123456789012345679.0123456789"
+       "f",
+       "458fe9af5b6bcbd5"
       ]
      ]
     }
@@ -44705,8 +45123,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -44735,14 +45153,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1234567890123456789012345679.0123456789"
+       "f",
+       "458fe9af5b6bcbd5"
       ]
      ]
     }
@@ -44759,8 +45177,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -44791,14 +45209,14 @@
      "outcome": "refusal",
      "stage": "materialize",
      "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1234567890123456789012345679.0123456789"
+       "f",
+       "458fe9af5b6bcbd5"
       ]
      ]
     }
@@ -44815,8 +45233,8 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
     "disposition": "expected"
    }
@@ -44850,8 +45268,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "458fe9af5b6bcbd5"
+      ]
+     ]
     }
    },
    "expected": {
@@ -44860,8 +45283,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -44888,17 +45313,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff1f9add3746f66"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 37)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.1234567890123456789012345678901234567"
+       "f",
+       "3ff1f9add3746f66"
       ]
      ]
     }
@@ -44915,10 +45343,10 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the reference accepts a number as a different number (pandas' cast changes its value)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "expected"
+    "disposition": null
    }
   },
   {
@@ -44942,17 +45370,20 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff1f9add3746f66"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 37)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "values": [
       [
-       "d",
-       "1.1234567890123456789012345678901234567"
+       "f",
+       "3ff1f9add3746f66"
       ]
      ]
     }
@@ -44969,10 +45400,10 @@
    "register": {
     "required": true,
     "why": [
-     "the reference fails with INTERNAL_ERROR (E66(b): a named refusal or a success in its place is a change to register)",
-     "the expectation derived from the exact value is not the reference's answer"
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
     ],
-    "disposition": "expected"
+    "disposition": null
    }
   },
   {
@@ -45002,8 +45433,13 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 37)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "40243f35ba6e8ded"
+      ]
+     ]
     }
    },
    "expected": {
@@ -45012,8 +45448,10 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
+    "required": true,
+    "why": [
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
     "disposition": null
    }
   },
@@ -45038,14 +45476,22 @@
    },
    "reference": {
     "public": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INVALID_REQUEST"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "3ff1f9add3746f66"
+      ]
+     ]
     },
     "cast": {
-     "dtype": "decimal128(38, 37)[pyarrow]",
-     "raised": "ArrowInvalid"
+     "dtype": "double[pyarrow]",
+     "values": [
+      [
+       "f",
+       "3ff1f9add3746f66"
+      ]
+     ]
     }
    },
    "expected": {
@@ -45054,9 +45500,13 @@
     "named": true
    },
    "register": {
-    "required": false,
-    "why": [],
-    "disposition": null
+    "required": true,
+    "why": [
+     "the reference accepts a text entity as a number key (pandas' cast changes its kind)",
+     "the expectation derived from the exact value is not the reference's answer",
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise"
+    ],
+    "disposition": "expected"
    }
   },
   {
@@ -45946,20 +46396,32 @@
      "code": "INVALID_REQUEST"
     },
     "cast": {
-     "dtype": "decimal128(38, 10)[pyarrow]",
+     "dtype": "double[pyarrow]",
      "raised": "ArrowInvalid"
     },
     "as_text": {
-     "outcome": "refusal",
-     "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "outcome": "success",
+     "entities": [
+      [
+       "f",
+       "4341c37937e08000"
+      ],
+      [
+       "f",
+       "3e8421f5f40d8376"
+      ],
+      [
+       "f",
+       "0000000000000000"
+      ]
+     ]
     }
    },
    "register": {
     "required": true,
     "why": [
-     "the host hands the core the text column ['1e+16', '1.5e-7', '0'], the same as that text given as text, which the reference answers otherwise (refusal INTERNAL_ERROR)"
+     "the reference reads the decimal key as double[pyarrow], not as its decimal type (main's eb6c68eb): a host holding the key's decimal value answers otherwise",
+     "the host hands the core the text column ['1e+16', '1.5e-7', '0'], the same as that text given as text, which the reference answers otherwise (success)"
     ],
     "disposition": "as_text"
    }

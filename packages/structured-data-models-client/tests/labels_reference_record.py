@@ -166,6 +166,19 @@ DECIMALS = [
 ]
 DECIMALS = _a_day_later(DECIMALS)
 
+# DECIMAL(38,18) sums at float32's midpoint 1 + 2**-24
+# (1.000000059604644775390625): just above it (rounded once, the next
+# float32 up, 1.0000001192092896; through float64 first, the midpoint
+# itself and then 1.0 by ties to even), just below it (1.0 either way), and
+# the negative of the first (T2.0c's exact decimals, single rounding).
+MIDPOINT = _a_day_later(
+    [
+        (1, 1.0, 1, '1.000000059604644776', '2024-03-02 00:00:00'),
+        (2, 1.0, 1, '1.000000059604644775', '2024-03-02 00:00:00'),
+        (3, 1.0, 1, '-1.000000059604644776', '2024-03-02 00:00:00'),
+    ]
+)
+
 LEAP_ANCHOR = [
     (1, 1.0, 1, '1', '2023-02-28 00:00:00'),
     (1, 2.0, 2, '2', '2023-03-01 00:00:00'),
@@ -249,6 +262,13 @@ for agg in ('SUM', 'COUNT', 'AVG', 'MIN', 'MAX'):
         MARCH,
     )
 
+case(
+    'sum-decimal-midpoint',
+    f'{REGRESSION_EXIT}; probe: SUM over DECIMAL(38,18) at a float32 midpoint',
+    'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id',
+    MIDPOINT,
+    MARCH,
+)
 case(
     'sum-offset-window-months',
     f'{MONTH_END_EXIT}; a window that starts after the anchor',

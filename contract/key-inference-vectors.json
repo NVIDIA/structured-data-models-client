@@ -1,7 +1,7 @@
 {
  "format": "sdm-key-inference-vectors/1",
  "recorded_by": "contract/tools/key_inference_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cell": "ref-pandas3",
  "environment": {
   "python": "3.12.13",
@@ -2595,10 +2595,10 @@
    },
    "reference": {
     "outcome": {
-     "result": "refusal",
+     "result": "success",
      "stage": "materialize",
-     "error": "StructuredDataError",
-     "code": "INTERNAL_ERROR"
+     "error": null,
+     "code": null
     },
     "schema": {
      "tables": [
@@ -2665,10 +2665,8 @@
     ]
    },
    "register": {
-    "required": true,
-    "why": [
-     "the reference fails with INTERNAL_ERROR at materialize (E66(b): a named refusal or a success in its place is a change to register)"
-    ]
+    "required": false,
+    "why": []
    }
   },
   {

@@ -152,6 +152,9 @@ pub(crate) fn columns(
                     declared_type: text(declared_type, row).unwrap_or_default(),
                     not_null: flag(not_null, row),
                     primary_key: flag(primary_key, row),
+                    key_nullable: false,
+                    unique: false,
+                    dtype: None,
                 });
             }
         }
@@ -175,6 +178,7 @@ pub(crate) fn keys(
             found.push(CatalogKey {
                 kind: text(kinds, row).map_or(KeyKind::Other, |k| kind_of(&k)),
                 columns: names(lists, row),
+                index: None,
             });
         }
     }
@@ -232,6 +236,7 @@ pub(crate) fn host(
         DescribePart::Keys => keys(batches, c::KIND, c::COLUMNS, |kind| match kind {
             c::KIND_PRIMARY => KeyKind::Primary,
             c::KIND_UNIQUE => KeyKind::Unique,
+            c::KIND_FOREIGN => KeyKind::Foreign,
             _ => KeyKind::Other,
         }),
         DescribePart::ForeignKeys => foreign_keys(
@@ -258,6 +263,14 @@ pub(crate) fn host(
                 }
             }
             Ok(CatalogAnswer::Indexes(found))
+        }
+        DescribePart::IndexColumns => {
+            let mut found = Vec::new();
+            for batch in batches {
+                let names = strings(batch, c::NAME)?;
+                found.extend((0..batch.num_rows()).map(|row| text(names, row)));
+            }
+            Ok(CatalogAnswer::IndexColumns(found))
         }
     }
 }

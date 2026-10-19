@@ -15,8 +15,8 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, TimestampNanosecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit as ArrowUnit};
 use sdm_contract::data::{
-    DataRequest, KeySet, NullOrder, SEED_BATCH, SEED_KEY, SEED_KEY_TYPE, SeedBound, TieBreak,
-    TieTerm,
+    DataRequest, KeySet, MARKED, NullOrder, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_TYPE,
+    SEED_KEY_UNIQUE, SeedBound, TieBreak, TieTerm,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind};
 
@@ -226,7 +226,7 @@ pub fn by_fkey(
 ) -> Result<DataRequest, CoreError> {
     Ok(DataRequest::Neighbors {
         table: table.source.clone(),
-        key: fkey.to_owned(),
+        key: vec![fkey.to_owned()],
         columns,
         seeds: typed(seeds, table, fkey),
         window: table
@@ -265,7 +265,7 @@ pub fn by_time(
     })?;
     Ok(DataRequest::Neighbors {
         table: table.source.clone(),
-        key: fkey.to_owned(),
+        key: vec![fkey.to_owned()],
         columns,
         seeds: typed(seeds, table, fkey),
         window: Some(sdm_contract::data::Window {
@@ -285,11 +285,16 @@ pub fn by_time(
 }
 
 /// `_by_pkey`'s request: one row of `table` for each seed whose key is the
-/// table's key, `columns` in order, with how many rows hold it.
+/// table's key, `columns` in order, with how many rows hold it where
+/// `counted`, as the reference reads the count only where it scores (the
+/// examples' entities); the seeds say so otherwise ([`SEED_COUNT_UNREAD`]),
+/// and say a key the source enforces unique ([`SEED_KEY_UNIQUE`]), which
+/// a SQL layer may read by a plain join, counting nothing.
 pub fn by_pkey(
     table: &Table,
     columns: Vec<String>,
     seeds: KeySet,
+    counted: bool,
 ) -> Result<DataRequest, CoreError> {
     let key = table.primary_key.clone().ok_or_else(|| {
         CoreError::new(
@@ -298,10 +303,20 @@ pub fn by_pkey(
             "a lookup names a table without a key",
         )
     })?;
+    let mut seeds = typed(seeds, table, &key);
+    let unique = table.column(&key).is_some_and(|c| c.unique);
+    for column in &mut seeds.columns {
+        let flag = match column.name.as_str() {
+            SEED_KEY if unique => SEED_KEY_UNIQUE,
+            SEED_BATCH if !counted => SEED_COUNT_UNREAD,
+            _ => continue,
+        };
+        column.metadata.insert(flag.to_owned(), MARKED.to_owned());
+    }
     Ok(DataRequest::Lookup {
         table: table.source.clone(),
-        seeds: typed(seeds, table, &key),
-        key,
+        seeds,
+        key: vec![key],
         columns,
     })
 }

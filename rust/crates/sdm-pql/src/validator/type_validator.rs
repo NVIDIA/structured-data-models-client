@@ -14,8 +14,6 @@ use crate::response::{Span, ValidationError, ValidationResponse, ValidationWarni
 use crate::schema::{ColumnKey, SchemaDefinition};
 use crate::types::{AggregationType, Dtype, MemberOp, Op, RelOp, Stype};
 
-use super::{col_name, table_name};
-
 /// A constant's value; one that cannot be read reads as nothing, as it
 /// never happens to a constant the parser built.
 pub fn typed(node: &NodeRef) -> Literal {
@@ -71,10 +69,9 @@ fn st(node: &NodeRef) -> Stype {
 
 impl TypeValidator<'_> {
     /// The schema's column a column node names.
-    fn schema_column(&self, fqn: &str) -> Option<crate::schema::Column> {
-        let table = self.schema.table(&table_name(fqn))?;
-        let name = col_name(fqn);
-        table.cols.iter().find(|c| c.name == name).cloned()
+    fn schema_column(&self, name: &ColumnKey) -> Option<crate::schema::Column> {
+        let table = self.schema.table(&name.table_name)?;
+        table.cols.iter().find(|c| c.name == name.col_name).cloned()
     }
 
     fn infer_dtype(&self, node: &NodeRef) {
@@ -108,10 +105,10 @@ impl TypeValidator<'_> {
                     })
                 }
                 Kind::Filter { target, .. } => Some(ast::dtype(target)),
-                Kind::Column { fqn, .. } => Some(if col_name(fqn) == "*" {
+                Kind::Column { name, .. } => Some(if name.is_wildcard() {
                     Some(NodeDtype::Plain(Dtype::Int))
                 } else {
-                    self.schema_column(fqn).map(|c| {
+                    self.schema_column(name).map(|c| {
                         if self.allow_array_targets {
                             match c.dtype {
                                 Dtype::Intlist => NodeDtype::Array(Dtype::Int),
@@ -165,10 +162,10 @@ impl TypeValidator<'_> {
                     _ => ast::stype(target),
                 }),
                 Kind::Filter { target, .. } => Some(ast::stype(target)),
-                Kind::Column { fqn, .. } => Some(if col_name(fqn) == "*" {
+                Kind::Column { name, .. } => Some(if name.is_wildcard() {
                     Some(Stype::Categorical)
                 } else {
-                    self.schema_column(fqn).map(|c| c.stype)
+                    self.schema_column(name).map(|c| c.stype)
                 }),
                 Kind::Logical { .. } | Kind::Condition { .. } => Some(Some(Stype::Categorical)),
                 Kind::Constant { .. } | Kind::Join { .. } => None,
@@ -512,17 +509,12 @@ impl TypeValidator<'_> {
         let target = target_of(node);
         let target_stype = st(&target);
         let target_text = ast::to_string(&target);
-        let fqn = ast::get_target_column_name(node);
-        let (table, column) = (table_name(&fqn), col_name(&fqn));
+        let name = ast::get_target_column_name(node).unwrap_or_else(|| ColumnKey::new("", ""));
         let mut target_is_key = self
             .schema
-            .table(&table)
-            .is_some_and(|t| t.pkey.as_deref() == Some(column.as_str()));
-        if self
-            .schema
-            .all_keys()
-            .contains(&&ColumnKey::new(&table, &column))
-        {
+            .table(&name.table_name)
+            .is_some_and(|t| t.pkey.as_ref() == Some(&name.col_name));
+        if self.schema.all_keys().contains(&&name) {
             target_is_key = true;
         }
         use AggregationType as A;

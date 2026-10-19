@@ -85,6 +85,8 @@ fn text(error: &CoreError, field: &str) -> String {
 fn fetching(expect: ExpectedSchema) -> HostRun {
     let fetch = TestFetch {
         echo: false,
+        undeclared: vec![],
+        fallback: None,
         request: DataRequest::Scan {
             table: "t".into(),
             columns: vec![],
@@ -113,6 +115,7 @@ fn reply(run: &HostRun, data: ArrowData) -> Result<(), CoreError> {
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),
+                continuation: None,
             },
         }))
         .unwrap(),
@@ -339,6 +342,7 @@ fn fetch_reply(id: u32, data: u32) -> Vec<u8> {
         id: ReplyId(id),
         outcome: FetchOutcome::Data {
             data: AttachmentId(data),
+            continuation: None,
         },
     }))
     .unwrap()
@@ -685,6 +689,7 @@ fn predicting(version: u32, payload: &str) -> Result<HostRun, CoreError> {
                 payload: AttachmentId(1),
                 query: AttachmentId(2),
                 forecast: None,
+                batches: None,
             },
             model: "kumo-relational".into(),
             request_id: "sdm-000000000000".into(),

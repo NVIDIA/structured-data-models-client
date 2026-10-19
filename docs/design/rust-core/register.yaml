@@ -2727,9 +2727,10 @@ entries:
     approved by both reviewers of T1.32g part 2b's review round 1 (Codex and
     the independent subagent), relayed by the orchestrator:
     APPROVE-P1B-18-first-admission-rows.
-  case_outcomes:
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
+    T2.0c: with exact decimals the core answers
+    decimal.class-target-38-18, as the reference at 6298913c does, so this
+    entry's two outcomes on it, a refusal, are taken out: the refusal no
+    longer exists (P2B-1). For the reviewers.
 
 - id: P1B-19
   title: A decimal feature past float64's precision is refused UNSUPPORTED_REQUEST where the reference refuses INVALID_REQUEST
@@ -3473,17 +3474,9 @@ entries:
   cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, key.varchar-large-buffers]
   refs:
   - 'contract/key-cast-vectors.json#decimal128-18-0.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-0-wide.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-0.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-10-wide.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#decimal128-38-10.* refusal INTERNAL_ERROR -> success'
-  - 'contract/key-cast-vectors.json#decimal128-38-37.* refusal INTERNAL_ERROR -> success'
   - 'contract/key-cast-vectors.json#large-utf8.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.at-precision.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.both.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.negative.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.null-foreign.* refusal INTERNAL_ERROR -> success'
-  - 'contract/decimal-vectors.json#key.primary-only.* refusal INTERNAL_ERROR -> success'
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E82}
@@ -3508,6 +3501,12 @@ entries:
     reviewers of T1.32g part 2b's review round 1 (Codex and the independent
     subagent), relayed by the orchestrator:
     APPROVE-P1B-33-first-admission-rows.
+    T2.0c: at the reference 6298913c (main's eb6c68eb reads a decimal key as
+    an integer or a float) no vector of decimal128-38-0-wide,
+    decimal128-38-10-wide, decimal128-38-37 or decimal-vectors' key groups
+    fails INTERNAL_ERROR any more, so those eight refs, which named no
+    vector, are taken out; the differences those vectors now make are
+    P2B-1's (KO2-35, permanent). For the reviewers.
   case_outcomes:
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
   - {case: key.decimal-18-0, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'first admission (T1.32g): the outcome this entry states, held as the case is admitted'}
@@ -4005,6 +4004,9 @@ entries:
     T1.17 round 1), whose own run of the CI artifacts showed the warning
     before the client's import in the floor lane alone; reviewer-owned
     (checkpoint 7), not the owner's.
+    T2.0c: measured in the floor-pandas2.2 cell at its old pins (pandas
+    2.2.0, NumPy 1.26.4); the cell is now pandas 2.2.2, pyarrow 14.0.1 and
+    NumPy 1.23.5 (KO2-37).
 
 - id: HOST-5
   title: In the floor cell the old route's sampler raises the runtime's BlockManager DeprecationWarnings the core route does not
@@ -4059,6 +4061,9 @@ entries:
     deprecation warnings raised only by the old route on old pandas, and
     harmless. Seeded in
     contract/tests/test_runtime_deprecations.py.
+    T2.0c: measured in the floor-pandas2.2 cell at its old pins (pandas
+    2.2.0, NumPy 1.26.4); the cell is now pandas 2.2.2, pyarrow 14.0.1 and
+    NumPy 1.23.5 (KO2-37).
 
 # --- PQL validation (T1.12) ---------------------------------------------------
 
@@ -4868,6 +4873,10 @@ entries:
     Re-confirmed as narrowed to the package alone by both reviewers of
     T1.32g part 2b's final review round (Codex and the independent
     subagent), relayed by the orchestrator: APPROVE-P1B-53.
+    T2.0c: with exact decimals the core answers
+    decimal.class-target-38-18, as the reference at 6298913c does, so this
+    entry's two outcomes on it, a refusal, are taken out: the refusal no
+    longer exists (P2B-1). For the reviewers.
   case_outcomes:
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: empty.entity-without-facts, cell: ref-pandas3, runner: python-old, old: 'success at predict', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
@@ -4931,8 +4940,6 @@ entries:
   - {case: key.hugeint, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'admitted to acceptance, each runner held to its observed outcome'}
   - {case: key.varchar-large-buffers, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'admitted to acceptance, each runner held to its observed outcome'}
-  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'admitted to acceptance, each runner held to its observed outcome'}
 
 - id: P1B-55
   title: The time and feature cases admitted to acceptance, each runner held to its observed outcome
@@ -5786,3 +5793,1263 @@ entries:
     subagent, which approved it in round 2, re-ran the boundary sweep at
     b6ac5b76 in five zones: the core holds both the UTC instant and the wall
     clock to the years 1 to 9999 exactly as the reference does.
+
+# --- lane A entries (P2A-1..19) ---
+
+- id: P2A-1
+  title: The AdventureWorks cases' core inputs name their sources as contract 26 relations, shape only
+  kind: change
+  old_behavior: >-
+    Under contract 25 the core's describe_source took each table's source
+    as one string, so the core inputs of base.adventureworks,
+    base.adventureworks.churn and base.adventureworks.color named each
+    source as "adventureworks_customers" and so on.
+  new_behavior: >-
+    Contract 26 (T2.1b, design choice 12, the owner's KO2-39) makes a
+    table's source a relation, {"source": [name]}, and the Python host
+    sends each one-part name as that relation, so each case's
+    core.describe_source names its sources as the hosts now send them,
+    one part each, the same names. Shape only: the statements the core
+    renders for a one-part relation are byte for byte contract 25's, and
+    no outcome moves on any runner; each case's python-ref lines are
+    re-recorded for the new case files, identity only.
+  affected_inputs: >-
+    The core inputs of the three AdventureWorks cases named; no public
+    call.
+  cases: [base.adventureworks, base.adventureworks.churn, base.adventureworks.color]
+  status: approved
+  approved_by: reviewer
+  decision_ref: null
+  notes: >-
+    Approved by both of T2.1b's round 2 reviewers (APPROVE-P2A-1), as
+    P1B-31 was: the case files' input migration that the owner's KO2-39
+    (the table source's relation in Phase 2's one contract bump) brings. The cases hold the core's own describe_source
+    message, which compare.py holds equal to the inputs each core host
+    records, so the shape moves with the contract rather than in a
+    runner. Found by T2.1b's round 1 review: the ratchet's case rule
+    (its input changed, and no approved entry names it).
+  case_outcomes:
+  - {case: base.adventureworks, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'input-only migration: the sources as contract 26 relations, the outcome unchanged'}
+  - {case: base.adventureworks.churn, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'input-only migration: the sources as contract 26 relations, the outcome unchanged'}
+  - {case: base.adventureworks.color, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'input-only migration: the sources as contract 26 relations, the outcome unchanged'}
+
+# --- lane B entries (P2B-1..19) ---
+
+- id: P2B-1
+  title: Exact decimals, where the reference at 6298913c rounds, merges or refuses
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c, the
+    reference reads a DuckDB DECIMAL by its declared type: int64 at scale 0
+    where it fits, float64 otherwise, through pyarrow's cast, which can be
+    one unit in the last place off (0.70 as 0.7000000000000001). So a key
+    with decimal places becomes a float, and distinct keys a float cannot
+    tell apart become one (a looked-up key merged silently, an entity's
+    refused as a repeated key); a decimal class target's distinct values a
+    float32 cannot tell apart become one class; its sums and averages are
+    float sums; a DECIMAL sum whose values do not fit int64 is still
+    refused INVALID_REQUEST past the column's digits.
+  new_behavior: >-
+    The core keeps decimals exact (T2.0c, the owner's KO2-35): a key with
+    decimal places is sent and read back as its exact digits, so a
+    result's id is text where the reference's is a float, and no two keys
+    merge; a feature is sent as the nearest double to its exact value; a
+    sum or an average is computed exactly, at any size, and read once at
+    float32; a class target's distinct values stay distinct classes,
+    spelled as the reference spells them unless two of them meet at one
+    float32 (a regression target's values are numbers, each the nearest
+    float32). It answers every decimal input the reference answers, except
+    the entities P1B-34 and P2B-8 refuse, and answers a sum past 38 digits,
+    which the reference refuses.
+  affected_inputs: >-
+    PredictiveQuery.materialize and SDMClient.predict on the core route
+    over a DuckDB source with a DECIMAL key with decimal places, a DECIMAL
+    feature whose value pyarrow's cast rounds wrongly, a DECIMAL sum or
+    average the reference computes as floats, a DECIMAL sum past 38
+    digits, or a DECIMAL class target with distinct values one float32
+    cannot tell apart.
+  cases: [key.decimal-38-10, decimal.class-target-38-18, decimal.sum-10-2, decimal.feature-inexact-38-18]
+  refs:
+  - eb6c68eb
+  - P1B-18
+  - P1B-53
+  - 'contract/decimal-vectors.json#key.pair.d10-2.d12-4 success -> success'
+  - 'contract/decimal-vectors.json#key.pair.d12-4.d10-2 success -> success'
+  - 'contract/decimal-vectors.json#key.pair.d20-2.d18-0 success -> success'
+  - 'contract/decimal-vectors.json#key.pair-merging.d38-0.d38-2 success -> success'
+  - 'contract/decimal-vectors.json#key.pair-merging.d38-2.d38-0 refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.huge.decimal unfinished -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.text.decimal-point refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.text.exponent refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.text.decimal-point refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.text.exponent refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.decimal.half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-exponent.mixed.float-text success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.float.half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.numpy.float64-half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.own.decimal success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.own.float success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.own.text success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10.text.half success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-wide.wide.decimal refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-wide.wide.text refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-10-wide.wide.trailing-zeros refusal INVALID_REQUEST -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-37.wide.decimal success -> success'
+  - 'contract/key-cast-vectors.json#decimal128-38-37.wide.text success -> success'
+  - 'contract/decimal-vectors.json#feature.orders.d19-19.spread success -> success'
+  - 'contract/decimal-vectors.json#feature.orders.d38-38.max success -> success'
+  - 'contract/decimal-vectors.json#feature.orders.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#feature.orders.d4-2.max success -> success'
+  - 'contract/decimal-vectors.json#feature.orders.d9-9.max success -> success'
+  - 'contract/decimal-vectors.json#feature.users.d19-19.spread success -> success'
+  - 'contract/decimal-vectors.json#feature.users.d38-38.max success -> success'
+  - 'contract/decimal-vectors.json#feature.users.d38-38.negative success -> success'
+  - 'contract/decimal-vectors.json#feature.users.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#feature.users.d4-2.max success -> success'
+  - 'contract/decimal-vectors.json#feature.users.d9-9.max success -> success'
+  - 'contract/decimal-vectors.json#key.at-precision.d38-0 success -> success'
+  - 'contract/decimal-vectors.json#key.both.d18-2 success -> success'
+  - 'contract/decimal-vectors.json#key.both.d9-2 success -> success'
+  - 'contract/decimal-vectors.json#overflow.d19-0.sum-past refusal INVALID_REQUEST -> success'
+  - 'contract/decimal-vectors.json#overflow.d38-0.sum-past refusal INVALID_REQUEST -> success'
+  - 'contract/decimal-vectors.json#overflow.d38-38.sum-past success -> success'
+  - 'contract/decimal-vectors.json#overflow.d4-2.sum-at success -> success'
+  - 'contract/decimal-vectors.json#overflow.d4-2.sum-past success -> success'
+  - 'contract/decimal-vectors.json#target.avg.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#target.count.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#target.max.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#target.min.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#target.sum.d19-19.spread success -> success'
+  - 'contract/decimal-vectors.json#target.sum.d38-38.max success -> success'
+  - 'contract/decimal-vectors.json#target.sum.d38-38.spread success -> success'
+  - 'contract/decimal-vectors.json#target.sum.d4-2.max success -> success'
+  - 'contract/decimal-vectors.json#target.sum.d9-9.max success -> success'
+  more_exact:
+  - case: decimal.feature-inexact-38-18
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/4/*'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/5/*'
+  - case: decimal.feature-inexact-38-18
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/4/*'
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/5/*'
+  - case: decimal.sum-10-2
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4/*'
+  - case: decimal.sum-10-2
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/related_tables/orders/rows/*/4/*'
+  - case: key.decimal-38-10
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+  - case: key.decimal-38-10
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/instance_table/rows/*/1'
+    - 'core.predicted.body/*/*/related_tables/orders/rows/*/4'
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/1'
+    - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
+  notes: >-
+    Approved by the owner on 2026-10-16 as KO2-35 ("better than main"),
+    whose registered differences these are, and on 2026-10-17, in the
+    orchestrator's chat, by moving T2.17's exact decimals into T2.0c: a
+    permanent entry, no temporary one. The core's three decimal refusals
+    (class targets, sums past 38 digits, features a double does not hold)
+    and its rounding of a comparison's constant to the column's scale
+    (KO2-50) are gone, so P1B-18's and P1B-53's refusal of
+    decimal.class-target-38-18 no longer holds. The key-cast ref of
+    decimal128-18-0.exponent.huge.decimal, unfinished on the reference, is
+    KO2-48's outcome (approved by the owner on 2026-10-16), not KO2-35's.
+  case_outcomes:
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', new: 'success at predict', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: rust-host, old: 'refusal UNSUPPORTED_REQUEST', new: 'success', summary: 'T2.0c exact decimals: a decimal class target answered, as the reference at 6298913c answers it'}
+
+- id: P2B-2
+  title: The core refuses a source column a query cannot name, which the reference leaves out, until T2.18
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c,
+    Schema.from_source leaves out a column whose name holds a dot, a
+    backtick, a line feed or a carriage return, with one SDMWarning per
+    table ("users leaves out 'a.b': a predictive query cannot name a column
+    holding a dot, a backtick or a line break"), and describes the rest;
+    b413e9ad refused the table INVALID_REQUEST in SourceTable.
+  new_behavior: >-
+    On the core route python-core still refuses, INVALID_REQUEST "The name
+    'a.b' contains one or more invalid characters", since the host builds
+    SourceTable from the core's description; rust-host describes the
+    column, since the core checks table names only. Measured at T2.0c on
+    DuckDB with each of the four characters: the old route leaves the
+    column out with the warning, the core route refuses. T2.18 (KO2-45)
+    retires this entry by letting any column name work.
+  affected_inputs: >-
+    Schema.from_source over a DuckDB source on the core route whose table
+    has a column named with a dot, a backtick, a line feed or a carriage
+    return.
+  cases: [T2.0c]
+  refs: [eb6c68eb]
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-36}
+  notes: >-
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator); the reviewers check
+    this entry fits it. Temporary: it lapses when T2.18
+    lands, and the final gate fails while it remains. No case covers it
+    yet; T2.18's test author adds one. Retired by T2.18 as KO2-45 says
+    (rejected, its ID kept, citing the owner's permanent row KO2-36 in
+    place of KO2-45): the core route no longer refuses such a column; it
+    keeps it as data and answers a query naming it, the permanent
+    difference P2E-1 registers.
+
+- id: P2B-3
+  title: The core refuses 1,001 to 100,000 entities, which the reference gathers, until T2.8c
+  kind: change
+  old_behavior: >-
+    Since main's 1fc5a686, merged into the reference at 6298913c, materialize
+    takes up to 10,000 entities per call and 100,000 across up to 100 calls,
+    gathering more than one call's as several payloads that predict sends
+    one at a time, numbering rows across calls; b413e9ad refused more than
+    1,000 UNSUPPORTED_REQUEST (_check_entity_count, now deleted).
+  new_behavior: >-
+    The core still refuses more than 1,000 entities UNSUPPORTED_REQUEST,
+    field indices (sdm-core materialize, PREDICT_ROWS), and gathers one
+    payload. Measured at T2.0c on DuckDB with 1,001 users: the old route
+    gathers one payload, the core route refuses. T2.8c (multi-call
+    materialize and predict, KO2-45) retires this entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a DuckDB source on the core route with
+    1,001 to 100,000 entities.
+  cases: [T2.0c]
+  refs:
+  - 1fc5a686
+  - P1B-20
+  - packages/structured-data-models-client/tests/t128a-payload-rules.json
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator); the reviewers check
+    this entry fits it. Temporary: it lapses when T2.8c
+    lands, and the final gate fails while it remains. P1B-20's old behavior
+    (the reference's _check_entity_count) no longer holds at 6298913c; the
+    re-recorded t128a vectors (base.regression.entities-1001,
+    many-1001.entities-1001) carry the reference's new outcomes.
+
+- id: P2B-4
+  title: The core refuses the rows_per_call option, which the reference takes, until T2.8c
+  kind: change
+  old_behavior: >-
+    Since main's 1fc5a686, merged into the reference at 6298913c, materialize
+    takes rows_per_call, a positive integer that lowers how many entities
+    one call scores (a non-integer, a bool or below 1 refused
+    INVALID_REQUEST); b413e9ad refused it as an unknown option,
+    INVALID_REQUEST.
+  new_behavior: >-
+    The client forwards rows_per_call to the core with every option the
+    materializer accepts, and the core refuses it as not one of its options
+    (sdm-request options), INVALID_REQUEST naming the field options. Measured
+    at T2.0c on DuckDB with 8 users and rows_per_call=3: the old route
+    gathers three payloads, the core route refuses. T2.8c (KO2-45) retires
+    this entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a DuckDB source on the core route with
+    rows_per_call set.
+  cases: [T2.0c]
+  refs: [1fc5a686]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-45}
+  notes: >-
+    Approved by the owner on 2026-10-16 in one written answer to Q-I,
+    recorded as KO2-45 (relayed by the orchestrator); the reviewers check
+    this entry fits it. Temporary: it lapses when T2.8c
+    lands, and the final gate fails while it remains. No case covers it
+    yet; T2.8c's test author adds one.
+
+- id: P2B-7
+  title: python-old answers the four decimal cases as the reference at 6298913c, by main's eb6c68eb
+  kind: change
+  old_behavior: >-
+    The old route, the epic's Python client over the reference's engine,
+    failed key.decimal-18-0, key.decimal-38-10, key.hugeint and
+    decimal.class-target-38-18 with INTERNAL_ERROR at materialize, as the
+    reference at b413e9ad did (an unsupported decimal128 data type for the
+    entity or target column), and its baselines held that crash.
+  new_behavior: >-
+    With main's eb6c68eb merged (T2.0c), the old route's engine reads a
+    DuckDB DECIMAL as its declared type, int64 at scale 0 and float64
+    otherwise, and answers each case at predict, exactly as the reference
+    at 6298913c does; its baselines move from the crash to the reference's
+    success.
+  affected_inputs: >-
+    PredictiveQuery.materialize and SDMClient.predict on the default
+    (old) route over a DuckDB source with a DECIMAL or HUGEINT key or a
+    DECIMAL class target.
+  cases: [key.decimal-18-0, key.decimal-38-10, key.hugeint, decimal.class-target-38-18]
+  refs: [eb6c68eb]
+  status: approved
+  approved_by: reviewer
+  decision_ref: null
+  notes: >-
+    Approved by both reviewers in T2.0c's round 1 (Codex's APPROVE-P2B-7,
+    having run the four cases through python-old against the new
+    reference recordings; the Claude subagent's approval), relayed by the
+    orchestrator. The old route now matches the reference where it crashed
+    before (the old client's crash replaced by the reference's answer), not
+    a refusal of anything; the outcomes are the ratchet's own proposals
+    from the gate at T2.0c's candidate.
+  case_outcomes:
+  - {case: decimal.class-target-38-18, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+  - {case: key.decimal-18-0, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+  - {case: key.decimal-38-10, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+  - {case: key.hugeint, cell: ref-pandas3, runner: python-old, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'main eb6c68eb: the old route answers as the reference at 6298913c'}
+
+- id: P2B-8
+  title: An entity value that names no key exactly is refused by name, where the reference at 6298913c rounds it onto a key
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb the reference casts the entities to the decimal
+    key's int64 or float64 reading, so an entity that is no value of the
+    key's type is rounded onto one: Decimal('1E-30') for a DECIMAL(18, 0)
+    key becomes the key 0, a microsecond timestamp the key 1, an entity
+    with more digits than DECIMAL(38, 37) holds the nearest float; each is
+    answered as that key.
+  new_behavior: >-
+    The core casts an entity to the key's exact decimal and refuses one
+    that names no value of it exactly, INVALID_REQUEST naming indices and
+    why (inexact, type), as it did before T2.0c, rather than answer for a
+    key the caller did not name.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route with an entity that is
+    no exact value of a DECIMAL key's type.
+  cases: [T2.0c]
+  refs:
+  - 'contract/key-cast-vectors.json#decimal128-18-0.exponent.tiny.decimal success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-18-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-0.time.timestamp-1us success -> refusal INVALID_REQUEST'
+  - 'contract/key-cast-vectors.json#decimal128-38-37.wide.inexact success -> refusal INVALID_REQUEST'
+  status: approved
+  approved_by: owner
+  decision_ref: null
+  notes: >-
+    Approved by the owner on 2026-10-17 ("keep refusing"), relayed by the
+    orchestrator: owner 2026-10-17, P2B-8; its decisions row lands with the
+    next owner-row docs landing, which this entry then cites. A refusal of
+    inputs the reference accepts, kept since these entities would be
+    answered only by being taken for a key the caller did not name. Found
+    by the key-cast vectors at T2.0c.
+
+- id: P2B-9
+  title: On the core route a forecast failing at a step carries no answered steps, until T2.8c
+  kind: change
+  old_behavior: >-
+    Since main's 1fc5a686, merged into the reference at 6298913c, a
+    forecast asked in parts that fails at step k carries the steps already
+    answered on its error, details['answered'] with parts_answered
+    (client.py's _carry_the_steps_already_paid_for).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, a
+    forecast is predicted step by step by the core (T1.36 fix 21), and a
+    step's refusal is raised as the core gives it, with no answered steps
+    on it (client.py's early return through sdm_client._rust.predict). T2.8c
+    (multi-call predict, KO2-45) retires this entry.
+  affected_inputs: >-
+    SDMClient.predict of a forecast over a DuckDB source on the core route
+    whose call fails at a step after the first.
+  cases: [T2.0c]
+  refs: [1fc5a686, P2B-3, P2B-4]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. Not a refusal: the same error, without the answered
+    steps main's client keeps on it. Found by T2.0c's round 1 review (the
+    Claude subagent's P3-13). Temporary: it lapses when T2.8c lands.
+
+- id: P2B-10
+  title: On SQLite, an empty table is refused by name where the reference raises an unnamed RuntimeError, as on DuckDB (P1B-11)
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a SQLite source holding an
+    empty table raises an unnamed RuntimeError ("Table 'orders' is empty")
+    from its engine's preview, as it does over DuckDB.
+  new_behavior: >-
+    On the core route over SQLite (T2.2) the same call is refused at
+    from_source with StructuredDataError, INVALID_REQUEST, rule empty_table,
+    as P1B-11 refuses it over DuckDB; python-core and rust-host alike.
+  affected_inputs: >-
+    Schema.from_source over a SQLite source holding a table with no rows,
+    under a forced core route.
+  cases: [empty.fact-table@sqlite]
+  refs: [P1B-11]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Approver: reviewer. P1B-11's behavior on the SQLite leg of its case,
+    under the same owner decision (E66(b): a reference's unnamed or
+    internal error becoming a named refusal is approved as a class; KO2-11
+    class (a)). Measured at T2.2 with python-core and rust-host on SQLite
+    against python-ref's committed empty.fact-table line. Approved by both
+    round 1 reviewers of T2.2 (Codex's and Claude's: APPROVE-P2B-10),
+    relayed by the orchestrator.
+  case_outcomes:
+  - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at from_source (RuntimeError)', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
+  - {case: empty.fact-table@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_REQUEST', summary: 'the SQLite line: the empty table refused by name, rule empty_table'}
+
+- id: P2B-11
+  title: On SQLite, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
+  kind: change
+  old_behavior: >-
+    Over SQLite, where a time is stored as text and no CAST reads it, the
+    reference reads a text time column value by value with pandas, and
+    refuses time.text-one-bad-value's unreadable value at materialize,
+    INVALID_REQUEST.
+  new_behavior: >-
+    The core reads SQLite's stored text by its fixed list of formats
+    (DT-7's capability, DT-15's reading): the value outside the list is
+    refused at materialize, UNSUPPORTED_REQUEST rule text_time;
+    python-core and rust-host alike. Over DuckDB the reference fails on
+    its own CAST (DT-12).
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source whose time column's
+    stored text the core's list does not read, under a forced core route.
+  cases: [time.text-one-bad-value@sqlite]
+  refs: [DT-7, DT-15]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
+  notes: >-
+    Approver: owner, as DT-15 was. Both refuse the input; only the code
+    differs, the core's DT-15's, owner-approved under E68, applied to the
+    SQLite leg of its case (T2.2). time.text-us-date, first listed here,
+    is answered as the reference answers it since the core reads an
+    empty fetch's columns, which SQLite's driver types as integers, as
+    holding no time (T2.2); it is no longer a difference. Measured at T2.2
+    against python-ref's committed lines. Approved by the owner under E68:
+    its (a) refuses by name (text_time) a value outside the list, and
+    DT-15, which E68 approves by the owner's answer, states the refusal
+    as UNSUPPORTED_REQUEST, rule text_time, by materialize when a fetched
+    text time column holds one, this input on any database; the
+    reference's own answer here, a refusal INVALID_REQUEST rather than
+    DT-15's dropped value, is the old behavior the same new one replaces.
+  case_outcomes:
+  - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
+  - {case: time.text-one-bad-value@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the SQLite line: the text time outside the list refused, rule text_time'}
+
+- id: P2B-12
+  title: On SQLite, an unsigned key past int64 is joined by its stored text where the reference fails INTERNAL_ERROR ingesting it
+  kind: change
+  old_behavior: >-
+    SQLite stores a UBIGINT key as its digits (TEXT, the type map); the
+    reference reads the sampled keys back as integers, and ADBC's ingest of
+    its key table refuses an unsigned value past int64, so materialize
+    fails INTERNAL_ERROR.
+  new_behavior: >-
+    The core keeps the keys as the source answers them, text, binds them
+    as text, and joins each fact row to its own entity; materialize and
+    predict answer. python-core and rust-host alike.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source whose key holds an
+    unsigned value past int64 (stored as its digits), under a forced core
+    route.
+  cases: [key.uint64-above-int64-max@sqlite]
+  refs:
+  - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.hugeint'
+  - 'contract/sqlite-key-pair-vectors.json#wide.ubigint.ubigint'
+  status: approved
+  approved_by: reviewer
+  decision_ref: null
+  notes: >-
+    Approver: reviewer (KO2-11 class (a): a reference's internal error
+    becoming a correct answer). The two key-pair vectors are the test
+    author's register.required ones; each answers with a right join on the
+    core (every row joined to its own entity), measured at T2.2. Approved
+    by both round 1 reviewers of T2.2 (Codex's and Claude's:
+    APPROVE-P2B-12; Claude's checked the answer correct, python-core's
+    context rows those of base.regression@sqlite with 2**63 taken from
+    each key), relayed by the orchestrator.
+  case_outcomes:
+  - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'success at predict', summary: 'the SQLite line: the keys joined by their stored text'}
+  - {case: key.uint64-above-int64-max@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'success', summary: 'the SQLite line: the keys joined by their stored text'}
+
+- id: P2B-13
+  title: On SQLite, a time of day stored as text is a categorical feature, where the reference reads it as today's timestamp and refuses
+  kind: change
+  old_behavior: >-
+    SQLite stores a time of day as text (HH:MM:SS); the reference's
+    inference reads it with pandas, which takes a bare time as that time of
+    the day it runs, so the column is a timestamp and the users table's
+    time column, and materialize then refuses INVALID_REQUEST; the answer
+    depends on the date the call runs.
+  new_behavior: >-
+    The core's list of text formats reads no bare time of day as a time
+    (DT-15's list, E68), so the column is categorical text, the table has
+    no time column, and materialize and predict answer; python-core and
+    rust-host alike.
+  affected_inputs: >-
+    Schema.from_source and materialize over a SQLite source with a TIME
+    column (stored as text), under a forced core route.
+  cases: [time.feature-time-of-day@sqlite]
+  refs: [DT-15]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-61}
+  notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-61 (relayed by
+    the orchestrator): a permanent registered difference.
+    Approver: owner (not a crash replaced, so outside KO2-11's reviewer
+    classes): the core answers where the reference refuses, its reading the
+    owner's E68 list. Measured at T2.2.
+  more_exact:
+  - case: time.feature-time-of-day@sqlite
+    runners: [python-core, rust-host]
+    fields:
+    - 'public.schema/tables/1/columns/3/stype'
+  - case: time.feature-time-of-day@sqlite
+    runners: [python-core, rust-host]
+    fields:
+    - 'public.schema/tables/1/time_column'
+    null_on_one_side: true
+  case_outcomes:
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
+  - {case: time.feature-time-of-day@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'the SQLite line: the time of day read as text, so materialize and predict answer'}
+
+- id: P2B-14
+  title: On SQLite, a column declared INTERVAL holding text is text, where the reference takes it as an integer by its declared name
+  kind: change
+  old_behavior: >-
+    The reference's SQLite table reads a declared type naming INT as an
+    integer column (SQLiteTable._to_dtype matches the substring), so an
+    INTERVAL column, which the type map stores as ISO 8601 duration text,
+    is described as int64, categorical.
+  new_behavior: >-
+    The core types a column declared INTERVAL by its values, not by its
+    declared name, so the INTERVAL column's ISO 8601 text is text,
+    categorical. Every other declared type is read as the reference reads
+    it (T2.2 fix 7). Its rows and the request sent are the reference's;
+    only the described dtype differs.
+  affected_inputs: >-
+    Schema.from_source over a SQLite source with a column declared
+    INTERVAL whose values are text.
+  cases: [time.feature-interval@sqlite]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-62}
+  notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-62 (relayed by
+    the orchestrator): a permanent registered difference.
+    Approver: owner. Measured at T2.2 with the case's routes widened to
+    materialize and predict (its committed routes stop at from_source,
+    where DuckDB's reference refuses): the payload, warnings and result
+    match, the schema's dtype does not.
+  more_exact:
+  - case: time.feature-interval@sqlite
+    runners: [python-core, rust-host]
+    fields:
+    - 'public.schema/tables/1/columns/3/dtype'
+
+- id: P2B-15
+  title: On SQLite, a sample seed past 2**64 - 1 is refused by name, where the reference takes any non-negative integer
+  kind: change
+  old_behavior: >-
+    The reference's seeded SQLite draw (RS-2) takes a seed of any size,
+    seeding numpy's legacy stream by the seed's 32-bit words.
+  new_behavior: >-
+    The SQLite dialect declares max_seed 2**64 - 1, the largest the
+    contract's ProviderCapabilities.max_seed carries (T2.1b), and the core
+    refuses a larger seed INVALID_REQUEST naming the seed (RS-7's
+    refusal); every seed up to it draws RS-2's stream exactly
+    (sdm-data's mt19937, tests/rs2.json past 2**126).
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source with random_seed of
+    2**64 or more, under a forced core route.
+  cases: [T2.2]
+  refs: [RS-2, RS-7]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-59}
+  notes: >-
+    Approved by the owner on 2026-10-17, recorded as KO2-59 (relayed by
+    the orchestrator): a permanent registered difference.
+    Approver: owner (a refusal of input the reference accepts). Lifting it
+    needs max_seed wider than u64 in the contract. Found by reading, not
+    measured by a case.
+
+- id: P2B-16
+  title: On SQLite, four S0 queries the reference answers are refused at materialize by E92-class rules, until T2.10
+  kind: change
+  old_behavior: >-
+    On SQLite the reference answers s0.boundary.deepest,
+    s0.boundary.digits-4300 and s0.boundary.start-past-64kb (a target
+    filtered by WHERE) and s0.boundary.escapes (a condition on the target)
+    through materialize.
+  new_behavior: >-
+    Off DuckDB every call a case makes runs on the core (T2.1d), so these
+    S0 cases reach the core's materialize on SQLite, which refuses them
+    UNSUPPORTED_REQUEST, rule target_filter (deepest, digits-4300,
+    start-past-64kb) and condition (escapes), E92's class (phase-1/not-yet-refusals.md, rows 43
+    and 20); python-core and rust-host alike. On DuckDB their materialize
+    takes the old route, as before. T2.10 (PQL targets, which lifts both
+    rules) retires this entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQLite source on the core route of a
+    query whose target has a WHERE filter or a condition.
+  cases: [s0.boundary.deepest@sqlite, s0.boundary.digits-4300@sqlite, s0.boundary.escapes@sqlite, s0.boundary.start-past-64kb@sqlite]
+  refs: [P1B-3]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
+  notes: >-
+    Approved under the owner's standing approval KO2-56 (2026-10-17): a
+    temporary register entry naming the package that retires it, still
+    listed for the owner; the reviewers check this entry fits it.
+    Temporary: it lapses when T2.10 lands, and the final gate fails while
+    it remains (register.py's TEMPORARY). Its cases' SQLite lines
+    (<case>@sqlite) are the ones it covers. Measured at T2.2 on python-core
+    and rust-host.
+  case_outcomes:
+  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+
+- id: P2B-17
+  title: On SQLite, a stored time's spelling is read once per call, where the reference reads it once per materializer
+  kind: change
+  old_behavior: >-
+    The reference's SQLite sampler reads one stored value of a table's time
+    column (SELECT ts FROM t WHERE ts IS NOT NULL LIMIT 1) before its first
+    windowed read and keeps the spelling for the sampler's life, which a
+    PredictiveQuery's materializer holds across its calls; a second
+    materialize of the same query reads none.
+  new_behavior: >-
+    The core reads the spelling once per run, before the table's first
+    windowed read, so a second materialize of the same query on the core
+    route reads it again: one statement more, the same answers. A run
+    holds no state of an earlier one, and holding it across calls would
+    need the host to keep it and hand it back (a contract field), which no
+    other read has.
+  affected_inputs: >-
+    A second PredictiveQuery.materialize of one query over a SQLite source
+    whose window reads a time column stored as text, under a forced core
+    route.
+  cases: []
+  refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/backend/sqlite/sampler.py#SQLiteSampler._time_spelling']
+  status: rejected
+  approved_by: reviewer
+  decision_ref: null
+  notes: >-
+    Approver: reviewer (an extra statement, the answers equal), unless the
+    owner takes it. Measured by T2.2's round 1 review (Claude P2-2 (d));
+    no contract case calls materialize twice on one query. Rejected as
+    fixed (T2.2 fix 14, round 2's Claude P2-B): the sampler's memo of
+    decision E52 keeps the spelling across a materializer's runs, so a
+    second materialize reads none, as the reference; the ID is kept.
+
+# --- lane E entries (P2E-1..19) ---
+
+- id: P2E-1
+  title: Any column name works on the core route, where the reference leaves the column out
+  kind: change
+  old_behavior: >-
+    Since main's eb6c68eb, merged into the reference at 6298913c,
+    Schema.from_source leaves out a column whose name holds a dot, a
+    backtick, a line feed or a carriage return, with one SDMWarning per
+    table, and describes the rest; a query naming such a column, which the
+    reference's language cannot spell (a quoted name holding a dot is
+    refused, and one holding a backtick or a line break does not lex), is
+    refused INVALID_REQUEST at materialize.
+  new_behavior: >-
+    The core keeps every column as data whatever its name (KO2-36,
+    T2.18): from_source describes it, with no warning, and a request sends
+    it; a query names it backtick-quoted, a backtick inside doubled and a
+    line break kept as it stands, as the entity (a primary key), the target,
+    a filter's or an aggregation's column, the table and column held apart
+    from the parser to the request, and is answered on DuckDB, SQLite and
+    Postgres as the same data under a name the reference can spell
+    (contract/column-name-vectors.json, each vector against its twin
+    a_b). The filter role is T2.10's, which lifts the core's not-yet
+    rule target_filter (P2E-2, rejected). Two quirk rows of
+    the PQL table the reference refuses as syntax (a quoted name holding
+    a dot, one holding a line feed) the core refuses by name as an unknown
+    table and an unknown column (sdm-core tests/pql/quirks.json,
+    core_only), INVALID_REQUEST either way.
+  affected_inputs: >-
+    Schema.from_source, PredictiveQuery.materialize and SDMClient.predict on
+    the core route over a DuckDB, SQLite or Postgres source with a column
+    whose name holds a dot, a backtick, a line feed or a carriage return.
+  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-target]
+  core_only_columns:
+  - users.a.b
+  - users.a`b
+  - "users.a\nb"
+  - orders.a.b
+  - orders.a`b
+  - "orders.a\nb"
+  refs:
+  - eb6c68eb
+  - P2B-2
+  - contract/column-name-vectors.json
+  - 'rust/crates/sdm-core/tests/pql/quirks.json#backticks/unknown-with-dot PQL_PARSE_SYNTAX -> PQL_SCHEMA_UNKNOWN_TABLE'
+  - 'rust/crates/sdm-core/tests/pql/quirks.json#backticks/newline-inside PQL_PARSE_SYNTAX -> PQL_SCHEMA_UNKNOWN_COLUMN'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-36}
+  notes: >-
+    Approved by the owner on 2026-10-16 as KO2-36 ("Odd column names: Yes
+    sounds good"), whose registered differences from main these are:
+    permanent, it retires P2B-2 (KO2-45). The feature cases keep their
+    outcome, a success through predict, and differ in what the reference
+    leaves out (the column in the schema, the request and its statements,
+    and the from_source warning). A DuckDB row moves a first admission
+    from none (E110); each SQLite and Postgres row names materialize
+    under statements_differ (T2.1e): the reference's statements are held
+    only through its refusal there. core_only_columns names the columns the
+    core keeps and the reference leaves out, as table and column, so the
+    comparator takes exactly those, and the key and links they make, out
+    of the core's side against the reference's, with the reference's
+    warning of leaving them out (T2.1f): users' as a feature, the target
+    or the entity, orders' as the aggregated column.
+  case_outcomes:
+  - {case: name.backtick-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-aggregation@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-aggregation@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-aggregation@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-aggregation@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-entity@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-target@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-aggregation@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-entity@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-target@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-aggregation, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-aggregation, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-aggregation@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-aggregation@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-aggregation@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-aggregation@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-entity, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-entity, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-entity@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-entity@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-entity@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-entity@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-target, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-target, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-target@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-target@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-target@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-target@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+
+- id: P2E-2
+  title: A target filter on a column only the core names is refused by the core's not-yet rule target_filter, until T2.10
+  kind: change
+  old_behavior: >-
+    The reference leaves out a column whose name holds a dot, a backtick or
+    a line break, and refuses a query whose target's aggregation filters on
+    it INVALID_REQUEST at materialize.
+  new_behavior: >-
+    The core keeps the column and resolves the query (P2E-1), and its
+    materialize refuses it UNSUPPORTED_REQUEST at materialize under its
+    not-yet rule target_filter (E92's class), as it refuses the same query
+    over a column named a_b. T2.10 (PQL targets: target_filter) lifts it
+    and retires this entry, the cases then answered under P2E-1.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a DuckDB, SQLite or
+    Postgres source of a query whose target's aggregation filters on a
+    column named with a dot, a backtick or a line break.
+  cases: [T2.18]
+  refs: [E92, T2.10, P2E-1]
+  status: rejected
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-36}
+  notes: >-
+    Approved under KO2-56's standing approval of a temporary entry naming
+    the package that retires it, relayed by the orchestrator; the
+    reviewers check this entry fits it. Temporary: it lapses when T2.10
+    lands, and the final gate fails while it remains. The rule was read
+    from the core's refusal (details rule target_filter), on each database
+    and on both core hosts. Rejected, its ID kept: filter role deferred to
+    T2.10 (the orchestrator's decision); the three filter cases and their
+    vectors left T2.18's acceptance for T2.10's
+    (contract/deferred/t210-column-filter), so no case is under this
+    entry.
+
+# --- lane C entries (P2C-1..19) ---
+
+- id: P2C-1
+  title: On Postgres a table named alone that a temporary or pg_catalog relation shadows is refused by name
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres table named without a schema in
+    current_schema() only (PostgresTable's schema), and qualifies every
+    read with that schema ("public"."t"), so a temporary table or a
+    pg_catalog relation of the same name, which an unqualified name finds
+    first on the search path, never shadows it.
+  new_behavior: >-
+    The core finds a table named alone as the reference does, in
+    current_schema() only (a table of a later schema of the search path is
+    not found, INVALID_REQUEST, as on the reference), but its reads name
+    the table alone, since a plan is rendered without the schema's name;
+    where a temporary or pg_catalog relation of the name would be read in
+    its place, the catalog answers no columns and the core refuses the
+    table as not found (INVALID_REQUEST), never reading another relation.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source, a table
+    named alone whose name a temporary table of the session or a
+    pg_catalog relation also has.
+  cases: [T2.3]
+  refs: [KO2-39, KO2-28]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-63}
+  notes: >-
+    Approved by the owner on 2026-10-17 as KO2-63, relayed by the
+    orchestrator; the full fix needs a schema field in a later contract. A
+    plan would have to name current_schema()'s schema, which the core does
+    not know when it plans, and Postgres reads an unqualified name by the
+    search path. Probed at T2.3 on Postgres 17 (search_path = public,
+    other): a view in public is read on both routes; a table only in other
+    and a name nowhere are refused INVALID_REQUEST on both; a public table
+    shadowed by a temporary table of its name is read on the old route,
+    which qualifies it ("public"."t"), and refused INVALID_REQUEST on the
+    core.
+
+- id: P2C-2
+  title: On Postgres the core runs fewer statements than the reference, without its unused reads
+  kind: change
+  old_behavior: >-
+    The reference's Postgres engine reads current_schema() once before it
+    reads a source's tables, and, when its sampler is built, counts every
+    table's rows (SELECT COUNT(*) FROM each table, kept as num_rows_dict,
+    which no Postgres read uses): from_source runs one statement more and
+    materialize one more per table than the core's requests.
+  new_behavior: >-
+    The core asks Postgres one statement per request it makes, as on
+    DuckDB, and names the current schema inside its catalog statements
+    (current_schema() in the table list, to_regclass for a named table),
+    so neither read is made. Every other statement answers the same step
+    with the same rows; the statement count per public call differs
+    (compare.py's sql.count, and the key matrix's counts), which shifts
+    the positional sql.result comparison too.
+  affected_inputs: >-
+    Every Schema.from_source and PredictiveQuery.materialize over a
+    Postgres source on the core route.
+  cases: [T2.3]
+  refs:
+  - KO2-20
+  - 'contract/postgres-key-vectors.json#* statements'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-58}
+  notes: >-
+    Approved by the owner on 2026-10-17 as KO2-58, relayed by the
+    orchestrator: a permanent registered difference, every answer equal.
+    Measured on all 86 cases on Postgres 17: the per-call counts differ
+    and no statement's answer to its own request does.
+
+- id: P2C-3
+  title: Exact decimals on Postgres, where the reference reads numeric as a float or overflows
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres numeric column as Float64 when it has
+    decimal places and as Int64 when it has none, so a decimal key is sent
+    and read back as a float (two keys a float cannot tell apart merged),
+    and a numeric(20,0) or numeric(38,0) value past int64 (an unsigned
+    64-bit key past int64's max, a 38-digit key or feature) fails from_source
+    with an OverflowError.
+  new_behavior: >-
+    The core reads numeric(p,s) as decimal128(p,s) (decimal256 past 38
+    digits) and keeps it exact as on DuckDB (KO2-35, P2B-1): a key with
+    decimal places is sent and read back as its exact digits, no two keys
+    merge, keys equal across scales join by value, and a value past int64
+    is answered.
+  affected_inputs: >-
+    Postgres sources with a numeric key or feature, on the core route.
+  cases:
+  - key.decimal-38-10@postgres
+  - decimal.feature-38-0-wide@postgres
+  - decimal.key-wide@postgres
+  - key.uint64-above-int64-max@postgres
+  refs:
+  - P2B-1
+  - 'contract/postgres-key-vectors.json#pair.d12-4.i16 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.i32 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.i64 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.u64 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.d38-0 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.d12-4 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.f32 success -> success'
+  - 'contract/postgres-key-vectors.json#pair.d12-4.f64 success -> success'
+  - 'contract/postgres-key-vectors.json#key.both.d9-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.both.d18-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.d10-2.d12-4 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.d12-4.d10-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair.d20-2.d18-0 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair-merging.d38-0.d38-2 success -> success'
+  - 'contract/postgres-key-vectors.json#key.pair-merging.d38-2.d38-0 success -> success'
+  - 'contract/postgres-key-vectors.json#fifteen.d17-16.d17-16 success -> success'
+  - 'contract/postgres-key-vectors.json#fifteen.d17-16.d18-17 success -> success'
+  - 'contract/postgres-key-vectors.json#key.at-precision.d19-0 refusal UNNAMED -> success'
+  - 'contract/postgres-key-vectors.json#key.at-precision.d38-0 refusal UNNAMED -> success'
+  more_exact:
+  - case: key.decimal-38-10@postgres
+    runners: [python-core]
+    fields:
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
+    - 'public.payloads/*/2/*/instance_table/rows/*/1'
+    - 'public.payloads/*/2/*/related_tables/orders/rows/*/4'
+    - 'public.payloads/*/2/*/related_tables/users/rows/*/1'
+    - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
+    - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+  - case: key.decimal-38-10@postgres
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/*/instance_table/rows/*/1'
+    - 'core.predicted.body/*/*/related_tables/orders/rows/*/4'
+    - 'core.predicted.body/*/*/related_tables/users/rows/*/1'
+    - 'core.predicted.body/*/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
+    - 'core.predicted.body/*/schema/related_tables/users/columns/user_id/dtype'
+    - 'core.predicted.body/*/schema/related_tables/orders/columns/user_id/dtype'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-35}
+  notes: >-
+    Approved by the owner on 2026-10-16 as KO2-35 ("better than main"),
+    relayed by the orchestrator, as P2B-1 on DuckDB. Measured at
+    T2.3 on Postgres 17, python-core and rust-host alike; every key pair
+    joins the rows the same-type control joins (the key matrix's lesson 19
+    test). The orchestrator asked for these, key.pair-merging.* and
+    fifteen.* by name. key.decimal-38-10@postgres differs in exactly
+    P2B-1's more_exact fields for key.decimal-38-10, listed here under its
+    line's key (T2.1d).
+  case_outcomes:
+  - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
+  - {case: decimal.feature-38-0-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) feature past int64 answered exactly where the reference overflows'}
+  - {case: decimal.key-wide@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(38,0) key past int64 answered exactly where the reference overflows'}
+  - {case: decimal.key-wide@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(38,0) key past int64 answered exactly where the reference overflows'}
+  - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
+  - {case: key.uint64-above-int64-max@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.3: a numeric(20,0) key past int64 answered exactly where the reference overflows'}
+
+- id: P2C-4
+  title: On Postgres an empty fact table and an interval column are refused by name, as on DuckDB
+  kind: change
+  old_behavior: >-
+    On Postgres the reference fails from_source with a RuntimeError for a
+    table that holds no rows and a ValueError for an interval column,
+    neither a StructuredDataError.
+  new_behavior: >-
+    The core refuses them as it does on DuckDB: INVALID_REQUEST for the
+    empty table (P1B-11) and UNSUPPORTED_TYPE for the interval (P1B-8).
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source with an
+    empty table or an interval column.
+  cases: [empty.fact-table@postgres, time.feature-interval@postgres]
+  refs: [P1B-11, P1B-8]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Approved by both reviewers of T2.3's round 1, Codex and the Claude
+    reviewer (APPROVE-P2C-4 each, relayed by the orchestrator), under E66(b)
+    as P1B-11 and P1B-8 on DuckDB: the committed reference lines give an
+    unnamed RuntimeError and ValueError at from_source, and the core refuses
+    by name, INVALID_REQUEST and UNSUPPORTED_TYPE.
+  case_outcomes:
+  - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-11)'}
+  - {case: empty.fact-table@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'T2.3: as on DuckDB (P1B-11)'}
+  - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_TYPE at from_source (StructuredDataError)', summary: 'T2.3: as on DuckDB (P1B-8)'}
+  - {case: time.feature-interval@postgres, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_TYPE', summary: 'T2.3: as on DuckDB (P1B-8)'}
+
+- id: P2C-5
+  title: On Postgres a text time value pandas reads and the core's list does not is refused by name at materialize
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler takes a time column's bounds as MIN
+    and MAX of the column in its own type, a text column's by its text, and
+    reads them in the host (pandas): a value pandas reads ('March 3rd
+    2023', the refusal census's rule:text_time probe) is answered.
+  new_behavior: >-
+    The core takes the same MIN and MAX and reads each bound and each
+    fetched value itself, by its fixed list of formats: a value outside the
+    list is refused at materialize, UNSUPPORTED_REQUEST rule text_time.
+    Until T2.3's fix 9 the core asked the source for its bounds as
+    timestamps (CAST to timestamp), and such a value failed the source's
+    statement, PROVIDER_ERROR at materialize.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source
+    whose text time column holds a value pandas reads and the core's list
+    does not.
+  cases: [T2.3]
+  refs: [DT-12, DT-7, DT-15, 'contract/refusal-census.json rule:text_time']
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-64}
+  notes: >-
+    Approved by the owner on 2026-10-17 as KO2-64, relayed by the
+    orchestrator, a named refusal where the reference answers; for the
+    census case only from T2.3's fix round 3, time.text-one-bad-value,
+    which it listed too, being P2C-10's (DT-15 under E68), by the
+    orchestrator's decision. Fix 9's census run (Postgres 17, against
+    python-ref at 6298913c) refuses the probe UNSUPPORTED_REQUEST rule
+    text_time, where it was PROVIDER_ERROR; the same 25 sites depart as
+    before.
+
+- id: P2C-6
+  title: On Postgres a seed past 2**64 - 1 is refused by name, where the reference hashes any integer
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler maps any integer seed into setseed's
+    range by hashing its decimal text (_postgres_seed), so a seed of 10**38
+    samples as any other.
+  new_behavior: >-
+    The Postgres dialect declares the largest seed a provider may declare,
+    max_seed 2**64 - 1 (ProviderCapabilities::max_seed is a u64, with no
+    "any seed" value, design choice 1), and the core refuses a larger seed
+    INVALID_REQUEST naming the seed and max_seed before the sample is
+    planned; every seed up to it maps as the reference maps it.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source
+    with a random_seed past 2**64 - 1.
+  cases: [T2.3]
+  refs: [RS-6, RS-7, KO2-28]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-59}
+  notes: >-
+    Approved by the owner on 2026-10-17 as KO2-59, relayed by the
+    orchestrator: a refusal of input the reference accepts, outside E92's
+    37 rules (KO2-28), found by the refusal census on Postgres (probe
+    rule:seed_size, a seed of 10**38); the core's seed is 64-bit.
+
+- id: P2C-7
+  title: On Postgres four S0 boundary queries are refused at materialize by the core's not-yet target rules, until T2.10
+  kind: change
+  old_behavior: >-
+    The reference materializes s0.boundary.deepest, s0.boundary.digits-4300,
+    s0.boundary.escapes and s0.boundary.start-past-64kb on Postgres: each
+    query's target has a filter (deepest, digits-4300, start-past-64kb) or
+    is a condition (escapes).
+  new_behavior: >-
+    Off DuckDB every call a case makes runs on the core (T2.1d), so these
+    queries, which the core validates and accepts, reach its materialize,
+    which refuses them UNSUPPORTED_REQUEST at materialize under its
+    not-yet rules (E92's class): rule target_filter for deepest,
+    digits-4300 and start-past-64kb, rule condition for escapes. T2.10
+    (PQL targets: condition, target_filter) lifts both and retires this
+    entry.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source of
+    a query whose target has a filter or is a condition.
+  cases:
+  - s0.boundary.deepest@postgres
+  - s0.boundary.digits-4300@postgres
+  - s0.boundary.escapes@postgres
+  - s0.boundary.start-past-64kb@postgres
+  refs: [E92, T2.10]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
+  notes: >-
+    Approved under KO2-56's standing approval of a temporary entry naming
+    the package that retires it, relayed by the orchestrator; the
+    reviewers check this entry fits it. Temporary: it lapses when T2.10
+    lands, and the final gate fails while it remains. The rules were read
+    from the core's refusals (details rule), the same on DuckDB with the
+    materialize route forced; T2.2 registers the same four on SQLite
+    (P2B-16). Each row names materialize under statements_differ (T2.1e),
+    as P2B-16's do: the reference's materialize statements are held only
+    through that call and reported as diagnostic, as the orchestrator
+    decided for the same four on SQLite.
+  case_outcomes:
+  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+
+- id: P2C-8
+  title: On Postgres a multi-dimensional array column is left out, where the reference fails the source's description
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres integer[] column holding a
+    two-dimensional array (ARRAY[ARRAY[n, n]]) as nested lists and fails
+    Schema.from_source with a RuntimeError ("Could not determine semantic
+    type for column ... with data type 'intlist'"); a one-dimensional
+    array column it leaves out of the schema.
+  new_behavior: >-
+    The core's Postgres provider reads a multi-dimensional array's elements
+    in row-major order as one Arrow list, and the core leaves the list
+    column out of the schema, as it leaves out a one-dimensional one, and
+    answers.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source with a
+    multi-dimensional array column.
+  cases: [T2.3]
+  refs: [E66]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner: an answer where the reference raises an unnamed error,
+    beyond E66(b)'s named refusal. Found at T2.3's fix round 1 with the
+    review's probe (integer[] of ARRAY[ARRAY[n, n]]) on Postgres 17, against
+    python-ref at 6298913c.
+- id: P2C-9
+  title: On Postgres under a DateStyle other than ISO the core fails as the provider's error, where the reference raises NotImplementedError
+  kind: change
+  old_behavior: >-
+    Under a session DateStyle other than ISO (PGDATESTYLE 'SQL, DMY' or
+    'Postgres, MDY'), psycopg cannot load a date or timestamp the server
+    writes, and the reference fails Schema.from_source with an unnamed
+    NotImplementedError.
+  new_behavior: >-
+    The core's Postgres provider reads with the same driver, which raises
+    the same error, and the core fails Schema.from_source with the named
+    PROVIDER_ERROR.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source with a
+    date or timestamp column, on a session whose DateStyle is not ISO.
+  cases: [T2.3]
+  refs: [E66]
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Approver: reviewer: E66(b)'s class, the reference's unnamed error a
+    named code. Found by the Claude reviewer at T2.3's round 2 with
+    probe.tz-no-anchor under PGDATESTYLE 'SQL, DMY' and 'Postgres, MDY' on
+    Postgres 17, against python-ref at 6298913c, in both modes. Setting ISO
+    on the provider's reads would answer where the reference fails, which
+    E66(b) does not cover, so the provider leaves the session's DateStyle
+    as it is. Approved under E66(b) by both reviewers of T2.3's round 3,
+    Codex and the Claude reviewer, relayed by the orchestrator.
+
+- id: P2C-10
+  title: On Postgres, a text time outside the core's list is refused by name, UNSUPPORTED_REQUEST, where the reference refuses it INVALID_REQUEST, as DT-15 refuses it
+  kind: change
+  old_behavior: >-
+    The reference's Postgres sampler reads a text time column's bounds with
+    pandas, and refuses time.text-one-bad-value's unreadable value at
+    materialize, INVALID_REQUEST.
+  new_behavior: >-
+    The core takes the reference's MIN and MAX of the text column and reads
+    each bound by its fixed list of formats (DT-7's capability, DT-15's
+    reading): the value outside the list is refused at materialize,
+    UNSUPPORTED_REQUEST rule text_time; python-core and rust-host alike. Over DuckDB the
+    reference fails on its own CAST (DT-12); over SQLite the same refusal
+    is P2B-11.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a Postgres source whose text time
+    column holds a value the core's list does not read, on the core route.
+  cases: [time.text-one-bad-value@postgres]
+  refs: [DT-7, DT-15, P2B-11]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E68}
+  notes: >-
+    Approver: owner, as DT-15 was. Both refuse the input; only the code
+    differs, the core's DT-15's, owner-approved under E68, applied to the
+    Postgres leg of its case as P2B-11 applies it to the SQLite leg (T2.2),
+    by the orchestrator's decision at T2.3's fix round 3: P2B-11's class,
+    not KO2-64's. Measured at T2.3's fix 9 on Postgres 17 against
+    python-ref's committed lines.
+  case_outcomes:
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
+  - {case: time.text-one-bad-value@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal UNSUPPORTED_REQUEST', summary: 'the Postgres line: the text time outside the list refused (DT-15)'}
+
+- id: P2C-11
+  title: On Postgres a composite primary or foreign key is refused by name, where the reference fails the source's description with an unnamed ValueError
+  kind: change
+  old_behavior: >-
+    The reference's Postgres graph discovery takes one-column keys only:
+    reading a table whose primary key covers several columns
+    (_get_source_columns) or that declares a foreign key of several columns
+    (_get_source_foreign_keys), it fails Schema.from_source with an
+    unnamed ValueError.
+  new_behavior: >-
+    The core reads the same catalog answers and refuses such a key by name
+    at describe_source (Schema.from_source), as it refuses a key of several
+    columns a caller names: UNSUPPORTED_REQUEST rule composite_key (E92's
+    Phase 2 class, until T2.12). A composite primary key is refused as the
+    table's keys are read, a composite foreign key as the foreign keys are
+    read, at the same statements the reference fails after; no later call
+    is reached. A composite UNIQUE constraint is left aside, as the
+    reference leaves it.
+  affected_inputs: >-
+    Schema.from_source on the core route over a Postgres source a table of
+    which declares a primary key or a foreign key of several columns.
+  cases: [T2.3]
+  refs:
+  - E66
+  - E92
+  - 'contract/postgres-regression-vectors.json#key.composite-primary refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> refusal UNSUPPORTED_REQUEST'
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E66}
+  notes: >-
+    Approved by both of T2.3's round 4 reviewers (APPROVE-P2C-11): E66(b)'s
+    class, the reference's unnamed error a named refusal. Before T2.3's
+    fix 14 the core keyed such a table by one
+    of the key's columns and linked on one of the foreign key's, which can
+    join rows the key does not; by the orchestrator's decision at round 3
+    it is refused as DuckDB refuses a key of several columns named. Its
+    inputs are the test author's two regression vectors,
+    key.composite-primary@postgres and key.composite-foreign@postgres
+    (contract/postgres-regression-vectors.json, the refs), not corpus
+    cases.

@@ -26,7 +26,8 @@ use std::collections::BTreeSet;
 
 use sdm_contract::facts::LocalZone;
 use sdm_contract::ops::{
-    ColumnRef, Dtype, PqlDiagnostic, QuerySchema, QueryValidation, Severity, Span, Stype,
+    ColumnRef, Dtype, PqlDiagnostic, QueryFacts, QuerySchema, QueryValidation, Severity, Span,
+    Stype,
 };
 use sdm_contract::pql::{
     Aggregation, ConditionOp, EntityClause, LogicalOp, NodeKind, NodeType, PqlLiteral, PqlNode,
@@ -89,6 +90,19 @@ impl Validation {
             diagnostics: self.diagnostics.clone(),
         }
     }
+
+    /// The facts of the accepted query a host reads ([`QueryFacts`],
+    /// T2.18); `None` when the query was refused.
+    pub fn facts(&self, schema: &QuerySchema) -> Option<QueryFacts> {
+        let query = self.query.as_ref()?;
+        let features = features(query, schema);
+        Some(QueryFacts {
+            entity_table: features.entity_table,
+            problem_type: query.problem_type,
+            windowed: features.temporal_target,
+            num_forecasts: query.num_forecasts,
+        })
+    }
 }
 
 /// Validates `query` against `schema` for `profile`.
@@ -106,6 +120,24 @@ pub fn validate(
 ) -> Result<(QueryValidation, Vec<CoreWarning>), CoreError> {
     on_adapter_stack(|| {
         resolve_here(query, schema, profile, facts, zones).map(|v| (v.to_result(), v.warnings))
+    })
+}
+
+/// `query` as the PQL library writes it back (its `to_string()`, the text a
+/// host sends materialize after validating, redundant parentheses dropped),
+/// or `None` when it does not parse. Read for training with no current year,
+/// on the adapter's stack ([`on_adapter_stack`]).
+pub fn normalized(query: &str) -> Option<String> {
+    on_adapter_stack(|| {
+        let reader = parser::dates::Reader {
+            year: None,
+            pads_year: true,
+        };
+        let parse = parser::parse(query, parser::Mode::Training, reader);
+        parse
+            .outcome
+            .ok()
+            .map(|parsed| parsed.query.to_string_with(false, false))
     })
 }
 
@@ -554,14 +586,13 @@ fn validated_query(validated: &parser::ValidatedQuery) -> Result<ValidatedQuery,
     })
 }
 
-fn column_ref(fqn: &str) -> Result<ColumnRef, CoreError> {
-    let (table, column) = fqn
-        .rsplit_once('.')
-        .ok_or_else(|| internal(format!("{fqn} is not table.column")))?;
-    Ok(ColumnRef {
-        table: table.to_owned(),
-        column: column.to_owned(),
-    })
+/// The parser holds a column's table and column apart, as the contract
+/// does, so neither is ever split on a dot (KO2-36).
+fn column_ref(name: &parser::schema::ColumnKey) -> ColumnRef {
+    ColumnRef {
+        table: name.table_name.clone(),
+        column: name.col_name.clone(),
+    }
 }
 
 fn window(range: &parser::dor::DateOffsetRange) -> Result<Window, CoreError> {
@@ -650,8 +681,8 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
     let borrowed = n.borrow();
     let base = &borrowed.base;
     let kind = match &borrowed.kind {
-        Kind::Column { fqn, .. } => NodeKind::Column {
-            column: column_ref(fqn)?,
+        Kind::Column { name, .. } => NodeKind::Column {
+            column: column_ref(name),
         },
         Kind::Constant { value, .. } => NodeKind::Constant {
             literal: literal(n, value)?,
@@ -693,8 +724,8 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
                 .as_ref()
                 .map(|r| window(&r.borrow()))
                 .transpose()?,
-            group_by: group_by.as_deref().map(column_ref).transpose()?,
-            time_column: time_col.as_deref().map(column_ref).transpose()?,
+            group_by: group_by.as_ref().map(column_ref),
+            time_column: time_col.as_ref().map(column_ref),
         },
         Kind::Join {
             rhs_target,
@@ -702,8 +733,8 @@ fn node(n: &NodeRef) -> Result<PqlNode, CoreError> {
             rhs_key,
         } => NodeKind::Join {
             target: boxed(rhs_target)?,
-            lhs_key: column_ref(lhs_key)?,
-            rhs_key: column_ref(rhs_key)?,
+            lhs_key: column_ref(lhs_key),
+            rhs_key: column_ref(rhs_key),
         },
     };
     Ok(PqlNode {

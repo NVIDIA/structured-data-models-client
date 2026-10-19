@@ -2,18 +2,39 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Publishing to PyPI, without a credential that can be stolen.
+# Publishing to PyPI through Kitmaker.
 #
-# There is no API token anywhere in this workflow or in the repository's
-# secrets. PyPI's Trusted Publishing exchanges this job's OIDC identity for a
-# short-lived, single-use upload token, and the same identity signs a PEP 740
-# attestation that a consumer can verify back to this workflow, this repository
-# and this tag. A token in a secret proves that whoever holds it can upload; an
-# attestation proves where the artifact came from.
+# Kitmaker owns NVIDIA's PyPI organization, and this project's open source
+# review record commits to releasing through it. Kitmaker does not accept an
+# upload; it fetches an artifact from a URL and publishes it itself, to pypi.org
+# and pypi.nvidia.com together. This workflow's job is to produce those URLs:
+# build every distribution and attach it to the GitHub Release. Asking Kitmaker
+# to publish from them is a separate step that a person runs, because Kitmaker's
+# Portal is on NVIDIA's internal network and a GitHub-hosted runner cannot
+# resolve it, let alone reach it. RELEASING.md says who runs that step and
+# what it has to do; the procedure itself is not kept in a public tree.
 #
-# The release runs in two jobs on purpose. `build` has no privileges and no
-# id-token, so a compromised build dependency cannot reach the publishing
-# identity; `publish` has the identity and runs nothing but the upload action.
+# Two consequences worth stating rather than discovering.
+#
+# Nothing here can publish to an index. There is no stored publishing
+# credential and no environment secret; the most this workflow can do is attach
+# files to a Release. The approval on `pypi` still gates the job, because
+# attaching the distributions is what makes them public and Kitmaker refuses
+# private assets, so that approval is the last point before the artifacts are
+# visible to anyone.
+#
+# This workflow does not sign what it ships. PEP 740 attestations are issued
+# to whoever uploads, and that is Kitmaker, so nothing here produces one
+# naming this repository. Whether Kitmaker supplies its own is Kitmaker's to
+# say. A consumer is left with NVIDIA's ownership of the PyPI project, which
+# SECURITY.md states rather than dressing up.
+#
+# `build` has `contents: read` to check the tree out and `actions: read` to ask
+# whether CI passed, and nothing more, so a compromised build dependency cannot
+# publish anything itself. It can still decide what gets published, because it
+# is what produces the distributions. `release` holds `contents: write` to
+# create the Release and attach to it, and is the only job behind the
+# protected environment.
 name: publish
 
 on:
@@ -24,15 +45,25 @@ on:
 # Least privilege at the top: a job that needs more says so itself.
 permissions: {}
 
+# Two runs for one tag, say a tag push and a `workflow_dispatch`, would build
+# that version twice and attach the results to one release. Nothing would fail:
+# the second run finds the first's assets already there and leaves them, so the
+# release ends up holding one build while the other run's artifact holds
+# different bytes for the same filenames. Not cancel-in-progress: a run that
+# has started attaching has to finish, or the release keeps part of a build.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    # workflow_dispatch can be started from any ref, and everything below reads
-    # GITHUB_REF_NAME as if it were a tag. A branch called v1.2.0 would have
-    # satisfied the version check and published from it; --verify-tag only runs
-    # afterwards, in attach-sbom, which is too late to stop an upload. Refuse
-    # here, where nothing has been built yet.
-    if: github.ref_type == 'tag'
+    # workflow_dispatch can be started from any ref, and everything below
+    # reads GITHUB_REF_NAME as if it were a release tag. A branch called
+    # v1.2.0 would have satisfied the version check and published from it.
+    # Refused here, where nothing has been built yet; the shape of the tag is
+    # checked again with the versions, since this only tests the prefix.
+    if: github.ref_type == 'tag' && startsWith(github.ref_name, 'v')
     permissions:
       contents: read
       # The gate below asks the API whether CI passed on this commit, which
@@ -41,7 +72,7 @@ jobs:
       # built at all.
       actions: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -77,7 +108,7 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_SHA is on main and its CI passed"
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
 
@@ -88,9 +119,9 @@ jobs:
             ( cd "packages/$package" && python -m build --outdir "$GITHUB_WORKSPACE/dist" . )
           done
 
-      # The engine pins its four siblings by exact version, and at this point in
-      # a release those versions exist only in dist/, not on PyPI
-      # yet, and will not be until the publish job runs. cibuildwheel's test
+      # The engine pins its siblings by exact version, and at this point in
+      # a release those versions exist only in dist/, not on PyPI yet, and
+      # will not be until someone publishes them. cibuildwheel's test
       # environment resolves from PyPI unless told otherwise, so without this
       # the smoke test fails with "structured-data-models-api was not found" and the release stops
       # before it can publish anything. cibuildwheel copies the directory it
@@ -104,9 +135,16 @@ jobs:
 
       # aarch64 is built under emulation on the x86-64 runner, the same way the
       # GitLab `wheels` job builds it, so the two cannot disagree on the set.
-      - uses: docker/setup-qemu-action@v4
+      # The image is pinned as well as the action. Left to its default, this
+      # step pulls `tonistiigi/binfmt:latest` and runs it with `--privileged`
+      # on the runner that then builds the native wheels, so a moving tag on
+      # that image reaches the release even though the action cannot. Nothing
+      # updates this digest automatically, since dependabot does not read a
+      # workflow input; it is raised by hand with the action.
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
 
       # The engine is a native build and needs one wheel per interpreter and
       # platform. It is not optional: structured-data-models-client[relational] pins it by exact
@@ -114,7 +152,7 @@ jobs:
       # uninstallable for the release it names. What is built, and the smoke
       # test each wheel must pass, is the engine's `[tool.cibuildwheel]`.
       - name: Build the relational engine's wheels
-        uses: pypa/cibuildwheel@v4.2.1
+        uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
         with:
           package-dir: packages/structured-data-models-relational-engine
           output-dir: dist
@@ -130,8 +168,15 @@ jobs:
           python - <<'EOF'
           import os, pathlib, re, sys
 
-          tag = os.environ['GITHUB_REF_NAME'].lstrip('v')
-          built = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+          ref = os.environ['GITHUB_REF_NAME']
+          # `lstrip` would also have accepted `vv1.0.0`, and a dispatch can be
+          # aimed at a tag called `1.0.0`.
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', ref):
+              sys.exit(f'{ref} is not a release tag of the form v1.2.3')
+          tag = ref.removeprefix('v')
+          wheels = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
+          sdists = sorted(p.name for p in pathlib.Path('dist').glob('*.tar.gz'))
+          built = wheels + sdists
           print('\n'.join(built))
 
           # All five, every time. The four pure-Python distributions and the
@@ -145,12 +190,19 @@ jobs:
           }
           if len(expected) != 5:
               sys.exit(f'expected 5 distributions, found {sorted(expected)}')
-          present = {name.split('-')[0] for name in built}
+          present = {name.split('-')[0] for name in wheels}
           missing = expected - present
           if missing:
               sys.exit(f'refusing to publish without {sorted(missing)}')
 
-          versions = {re.match(r'[^-]+-([^-]+)-', name).group(1) for name in built}
+          # Every file, not only the wheels: an sdist carrying a different
+          # version passes a wheels-only check and is published anyway.
+          versions = {
+              name.split('-')[1]
+              if name.endswith('.whl')
+              else name.rsplit('-', 1)[1].removesuffix('.tar.gz')
+              for name in built
+          }
           if len(versions) != 1:
               sys.exit(f'distributions disagree on the version: {sorted(versions)}')
           built_version = versions.pop()
@@ -179,65 +231,111 @@ jobs:
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
           python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors','structured-data-models-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
-      - uses: actions/upload-artifact@v7
+      - name: Take the release notes from the changelog
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            { line = $0; sub(/[ \t\r]+$/, "", line) }
+            line == "## " v || index(line, "## " v " - ") == 1 { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > dist/notes.md
+          test -s dist/notes.md || {
+            echo "CHANGELOG.md has no '## $version' entry" >&2
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: distributions
           path: dist/
 
-  publish:
+  # Kitmaker fetches artifacts from a URL rather than accepting an upload, so
+  # the GitHub Release exists to give it public asset URLs. It refuses private
+  # assets, so this cannot publish while the repository is internal.
+  #
+  # The Release is created behind the approval rather than before it. Creating
+  # it in an earlier ungated job would make every distribution public whether
+  # or not anyone approved, and it cannot be a draft instead, because a draft's
+  # asset URLs are private and Kitmaker could not fetch them. Declining the
+  # approval therefore means nothing was created at all.
+  release:
     needs: build
     runs-on: ubuntu-latest
     environment: pypi          # a protected environment, so a release is reviewable
     permissions:
-      id-token: write          # the only privilege here, and the reason there is no token
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: distributions
-          path: dist/
-
-      # The SBOM is a release asset, not something to upload to the index.
-      - name: Keep only the distributions
-        run: rm -f dist/sbom.cyclonedx.json
-
-      - name: Publish with Trusted Publishing and attest the artifacts
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          attestations: true
-
-  # The SBOM is generated during the build and stripped from the upload,
-  # because PyPI takes distributions and nothing else. Without this job it
-  # lived only in the Actions artifact, which expires, so the inventory a
-  # consumer needs to accept this into their own supply chain existed for
-  # ninety days and then did not. Attached to the release, where it lasts as
-  # long as the release does.
-  attach-sbom:
-    needs: publish
-    runs-on: ubuntu-latest
-    permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: distributions
           path: dist/
 
-      # Pushing a tag creates a tag, not a Release, and `gh release upload`
-      # needs the Release to exist. Creating it here rather than asking the
-      # releaser to do it by hand keeps RELEASING.md's promise that the tag is
-      # the only manual step. `--verify-tag` refuses to invent a release for a
-      # tag that is not really there.
-      - name: Attach the SBOM to the release
+      - name: Attach every distribution and the SBOM to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           test -s dist/sbom.cyclonedx.json
+          test -s dist/notes.md
+          # Pushing a tag creates a tag, not a Release, and `gh release upload`
+          # needs the Release to exist. `--verify-tag` refuses to invent one for
+          # a tag that is not really there.
           if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Not Latest yet. Kitmaker needs public asset URLs, so the
+            # release cannot be a draft and has to exist before anything is
+            # published from it. Marking it Latest here would advertise a
+            # version that is not on the index, so that is done by hand once
+            # the Kitmaker publish has worked. This only withholds the
+            # promotion: with no earlier release to stay Latest, GitHub still
+            # reports the newest non-draft release as the latest one.
             gh release create "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" \
               --verify-tag \
-              --generate-notes
+              --latest=false \
+              --notes-file dist/notes.md
           fi
-          gh release upload "$GITHUB_REF_NAME" dist/sbom.cyclonedx.json \
-            --repo "$GITHUB_REPOSITORY" --clobber
+          # The SBOM is a release asset and was never meant for the index; the
+          # notes are already the release body.
+          rm -f dist/notes.md
+
+          # Deliberately not `--clobber`: these builds are not byte
+          # reproducible, so re-running would swap the assets for new bytes
+          # while PyPI keeps the old, breaking the GitHub-to-PyPI comparison
+          # SECURITY.md asks a consumer to make. An attached asset is left
+          # alone. See RELEASING.md on re-running.
+          # Not a process substitution: its exit status is not the one
+          # `mapfile` returns, so a failed query would read as "nothing is
+          # attached" and `set -e` would never see it.
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' > attached.txt
+          mapfile -t attached < attached.txt
+          for path in dist/*; do
+            name=$(basename "$path")
+            for existing in ${attached+"${attached[@]}"}; do
+              if [ "$name" = "$existing" ]; then
+                echo "already attached, left alone: $name"
+                continue 2
+              fi
+            done
+            gh release upload "$GITHUB_REF_NAME" "$path" --repo "$GITHUB_REPOSITORY"
+          done
+
+      # The release is built and attached, and the person who approved this is
+      # the one who has to finish it. What the index holds is deliberately not
+      # asserted here: this job never asks, and a dispatch against a tag that
+      # was already published would make any claim about it wrong.
+      - name: Say what is left to do
+        run: |
+          {
+            echo "### Attached, not published"
+            echo
+            echo "\`$GITHUB_REF_NAME\` is on the Releases page with every"
+            echo "distribution and the SBOM attached. This workflow publishes"
+            echo "nothing to PyPI; that is a separate step, run from inside"
+            echo "NVIDIA's network. RELEASING.md says who runs it and what it"
+            echo "has to do."
+            echo
+            echo "Mark this release Latest once the index has all five."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -251,17 +251,23 @@ impl At<'_> {
         1 + self.run(from + 1, is_id_char)
     }
 
-    /// `QUOTED_ID`, from `from`.
+    /// `QUOTED_ID`, from `from`: `` '`' (~'`' | '``')+ '`' ``, a backtick
+    /// in the name doubled and any other character, a line break included,
+    /// as it stands (KO2-36; the reference's grammar takes neither).
     fn quoted_id(&self, from: usize) -> usize {
         if self.get(from) != Some('`') {
             return 0;
         }
-        let body = self.run(from + 1, |c| !matches!(c, '`' | '\r' | '\n'));
-        if body > 0 && self.get(from + 1 + body) == Some('`') {
-            body + 2
-        } else {
-            0
+        let mut k = from + 1;
+        loop {
+            match self.get(k) {
+                None => return 0,
+                Some('`') if self.get(k + 1) == Some('`') => k += 2,
+                Some('`') => break,
+                Some(_) => k += 1,
+            }
         }
+        if k == from + 1 { 0 } else { k + 1 - from }
     }
 
     fn name(&self, from: usize) -> usize {
@@ -510,6 +516,12 @@ mod tests {
             ("-infinity", &[(NegInfty, "-infinity")]),
             ("true", &[(Bool, "true")]),
             ("`a b`.c", &[(FqnColumn, "`a b`.c")]),
+            // KO2-36: a doubled backtick and a line break inside the quotes.
+            ("t.`a``b`", &[(FqnColumn, "t.`a``b`")]),
+            ("t.````", &[(FqnColumn, "t.````")]),
+            ("t.`a\nb`", &[(FqnColumn, "t.`a\nb`")]),
+            ("t.`a.b`", &[(FqnColumn, "t.`a.b`")]),
+            ("`a``b`", &[(QuotedId, "`a``b`")]),
             ("x.*", &[(WildcardColumn, "x.*")]),
             ("12:00:00", &[(Time, "12:00:00")]),
             ("'it\\'s'", &[(Str, "'it\\'s'")]),
@@ -520,5 +532,18 @@ mod tests {
             let want: Vec<(Kind, String)> = want.iter().map(|(k, t)| (*k, t.to_string())).collect();
             assert_eq!(kinds(text), want, "{text:?}");
         }
+    }
+
+    #[test]
+    fn a_quoted_name_is_closed_by_a_single_backtick() {
+        let lexes = |text: &str| tokenize(&text.chars().collect::<Vec<_>>()).is_ok();
+        // Empty, or never closed: a doubled backtick is part of the name.
+        for text in ["t.``", "t.`a", "t.`a``", "t.```"] {
+            assert!(!lexes(text), "{text:?}");
+        }
+        // A line break inside the quotes moves the next token's row.
+        let chars: Vec<char> = "t.`a\nb` x".chars().collect();
+        let tokens = tokenize(&chars).unwrap();
+        assert_eq!((tokens[1].line, tokens[1].column), (2, 3));
     }
 }

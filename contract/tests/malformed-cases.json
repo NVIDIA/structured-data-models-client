@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, and from T2.1j input.probabilities, a boolean, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -814,6 +814,210 @@
           }
         ]
       }
+    },
+    {
+      "why": "candidates that are not a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": 7
+    },
+    {
+      "why": "candidates as one text, not a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": "7"
+    },
+    {
+      "why": "a candidate written with a fraction",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        1,
+        1.0
+      ]
+    },
+    {
+      "why": "a candidate that is a boolean",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        true
+      ]
+    },
+    {
+      "why": "a candidate that is null",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        null
+      ]
+    },
+    {
+      "why": "a candidate that is a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "why": "top_k as text",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": "3"
+    },
+    {
+      "why": "top_k written with a fraction",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 3.0
+    },
+    {
+      "why": "top_k as a boolean",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": true
+    },
+    {
+      "why": "top_k null",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": null
+    },
+    {
+      "why": "rows_per_call null",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": null
+    },
+    {
+      "why": "rows_per_call a list",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": [
+        3
+      ]
+    },
+    {
+      "why": "rows_per_call an object",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": {
+        "n": 3
+      }
+    },
+    {
+      "why": "fail_call as text",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": "2"
+    },
+    {
+      "why": "fail_call written with a fraction",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 2.0
+    },
+    {
+      "why": "fail_call as a boolean",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": true
+    },
+    {
+      "why": "fail_call below zero",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": -1
+    },
+    {
+      "why": "fail_call null",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": null
+    },
+    {
+      "why": "fail_call past what a u64 holds",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "probabilities as text",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "probabilities as a number",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": 1
+    },
+    {
+      "why": "probabilities null",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": null
     }
   ],
   "accepted": [
@@ -987,6 +1191,162 @@
         "anchor_time": null,
         "seed": null
       }
+    },
+    {
+      "why": "candidates of integers, one past 2**64 read without loss",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        1,
+        2,
+        123456789012345678901234567890
+      ]
+    },
+    {
+      "why": "candidates of text keys",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "why": "top_k of 3",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 3
+    },
+    {
+      "why": "top_k of 0, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 0
+    },
+    {
+      "why": "top_k past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 9223372036854775808
+    },
+    {
+      "why": "top_k past 2**64",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "top_k negative, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": -1
+    },
+    {
+      "why": "rows_per_call of 3",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 3
+    },
+    {
+      "why": "rows_per_call of 0, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 0
+    },
+    {
+      "why": "rows_per_call written with a fraction, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 2.5
+    },
+    {
+      "why": "rows_per_call as a boolean, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": true
+    },
+    {
+      "why": "rows_per_call as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": "3"
+    },
+    {
+      "why": "rows_per_call past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "fail_call of 0, the first call",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 0
+    },
+    {
+      "why": "fail_call of 2",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 2
+    },
+    {
+      "why": "the scripted endpoint told to answer probabilities (T2.8)",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer probabilities",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": false
     }
   ],
   "omitted": [

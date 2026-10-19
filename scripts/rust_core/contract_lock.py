@@ -28,6 +28,9 @@ current version has an entry, is checked by ``cargo test -p sdm-contract
 --test schema_lock``. Run from anywhere in the repository; CI checks out
 every branch so the merge base is there; ``--base`` names another base, and
 the root Python test runs with ``--no-base``, since its checkout is shallow.
+With no base to read, which entries are merged is not known: each but the
+newest is taken as merged, so only the hashes are checked, and a phase's
+working entry beside the merged ones passes (T2.1b: version 26 beside 25).
 """
 
 from __future__ import annotations
@@ -195,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         '--no-base',
         action='store_true',
-        help='check the hashes and the one-working-entry rule only (a shallow checkout)',
+        help='check the hashes only, each entry but the newest taken as merged (a shallow checkout)',
     )
     args = parser.parse_args(argv)
 
@@ -208,7 +211,23 @@ def main(argv: list[str] | None = None) -> int:
 def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
     """Checks one lock; whether it failed."""
     base_locks: list[tuple[str, str]] = []
-    if not no_base:
+    path = REPO_ROOT / lock
+    current = path.read_text(encoding='utf-8') if path.is_file() else ''
+    if no_base:
+        # Each entry but the newest taken as merged, as the base would hold
+        # it, so the hashes alone are checked; a lock that does not parse is
+        # reported by ``check``.
+        try:
+            entries = parse_lock(current)
+        except ValueError:
+            entries = {}
+        older = ''.join(
+            f'{version} sha256:{locked} {name}\n'
+            for version, (locked, name) in sorted(entries.items())
+            if version != max(entries)
+        )
+        base_locks = [('(no base)', older)] if older else []
+    else:
         try:
             base_locks = _base_lock(base, lock)
         except subprocess.CalledProcessError as error:
@@ -223,8 +242,6 @@ def _check_lock(lock: Path, base: str, no_base: bool) -> bool:
         path = REPO_ROOT / SCHEMA_DIR / name
         return path.read_bytes() if path.is_file() else None
 
-    path = REPO_ROOT / lock
-    current = path.read_text(encoding='utf-8') if path.is_file() else ''
     problems = check(current, base_locks, read_schema)
     if not current and not problems:
         problems = [f'{lock} is missing']

@@ -168,6 +168,8 @@ fn fetch_run() -> HostRun {
         }),
         provider: None,
         echo: false,
+        undeclared: vec![],
+        fallback: None,
     };
     let run = HostRun::start(
         &sdm_host::default_root(),

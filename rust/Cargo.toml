@@ -28,6 +28,7 @@ arrow-buffer = "58"
 arrow-data = "58"
 arrow-ipc = { version = "58", default-features = false }
 arrow-pyarrow = "58"
+arrow-row = "58"
 arrow-schema = "58"
 arrow-select = "58"
 base64 = "0.22"
@@ -49,6 +50,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 serde_stacker = "0.1"
 regex = "1"
+# The SQLite engine of the dev-only test host and its tests (T2.2).
+rusqlite = { version = "0.40", features = ["bundled"] }
 sha2 = "0.10"
 stacker = "0.1"
 thiserror = "2"

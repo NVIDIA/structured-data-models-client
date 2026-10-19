@@ -32,8 +32,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_schema::TimeUnit;
-use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey};
-use sdm_contract::data::{DataRequest, DescribePart, TableKey};
+use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
+use sdm_contract::data::{DataRequest, DescribePart, RELATION_RULE, Relation, TableKey};
 use sdm_contract::ops::{ColumnRef, DescribedSource, NamedTable, OperationResult, SourceSpec};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Unit};
 use sdm_engine::time::text::Reader;
@@ -43,10 +43,10 @@ use sdm_schema::catalog;
 use sdm_schema::infer::{self, InferredTable, PREVIEW_ROWS};
 use sdm_schema::keys;
 
-use crate::big_integer;
 use crate::run::{
     ArrowData, Ask, Asker, Attachment, FetchResult, Reply, internal, schema_mismatch,
 };
+use crate::{big_integer, exact_number};
 
 /// The reader of text times for a run whose clock is `facts.now`: its
 /// year, in UTC, places a two-digit year, as the date literals' reader
@@ -120,7 +120,7 @@ pub(crate) async fn run(
         for name in listed {
             assemble::check_table_name(&name)?;
             tables.push(NamedTable {
-                source: name.clone(),
+                source: Relation::named(name.clone()),
                 name,
             });
         }
@@ -175,7 +175,7 @@ pub(crate) async fn run(
             // refuses one it cannot read.
             return Err(not_held());
         }
-        let constraints = declared_keys(keys)?;
+        let constraints = key_columns(&asker, &table.source, declared_keys(keys)?).await?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
         let preview = ask(
             &asker,
@@ -198,6 +198,9 @@ pub(crate) async fn run(
         }
         // A big integer's tier, the whole column's (P1B-43).
         let preview = whole_column_tiers(&asker, &table.source, preview).await?;
+        // A column of numbers handed over as their text, by its role: a
+        // key's text, any other's doubles (crate::exact_number).
+        let preview = exact_number::settle(preview, &constraints)?;
         big_types.push(big_integer_types(&preview, &declared));
         let previewed = infer::preview(
             &table.name,
@@ -399,7 +402,7 @@ fn big_integer_types(preview: &ArrowData, declared: &[CatalogColumn]) -> Vec<(St
 /// past it is refused by name.
 async fn whole_column_tiers(
     asker: &Asker,
-    source: &str,
+    source: &Relation,
     preview: ArrowData,
 ) -> Result<ArrowData, CoreError> {
     let big: Vec<(String, arrow_schema::DataType)> = preview
@@ -418,7 +421,7 @@ async fn whole_column_tiers(
     let read = match ask(
         asker,
         DataRequest::ColumnRanges {
-            table: source.to_owned(),
+            table: source.clone(),
             columns: asked.clone(),
         },
     )
@@ -532,12 +535,12 @@ fn not_held() -> CoreError {
 /// `source` named, whose answer is empty when it holds none (sdm-data's
 /// rendering decides how the dialect matches a name; the core matches
 /// none).
-async fn holds(asker: &Asker, source: &str) -> Result<bool, CoreError> {
+async fn holds(asker: &Asker, source: &Relation) -> Result<bool, CoreError> {
     let held = table_names(
         describe(
             asker,
             DataRequest::Describe {
-                tables: vec![source.to_owned()],
+                tables: vec![source.clone()],
                 part: DescribePart::Tables,
             },
         )
@@ -563,7 +566,15 @@ fn named_tables(spec: &SourceSpec) -> Result<Vec<NamedTable>, CoreError> {
     let mut seen = std::collections::BTreeSet::new();
     for table in &spec.tables {
         assemble::check_table_name(&table.name)?;
-        if table.source.is_empty() {
+        // A relation of no part is no source's (design choice 12): refused
+        // by its rule here, whatever reads it; how many parts a source takes
+        // is its dialect's or provider's to refuse.
+        if table.source.source.is_empty() {
+            return Err(
+                refuse("a relation names no part").with_field("rule", Detail::text(RELATION_RULE))
+            );
+        }
+        if table.source.source.iter().any(String::is_empty) {
             return Err(refuse("a table's name in the source is empty"));
         }
         if !seen.insert(table.name.as_str()) {
@@ -589,15 +600,18 @@ fn declared_links(
     tables: &[InferredTable],
 ) -> Vec<Vec<ColumnRef>> {
     // Source name to the table described under it, the last one winning,
-    // in the order each source name first appears.
+    // in the order each source name first appears. A relation of several
+    // parts names its table by them, which a foreign key's one name does
+    // not say: none refers to it (design choice 12; Phase 2's hosts give
+    // one part).
     let mut by_source: Vec<(&str, &InferredTable)> = Vec::new();
     for described in tables {
-        match by_source
-            .iter_mut()
-            .find(|(source, _)| *source == described.source)
-        {
+        let Some(name) = described.source.single() else {
+            continue;
+        };
+        match by_source.iter_mut().find(|(source, _)| *source == name) {
             Some(slot) => slot.1 = described,
-            None => by_source.push((&described.source, described)),
+            None => by_source.push((name, described)),
         }
     }
     let mut keys: Vec<(&String, &CatalogForeignKey)> = Vec::new();
@@ -804,6 +818,46 @@ fn declared_keys(answer: CatalogAnswer) -> Result<Vec<CatalogKey>, CoreError> {
     }
 }
 
+/// `keys`, each one the catalog lists as an index by its name (SQLite's
+/// unique indexes) with its columns read by that name, one index after
+/// another in the catalog's order, as the reference reads each
+/// (`PRAGMA index_info`); the index is its table's schema's object, so its
+/// relation is `source`'s with the index's name last.
+async fn key_columns(
+    asker: &Asker,
+    source: &Relation,
+    keys: Vec<CatalogKey>,
+) -> Result<Vec<CatalogKey>, CoreError> {
+    let mut read = Vec::with_capacity(keys.len());
+    for mut key in keys {
+        if let Some(index) = &key.index {
+            let mut relation = source.clone();
+            if let Some(last) = relation.source.last_mut() {
+                last.clone_from(index);
+            }
+            let answer = describe(
+                asker,
+                DataRequest::Describe {
+                    tables: vec![relation],
+                    part: DescribePart::IndexColumns,
+                },
+            )
+            .await?;
+            let CatalogAnswer::IndexColumns(columns) = answer else {
+                return Err(another_part());
+            };
+            // An index over an expression names no column, and keys none
+            // the core can read.
+            match columns.into_iter().collect::<Option<Vec<String>>>() {
+                Some(columns) if !columns.is_empty() => key.columns = columns,
+                _ => key.kind = KeyKind::Other,
+            }
+        }
+        read.push(key);
+    }
+    Ok(read)
+}
+
 fn foreign_keys(answer: CatalogAnswer) -> Result<Vec<CatalogForeignKey>, CoreError> {
     match answer {
         CatalogAnswer::ForeignKeys(keys) => Ok(keys),
@@ -838,6 +892,9 @@ fn data(reply: Reply, request: &'static str) -> Result<ArrowData, CoreError> {
             Err(CoreError::provider(&error).with_field("request", Detail::text(request)))
         }
         Reply::Model(_) => Err(internal("a fetch was answered by the model")),
+        // The run reads a provider's pages as one answer before it reaches
+        // the body.
+        Reply::Fetch(FetchResult::Page { .. }) => Err(internal("a page reached the body")),
     }
 }
 

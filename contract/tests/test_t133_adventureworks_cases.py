@@ -15,7 +15,9 @@ notebook, before the implementation. The cases are
 ``base.adventureworks.color.json``.
 
 - The questions are the notebook's (``examples/databricks/
-  adventureworks_relational.ipynb``, ``QUESTIONS['inactivity_90d']`` and
+  adventureworks_relational.ipynb``, frozen since T2.0c as
+  ``contract/fixtures/adventureworks/notebook-fa0637d4.ipynb``,
+  ``QUESTIONS['inactivity_90d']`` and
   ``QUESTIONS['product_color']``): the query text as the client prints
   it once parsed (``to_string()``), no option the notebook does not pass
   (``inference_config`` among them), and the entities its
@@ -71,7 +73,10 @@ ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / 'contract/cases/s1'
 IDS = ['base.adventureworks.churn', 'base.adventureworks.color']
 BASE = 'base.adventureworks'
-NOTEBOOK = ROOT / 'examples/databricks/adventureworks_relational.ipynb'
+#: The notebook as it was at fa0637d4, the cases' source: main deleted it
+#: from ``examples/`` (18e26f1c), and T2.0c keeps it here, frozen, so the
+#: cases are still held to the questions they were written from.
+NOTEBOOK = ROOT / 'contract/fixtures/adventureworks/notebook-fa0637d4.ipynb'
 #: Each case's question in the notebook's ``QUESTIONS``.
 QUESTION = {
     'base.adventureworks.churn': 'inactivity_90d',
@@ -152,12 +157,23 @@ def reference() -> dict[str, dict[str, Any]]:
     return out
 
 
+def input_only(entry: dict[str, Any]) -> bool:
+    r"""Whether ``entry`` records an input migration alone: it lists case
+    outcomes, and in each the outcome is the one before (P2A-1, T2.1b's
+    AdventureWorks sources as relations). Such an entry approves no
+    difference in an answer."""
+    outcomes = entry.get('case_outcomes') or []
+    return bool(outcomes) and all(
+        row.get('old') == row.get('new') for row in outcomes
+    )
+
+
 def registered_case(case: str) -> str | None:
-    r"""The approved entry, other than the placeholder, that lists ``case``
-    in its ``cases``."""
+    r"""The approved entry, other than the placeholder and an input-only
+    migration, that lists ``case`` in its ``cases``."""
     path = ROOT / 'docs/design/rust-core/register.yaml'
     for entry in yaml.safe_load(path.read_text(encoding='utf-8'))['entries']:
-        if entry['id'] in UMBRELLAS:
+        if entry['id'] in UMBRELLAS or input_only(entry):
             continue
         if entry.get('status') == 'approved' and case in (
             entry.get('cases') or []
@@ -493,6 +509,30 @@ def test_the_answer_comparison_fails_closed() -> None:
         problem = answer_problem(case, changed(edit), theirs)
         assert problem is not None and part in problem, part
     assert registered_case(case) is None
+
+
+def test_an_input_only_migration_approves_no_answer_difference() -> None:
+    # P2A-1 lists the three cases with every outcome unchanged: it moves
+    # their inputs, not their answers, so it registers none of them here.
+    path = ROOT / 'docs/design/rust-core/register.yaml'
+    entries = {
+        entry['id']: entry
+        for entry in yaml.safe_load(path.read_text(encoding='utf-8'))['entries']
+    }
+    migration = entries['P2A-1']
+    assert migration['status'] == 'approved'
+    assert set(migration['cases']) >= {
+        'base.adventureworks',
+        'base.adventureworks.churn',
+        'base.adventureworks.color',
+    }
+    assert input_only(migration)
+    # Seeded: the same entry with one outcome moved approves a difference
+    # again, and an entry with no outcomes listed is never input-only.
+    moved = json.loads(json.dumps(migration))
+    moved['case_outcomes'][0]['new'] = 'refusal at predict'
+    assert not input_only(moved)
+    assert not input_only({**migration, 'case_outcomes': []})
 
 
 # --- the gating -----------------------------------------------------------------

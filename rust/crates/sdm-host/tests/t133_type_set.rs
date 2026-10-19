@@ -778,11 +778,12 @@ fn host_provider() -> ProviderChoice {
         capabilities: ProviderCapabilities {
             optional: BTreeSet::from([OptionalRequest::Preview]),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::Unseeded,
+            fallback: None,
         },
     }
 }
@@ -857,7 +858,7 @@ fn answer(request: &DataRequest, received: &DataType) -> ArrowData {
 fn infer_column(received: &DataType) -> Value {
     let run = || -> Result<Value, CoreError> {
         let spec = json!({
-            "tables": [{"name": "t", "source": "t"}],
+            "tables": [{"name": "t", "source": {"source": ["t"]}}],
             "primary_keys": {},
             "time_columns": {},
         });

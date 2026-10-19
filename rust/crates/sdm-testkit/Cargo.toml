@@ -16,6 +16,10 @@ publish.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-host = { path = "../sdm-host" }
 anyhow.workspace = true
+# The Postgres replay (KO2-20): a recorded answer is an Arrow IPC stream
+# in base64 text.
+arrow-ipc.workspace = true
+base64.workspace = true
 # vtab-arrow: the Arrow table function a key set is bound through, as the
 # provider binds a key set (a relation of the attachment's rows); it adds
 # the num crates to the test host only.
@@ -25,6 +29,9 @@ serde.workspace = true
 # digits; it only adds `RawValue`, changing no other reading.
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
+# The dev-only SQLite provider of `sdm-contract-run --database sqlite`
+# (T2.2), SQLite bundled so the host reads the version it builds.
+rusqlite.workspace = true
 
 [dev-dependencies]
 # The test-only fetch, which echoes what the core admitted, for the
@@ -34,6 +41,8 @@ sdm-host = { path = "../sdm-host", features = ["test-ops"] }
 arrow-array.workspace = true
 arrow-schema.workspace = true
 arrow-select.workspace = true
+# T2.2's tests execute the SQLite dialect's relation goldens on SQLite.
+rusqlite.workspace = true
 
 # Not the workspace lints: unsafe code is denied rather than forbidden, so the
 # Arrow FFI sites can allow it locally.

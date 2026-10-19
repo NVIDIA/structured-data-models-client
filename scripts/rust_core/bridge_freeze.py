@@ -45,7 +45,29 @@ for it are gone), must be declared in ``bridge_changes.json`` under
   old name gone;
 - ``{"gone": "<one line>"}``, an entry that left the freeze: an entry gone
   against the base is declared gone, or moved when its rule moved into
-  Rust, and nothing else.
+  Rust, or main, and nothing else;
+- ``{"main": "<the full SHA of a commit of main> <its title>"}``, a change
+  ``main`` made, brought into the phase branch by the candidate's merge of
+  ``main`` (T2.0e): the SHA is 40 lower-case hex digits, then one space and
+  the commit's own subject; the commit is an ancestor of ``main`` as last
+  fetched (``refs/remotes/origin/main``, never a local branch) and of HEAD,
+  is not an ancestor of the merge base (a commit the base already holds was
+  judged when it came in), is brought in by the package's merge commit of
+  ``main`` on the phase's first-parent history (reached from a parent other
+  than its first; a merge inside ``main`` never counts), changes the entry
+  against its first parent (entries compared by fingerprint; an entry gone,
+  gone there too), the merge's first parent holds the entry as the merge
+  base does (no change of the candidate's own before the merge), the
+  candidate holds the entry as that merge commit holds it, and, where git
+  merges the file cleanly (``git merge-tree``), the merge commit holds git's
+  merge of it (a conflict's resolution is review's): ``main``'s change
+  merged with the phase's, so an entry both changed passes, and a change the
+  candidate made after the merge does not. ``main`` is read from the
+  remote-tracking ref as it stands: CI's checkout fetches it, so CI's run,
+  the evidence a landing stands on, reads the remote's ``main``; a local run
+  reads the ref as last fetched. Review judges, as for the others, whether
+  ``main``'s rule belongs in the bridge; the port of a ``main`` rule into
+  Rust is its own package's ``moved``.
 
 It fails on an undeclared change; on a declaration of an entry that did not
 change (stale), unless the merge base's declarations hold it as it stands,
@@ -54,8 +76,13 @@ by an entry the merge base's declarations already hold (spent: a later
 change states its own reason, so a declaration once landed does not wave
 through every later change to its entry); on ``gone`` for an entry that is
 not gone, or a gone entry declared anything but gone or moved; and on a
-``moved`` that names no task. It reads each frozen file's bytes, as the
-interpreter does, and refuses one declaring a source encoding other than
+``moved`` that names no task. A function ``COVERED`` names that its file no
+longer defines fails by name, unless it is declared ``main`` (T2.0g): the
+gate judges a candidate with its checkpoint's ``COVERED``, so a candidate
+merging ``main``'s deletion of a covered function cannot first take it out;
+the ratchet judges that reason as for any entry gone, and the commit it
+names must be the one that deleted the entry. It reads each frozen file's
+bytes, as the interpreter does, and refuses one declaring a source encoding other than
 UTF-8 (a ``raw_unicode_escape`` or ``utf-7`` cookie runs what a UTF-8
 reader takes for a comment); and it refuses a directory beside a frozen
 module with the module's name, whose package would be imported in the
@@ -135,7 +162,7 @@ import re
 import subprocess
 import sys
 import tokenize
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -169,10 +196,17 @@ ABOUT = (
 CHANGES_ABOUT = (
     'Each change to frozen bridge code against the merge base, with one '
     'reason: moved (a rule moved into Rust, naming its task), refactor '
-    '(behaviour kept) or gone (an entry that left the freeze). Entries the '
-    'merge base already holds are spent and may be pruned.'
+    '(behaviour kept), gone (an entry that left the freeze) or main (a '
+    'change main made, merged by this change: the full SHA of the main '
+    'commit, then its title). Entries the merge base already holds are '
+    'spent and may be pruned.'
 )
-REASONS = ('moved', 'refactor', 'gone')
+REASONS = ('moved', 'refactor', 'gone', 'main')
+#: Where ``main`` is read for a ``main`` reason: the remote's, as last
+#: fetched, never a local branch.
+MAIN_REF = 'refs/remotes/origin/main'
+#: A ``main`` reason: a commit's full SHA, a space, and its title.
+_MAIN_REASON = re.compile(r'([0-9a-f]{40}) (\S.*)')
 #: What a ``moved`` reason names: the task that moves the rule.
 _TASK = re.compile(r'\bT\d+\.\d+[a-z]?\b')
 
@@ -213,7 +247,6 @@ COVERED: dict[Path, tuple[str, ...]] = {
     ),
     _CLIENT / 'materializers/relational.py': (
         'RelationalMaterializer.__init__',
-        'RelationalMaterializer._check_entity_count',
         'RelationalMaterializer._check_limits',
         'RelationalMaterializer._check_shape',
         'RelationalMaterializer._gather',
@@ -575,9 +608,13 @@ def load_changes(
 
 
 def exactness(
-    code: Mapping[Path, Measured | None], baseline: Baseline
+    code: Mapping[Path, Measured | None],
+    baseline: Baseline,
+    deleted_by_main: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Where the code differs from the baseline."""
+    """Where the code differs from the baseline. A covered name the file no
+    longer defines is excused only when ``deleted_by_main`` holds its key
+    (declared ``main``, a reason :func:`ratchet` judges)."""
     problems = []
     covered = entries(code)
     remedy = 'rewrite the baseline (bridge_freeze.py --write)'
@@ -588,11 +625,12 @@ def exactness(
             problems.append(f'{rel}: a frozen bridge file that does not exist')
             continue
         for name in COVERED.get(rel, ()):
-            if name not in found:
+            if name not in found and f'{rel}::{name}' not in deleted_by_main:
                 problems.append(
                     f'{rel}::{name}: COVERED names it, but the file defines '
                     'no such function: take it out of COVERED '
-                    '(bridge_freeze.py) and declare the change'
+                    "(bridge_freeze.py) and declare the change, or main's "
+                    'commit that deleted it'
                 )
         now = covered[str(rel)]
         for name in sorted(set(recorded) - set(now)):
@@ -633,6 +671,11 @@ class Base:
     label: str
     baseline: str | None
     changes: str | None = None
+    #: Why a ``main`` reason's text is not one for the entry (the
+    #: arguments: its key, the text, and its fingerprint now, None when it
+    #: is gone), or None when it is (:func:`main_judge`); without one, a
+    #: ``main`` reason is refused.
+    main: Callable[[str, str, str | None], str | None] | None = None
 
 
 def ratchet(
@@ -642,18 +685,22 @@ def ratchet(
     *,
     declared: Mapping[str, tuple[str, str]],
     spent: Mapping[str, tuple[str, str]],
+    main: Callable[[str, str, str | None], str | None] | None = None,
 ) -> list[str]:
     """The tripwire against the merge base: every entry changed, new or
-    gone is declared, once, with a reason that fits."""
+    gone is declared, once, with a reason that fits; ``main`` judges a
+    ``main`` reason (:attr:`Base.main`)."""
     problems = []
     files = {str(rel): rel for rel in FROZEN}
     files.update({name: Path(name) for name in base if name not in files})
     changed: dict[str, str] = {}
+    current: dict[str, str | None] = {}
     for name_of, rel in files.items():
         now = baseline.get(name_of, {})
         held = base.get(name_of, {})
         for name in sorted(set(now) | set(held)):
             key = f'{rel}::{name}'
+            current[key] = now.get(name)
             if name not in held:
                 changed[key] = 'new'
             elif name not in now:
@@ -674,11 +721,11 @@ def ratchet(
                 f'{key}: {how}, declared only by an entry the base ({label}) '
                 'already holds, which is spent: declare this change anew'
             )
-        elif how == 'gone' and reason[0] not in ('gone', 'moved'):
+        elif how == 'gone' and reason[0] not in ('gone', 'moved', 'main'):
             problems.append(
                 f'{key}: gone against the base ({label}), declared '
                 f'{reason[0]}: an entry that left is declared gone (or moved, '
-                'when its rule moved into Rust)'
+                'when its rule moved into Rust, or main, when main removed it)'
             )
         elif reason[0] == 'gone' and how != 'gone':
             problems.append(
@@ -690,6 +737,17 @@ def ratchet(
                 f'{key}: a moved reason names the task that moves the rule '
                 f'(T1.xx), not {reason[1]!r}'
             )
+        elif reason[0] == 'main':
+            why = (
+                'no git history to judge it by'
+                if main is None
+                else main(key, reason[1], current[key])
+            )
+            if why is not None:
+                problems.append(
+                    f'{key}: {how}, declared main, which is not a change the '
+                    f'candidate merged from main: {why}'
+                )
     for key in sorted(set(declared) - set(changed)):
         if spent.get(key) != declared[key]:
             problems.append(
@@ -719,7 +777,11 @@ def check(root: Path, base: Base | str) -> list[str]:
         return [*problems, f'{error.filename}: does not parse: {error.msg}']
     except Unreadable as error:
         return [*problems, str(error)]
-    problems += exactness(code, baseline)
+    problems += exactness(
+        code,
+        baseline,
+        frozenset(key for key, (kind, _) in declared.items() if kind == 'main'),
+    )
     problems += shadowing(root)
     if isinstance(base, str):
         problems.append(f'no base to ratchet against: {base}')
@@ -746,7 +808,12 @@ def check(root: Path, base: Base | str) -> list[str]:
             return problems + unreadable
         spent = spent_or_none
     problems += ratchet(
-        baseline, then, base.label, declared=declared, spent=spent
+        baseline,
+        then,
+        base.label,
+        declared=declared,
+        spent=spent,
+        main=base.main,
     )
     return problems
 
@@ -783,7 +850,148 @@ def base_baseline(root: Path, ref: str) -> Base | str:
         label=f'{ref} at {merge_base[:12]}',
         baseline=read(BASELINE),
         changes=read(CHANGES),
+        main=main_judge(root, merge_base),
     )
+
+
+def main_judge(
+    root: Path, merge_base: str
+) -> Callable[[str, str, str | None], str | None]:
+    """The judge of a ``main`` reason against ``merge_base``: why its text
+    is not the full SHA and title of a commit of :data:`MAIN_REF` that
+    HEAD holds, ``merge_base`` does not, and that changes the file named,
+    or None when it is."""
+
+    def ask(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ['git', '-C', str(root), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
+
+    def entry_at(rev: str, rel: str, name: str) -> str | None:
+        """The entry's fingerprint in ``rev``'s copy of the file, None when
+        the file or the entry is not there."""
+        if ask('cat-file', '-e', f'{rev}:{rel}').returncode != 0:
+            return None
+        data = subprocess.run(
+            ['git', '-C', str(root), 'show', f'{rev}:{rel}'],
+            capture_output=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        ).stdout
+        try:
+            return measure_text(data, Path(rel)).get(name)
+        except (SyntaxError, Unreadable):
+            return None
+
+    def judge(key: str, text: str, now: str | None) -> str | None:
+        rel, _, name = key.partition('::')
+        found = _MAIN_REASON.fullmatch(text)
+        if not found:
+            return (
+                'a main reason is the full SHA of the commit (40 lower-case '
+                f'hex digits), a space and its title, not {text!r}'
+            )
+        sha, title = found.groups()
+        if ask('cat-file', '-e', f'{sha}^{{commit}}').returncode != 0:
+            return f'{sha} is no commit here'
+        tip = ask('rev-parse', '--verify', '--quiet', f'{MAIN_REF}^{{commit}}')
+        if tip.returncode != 0:
+            return f'no {MAIN_REF} to read main from; fetch origin main'
+        if ask(
+            'merge-base', '--is-ancestor', sha, tip.stdout.strip()
+        ).returncode:
+            return (
+                f'{sha[:12]} is not in main ({MAIN_REF} at '
+                f'{tip.stdout.strip()[:12]}), the only branch merged so'
+            )
+        if ask('merge-base', '--is-ancestor', sha, 'HEAD').returncode:
+            return f'{sha[:12]} is not merged into the candidate'
+        if ask('merge-base', '--is-ancestor', sha, merge_base).returncode == 0:
+            return (
+                f'{sha[:12]} is already in the merge base {merge_base[:12]}, '
+                'so this change did not bring it in'
+            )
+        # Only the package's own merges, on the phase's first-parent
+        # history: a merge inside main (a pull request's) is never one.
+        merges = ask(
+            'rev-list',
+            '--first-parent',
+            '--merges',
+            '--parents',
+            f'{merge_base}..HEAD',
+        ).stdout.splitlines()
+        bringing = [
+            (line.split()[0], line.split()[1], line.split()[2:])
+            for line in merges
+            if len(parents := line.split()[1:]) >= 2
+            and ask('merge-base', '--is-ancestor', sha, parents[0]).returncode
+            and any(
+                ask('merge-base', '--is-ancestor', sha, other).returncode == 0
+                for other in parents[1:]
+            )
+        ]
+        if not bringing:
+            return (
+                f'{sha[:12]} is not brought in by a merge of the candidate '
+                '(a commit main holds reaches the phase branch only by the '
+                "package's merge of main)"
+            )
+        subject = ask('log', '-1', '--format=%s', sha).stdout.strip()
+        if subject != title:
+            return f'{sha[:12]} is titled {subject!r}, not {title!r}'
+        parent = ask('rev-parse', '--verify', '--quiet', f'{sha}^1')
+        if parent.returncode != 0:
+            return f'{sha[:12]} is a root commit, which no merge brings in'
+        changed = ask(
+            'diff', '--name-only', '-z', parent.stdout.strip(), sha, '--'
+        ).stdout.split('\0')
+        if rel not in changed:
+            return f'{sha[:12]} does not change {rel}'
+        if entry_at(sha, rel, name) == entry_at(
+            parent.stdout.strip(), rel, name
+        ):
+            return f'{sha[:12]} does not change the entry {name}'
+        if now is None and entry_at(sha, rel, name) is not None:
+            return f'{sha[:12]} does not delete the entry {name}, now gone'
+        # The entry as the merge bringing the commit in holds it: main's
+        # change merged with the phase's, which no main commit alone made.
+        held = entry_at(merge_base, rel, name)
+        merge, first, others = bringing[0]
+        if entry_at(first, rel, name) != held:
+            return (
+                f'the entry {name} changed on the phase side before the merge '
+                f"of main ({merge[:12]}): a change of the candidate's own "
+                'is declared by its own reason, not main'
+            )
+        merged = entry_at(merge, rel, name)
+        if merged != now:
+            return (
+                f'the entry {name} is not as the merge of main bringing '
+                f'{sha[:12]} in ({merge[:12]}) holds it: the candidate '
+                'changed it after the merge'
+            )
+        # Where git merges the file cleanly, the merge commit holds git's
+        # merge of it; a conflict's resolution is review's, as a refactor.
+        found = ask(
+            'merge-tree', '--write-tree', '--name-only', first, *others
+        ).stdout.split('\n')
+        conflicted = set(
+            found[1 : found.index('')] if '' in found else found[1:]
+        )
+        if found[0] and rel not in conflicted:
+            if entry_at(found[0], rel, name) != merged:
+                return (
+                    f'the entry {name} in the merge of main ({merge[:12]}) '
+                    "is not git's clean merge of its parents: the merge "
+                    'commit itself changed it'
+                )
+        return None
+
+    return judge
 
 
 def base_ref(

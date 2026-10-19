@@ -1,0 +1,18 @@
+# T2.1e: SQLite and Postgres lines judged against their effective expectations
+
+On the phase head after T2.1d's landing (1a37efe2), before T2.2 lands; the judging-path changes T2.2's SQLite job needs, moved out of T2.2 so the gate judges T2.2 with a checkpoint that holds them (the orchestrator's decision).
+Each change has one focused test, which fails before it.
+
+## What changed
+
+- **A database line's baseline** (`ratchet.py effective`): a `<case>@sqlite` or `<case>@postgres` line, which no baseline holds, takes python-ref's committed line of that key as its baseline for python-core and rust-host (rust-host's without the stage and error it does not observe), moved by an approved entry as a DuckDB baseline is; DuckDB's lines keep theirs; the SQLite and Postgres contract jobs hand the effective expectations to `compare.py` as the gate and cross-host do (`test_t21e_database_expectations.py`).
+- **`statements_differ`, an entry's opt-in** (`register.schema.json`, `register.py`, `compare.py`): a `case_outcomes` row of an owner-approved entry may name the call its old outcome refuses at, on a move from that refusal to a success; for that line, runner and call the call's `sql.count` and `sql.result` against the reference are reported as diagnostic; without it every call gates as before (`test_t21e_approved_answer.py`).
+- **A database line is held to the calls it makes** (`compare.py`, `line_stop`, `core_held`): a case's core block is DuckDB's run, and off DuckDB the reference's line may stop earlier (SQLite stores a decimal as its canonical text, which the reference types as text and refuses as a number, KO2-47's types); the `route`, `inputs` and core-consistency rules hold such a line to the core operations of the calls before the one it stops at (its effective expectation's refusal, else the reference line's) and to any later one the runner ran; DuckDB's lines are held to the whole block as before; rust-host, which records no edits, has its refused edit read from its operations (`test_t21e_database_stop.py`).
+- **`statements_differ` on an approved refusal, and the two hosts on the operations both ran** (`compare.py`, `register.py`): the opt-in also takes an owner-approved row moving the reference's answer to the runner's refusal at a call (KO2-56's P2B-16), the reference's statements held only through that call, its `sql.count` and `sql.result` and the line's `warnings` reported as diagnostic; and on a database line stopping at a call, where one core host went on into that call or a later one past the operations both ran, the `core` rule holds the two on those operations (`test_t21e_refused_and_shared.py`).
+- **`more_exact` may leave out a value on one side alone** (`register.schema.json`, `compare.py`): an owner-approved item marked `null_on_one_side` leaves out, at its fields only, one value on one side and a null or nothing on the other, so KO2-61's users with no time column, where the reference names one, can be stated (`test_t21e_null_on_one_side.py`).
+
+## Decisions
+
+The opt-in is the orchestrator's decision of 2026-10-18, after both round 1 reviews.
+E112 (Phase 1) holds a moved runner's statements at the reference's stopping call to the reference's, and Phase 1's guard (`test_t132g_later_stage.py`) keeps that so under an approved success; E112 is left as recorded.
+Where the owner approved the answer itself, as KO2-61 approves `time.feature-time-of-day` answering on SQLite where the reference refuses at materialize, the reference's statements up to its refusal are no expectation of that call's, so the entry may say so for that call alone; nothing else on the line, and no unapproved or later-refusal move, is relaxed.

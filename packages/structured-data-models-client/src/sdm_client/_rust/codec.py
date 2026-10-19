@@ -397,6 +397,26 @@ def given_key(value: Any) -> tuple[Any, Any]:
     return given([str.__str__(name) for name in names]), names
 
 
+def relation(name: Any) -> dict[str, Any]:
+    r"""``name``, a table's name in the source, as the contract's relation
+    of one part (contract v26, design choice 12): never split on a dot, so
+    ``'a.b'`` reads the one table of that name."""
+    return {'source': [name]}
+
+
+def relation_name(value: Any) -> str:
+    r"""The name of a relation of one part the core described: this host
+    gives one part, so the core answers one; any other is refused."""
+    parts = value.get('source') if isinstance(value, Mapping) else None
+    if (
+        not isinstance(parts, list)
+        or len(parts) != 1
+        or not isinstance(parts[0], str)
+    ):
+        raise CodecError('relation: not a relation of one part')
+    return parts[0]
+
+
 def _json(data: bytes) -> dict[str, Any]:
     try:
         message = json.loads(data)

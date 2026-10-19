@@ -85,6 +85,7 @@ import importlib.util
 import json
 import re
 import sys
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -155,6 +156,25 @@ def transitions(
     return out, malformed
 
 
+#: The decision rows whose approved entries are improvements on the
+#: reference (KO2-35, exact decimals): a vector such an entry names may
+#: differ in its statement counts too, where the core reads less than the
+#: reference does (its float merging of decimal keys is a statement more).
+IMPROVEMENT_ROWS = frozenset({'KO2-35'})
+
+
+def improvements(document: dict[str, Any] | None = None) -> set[str]:
+    r"""The approved entries whose decision row is an improvement's."""
+    if document is None:
+        document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    return {
+        str(entry['id'])
+        for entry in document['entries']
+        if entry.get('status') == 'approved'
+        and (entry.get('decision_ref') or {}).get('row') in IMPROVEMENT_ROWS
+    }
+
+
 def covered(
     vector_id: str, old: str, new: str
 ) -> tuple[str | None, str | None]:
@@ -195,8 +215,13 @@ def problem_of(
         return None
     if approved is not None and old == new:
         # success -> success, or the same refusal: a difference within the
-        # outcome is declared, the counts are still the reference's.
-        if counted is not None and counted != vector['statements']:
+        # outcome is declared, the counts are still the reference's, but
+        # under an improvement's entry (KO2-35).
+        if (
+            counted is not None
+            and counted != vector['statements']
+            and approved not in improvements()
+        ):
             return (
                 f'{vector["id"]}: statements {counted}, the reference '
                 f'{vector["statements"]}'
@@ -380,15 +405,37 @@ def test_the_vectors_are_not_vacuous() -> None:
     outcomes = [a['outcome'] for a in answers.values()]
     successes = [o for o in outcomes if o['result'] == 'success']
     refusals = [o for o in outcomes if o['result'] == 'refusal']
-    assert len(successes) > 120 and len(refusals) > 40
+    assert len(successes) > 120
+    # At 6298913c (main's eb6c68eb reads a DECIMAL column as int64 or
+    # float64 where its values fit) the reference refuses six, each by
+    # name: a sum past the declared precision of a decimal whose values do
+    # not fit int64 (kept as a decimal), and the four decimal time columns.
+    assert sorted(
+        i for i, a in answers.items() if a['outcome']['result'] == 'refusal'
+    ) == [
+        # The reference reads the DECIMAL(38, 2) primary key's 10**17 + i
+        # as float64, merging the users (T2.0c's key-type pair matrix).
+        'key.pair-merging.d38-2.d38-0',
+        'overflow.d19-0.sum-past',
+        'overflow.d38-0.sum-past',
+        'time.epoch-declared',
+        'time.epoch-in-place',
+        'time.epoch-in-place-declared',
+        'time.yyyymmdd-declared',
+    ]
+    assert {o['code'] for o in refusals} == {'INVALID_REQUEST'}
     for answer in answers.values():
         if answer['outcome']['result'] == 'success':
             assert answer['outcome']['stage'] == 'predict'
             assert answer['payload'] and answer['result']
         else:
             assert answer['payload'] is None
+    # None fails unnamed or with INTERNAL_ERROR at 6298913c, so none is
+    # marked; test_a_difference_passes_only_under_an_approved_transition
+    # holds the marking on a seeded vector.
     marked = [v for v in RECORDED['vectors'] if v['register']['required']]
-    assert 0 < len(marked) < len(RECORDED['vectors'])
+    assert marked == []
+    assert all(o['code'] != 'INTERNAL_ERROR' for o in outcomes)
     # The brief's spread: every type, as a feature on both tables and as a
     # summed target, with small values and values at the precision.
     for p, s in R.TYPES:
@@ -417,24 +464,30 @@ def test_the_vectors_are_not_vacuous() -> None:
         'time.',
     ):
         assert sum(i.startswith(prefix) for i in answers) >= 5, prefix
-    # The tracker's T1.27 note, measured: the reference's sum fails at the
-    # column's declared precision (DECIMAL(4, 0): 9999 + 1 refused,
-    # INVALID_REQUEST at materialize), and takes the same sum at it.
-    past = answers['overflow.d4-0.sum-past']['outcome']
+    # The tracker's T1.27 note, as the reference at 6298913c measures it:
+    # a sum past the declared precision of a decimal it reads as int64
+    # (DECIMAL(4, 0): 9999 + 1) is taken now (b413e9ad refused it
+    # INVALID_REQUEST), as is the sum at it; a DECIMAL(38, 0) whose values
+    # do not fit int64 stays a decimal, and its sum past 38 digits is still
+    # refused INVALID_REQUEST at materialize, the sum at it taken.
+    for vector_id in ('overflow.d4-0.sum-past', 'overflow.d4-0.sum-at'):
+        assert answers[vector_id]['outcome']['result'] == 'success', vector_id
+    target = _request('overflow.d4-0.sum-at', 'instance_table.TARGET')
+    assert '{"number":"9999.0"}' in target['context']['cells']
+    past = answers['overflow.d38-0.sum-past']['outcome']
     assert (past['result'], past['stage'], past['code']) == (
         'refusal',
         'materialize',
         'INVALID_REQUEST',
     )
-    assert answers['overflow.d4-0.sum-at']['outcome']['result'] == 'success'
-    target = _request('overflow.d4-0.sum-at', 'instance_table.TARGET')
-    assert '{"number":"9999.0"}' in target['context']['cells']
-    # A static decimal target fails the reference with INTERNAL_ERROR
-    # (P1B-18's class), and is marked.
-    for vector_id in answers:
-        if vector_id.startswith('class.static-three.'):
-            assert answers[vector_id]['outcome']['code'] == 'INTERNAL_ERROR'
-            assert BY_ID[vector_id]['register']['required']
+    assert answers['overflow.d38-0.sum-at']['outcome']['result'] == 'success'
+    # A static decimal target failed b413e9ad with INTERNAL_ERROR (P1B-18's
+    # class); at 6298913c the reference answers each, unmarked.
+    three = [i for i in answers if i.startswith('class.static-three.')]
+    assert len(three) >= 5
+    for vector_id in three:
+        assert answers[vector_id]['outcome']['result'] == 'success'
+        assert not BY_ID[vector_id]['register']['required']
     # How decimals reach the model: a DECIMAL(38, 0) past int64 as text,
     # every digit kept; a DECIMAL(4, 0) as int64 numbers; a scale as
     # float64 numbers; nulls as nulls.
@@ -461,6 +514,151 @@ def test_the_vectors_are_not_vacuous() -> None:
             'predict',
         }
         assert vector['statements']['from_source'] > 0, vector['id']
+
+
+# --- the key-type pair matrix (T2.0c) --------------------------------------------
+
+#: Primary and foreign keys of different decimal types holding equal values
+#: (``key.pair.*``: 1.00 against 1.0000, both ways, scale 0 against 2), and
+#: values float64 would merge (``key.pair-merging.*``: 10**17 + 0 to 7).
+PAIRS = [v['id'] for v in RECORDED['vectors'] if v['id'].startswith('key.pair')]
+#: The same shop with integral keys of one type: the join every pair must
+#: give.
+SAME_TYPE = 'key.both.d9-0'
+
+
+def _tables(answer: dict[str, Any]) -> list[Any]:
+    return [payload['tables'] for payload in answer['payload'] or []]
+
+
+def test_the_pair_matrix_is_there_both_ways() -> None:
+    assert sorted(PAIRS) == [
+        'key.pair-merging.d38-0.d38-2',
+        'key.pair-merging.d38-2.d38-0',
+        'key.pair.d10-2.d12-4',
+        'key.pair.d12-4.d10-2',
+        'key.pair.d18-0.d20-2',
+        'key.pair.d20-2.d18-0',
+    ]
+    for vector_id in PAIRS:
+        primary, foreign = (
+            BY_ID[vector_id]['setup'][0],
+            BY_ID[vector_id]['setup'][1],
+        )
+        assert 'users ALTER user_id TYPE DECIMAL' in primary
+        assert 'orders ALTER user_id TYPE DECIMAL' in foreign
+        assert primary.split('TYPE ')[1][:14] != foreign.split('TYPE ')[1][:14]
+    # The reference joins the equal-valued pairs as one type does, and is
+    # wrong on the merging ones (float64): a refusal one way, another join
+    # the other.
+    same = _tables(BY_ID[SAME_TYPE]['reference'])
+    for vector_id in PAIRS:
+        reference = BY_ID[vector_id]['reference']
+        if vector_id.startswith('key.pair.'):
+            assert _tables(reference) == same, vector_id
+        else:
+            assert _tables(reference) != same, vector_id
+
+
+#: The key columns of the pair vectors' requests: the entity reference and
+#: users' and orders' ``user_id``.
+KEY_COLUMNS = frozenset({'__kumo_entity_ref_0', 'user_id'})
+
+
+def _key(cell: Any) -> Decimal:
+    r"""A key cell's exact value, sent as a number or as its digits."""
+    return Decimal(cell['number'] if isinstance(cell, dict) else cell)
+
+
+def _joined(body: dict[str, Any], offset: int) -> dict[str, Any]:
+    r"""Every table of a request, every row and cell, its key cells read
+    exactly and less ``offset``: which entity each row is about and which
+    foreign rows joined it."""
+    out = {}
+    for part in ('context', 'predict'):
+        tables = {
+            'instance_table': body[part]['instance_table'],
+            **body[part]['related_tables'],
+        }
+        for name, table in tables.items():
+            columns = table['columns']
+            out[f'{part}.{name}'] = (
+                columns,
+                [
+                    [
+                        _key(cell) - offset
+                        if column in KEY_COLUMNS and cell is not None
+                        else cell
+                        for column, cell in zip(columns, row, strict=True)
+                    ]
+                    for row in table['rows']
+                ],
+            )
+    return out
+
+
+def _offset(vector_id: str) -> int:
+    return 10**17 if vector_id.startswith('key.pair-merging.') else 0
+
+
+def _identities(observation: dict[str, Any], offset: int) -> list[Decimal]:
+    r"""Each result row's entity id, exactly, less ``offset``."""
+    result = observation['core']['predicted']['result']
+    at = [c['name'] for c in result['columns']].index('id')
+    return [
+        Decimal(next(iter(row[at].values()))) - offset for row in result['rows']
+    ]
+
+
+@pytest.mark.parametrize('vector_id', [pytest.param(i, id=i) for i in PAIRS])
+def test_a_decimal_key_pair_joins_exactly_on_the_core(
+    vector_id: str, core_runs: dict[str, Any]
+) -> None:
+    r"""Exact decimals (T2.0c): every pair, the merging ones included,
+    sends the request key.both.d9-0 sends (whose requests are the
+    reference's, held by the per-vector test), every row and cell of every
+    table, its keys read exactly and shifted by the pair's base: the same
+    entities joined to the same foreign rows. Each result row's id is the
+    entity asked for, exactly, in order."""
+    observation = core_runs[vector_id]
+    assert R.project(observation, BY_ID[vector_id])['outcome']['result'] == (
+        'success'
+    )
+    offset = _offset(vector_id)
+    [got] = [p['parsed'] for p in observation['public']['payloads']]
+    [same] = [p['parsed'] for p in core_runs[SAME_TYPE]['public']['payloads']]
+    assert _joined(got, offset) == _joined(same, 0)
+    assert _identities(observation, offset) == [Decimal(0), Decimal(1)]
+    assert [
+        Decimal(i) - offset for i in BY_ID[vector_id].get('indices', [0, 1])
+    ] == [0, 1]
+
+
+def test_the_exact_join_check_fails_on_a_merged_key(
+    core_runs: dict[str, Any],
+) -> None:
+    r"""Codex's round 2 repro: every non-null ``orders.user_id`` of the
+    merging pair replaced by the valid but wrong key 10**17 keeps every row
+    and null count, and fails the exact comparison; so does one entity's
+    result id merged into the other's."""
+    vector_id = 'key.pair-merging.d38-0.d38-2'
+    observation = copy.deepcopy(core_runs[vector_id])
+    [got] = [p['parsed'] for p in observation['public']['payloads']]
+    [same] = [p['parsed'] for p in core_runs[SAME_TYPE]['public']['payloads']]
+    offset = _offset(vector_id)
+    assert _joined(got, offset) == _joined(same, 0)
+    merged = copy.deepcopy(got)
+    for part in ('context', 'predict'):
+        orders = merged[part]['related_tables']['orders']
+        at = orders['columns'].index('user_id')
+        for row in orders['rows']:
+            if row[at] is not None:
+                row[at] = str(10**17)
+    assert _joined(merged, offset) != _joined(same, 0)
+    result = observation['core']['predicted']['result']
+    at = [c['name'] for c in result['columns']].index('id')
+    result['rows'][1][at] = dict(result['rows'][0][at])
+    assert _identities(observation, offset) != [Decimal(0), Decimal(1)]
 
 
 # --- T1.32d's null.decimal-18-2 -------------------------------------------------
@@ -527,6 +725,18 @@ def test_every_vector_ref_names_its_transition() -> None:
     assert transitions()[1] == []
 
 
+def test_the_improvements_are_ko2_35_s_approved_entries() -> None:
+    # P2B-1, exact decimals, is approved under KO2-35; no entry under
+    # another decision row is an improvement's.
+    assert 'P2B-1' in improvements()
+    document = yaml.safe_load(REGISTER.read_text(encoding='utf-8'))
+    rows = {
+        str(e['id']): (e.get('decision_ref') or {}).get('row')
+        for e in document['entries']
+    }
+    assert {rows[i] for i in improvements()} == {'KO2-35'}
+
+
 def test_a_difference_passes_only_under_an_approved_transition(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -534,7 +744,19 @@ def test_a_difference_passes_only_under_an_approved_transition(
     # register entries.
     module = sys.modules[__name__]
     plain = BY_ID['feature.users.d4-2.spread']
-    marked = BY_ID['class.static-three.d4-0']
+    # class.static-three.d4-0 as the reference answered it at b413e9ad
+    # (INTERNAL_ERROR at materialize), seeded: no recorded vector fails so
+    # at 6298913c. Its mark is the recorder's own, derived from it.
+    marked = copy.deepcopy(BY_ID['class.static-three.d4-0'])
+    marked['reference']['outcome'] = {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'StructuredDataError',
+        'code': 'INTERNAL_ERROR',
+    }
+    marked['reference']['payload'] = None
+    why = R.register(marked['reference'])
+    marked['register'] = {'required': bool(why), 'why': why}
     assert marked['register']['required']
     assert R.outcome_class(marked['reference']['outcome']) == (
         'refusal INTERNAL_ERROR'
@@ -583,9 +805,9 @@ def test_a_difference_passes_only_under_an_approved_transition(
     assert problem_of(marked, succeeded) is not None
     # An unmarked vector, a sum past the declared precision refused by
     # name, is held exactly, and excused only the same way.
-    past = BY_ID['overflow.d4-0.sum-past']
+    past = BY_ID['overflow.d38-0.sum-past']
     assert not past['register']['required']
-    taken = copy.deepcopy(BY_ID['overflow.d4-0.sum-at']['reference'])
+    taken = copy.deepcopy(BY_ID['overflow.d38-0.sum-at']['reference'])
     entries[:] = []
     assert problem_of(past, taken) is not None
     entries[:] = [
@@ -632,6 +854,17 @@ def test_a_difference_passes_only_under_an_approved_transition(
     assert problem_of(plain, plain['reference'], more) is not None
     entries[:] = [('A-3', 'approved', 'feature.users.*', 'success', 'success')]
     assert problem_of(plain, changed, counts) is None
+    assert problem_of(plain, changed, more) is not None
+    # Under an improvement's approved entry (KO2-35) the counts may differ
+    # too, for the vectors it names alone; the same entry not an
+    # improvement's still holds them.
+    monkeypatch.setattr(module, 'improvements', lambda: {'A-3'})
+    assert problem_of(plain, changed, more) is None
+    assert problem_of(plain, plain['reference'], more) is not None
+    entries[:] = [('A-3', 'approved', 'feature.orders.*', 'success', 'success')]
+    assert problem_of(plain, changed, more) is not None
+    monkeypatch.setattr(module, 'improvements', set)
+    entries[:] = [('A-3', 'approved', 'feature.users.*', 'success', 'success')]
     assert problem_of(plain, changed, more) is not None
 
 

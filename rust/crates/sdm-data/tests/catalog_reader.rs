@@ -36,11 +36,12 @@ fn host() -> ProviderChoice {
         capabilities: ProviderCapabilities {
             optional: Default::default(),
             max_keys_per_request: None,
-            max_seed: None,
+            max_seed: u64::MAX,
             text_times: None,
             null_order: None,
             index_advice: None,
             sampling: Determinism::SeededStable,
+            fallback: None,
         },
     }
 }
@@ -132,12 +133,18 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
             declared_type: "BIGINT".into(),
             not_null: true,
             primary_key: true,
+            key_nullable: false,
+            unique: false,
+            dtype: None,
         },
         CatalogColumn {
             name: "ts".into(),
             declared_type: "TIMESTAMP".into(),
             not_null: false,
             primary_key: false,
+            key_nullable: false,
+            unique: false,
+            dtype: None,
         },
     ]);
     let name = strings(&[Some("order_id"), Some("ts")]);
@@ -167,14 +174,17 @@ fn duckdb_s_catalog_and_a_host_s_read_to_the_same_answer() {
         CatalogKey {
             kind: KeyKind::Primary,
             columns: vec!["order_id".into()],
+            index: None,
         },
         CatalogKey {
             kind: KeyKind::Unique,
             columns: vec!["a".into(), "b".into()],
+            index: None,
         },
         CatalogKey {
             kind: KeyKind::Other,
             columns: vec!["user_id".into()],
+            index: None,
         },
     ]);
     let members: &[&[&str]] = &[&["order_id"], &["a", "b"], &["user_id"]];
@@ -388,13 +398,13 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
         .read(
             &columns,
             &ProviderChoice::Sql {
-                dialect: Dialect::new("sqlite"),
+                dialect: Dialect::new("snowflake"),
             },
             &[],
         )
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(err.fields["dialect"], Detail::text("sqlite"));
+    assert_eq!(err.fields["dialect"], Detail::text("snowflake"));
 }
 
 /// The plan's expected shape is what the reader reads: an answer in the

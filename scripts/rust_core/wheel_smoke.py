@@ -9,8 +9,8 @@ CI's ``wheel-smoke`` job runs this once per lane, with the wheels the
 ``native-wheel`` and ``native-test-ops`` jobs built, never rebuilt and
 never the source tree. Each lane is a pinned runtime of decision E16:
 
-- ``floor``: Python 3.10 with pyarrow 14.0.1, pandas 2.2.0 and NumPy
-  1.26.4, the floors every distribution declares;
+- ``floor``: Python 3.10 with pyarrow 14.0.1, pandas 2.2.2 and NumPy
+  1.23.5, the floors every distribution declares;
 - ``newest``: Python 3.14 with pandas 3, NumPy 2 and pyarrow at the newest
   releases those admit, resolved afresh on every run (no upper bound, a new
   environment, pip's newest).
@@ -137,6 +137,12 @@ EXPECTED: dict[str, tuple[str, ...]] = {
         'test_only_the_test_ops_build_takes_a_test_operation',
         'test_importing_the_module_changes_nothing_in_the_process',
     ),
+    'test_paged_schema.py': (
+        'test_the_unpaged_reply_with_a_null_is_refused',
+        'test_a_null_in_the_first_page_is_refused',
+        'test_a_null_in_a_middle_page_is_refused',
+        'test_a_valid_paged_answer_reads_whole',
+    ),
     'test_test_ops.py': (
         'test_another_thread_runs_and_logs_while_the_core_holds_a_call',
         'test_a_second_call_while_one_is_in_the_run_is_refused_as_busy',
@@ -197,8 +203,8 @@ LANES = {
         python='3.10',
         image='ghcr.io/nvidia/structured-data-models-client/python:3.10.22-trixie'
         '@sha256:c10791e6f69086d5216f7b5d3b839929c454e24305867ed9bc5152f0355b5423',
-        pins=('pyarrow==14.0.1', 'pandas==2.2.0', 'numpy==1.26.4'),
-        resolved={'pyarrow': '14.0.1', 'pandas': '2.2.0', 'numpy': '1.26.4'},
+        pins=('pyarrow==14.0.1', 'pandas==2.2.2', 'numpy==1.23.5'),
+        resolved={'pyarrow': '14.0.1', 'pandas': '2.2.2', 'numpy': '1.23.5'},
     ),
     'newest': Lane(
         python='3.14',

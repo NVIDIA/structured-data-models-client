@@ -17,11 +17,21 @@ It holds the file, as ``--root``'s tree has it, to:
 - unique IDs, and with ``--checkpoint`` (the checkpoint's register, of
   either format) never reused: every ID the checkpoint has is still there,
   so an entry is never deleted, and a withdrawn one is ``rejected``;
-- ``cases`` that resolve: a case of the corpus (``contract/cases``), or the
-  legacy form of an entry written before it, a task ID (``T1.7c``) or a
-  Phase 1b inventory case ID; ``case_outcomes`` name corpus cases only, but
-  for a case they record as ``removed``;
+- ``cases`` that resolve: a case of the corpus (``contract/cases``), or
+  its line on another database (``X@sqlite``, ``X@postgres``, T2.1e), which
+  names that line only, or the legacy form of an entry written before it,
+  a task ID (``T1.7c``) or a Phase 1b inventory case ID; each of
+  ``case_outcomes`` names a line's key
+  (``X``, or ``X@sqlite`` and ``X@postgres`` on another database, T2.0f)
+  whose case part is a corpus case, but for a case it records as
+  ``removed``;
 - each ``decision_ref`` a row of the decisions file it names;
+- each ``more_exact`` item's case a line's key (``X``, ``X@sqlite`` or
+  ``X@postgres``, T2.1d) that is one of its entry's ``cases``, or whose
+  case part is (T2.0g);
+- a ``case_outcomes`` row's ``statements_differ`` the one call refused,
+  on a move from the old outcome's refusal there to a success or from a
+  success to the new outcome's refusal there (T2.1e);
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;
   and no entry accepting ``INTERNAL_ERROR``, the code a contained panic
@@ -55,6 +65,8 @@ REFERENCE = Path('contract/reference')
 INVENTORY = Path('docs/design/rust-core/phase-0/phase-1b-inventory.yaml')
 #: A task ID, the legacy form of a case: ``T0.6``, ``T1.7c``, ``T1.11f``.
 TASK = re.compile(r'T[0-9]+\.[0-9]+[a-z]?')
+#: A line's key on another database: the case, ``@``, the database.
+ON_DATABASE = re.compile(r'(?P<case>.+)@(?:sqlite|postgres)')
 #: A projected outcome as ratchet.py writes it (the schema's pattern).
 OUTCOME = re.compile(
     r'(?P<result>success|refusal) ?(?P<code>[A-Z][A-Z0-9_]*|-)?'
@@ -62,6 +74,13 @@ OUTCOME = re.compile(
 )
 #: The code a contained panic answers with; no entry accepts it.
 PANIC = 'INTERNAL_ERROR'
+#: The decision rows that approve only until a package lands (T2.1a's
+#: temporary-approval rule; Phase 2 design, T2.1a's row), named here and
+#: nowhere else in the harness: the locked run's ratchet step
+#: (``ratchet.py check --locked``) fails, naming each, while an approved
+#: entry's ``decision_ref`` cites one. The package that lands the fix
+#: retires its entries (``rejected``, or citing a permanent row).
+TEMPORARY = ('KO2-45', 'KO2-50', 'KO2-56')
 
 
 class Unreadable(Exception):
@@ -212,8 +231,10 @@ def problems(
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
+            line = ON_DATABASE.fullmatch(case)
+            base = case if line is None else line['case']
             if not (
-                case in corpus or TASK.fullmatch(case) or case in inventory
+                base in corpus or TASK.fullmatch(base) or base in inventory
             ):
                 found.append(
                     f'{where}: case {case}: not a corpus case, a task ID '
@@ -224,13 +245,33 @@ def problems(
             path = root / ref['file']
             if not path.is_file():
                 found.append(f'{where}: decision_ref: no file {ref["file"]}')
-            elif str(ref['row']) not in decision_rows(path):
-                found.append(
-                    f'{where}: decision_ref: {ref["row"]} is not a row of '
-                    f'{ref["file"]}'
-                )
+            else:
+                try:
+                    rows = decision_rows(path)
+                except (OSError, UnicodeDecodeError):
+                    # Named here, not raised: the decisions rule names the
+                    # unreadable file in its own words (T2.0c fix 3).
+                    found.append(
+                        f'{where}: decision_ref: {ref["file"]} cannot be read '
+                        'as UTF-8 text'
+                    )
+                else:
+                    if str(ref['row']) not in rows:
+                        found.append(
+                            f'{where}: decision_ref: {ref["row"]} is not a row '
+                            f'of {ref["file"]}'
+                        )
         for outcome in entry.get('case_outcomes', []):
             found += _outcome_problems(entry, outcome, corpus, accepted)
+        for item in entry.get('more_exact', []):
+            # A line's key: the case, or the case and its database (T2.1d).
+            if (
+                item['case'] not in entry['cases']
+                and item['case'].partition('@')[0] not in entry['cases']
+            ):
+                found.append(
+                    f'{where}: more_exact: {item["case"]} is not one of its cases'
+                )
     return found
 
 
@@ -242,11 +283,40 @@ def _outcome_problems(
 ) -> list[str]:
     where = f'{entry["id"]}: {outcome["case"]} on {outcome["runner"]}'
     found = []
-    if outcome['case'] not in corpus and outcome['new'] != 'removed':
+    # The item names a line's key (``X``, ``X@sqlite``, ``X@postgres``):
+    # the part before ``@`` is the corpus case.
+    case = outcome['case'].partition('@')[0]
+    if case not in corpus and outcome['new'] != 'removed':
         found.append(f'{where}: not a corpus case')
     old, new = parse_outcome(outcome['old']), parse_outcome(outcome['new'])
     if new is not None and new['code'] == PANIC:
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
+    calls = outcome.get('statements_differ')
+    if calls is not None and not (
+        old is not None
+        and new is not None
+        and len(calls) == 1
+        and (
+            (
+                old['result'] == 'refusal'
+                and new['result'] == 'success'
+                and old['stage'] in (None, calls[0])
+            )
+            or (
+                old['result'] == 'success'
+                and new['result'] == 'refusal'
+                and new['stage'] in (None, calls[0])
+            )
+        )
+    ):
+        # The call whose statements differ is the one refused: the
+        # reference's, on a move from that refusal to an answer, or the
+        # runner's, on a move from the reference's answer to that refusal
+        # (rust-host's outcome names no stage; T2.1e).
+        found.append(
+            f'{where}: statements_differ names other than the one call '
+            'refused, on a move between that refusal and a success'
+        )
     refuses = new is not None and new['result'] == 'refusal'
     newly = refuses and (
         (old is not None and old['result'] == 'success')

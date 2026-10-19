@@ -65,6 +65,8 @@ fn start(request: &Value) -> HostRun {
             dialect: Dialect::new("duckdb"),
         }),
         echo: true,
+        undeclared: vec![],
+        fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
@@ -101,6 +103,7 @@ fn admitted(
             id: requests[0].id,
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),
+                continuation: None,
             },
         }))
         .unwrap(),
@@ -499,6 +502,8 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
             dialect: Dialect::new("duckdb"),
         }),
         echo: true,
+        undeclared: vec![],
+        fallback: None,
     };
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
@@ -555,6 +560,7 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
             id: step.id,
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),
+                continuation: None,
             },
         }))
         .unwrap(),
@@ -735,6 +741,7 @@ fn two_key_sets_bound_to_one_name_are_refused() {
             }],
             expect: sdm_contract::data::ExpectedSchema::Discover {},
         },
+        continuation: None,
     };
     let keys = |values: &[&str]| {
         let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);
@@ -876,7 +883,7 @@ fn base_regression_s_statements_return_the_reference_s_results() {
 fn columns_of(connection: &Connection, table: &str) -> (String, Vec<RecordBatch>) {
     use sdm_contract::data::{DescribePart, FetchPlan};
     let request = DataRequest::Describe {
-        tables: vec![table.to_owned()],
+        tables: vec![table.into()],
         part: DescribePart::Columns,
     };
     let duckdb = ProviderChoice::Sql {
@@ -1256,7 +1263,7 @@ fn a_named_table_the_source_lacks_is_the_caller_s_naming_refused() {
     // columns; the core asks the table list then and refuses the naming
     // with the reference's INVALID_REQUEST, on this host as on python-core.
     let observed = described_as(
-        serde_json::json!({"tables": [{"name": "x", "source": "nope"}], "primary_keys": {}, "time_columns": {}}),
+        serde_json::json!({"tables": [{"name": "x", "source": {"source": ["nope"]}}], "primary_keys": {}, "time_columns": {}}),
         vec![],
     );
     let Answer::Error { code, fields, .. } = &observed.answer else {
@@ -1276,9 +1283,9 @@ fn a_source_table_named_twice_is_joined_under_its_last_name() {
         let observed = described_as(
             serde_json::json!({
                 "tables": [
-                    {"name": "first", "source": referenced},
-                    {"name": "children", "source": "child"},
-                    {"name": "second", "source": referenced},
+                    {"name": "first", "source": {"source": [referenced]}},
+                    {"name": "children", "source": {"source": ["child"]}},
+                    {"name": "second", "source": {"source": [referenced]}},
                 ],
                 "primary_keys": {},
                 "time_columns": {},
@@ -1333,8 +1340,10 @@ fn the_source_says_which_relations_it_holds_under_a_name() {
         ("elsewhere_view", 0),
         ("attached", 0),
     ] {
-        let run =
-            start(&serde_json::json!({"request": "describe", "tables": [name], "part": "tables"}));
+        // The name asked as a relation of one part (contract v26).
+        let run = start(&serde_json::json!(
+            {"request": "describe", "tables": [{"source": [name]}], "part": "tables"}
+        ));
         let data = admitted(&run, |step| duck::answer(&connection, step).unwrap());
         let rows: usize = data.batches.iter().map(RecordBatch::num_rows).sum();
         assert_eq!(rows, held, "{name}");

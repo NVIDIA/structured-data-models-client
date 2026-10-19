@@ -32,6 +32,22 @@ The rule, for ``POST /v1/predictions`` with a JSON object body:
 - any other method or path is answered ``404`` with ``{"error":
   "not_found"}``.
 
+Each request a served endpoint receives is a call, numbered from zero in
+the order received (T2.1a; T2.8c's multi-call cases). An endpoint told to
+fail a call answers that one ``500`` with ``{"error": "scripted_failure",
+"call": <its number>}``, a status the client's transport does not retry,
+and every other call by the rule; told to fail none, it answers every call
+by the rule.
+
+An endpoint told to answer probabilities (T2.8's ranking cases, whose
+model answers how sure it is, as a real one does) answers a
+classification call whose ``output.fields`` names ``probabilities`` with
+them: for row ``i`` of call ``k``, ``d = (3k + 5i) mod 9 + 1``, the item
+carries ``probabilities`` with the first class ``(10 - d) / 10``, the
+last ``d / 10`` and any other ``0.0``, and its prediction is the last
+class where ``d > 5``, else the first. Every other call, and every call of
+an endpoint not told to, is answered by the rule above.
+
 Numbers are read as the tokens the request wrote, never through a float,
 so an id past 2**53 is answered as it was asked.
 """
@@ -48,6 +64,8 @@ from typing import Any
 
 #: The path the client posts a prediction to.
 PREDICTIONS = '/v1/predictions'
+#: The status of the call an endpoint is told to fail.
+FAILED = 500
 #: Why a request the rule cannot read is refused, as the 400 body names it.
 REASONS = (
     'not_json',
@@ -117,7 +135,26 @@ def _instance_id(value: Any) -> str:
     raise _Refused('bad_instance_id')
 
 
-def _predictions(payload: Any) -> list[dict[str, Any]]:
+def _asks_probabilities(payload: dict[str, Any]) -> bool:
+    output = payload.get('output')
+    fields = output.get('fields') if isinstance(output, dict) else None
+    return isinstance(fields, list) and 'probabilities' in fields
+
+
+def _sure(task: dict[str, Any], call: int, index: int) -> tuple[Any, dict]:
+    r"""Row ``index`` of call ``call``'s prediction and probabilities, as
+    an endpoint told to answer probabilities gives them."""
+    classes = [str(c) for c in task['target']['classes']]
+    d = (3 * call + 5 * index) % 9 + 1
+    given = {c: 0.0 for c in classes}
+    given[classes[0]] = (10 - d) / 10
+    given[classes[-1]] = d / 10
+    return (classes[-1] if d > 5 else classes[0]), given
+
+
+def _predictions(
+    payload: Any, call: int = 0, probabilities: bool = False
+) -> list[dict[str, Any]]:
     payload = _object(payload, 'not_an_object')
     predict = payload.get('predict')
     table = predict.get('instance_table') if isinstance(predict, dict) else None
@@ -134,27 +171,50 @@ def _predictions(payload: Any) -> list[dict[str, Any]]:
         raise _Refused('no_instance_id')
     at = columns.index('instance_id')
     task = payload.get('task')
-    p = _prediction(task if isinstance(task, dict) else {})
+    task = task if isinstance(task, dict) else {}
+    p = _prediction(task)
+    sure = (
+        probabilities
+        and task.get('kind') != 'regression'
+        and _asks_probabilities(payload)
+    )
     answered = []
     for index, row in enumerate(rows):
         if not isinstance(row, list) or len(row) <= at:
             raise _Refused('not_arrays')
-        answered.append(
-            {
-                'id': _instance_id(row[at]),
-                'row_index': index,
-                'prediction': p,
-            }
-        )
+        item: dict[str, Any] = {
+            'id': _instance_id(row[at]),
+            'row_index': index,
+            'prediction': p,
+        }
+        if sure:
+            item['prediction'], item['probabilities'] = _sure(task, call, index)
+        answered.append(item)
     return answered
 
 
-def answer(method: str, path: str, body: bytes) -> tuple[int, dict[str, Any]]:
-    r"""The rule: the status and JSON body answering one request."""
+def _failed(call: int) -> tuple[int, dict[str, Any]]:
+    return FAILED, {'error': 'scripted_failure', 'call': call}
+
+
+def answer(
+    method: str,
+    path: str,
+    body: bytes,
+    *,
+    call: int = 0,
+    fail_call: int | None = None,
+    probabilities: bool = False,
+) -> tuple[int, dict[str, Any]]:
+    r"""The rule: the status and JSON body answering the request that is
+    call number ``call``, the call numbered ``fail_call`` failed, with a
+    classification's probabilities where ``probabilities`` says so."""
+    if call == fail_call:
+        return _failed(call)
     if method != 'POST' or path != PREDICTIONS:
         return 404, {'error': 'not_found'}
     try:
-        predictions = _predictions(_read(body))
+        predictions = _predictions(_read(body), call, probabilities)
     except _Refused as refused:
         return 400, {'error': refused.reason}
     return 200, {
@@ -168,9 +228,19 @@ def answer(method: str, path: str, body: bytes) -> tuple[int, dict[str, Any]]:
 
 @dataclass
 class Received:
-    r"""What the endpoint was sent, in order: method, path and body bytes."""
+    r"""What the endpoint was sent, in order: method, path and body bytes;
+    a request's position is its call's number."""
 
     requests: list[tuple[str, str, bytes]] = field(default_factory=list)
+    fail_call: int | None = None
+    probabilities: bool = False
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def take(self, method: str, path: str, body: bytes) -> int:
+        r"""Records a request; its call's number."""
+        with self.lock:
+            self.requests.append((method, path, body))
+            return len(self.requests) - 1
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -183,8 +253,22 @@ class _Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length') or 0)
         body = self.rfile.read(length) if length else b''
         received: Received = self.server.received  # type: ignore[attr-defined]
-        received.requests.append((self.command, self.path, body))
-        status, reply = answer(self.command, self.path, body)
+        call = received.take(self.command, self.path, body)
+        # The chosen call fails here, and every other is the rule's, called
+        # as one request is with the call's number and whether to answer
+        # probabilities as keywords (a test may stand a rule of its own in
+        # for it, taking the same arguments).
+        status, reply = (
+            _failed(call)
+            if call == received.fail_call
+            else answer(
+                self.command,
+                self.path,
+                body,
+                call=call,
+                probabilities=received.probabilities,
+            )
+        )
         out = json.dumps(reply).encode()
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
@@ -199,11 +283,15 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 @contextmanager
-def serve() -> Iterator[tuple[str, Received]]:
+def serve(
+    fail_call: int | None = None, probabilities: bool = False
+) -> Iterator[tuple[str, Received]]:
     r"""The endpoint on a free localhost port: its base URL, and what it
-    receives."""
+    receives; the call numbered ``fail_call`` is failed, and a
+    classification answered with its probabilities where ``probabilities``
+    says so."""
     server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
-    received = Received()
+    received = Received(fail_call=fail_call, probabilities=probabilities)
     server.received = received  # type: ignore[attr-defined]
     thread = threading.Thread(
         target=lambda: server.serve_forever(poll_interval=0.01), daemon=True

@@ -6,9 +6,10 @@
 Forced onto the core (``SDM_CORE_ROUTES``, with the schema's route), the
 call's gathering runs on the core's ``materialize``: the request it builds
 for ``base.regression`` is the one the old route builds in the same
-process, payload for payload; a seed of ``2**70`` crosses from Python into
-the core as that exact integer, which DuckDB's data layer refuses by name
-(register entry RS-7); an option or a schema the core does not take yet is
+process, payload for payload; the largest seed a provider can declare,
+``2**64 - 1``, crosses from Python into the core as that exact integer, and
+DuckDB's data layer refuses one past its own range by name (register entry
+RS-7); an option or a schema the core does not take yet is
 refused by name; nothing of the relational engine is imported on the
 route, which a test-only import hook in a process of its own shows. The
 reference comparison of the payload is ``contract/tests``'s.
@@ -24,6 +25,7 @@ import subprocess
 import sys
 import textwrap
 import warnings
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -304,9 +306,10 @@ def test_tables_named_are_sampled_as_the_old_route_samples_them(
     )
     core, schema = _named()
     assert schema._core_description is not None
+    # Each source a relation of one part, its name whole (contract v26).
     assert {
         t['name']: t['source'] for t in schema._core_description['tables']
-    } == NAMED
+    } == {name: {'source': [source]} for name, source in NAMED.items()}
     payload = core._payloads[0]
     assert set(payload['context']['related_tables']) == {'buyers', 'purchases'}
     assert core.entity_table == 'buyers'
@@ -335,16 +338,20 @@ def test_a_schema_not_described_on_the_core_has_no_core_route(
         )
 
 
-def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
-    seed = 2**70
-    assert codec.seed(seed) == '0x400000000000000000'
-    # A host provider, so the seed reaches the sample request unrefused,
-    # and the request carries it back: the core read it exactly.
+def test_the_largest_declared_seed_reaches_the_core_exactly() -> None:
+    # The largest seed any provider can declare (contract v26: every
+    # provider declares its `max_seed`, a u64), past int64 and float64's
+    # exact integers, so a seed read through either would change.
+    seed = 2**64 - 1
+    assert codec.seed(seed) == '0xffffffffffffffff'
+    assert float(seed) != seed and seed > 2**63 - 1
+    # A host provider declaring it, so the seed reaches the sample request
+    # unrefused, and the request carries it back: the core read it exactly.
     description = {
         'tables': [
             {
                 'name': 'users',
-                'source': 'users',
+                'source': {'source': ['users']},
                 'columns': [
                     {
                         'name': 'user_id',
@@ -361,7 +368,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
             },
             {
                 'name': 'orders',
-                'source': 'orders',
+                'source': {'source': ['orders']},
                 'columns': [
                     {
                         'name': 'order_id',
@@ -445,7 +452,7 @@ def test_a_seed_of_2_to_the_70_reaches_the_core_as_that_exact_integer() -> None:
                 ],
                 'max_keys_per_request': None,
                 'sampling': 'seeded_stable',
-                'max_seed': None,
+                'max_seed': seed,
                 # Declared, so the sampler is not refused before it fetches
                 # (T1.26b).
                 'null_order': 'last',
@@ -1430,7 +1437,8 @@ def test_the_host_drops_a_state_on_the_core_s_word_not_the_field_it_names(
 
 #: A decimal average whose sum would not fit DECIMAL(38, 18) (T1.27's fix
 #: round 2): two prices of 6e19 for user 1 in the window, one earlier order
-#: bounding the data. The reference averages them; the sum it refuses.
+#: bounding the data. The reference averages them; the sum it refused at
+#: b413e9ad and answers since main's eb6c68eb (6298913c).
 DECIMAL_AVERAGE = (
     'CREATE TABLE users (user_id BIGINT PRIMARY KEY)',
     'INSERT INTO users SELECT i FROM range(4) t(i)',
@@ -1446,6 +1454,25 @@ DECIMAL_AVERAGE = (
 DECIMAL_AVERAGE_REFERENCE = [
     [0, 1, '2024-02-01T00:00:00.000000Z', 6.000000208206194e19]
 ]
+
+
+def _float32_once(exact: Fraction) -> float:
+    r"""The float32 nearest ``exact``, ties to even: one rounding, never
+    through a float64 first."""
+    import numpy as np
+
+    first = np.float32(float(exact))
+    candidates = {
+        first,
+        np.nextafter(first, np.float32(np.inf)),
+        np.nextafter(first, np.float32(-np.inf)),
+    }
+
+    def key(c: Any) -> tuple[Fraction, int]:
+        bits = int(np.array(c, dtype=np.float32).view(np.uint32))
+        return (abs(Fraction(float(c)) - exact), bits & 1)
+
+    return float(min(candidates, key=key))
 
 
 def _decimal_average(query: str) -> Any:
@@ -1465,25 +1492,35 @@ def test_a_decimal_average_past_38_digits_is_not_the_caller_s_error(
 ) -> None:
     average = 'PREDICT AVG(orders.price, 0, 1, months) FOR EACH users.user_id'
     total = 'PREDICT SUM(orders.price, 0, 1, months) FOR EACH users.user_id'
+
+    def rows_of(query: str) -> list[list[Any]]:
+        request = _decimal_average(query)
+        rows = request._payloads[0]['context']['instance_table']['rows']
+        return json.loads(json.dumps(rows))
+
+    six = 60_000_000_000_000_000_000
+    old = None
     if importlib.util.find_spec('sdm_relational_engine') is not None:
         # The old route is the reference's: the average taken, as recorded,
-        # and the sum refused as the caller's error.
-        request = _decimal_average(average)
-        rows = request._payloads[0]['context']['instance_table']['rows']
-        assert json.loads(json.dumps(rows)) == DECIMAL_AVERAGE_REFERENCE
-        with pytest.raises(StructuredDataError) as refused:
-            _decimal_average(total)
-        assert refused.value.code == 'INVALID_REQUEST'
+        # and since main's eb6c68eb the sum answered too.
+        assert rows_of(average) == DECIMAL_AVERAGE_REFERENCE
+        old = rows_of(total)
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    # On the core a decimal's average is the reference's (T1.32b), its
-    # total past 38 digits not the caller's error.
-    request = _decimal_average(average)
-    rows = request._payloads[0]['context']['instance_table']['rows']
-    assert json.loads(json.dumps(rows)) == DECIMAL_AVERAGE_REFERENCE
-    # The sum is the caller's error on both routes.
-    with pytest.raises(StructuredDataError) as refused:
-        _decimal_average(total)
-    assert refused.value.code == 'INVALID_REQUEST'
+    # On the core (exact decimals, T2.0c) neither is the caller's error:
+    # the average is the exact mean, 6e19, and user 1's sum the exact
+    # 1.2e20 though it passes DECIMAL(38, 18), each rounded once to
+    # float32; every other example's sum is 0.
+    assert rows_of(average) == [
+        [0, 1, '2024-02-01T00:00:00.000000Z', _float32_once(Fraction(six))]
+    ]
+    summed = rows_of(total)
+    labels = {(row[1], row[2]): row[3] for row in summed}
+    assert labels.pop((1, '2024-02-01T00:00:00.000000Z')) == _float32_once(
+        Fraction(2 * six)
+    )
+    assert labels and set(labels.values()) == {0.0}, labels
+    if old is not None:
+        assert summed == old
 
 
 #: Decimal sums whose running total passes 38 digits (or ``i128``) and
@@ -1715,12 +1752,14 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
-    for options in ({'indices': list(range(1_001))}, {'num_hops': 7}):
-        old = _refusal_of(**options)
-        assert (type(old), old.code) == (
-            StructuredDataError,
-            'UNSUPPORTED_REQUEST',
-        ), options
+    old = _refusal_of(num_hops=7)
+    assert (type(old), old.code) == (StructuredDataError, 'UNSUPPORTED_REQUEST')
+    # Since main's 1fc5a686 (the reference at 6298913c) the old route has no
+    # 1,000-entity limit: it refuses these 1,001 indices for another reason
+    # (the shop has 8 users), INVALID_REQUEST, where the core's limit
+    # refuses them first (register P2B-3, until T2.8c).
+    old = _refusal_of(indices=list(range(1_001)))
+    assert (type(old), old.code) == (StructuredDataError, 'INVALID_REQUEST')
 
 
 def test_an_average_compared_with_null_is_refused_by_name_register_p1b_21(
@@ -1804,3 +1843,45 @@ def test_numpy_inference_options_are_read_as_on_the_old_route(
         return
     old = _materialize(query=query, inference_config=config)
     assert core._payloads[0]['inference'] == old._payloads[0]['inference']
+
+
+def test_a_zoned_time_column_one_answer_holds_no_value_of_still_joins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""T2.2 fix 6 (round 1, Claude P1-2): a TIMESTAMPTZ column that one
+    of a table's answers holds no value of (the referrers' last logins,
+    read by their own lookup) keeps its unit there as in the others, so
+    the answers join and ``materialize`` succeeds, as on the old route; a
+    column holding no value was read to nanoseconds before its zone was
+    looked at, and the join failed INTERNAL_ERROR."""
+    connection = duckdb.connect()
+    for statement in (
+        'CREATE TABLE users (user_id INTEGER PRIMARY KEY, '
+        'last_login TIMESTAMPTZ, country VARCHAR)',
+        "INSERT INTO users SELECT i, TIMESTAMPTZ '2024-01-01 00:00:00+00' "
+        "+ i * INTERVAL 1 HOUR, 'c' || (i % 3) FROM range(40) t(i)",
+        "INSERT INTO users SELECT i, NULL, 'r' FROM range(100, 105) t(i)",
+        'CREATE TABLE orders (order_id INTEGER PRIMARY KEY, '
+        'user_id INTEGER REFERENCES users(user_id), '
+        'referrer_id INTEGER REFERENCES users(user_id), ts TIMESTAMP, '
+        'price DOUBLE)',
+        'INSERT INTO orders SELECT i, i % 40, 100 + i % 5, '
+        "TIMESTAMP '2024-01-10' + (i % 50) * INTERVAL 1 DAY, i + 0.5 "
+        'FROM range(200) t(i)',
+        'CREATE TABLE visits (visit_id INTEGER PRIMARY KEY, '
+        'user_id INTEGER REFERENCES users(user_id), ts TIMESTAMP)',
+        'INSERT INTO visits SELECT i, i % 40, '
+        "TIMESTAMP '2024-01-10' + (i % 50) * INTERVAL 1 DAY "
+        'FROM range(300) t(i)',
+    ):
+        connection.execute(statement)
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(
+            'PREDICT COUNT(visits.*, 0, 30, days) FOR EACH users.user_id',
+            schema,
+        ).materialize(indices=[0, 1], anchor_time=ANCHOR)
+    [payload] = request._payloads
+    assert payload['context']['instance_table']['rows']

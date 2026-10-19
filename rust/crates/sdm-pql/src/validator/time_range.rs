@@ -14,7 +14,6 @@ use crate::schema::{ColumnKey, SchemaDefinition};
 use crate::types::{AggregationType, ProblemType, Stype};
 
 use super::type_validator::validate_int64;
-use super::{col_name, table_name};
 
 pub const ENTITY: &str = "ENTITY";
 pub const TARGET: &str = "TARGET";
@@ -55,8 +54,8 @@ fn span(node: &NodeRef) -> Option<Span> {
 
 impl TimeRangeValidator<'_> {
     /// What to ask instead, when the aggregated table has no time column.
-    fn instead_of_aggregating(&self, target_col_fqn: &str) -> String {
-        if target_col_fqn.ends_with(".*") {
+    fn instead_of_aggregating(&self, target_col: &ColumnKey) -> String {
+        if target_col.is_wildcard() {
             return ". There is no static form of this query to fall back on: a wildcard is \
                     only legal inside COUNT, so ask about a column of the entity table instead"
                 .to_string();
@@ -67,7 +66,8 @@ impl TimeRangeValidator<'_> {
         }
         format!(
             " or remove the aggregation and turn this into a static prediction problem with \
-             \"PREDICT {target_col_fqn}\""
+             \"PREDICT {}\"",
+            crate::names::fqn(target_col)
         )
     }
 
@@ -138,8 +138,9 @@ impl TimeRangeValidator<'_> {
         is_label: bool,
     ) -> ValidationResponse {
         let mut response = ValidationResponse::default();
-        let target_col_fqn = ast::get_target_column_name(node);
-        let target_table_name = table_name(&target_col_fqn);
+        let target_col_key =
+            ast::get_target_column_name(node).unwrap_or_else(|| ColumnKey::new("", ""));
+        let target_table_name = target_col_key.table_name.clone();
         let window = ast::aggr_time_range(node);
         let node_text = ast::to_string(node);
         if !allow.temporal && window.is_some() {
@@ -166,7 +167,7 @@ impl TimeRangeValidator<'_> {
                      temporal prediction. To fix this, you can update your schema to include a \
                      \"Create date\" column in {target_table_name}{}",
                     loc_start(node),
-                    self.instead_of_aggregating(&target_col_fqn)
+                    self.instead_of_aggregating(&target_col_key)
                 ),
                 codes::TIME_TABLE_HAS_NO_TIME_COLUMN,
                 span(node),
@@ -177,15 +178,12 @@ impl TimeRangeValidator<'_> {
             let aggr = ast::aggr(node);
             let is_target_list_distinct =
                 query_name == TARGET && aggr == Some(AggregationType::ListDistinct);
-            let column = col_name(&target_col_fqn);
+            let column = target_col_key.col_name.clone();
             let (target_is_fkey, target_is_categorical_col, is_ranking, target_col) =
-                if column == "*" {
+                if target_col_key.is_wildcard() {
                     (false, false, false, None)
                 } else {
-                    let mut is_fkey = self
-                        .schema
-                        .all_keys()
-                        .contains(&&ColumnKey::new(&target_table_name, &column));
+                    let mut is_fkey = self.schema.all_keys().contains(&&target_col_key);
                     if table.pkey.as_deref() == Some(column.as_str()) {
                         is_fkey = false;
                     }
@@ -299,7 +297,7 @@ impl TimeRangeValidator<'_> {
         if let Some(time_col) = &table.time_col
             && let Kind::Aggregation { time_col: slot, .. } = &mut node.borrow_mut().kind
         {
-            *slot = Some(format!("{target_table_name}.{time_col}"));
+            *slot = Some(ColumnKey::new(&target_table_name, time_col));
         }
         response
     }
@@ -342,14 +340,14 @@ impl TimeRangeValidator<'_> {
     /// What applies to a query whose target has no window.
     pub fn static_query_validations(&self, query: &ParsedQuery) -> ValidationResponse {
         let mut response = ValidationResponse::default();
-        let entity_table = table_name(&query.entity_column());
+        let entity_table = query.entity_table();
         if self.schema.table_or_empty(&entity_table).time_col.is_none() {
-            let with_time: Vec<String> = query
+            let with_time: Vec<ColumnKey> = query
                 .all_query_columns()
                 .into_iter()
                 .filter(|c| {
                     self.schema
-                        .table(&table_name(c))
+                        .table(&c.table_name)
                         .is_some_and(|t| t.time_col.is_some())
                 })
                 .collect();

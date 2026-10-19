@@ -1,0 +1,362 @@
+{
+  "format": "sdm-type-map-vectors/1",
+  "about": "T2.1a's type map (design, choice 2), written by the package's independent test author before the implementation, recorded by contract/tools/type_map_record.py: the one definition of a decimal's canonical text (plain positional notation, no exponent, no trailing fractional zeros, no trailing point, -0 written 0), which the Python loader and the Rust key binders each implement and both run; a SQLite decimal stored in a column declared TEXT as that text, since a column declared DECIMAL takes numeric affinity and rounds what it stores (sqlite_distinct_keys, KO2-35); and equal keys of different scales that must still join on every engine (join_across_scales, lesson 19). `map` is the stored type per engine; the rest of the type set's entries are the implementer's, added here under review.",
+  "map": {
+    "boolean": {
+      "duckdb": "BOOLEAN",
+      "sqlite": "BOOLEAN",
+      "postgres": "boolean"
+    },
+    "int8": {
+      "duckdb": "TINYINT",
+      "sqlite": "INTEGER",
+      "postgres": "smallint"
+    },
+    "int16": {
+      "duckdb": "SMALLINT",
+      "sqlite": "INTEGER",
+      "postgres": "smallint"
+    },
+    "int32": {
+      "duckdb": "INTEGER",
+      "sqlite": "INTEGER",
+      "postgres": "integer"
+    },
+    "int64": {
+      "duckdb": "BIGINT",
+      "sqlite": "INTEGER",
+      "postgres": "bigint"
+    },
+    "uint8": {
+      "duckdb": "UTINYINT",
+      "sqlite": "INTEGER",
+      "postgres": "smallint"
+    },
+    "uint16": {
+      "duckdb": "USMALLINT",
+      "sqlite": "INTEGER",
+      "postgres": "integer"
+    },
+    "uint32": {
+      "duckdb": "UINTEGER",
+      "sqlite": "INTEGER",
+      "postgres": "bigint"
+    },
+    "uint64": {
+      "duckdb": "UBIGINT",
+      "sqlite": "TEXT",
+      "sqlite_value": "digits",
+      "postgres": "numeric(20,0)"
+    },
+    "float32": {
+      "duckdb": "FLOAT",
+      "sqlite": "REAL",
+      "sqlite_refuses": "NaN",
+      "postgres": "real"
+    },
+    "float64": {
+      "duckdb": "DOUBLE",
+      "sqlite": "REAL",
+      "sqlite_refuses": "NaN",
+      "postgres": "double precision"
+    },
+    "decimal": {
+      "duckdb": "DECIMAL(p,s)",
+      "sqlite": "TEXT",
+      "sqlite_value": "canonical",
+      "postgres": "numeric(p,s)"
+    },
+    "string": {
+      "duckdb": "VARCHAR",
+      "sqlite": "TEXT",
+      "postgres": "text"
+    },
+    "binary": {
+      "duckdb": "BLOB",
+      "sqlite": "BLOB",
+      "postgres": "bytea"
+    },
+    "date": {
+      "duckdb": "DATE",
+      "sqlite": "DATE",
+      "sqlite_value": "iso",
+      "postgres": "date"
+    },
+    "time": {
+      "duckdb": "TIME",
+      "sqlite": "TIME",
+      "sqlite_value": "iso",
+      "postgres": "time"
+    },
+    "timestamp": {
+      "duckdb": "TIMESTAMP",
+      "sqlite": "TIMESTAMP",
+      "sqlite_value": "iso",
+      "postgres": "timestamp"
+    },
+    "timestamptz": {
+      "duckdb": "TIMESTAMP WITH TIME ZONE",
+      "sqlite": "TIMESTAMPTZ",
+      "sqlite_value": "iso",
+      "postgres": "timestamp with time zone"
+    },
+    "interval": {
+      "duckdb": "INTERVAL",
+      "sqlite": "INTERVAL",
+      "sqlite_value": "iso",
+      "postgres": "interval"
+    },
+    "list": {
+      "duckdb": "T[] or T[n]",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "T[]"
+    },
+    "struct": {
+      "duckdb": "STRUCT(...)",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "(n)"
+    },
+    "map": {
+      "duckdb": "MAP(VARCHAR, T)",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "jsonb",
+      "postgres_value": "json"
+    },
+    "union": {
+      "duckdb": "UNION(...)",
+      "sqlite": "TEXT",
+      "sqlite_value": "json",
+      "postgres": "jsonb",
+      "postgres_value": "json"
+    }
+  },
+  "canonical_text": [
+    {
+      "duckdb_type": "DECIMAL(10,2)",
+      "literal": "100.00",
+      "canonical": "100",
+      "duckdb_text": "100.00",
+      "python_str": "100.00"
+    },
+    {
+      "duckdb_type": "DECIMAL(10,0)",
+      "literal": "100",
+      "canonical": "100",
+      "duckdb_text": "100",
+      "python_str": "100"
+    },
+    {
+      "duckdb_type": "DECIMAL(12,4)",
+      "literal": "100.5000",
+      "canonical": "100.5",
+      "duckdb_text": "100.5000",
+      "python_str": "100.5000"
+    },
+    {
+      "duckdb_type": "DECIMAL(10,2)",
+      "literal": "100.50",
+      "canonical": "100.5",
+      "duckdb_text": "100.50",
+      "python_str": "100.50"
+    },
+    {
+      "duckdb_type": "DECIMAL(10,2)",
+      "literal": "-0.00",
+      "canonical": "0",
+      "duckdb_text": "0.00",
+      "python_str": "0.00"
+    },
+    {
+      "duckdb_type": "DECIMAL(10,0)",
+      "literal": "0",
+      "canonical": "0",
+      "duckdb_text": "0",
+      "python_str": "0"
+    },
+    {
+      "duckdb_type": "DECIMAL(12,4)",
+      "literal": "0.0000",
+      "canonical": "0",
+      "duckdb_text": "0.0000",
+      "python_str": "0.0000"
+    },
+    {
+      "duckdb_type": "DECIMAL(10,2)",
+      "literal": "-1.50",
+      "canonical": "-1.5",
+      "duckdb_text": "-1.50",
+      "python_str": "-1.50"
+    },
+    {
+      "duckdb_type": "DECIMAL(10,2)",
+      "literal": "0.10",
+      "canonical": "0.1",
+      "duckdb_text": "0.10",
+      "python_str": "0.10"
+    },
+    {
+      "duckdb_type": "DECIMAL(18,10)",
+      "literal": "-0.0000000001",
+      "canonical": "-0.0000000001",
+      "duckdb_text": "-0.0000000001",
+      "python_str": "-1E-10"
+    },
+    {
+      "duckdb_type": "DECIMAL(38,38)",
+      "literal": "0.00000000000000000000000000000000000001",
+      "canonical": "0.00000000000000000000000000000000000001",
+      "duckdb_text": ".00000000000000000000000000000000000001",
+      "python_str": "1E-38"
+    },
+    {
+      "duckdb_type": "DECIMAL(38,0)",
+      "literal": "99999999999999999999999999999999999999",
+      "canonical": "99999999999999999999999999999999999999",
+      "duckdb_text": "99999999999999999999999999999999999999",
+      "python_str": "99999999999999999999999999999999999999"
+    },
+    {
+      "duckdb_type": "DECIMAL(38,0)",
+      "literal": "-99999999999999999999999999999999999999",
+      "canonical": "-99999999999999999999999999999999999999",
+      "duckdb_text": "-99999999999999999999999999999999999999",
+      "python_str": "-99999999999999999999999999999999999999"
+    },
+    {
+      "duckdb_type": "DECIMAL(38,18)",
+      "literal": "12345678901234567890.123456789012345678",
+      "canonical": "12345678901234567890.123456789012345678",
+      "duckdb_text": "12345678901234567890.123456789012345678",
+      "python_str": "12345678901234567890.123456789012345678"
+    },
+    {
+      "duckdb_type": "DECIMAL(38,10)",
+      "literal": "1000000.0000000000",
+      "canonical": "1000000",
+      "duckdb_text": "1000000.0000000000",
+      "python_str": "1000000.0000000000"
+    },
+    {
+      "duckdb_type": "DECIMAL(18,8)",
+      "literal": "1234567890.12345601",
+      "canonical": "1234567890.12345601",
+      "duckdb_text": "1234567890.12345601",
+      "python_str": "1234567890.12345601"
+    },
+    {
+      "duckdb_type": "DECIMAL(18,8)",
+      "literal": "1234567890.12345602",
+      "canonical": "1234567890.12345602",
+      "duckdb_text": "1234567890.12345602",
+      "python_str": "1234567890.12345602"
+    },
+    {
+      "duckdb_type": "DECIMAL(4,0)",
+      "literal": "-9999",
+      "canonical": "-9999",
+      "duckdb_text": "-9999",
+      "python_str": "-9999"
+    }
+  ],
+  "one_text": [
+    {
+      "canonical": "0",
+      "literals": [
+        "-0.00",
+        "0",
+        "0.0000"
+      ]
+    },
+    {
+      "canonical": "100",
+      "literals": [
+        "100",
+        "100.00"
+      ]
+    },
+    {
+      "canonical": "100.5",
+      "literals": [
+        "100.50",
+        "100.5000"
+      ]
+    }
+  ],
+  "sqlite_distinct_keys": {
+    "duckdb_type": "DECIMAL(18,8)",
+    "keys": [
+      "1234567890.12345601",
+      "1234567890.12345602"
+    ],
+    "canonical": [
+      "1234567890.12345601",
+      "1234567890.12345602"
+    ],
+    "common_significant_digits": 17,
+    "sqlite_probe": [
+      {
+        "declared": "DECIMAL(18,8)",
+        "storage_classes": [
+          "real"
+        ],
+        "distinct": 1
+      },
+      {
+        "declared": "TEXT",
+        "storage_classes": [
+          "text"
+        ],
+        "distinct": 2
+      }
+    ]
+  },
+  "join_across_scales": {
+    "left": {
+      "duckdb_type": "DECIMAL(10,2)",
+      "keys": [
+        "100.50",
+        "-0.00",
+        "7.00",
+        "12345678.90",
+        "-3.10"
+      ],
+      "canonical": [
+        "100.5",
+        "0",
+        "7",
+        "12345678.9",
+        "-3.1"
+      ]
+    },
+    "right": {
+      "duckdb_type": "DECIMAL(12,4)",
+      "keys": [
+        "100.5000",
+        "0.0000",
+        "7.0000",
+        "12345678.9000",
+        "-3.1000"
+      ],
+      "canonical": [
+        "100.5",
+        "0",
+        "7",
+        "12345678.9",
+        "-3.1"
+      ]
+    },
+    "duckdb_joined": 5
+  },
+  "recorded": {
+    "by": "contract/tools/type_map_record.py",
+    "environment": {
+      "python": "3.12.15",
+      "duckdb": "1.5.6",
+      "pyarrow": "26.0.0",
+      "sqlite": "3.53.1"
+    }
+  }
+}

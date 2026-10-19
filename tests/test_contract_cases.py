@@ -261,6 +261,48 @@ def admitted_inventory_cases() -> set[str]:
     }
 
 
+#: T2.0c's S1 cases for exact decimals (KO2-50), none in the inventory.
+T20C_DECIMAL = (
+    'decimal.compare-finer-gt',
+    'decimal.compare-finer-eq',
+    'decimal.compare-finer-negative',
+    'decimal.compare-past-precision',
+    'decimal.compare-past-precision-gt',
+    'decimal.compare-same-scale',
+    'decimal.sum-10-2',
+    'decimal.feature-inexact-38-18',
+    'decimal.key-wide',
+    'decimal.target-regression-collide',
+)
+
+#: T2.19's two-path sampling cases (main's eb6c68eb), none in the inventory.
+T219_SHAPES = (
+    'shape.chain.addresses',
+    'shape.diamond.addresses',
+    'shape.diamond-from-source',
+    'shape.one-column-two-tables',
+    'shape.same-table-twice.buyers',
+    'shape.same-table-twice.customers',
+    'shape.star.customers',
+    'shape.star.products',
+    'shape.star.stores',
+    'shape.two-paths.keyed',
+    'shape.two-paths.keyless',
+)
+
+
+#: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
+#: each of a dot, a backtick and a line break in a column's name, as a
+#: feature the query does not name, the target, the entity (users' declared
+#: primary key) and an aggregation's column. The filter role waits for
+#: T2.10 (contract/deferred/t210-column-filter/).
+T218_NAMES = tuple(
+    f'name.{name}-{role}'
+    for name in ('dot', 'backtick', 'line-break')
+    for role in ('feature', 'target', 'entity', 'aggregation')
+)
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -280,11 +322,25 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     }
     # T1.33 (T1.32f's real-data part) adds the notebook's churn and Color
     # questions over the AdventureWorks base, no inventory case either.
+    # T2.0c adds the exact-decimal cases (KO2-50), no inventory case either;
+    # each is an acceptance case carrying its call as far as the reference
+    # goes. T2.19 adds the two-path sampling cases, acceptance cases through
+    # predict, no inventory case either. T2.18 adds the column-name cases
+    # (KO2-36), each carrying its call through predict.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
         'base.adventureworks.color',
+        *T20C_DECIMAL,
+        *T219_SHAPES,
+        *T218_NAMES,
     }
+    for case_id in (*T20C_DECIMAL, *T218_NAMES):
+        assert committed[case_id]['status'] == 'acceptance', case_id
+        assert _held_to_its_input(committed[case_id]) == [], case_id
+    for case_id in T219_SHAPES:
+        assert committed[case_id]['status'] == 'acceptance', case_id
+        assert committed[case_id]['until'] == 'predict', case_id
     # From T1.29 the inventory's three baseline cases are acceptance cases
     # with their routes and paths, keeping its input and expectation; from
     # T1.32 so is each case whose family's admission exit has cleared, and
@@ -957,7 +1013,10 @@ def _not_synthesizable() -> dict[str, str]:
 
 def _synthesizable(tmp_path: Path) -> tuple[Path, Path]:
     r"""The cases and the reference observations, as their files are,
-    but those :func:`_not_synthesizable` names."""
+    but those :func:`_not_synthesizable` names, and the reference's DuckDB
+    lines only (the bare case IDs): the syntheses are compared in a DuckDB
+    run, and a ``<case>@sqlite`` or ``<case>@postgres`` line is its
+    database's run's."""
     left_out = _not_synthesizable()
     root = Path(tempfile.mkdtemp(prefix='synthesizable-', dir=tmp_path))
     cases = root / 'cases'
@@ -972,7 +1031,8 @@ def _synthesizable(tmp_path: Path) -> tuple[Path, Path]:
         ''.join(
             line + '\n'
             for line in reference.read_text(encoding='utf-8').splitlines()
-            if json.loads(line)['case'] not in left_out
+            if '@' not in (case := json.loads(line)['case'])
+            and case not in left_out
         ),
         encoding='utf-8',
     )
@@ -1197,6 +1257,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
             # From T1.11d, a prediction, for a case that predicts on the
             # core.
             predicted = None
+            refused = None
             if 'predict' in case['core']:
                 inputs.append(
                     {
@@ -1213,16 +1274,29 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 received = (observation.get('public') or {}).get(
                     'payloads'
                 ) or []
-                predicted = {
-                    'body': received[0]['parsed'] if received else {},
-                    'model': 'kumo-relational',
-                    'request_id': 'r1',
-                    'metadata': {},
-                    'result': {
-                        'columns': [{'name': 'ENTITY', 'type': 'int64'}],
-                        'rows': [[{'i64': '0'}]],
-                    },
-                }
+                outcome = observation['outcome']
+                if received:
+                    predicted = {
+                        'body': received[0]['parsed'],
+                        'model': 'kumo-relational',
+                        'request_id': 'r1',
+                        'metadata': {},
+                        'result': {
+                            'columns': [{'name': 'ENTITY', 'type': 'int64'}],
+                            'rows': [[{'i64': '0'}]],
+                        },
+                    }
+                elif outcome['result'] == 'refusal':
+                    # Refused at predict before any request was sent (T2.0c's
+                    # one-class comparisons): no prediction and no request,
+                    # the core's error the refusal's code, as a real
+                    # python-core run records it.
+                    refused = {
+                        'kind': outcome['code']
+                        .lower()
+                        .removesuffix('_request'),
+                        'code': outcome['code'],
+                    }
             # A query validated in place of materialize (from T1.32g:
             # refuse.unknown-column), answered as the call was.
             validated = None
@@ -1250,7 +1324,7 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 'described': described,
                 'materialized': materialized,
                 'predicted': predicted,
-                'error': None,
+                'error': refused,
             }
             return
         spec = case['core']['validate_query']

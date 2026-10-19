@@ -20,6 +20,7 @@ from sdm_relational_engine.rfm.view_expr import (
     _SNOWFLAKE_RESERVED,
     _unsafe_expr_reason,
     _untrusted_call_reason,
+    strip_comments,
 )
 
 _DIALECTS = ['databricks', 'snowflake']
@@ -131,14 +132,39 @@ def test_no_session_or_random_function_is_trusted(functions) -> None:
         '(FROM payroll |> AGGREGATE MAX(salary))',
         'x IN ( from payroll)',
         '1 ->> SHOW TABLES',
+        # A filter is spliced into `WHERE (...)`: `(VALUES +1 > 0)`.
+        'values + 1 > 0',
+        'x = (VALUES 1)',
+        'x IN (values (1))',
+        '(WITH a AS (VALUES (1)) VALUES (2))',
+        "x = (MAP x USING 'cat')",
+        "(REDUCE x USING 'cat')",
+        "(MAP f(x) USING 'cat')",
     ],
 )
 def test_a_query_without_select_is_refused(expr: str) -> None:
     r"""Verified on a Databricks SQL warehouse: ``TABLE t``, a query opening
-    with ``FROM`` and the ``|>`` pipe each read a table inside an expression,
-    with no ``SELECT`` anywhere.
+    with ``FROM``, ``VALUES``, ``WITH``, ``MAP`` or ``REDUCE``, and the ``|>``
+    pipe each read a table or run a query inside an expression, with no
+    ``SELECT`` anywhere.
     """
     assert _unsafe_expr_reason(expr) is not None
+
+
+@pytest.mark.parametrize(
+    'expr',
+    [
+        'x + values',
+        '(with + 1)',
+        'struct(with AS f)',
+        'map(x, 1)',
+        'reduce(a, 0, (s, y) -> s + y)',
+        'x IN (map, 1) OR using',
+    ],
+)
+def test_a_name_or_call_like_a_query_start_is_not_a_query(expr: str) -> None:
+    r"""On the same warehouse these read a column or call a function."""
+    assert _unsafe_expr_reason(expr) is None
 
 
 @pytest.mark.parametrize(
@@ -188,6 +214,10 @@ def _refused(expr: str, dialect: str) -> str | None:
         # Names the old pattern never recognised as names:
         '1f(x)',
         'x + 9secret(x)',
+        # A Snowflake name may hold `$`, so `a$$` opens no literal:
+        'a$$ + secret(x) + b$$',
+        # Whether a non-ASCII letter starts a name is not documented:
+        'é$$ + secret(x) + b$$',
         'fünf(x)',
         '函数(x)',
         'a[0](x)',
@@ -292,6 +322,55 @@ def test_databricks_has_no_dollar_quoting() -> None:
     assert _unsafe_expr_reason('$$x$$', 'snowflake') is None
     assert _unsafe_expr_reason('$$x$$', 'databricks') is not None
     assert _unsafe_expr_reason("CONCAT('$$', x)", 'databricks') is not None
+
+
+def test_snowflake_refuses_a_line_comment_written_with_slashes() -> None:
+    # Spliced into a select list, it would comment out the table read.
+    assert _unsafe_expr_reason('X FROM PAYROLL //', 'snowflake') is not None
+    assert _unsafe_expr_reason('X / 2', 'snowflake') is None
+    assert (
+        _unsafe_expr_reason("CONCAT('https://x.com/', ID)", 'snowflake') is None
+    )
+    assert _unsafe_expr_reason("CONCAT('a//b', x)", 'databricks') is None
+
+
+@pytest.mark.parametrize(
+    'expr',
+    [
+        "concat('a--b', `c--d`)",
+        "'/* x */' || `a/*b`",
+        "'/*' || x || '*/'",
+        "`a*/b` || 'c*/'",
+        "concat('http://x', x)",
+    ],
+)
+def test_a_comment_opener_in_a_string_or_quoted_name_opens_none(
+    expr: str,
+) -> None:
+    r"""Databricks reads each of these as strings and names, so removing
+    comments leaves them whole, and a comment after them ends with its
+    line: the call on the next line runs, and is checked.
+    """
+    assert strip_comments(expr) == expr
+    hiding = strip_comments(f'{expr} -- note\n|| secret(x)')
+    assert hiding == f'{expr}  \n|| secret(x)'
+    assert _call(hiding, 'databricks') == (
+        "it calls 'secret', which is not a pure built-in SQL function"
+    )
+
+
+@pytest.mark.parametrize(
+    'dialect, expr',
+    [
+        ('databricks', '`café` || upper(`列`)'),
+        ('snowflake', '"café" || UPPER("列")'),
+    ],
+)
+def test_a_quoted_name_may_hold_any_letter(dialect: str, expr: str) -> None:
+    r"""Only a name outside quotes is held to ASCII, where which letters
+    may join a name is undocumented.
+    """
+    assert _refused(expr, dialect) is None
 
 
 def test_snowflake_refuses_a_backslash_in_a_quoted_name() -> None:

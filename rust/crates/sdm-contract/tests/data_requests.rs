@@ -43,7 +43,7 @@ fn neighbors(
 ) -> DataRequest {
     DataRequest::Neighbors {
         table: "orders".into(),
-        key: "user_id".into(),
+        key: vec!["user_id".into()],
         columns: vec!["price".into()],
         seeds: seeds(&["anchor", "start"]),
         window,
@@ -138,7 +138,7 @@ fn seeds_hold_the_key_and_batch_columns() {
         refused(
             &DataRequest::Lookup {
                 table: "users".into(),
-                key: "user_id".into(),
+                key: vec!["user_id".into()],
                 columns: vec![],
                 seeds: keys.clone(),
             },
@@ -263,7 +263,7 @@ fn every_request_has_its_contract_name() {
         neighbors(None, None, None),
         DataRequest::Lookup {
             table: "users".into(),
-            key: "user_id".into(),
+            key: vec!["user_id".into()],
             columns: vec![],
             seeds: seeds(&[]),
         },

@@ -1,0 +1,98 @@
+{
+  "format": "sdm-case/1",
+  "id": "name.line-break-entity",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE users (\"a\nb\" BIGINT PRIMARY KEY, age INTEGER, country VARCHAR)",
+      "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT REFERENCES users (\"a\nb\"), price DOUBLE, ts TIMESTAMP)",
+      "INSERT INTO users SELECT i, 20 + i, ['US', 'DE', 'IN'][1 + i % 3] FROM range(8) t(i)",
+      "INSERT INTO orders SELECT i, i % 8, 10 + i * 1.5, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) FROM range(80) t(i)"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.`a\nb`",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: refused INVALID_REQUEST at materialize; Schema.from_source leaves the column out with one SDMWarning per table (a predictive query cannot name a column holding a dot, a backtick or a line break), so users has no primary key and no link, and the grammar's quoted name holds no line break, so the line feed is a token recognition error; the core naming any column (KO2-36) answers through predict"
+  },
+  "why": "A column named with a line feed (inside the quoted name) (\"a\\nb\"), as the entity, users' declared primary key, which orders.user_id references: KO2-36, any column name works, kept as data and nameable in a query",
+  "source": "T2.18 any column name (KO2-36), the design row"
+}

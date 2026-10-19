@@ -35,7 +35,7 @@ use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, Sam
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
 use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Step};
 
-use crate::compose::DataAccess;
+use crate::compose::{DataAccess, Route};
 
 /// Data that travels beside a control message.
 #[derive(Debug, Clone)]
@@ -73,6 +73,13 @@ impl ArrowData {
 #[derive(Debug, Clone)]
 pub enum FetchResult {
     Data(ArrowData),
+    /// One page of the answer, more following: the run asks again with the
+    /// provider's `continuation` (design choice 1, paging) and gives the
+    /// body the pages as one answer, so a body never sees a page.
+    Page {
+        data: ArrowData,
+        continuation: String,
+    },
     Error(ProviderError),
 }
 
@@ -124,8 +131,9 @@ struct Shared {
     /// The last ids given; ids start at 1 in each run.
     next_reply: u32,
     next_attachment: u32,
-    /// Set when the body asked for more ids than a `u32` holds; the run
-    /// then finishes with `INTERNAL_ERROR` at its next step.
+    /// Set when the body asked for more ids than a `u32` holds, or a
+    /// provider's pages of one answer did not match; the run then finishes
+    /// with that error at its next step.
     exhausted: Option<CoreError>,
     /// Asked by the body since the last step.
     fetches: Vec<FetchStep>,
@@ -166,8 +174,54 @@ impl Asker {
                 "the operation asked for data and names no provider",
             ));
         };
-        let plan = data.plan(&request)?;
-        Ok(self.ask_planned(request, plan))
+        let limits = match data.route(&request)? {
+            Route::Plan(plan) => return Ok(self.ask_planned(request, plan)),
+            Route::Fallback(limits) => limits,
+        };
+        // The in-memory fallback (T2.6): the request is never the host's;
+        // its seeds, attached for the host, come back to the core.
+        let seeds = match &request {
+            DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => {
+                Some(self.take_attached(seeds.attachment)?)
+            }
+            _ => None,
+        };
+        Ok(Ask {
+            shared: Arc::clone(&self.shared),
+            state: AskState::Fallback(Box::pin(crate::fallback::answer(
+                self.clone(),
+                request,
+                limits,
+                seeds,
+            ))),
+            budget: None,
+        })
+    }
+
+    /// [`Asker::fetch`], the answer held to `budget` as each page arrives.
+    pub(crate) fn fetch_within(
+        &self,
+        request: DataRequest,
+        budget: Budget,
+    ) -> Result<Ask, CoreError> {
+        let mut ask = self.fetch(request)?;
+        ask.budget = Some(Box::new(budget));
+        Ok(ask)
+    }
+
+    /// The Arrow data the body attached as `id`, taken back before the host
+    /// took it: the seeds of a request the fallback answers.
+    fn take_attached(&self, id: AttachmentId) -> Result<ArrowData, CoreError> {
+        match lock(&self.shared).attachments.remove(&id) {
+            Some(Attachment::Arrow(data)) => Ok(data),
+            _ => Err(internal("a request's seeds are not attached as Arrow")),
+        }
+    }
+
+    /// Ends the run with `error` at its next step, as a provider's pages
+    /// that do not match end it: what the in-memory fallback fails with.
+    pub(crate) fn fail(&self, error: CoreError) {
+        lock(&self.shared).exhausted.get_or_insert(error);
     }
 
     /// What the run's provider declared it answers, for an operation that
@@ -177,6 +231,24 @@ impl Asker {
             .as_ref()
             .map(DataAccess::capabilities)
             .ok_or_else(|| internal("the operation asked what its provider answers and names none"))
+    }
+
+    /// Whether the run's provider compares a window's bounds with the
+    /// stored text of the window's column (`DataLayer::compares_stored_times`);
+    /// `false` for an operation that names no provider.
+    pub fn compares_stored_times(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(DataAccess::compares_stored_times)
+    }
+
+    /// Whether the run's provider orders a seeded sample by the key's data
+    /// type (`DataLayer::samples_by_key_dtype`); `false` for an operation
+    /// that names no provider.
+    pub fn samples_by_key_dtype(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(DataAccess::samples_by_key_dtype)
     }
 
     /// The catalog answer `data` holds, the admitted answer to `request`,
@@ -208,6 +280,7 @@ impl Asker {
         Ask {
             shared: Arc::clone(&self.shared),
             state: AskState::New(Asked::Fetch(Box::new((request, plan)))),
+            budget: None,
         }
     }
 
@@ -220,6 +293,7 @@ impl Asker {
                 content_type,
                 body,
             }),
+            budget: None,
         }
     }
 
@@ -297,34 +371,113 @@ enum Asked {
 pub struct Ask {
     shared: Arc<Mutex<Shared>>,
     state: AskState,
+    /// What the answer may hold, checked as each page arrives.
+    budget: Option<Box<Budget>>,
+}
+
+/// What one fetch's answer may hold, the in-memory fallback's limits on a
+/// scan it asks (T2.6): checked as each page arrives, so past either the
+/// run ends with that limit's error, at once, and no later page is asked
+/// for or its failure awaited.
+pub(crate) struct Budget {
+    pub(crate) rows: u64,
+    pub(crate) bytes: u64,
+    pub(crate) past_rows: CoreError,
+    pub(crate) past_bytes: CoreError,
+}
+
+impl Budget {
+    /// The error of the limit `data`, the pages read so far, is past.
+    fn exceeded(&self, data: &ArrowData) -> Option<CoreError> {
+        let rows: usize = data.batches.iter().map(RecordBatch::num_rows).sum();
+        if rows as u64 > self.rows {
+            return Some(self.past_rows.clone());
+        }
+        let bytes: usize = data
+            .batches
+            .iter()
+            .map(RecordBatch::get_array_memory_size)
+            .sum();
+        (bytes as u64 > self.bytes).then(|| self.past_bytes.clone())
+    }
+}
+
+/// The error of the limit `data` is past, where `budget` is given.
+fn past(budget: &Option<Box<Budget>>, data: &ArrowData) -> Option<CoreError> {
+    budget.as_ref().and_then(|budget| budget.exceeded(data))
 }
 
 enum AskState {
     New(Asked),
-    Asked(ReplyId),
+    /// Answered by the in-memory fallback (T2.6), which asks its own
+    /// requests of the host through the run.
+    Fallback(Pin<Box<dyn Future<Output = Reply> + Send>>),
+    /// Asked under the id; a fetch keeps its request and plan, to ask for
+    /// the next page, and the pages read so far.
+    Asked {
+        id: ReplyId,
+        fetch: Option<Box<(DataRequest, FetchPlan)>>,
+        pages: Option<ArrowData>,
+    },
     Answered,
+}
+
+/// The run's next reply id, or `None` once they are used up, which ends the
+/// run with `INTERNAL_ERROR` at its next step.
+fn next_reply(shared: &mut Shared) -> Option<ReplyId> {
+    let Some(next) = shared.next_reply.checked_add(1) else {
+        exhausted(shared, "reply");
+        return None;
+    };
+    shared.next_reply = next;
+    Some(ReplyId(next))
+}
+
+/// `page` added to the pages read before it, which it must match in
+/// schema: a provider's pages are one answer (design choice 1, paging).
+fn add_page(pages: Option<ArrowData>, page: ArrowData) -> Result<ArrowData, CoreError> {
+    let Some(mut pages) = pages else {
+        return Ok(page);
+    };
+    if pages.schema != page.schema || pages.received != page.received {
+        return Err(schema_mismatch(
+            "pages",
+            None,
+            "a page of the answer has another schema than the pages before it",
+        ));
+    }
+    pages.batches.extend(page.batches);
+    Ok(pages)
 }
 
 impl Future for Ask {
     type Output = Reply;
 
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Reply> {
+    fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Reply> {
         let this = self.get_mut();
+        // The fallback's own asks lock the run's state as they are polled.
+        if let AskState::Fallback(answer) = &mut this.state {
+            return answer.as_mut().poll(context);
+        }
         let mut shared = lock(&this.shared);
         match mem::replace(&mut this.state, AskState::Answered) {
             AskState::New(asked) => {
                 // Out of ids, the request is never asked; the run finishes
                 // with the error at its next step.
-                let Some(next) = shared.next_reply.checked_add(1) else {
-                    exhausted(&mut shared, "reply");
+                let Some(id) = next_reply(&mut shared) else {
                     return Poll::Pending;
                 };
-                shared.next_reply = next;
-                let id = ReplyId(next);
+                let mut fetch = None;
                 match asked {
                     Asked::Fetch(asked) => {
-                        let (request, plan) = *asked;
-                        shared.fetches.push(FetchStep { id, request, plan })
+                        let (request, plan) = (*asked).clone();
+                        shared.fetches.push(FetchStep {
+                            id,
+                            request,
+                            plan,
+                            continuation: None,
+                        });
+                        fetch = Some(asked);
                     }
                     Asked::Call {
                         endpoint,
@@ -342,16 +495,74 @@ impl Future for Ask {
                         });
                     }
                 }
-                this.state = AskState::Asked(id);
+                this.state = AskState::Asked {
+                    id,
+                    fetch,
+                    pages: None,
+                };
                 Poll::Pending
             }
-            AskState::Asked(id) => match shared.replies.remove(&id) {
-                Some(reply) => Poll::Ready(reply),
+            AskState::Asked { id, fetch, pages } => match shared.replies.remove(&id) {
                 None => {
-                    this.state = AskState::Asked(id);
+                    this.state = AskState::Asked { id, fetch, pages };
                     Poll::Pending
                 }
+                // A page: kept, and the next one asked for with the
+                // provider's continuation, under a new id.
+                Some(Reply::Fetch(FetchResult::Page { data, continuation })) => {
+                    let pages = match add_page(pages, data) {
+                        Ok(pages) => pages,
+                        Err(err) => {
+                            shared.exhausted.get_or_insert(err);
+                            return Poll::Pending;
+                        }
+                    };
+                    // Past the budget: no next page is asked for.
+                    if let Some(err) = past(&this.budget, &pages) {
+                        shared.exhausted.get_or_insert(err);
+                        return Poll::Pending;
+                    }
+                    let Some(asked) = fetch else {
+                        shared
+                            .exhausted
+                            .get_or_insert_with(|| internal("a page answered no fetch"));
+                        return Poll::Pending;
+                    };
+                    let Some(next) = next_reply(&mut shared) else {
+                        return Poll::Pending;
+                    };
+                    let (request, plan) = (*asked).clone();
+                    shared.fetches.push(FetchStep {
+                        id: next,
+                        request,
+                        plan,
+                        continuation: Some(continuation),
+                    });
+                    this.state = AskState::Asked {
+                        id: next,
+                        fetch: Some(asked),
+                        pages: Some(pages),
+                    };
+                    Poll::Pending
+                }
+                // The last page, or the only one: the pages read as one
+                // answer, held to the budget.
+                Some(Reply::Fetch(FetchResult::Data(data))) => match add_page(pages, data) {
+                    Ok(whole) => match past(&this.budget, &whole) {
+                        Some(err) => {
+                            shared.exhausted.get_or_insert(err);
+                            Poll::Pending
+                        }
+                        None => Poll::Ready(Reply::Fetch(FetchResult::Data(whole))),
+                    },
+                    Err(err) => {
+                        shared.exhausted.get_or_insert(err);
+                        Poll::Pending
+                    }
+                },
+                Some(reply) => Poll::Ready(reply),
             },
+            AskState::Fallback(_) => unreachable!("polled above"),
             AskState::Answered => panic!("a request's reply was awaited after it was taken"),
         }
     }
@@ -542,15 +753,16 @@ impl Run {
     /// expected closed-set type, holding the field metadata the request
     /// requires, and no nulls where it expects none. A mismatch is
     /// `PROVIDER_SCHEMA_MISMATCH`, and ends the run, as a refusal of data
-    /// does; nothing is dropped, relabelled or filled. A discovery request
-    /// takes the schema the data declares.
+    /// does; nothing is dropped, relabelled or filled. Each page of a paged
+    /// answer is held to it as it arrives, as a whole answer is. A
+    /// discovery request takes the schema the data declares.
     pub fn submit_fetch(&mut self, id: ReplyId, result: FetchResult) -> Result<(), CoreError> {
         if let Some(err) = self.terminal() {
             return Err(err);
         }
         match &mut self.state {
             State::AwaitingFetch(pending) if pending.contains_key(&id) => {
-                if let FetchResult::Data(data) = &result
+                if let FetchResult::Data(data) | FetchResult::Page { data, .. } = &result
                     && let Err(mismatch) = check_expected(&pending[&id], data)
                 {
                     self.end()?;
@@ -731,11 +943,14 @@ pub(crate) fn internal(message: &str) -> CoreError {
 
 #[cfg(test)]
 mod tests {
-    use sdm_contract::ErrorCode;
-    use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema, FetchPlan};
-    use sdm_contract::run::Endpoint;
+    use std::sync::Arc;
 
-    use super::{Attachment, Run, RunState, lock};
+    use arrow_array::{Int64Array, RecordBatch};
+    use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema, FetchPlan, field};
+    use sdm_contract::run::Endpoint;
+    use sdm_contract::{ColumnType, ErrorCode};
+
+    use super::{ArrowData, Attachment, FetchResult, Run, RunState, Step, lock};
 
     fn describe() -> DataRequest {
         DataRequest::Describe {
@@ -781,5 +996,55 @@ mod tests {
         let err = run.next().unwrap_err();
         assert_eq!(err.code, ErrorCode::InternalError);
         assert_eq!(run.state(), RunState::Finished);
+    }
+
+    /// A page of one nullable `a` column holding `values`, more following.
+    fn page(values: Vec<Option<i64>>) -> FetchResult {
+        let schema = Arc::new(arrow_schema::Schema::new(vec![arrow_schema::Field::new(
+            "a",
+            arrow_schema::DataType::Int64,
+            true,
+        )]));
+        let batch = RecordBatch::try_new(
+            Arc::clone(&schema),
+            vec![Arc::new(Int64Array::from(values))],
+        )
+        .unwrap();
+        FetchResult::Page {
+            data: ArrowData::new(schema, vec![batch]),
+            continuation: "more".into(),
+        }
+    }
+
+    #[test]
+    fn every_page_is_held_to_the_expected_schema() {
+        // A null where the request takes none fails on the page that holds
+        // it, first or later, as it fails in an answer of one page.
+        for valid_before in [0, 1] {
+            let mut run = Run::new(|asker| async move {
+                let plan = FetchPlan::Host {
+                    expect: ExpectedSchema::Schema {
+                        fields: vec![field("a", ColumnType::Int64, false)],
+                    },
+                };
+                asker.ask_planned(describe(), plan).await;
+                unreachable!("the run ends on the page with a null")
+            });
+            for _ in 0..valid_before {
+                let Step::Fetch { requests } = run.next().unwrap() else {
+                    panic!("not a fetch")
+                };
+                run.submit_fetch(requests[0].id, page(vec![Some(1)]))
+                    .unwrap();
+            }
+            let Step::Fetch { requests } = run.next().unwrap() else {
+                panic!("not a fetch")
+            };
+            let err = run
+                .submit_fetch(requests[0].id, page(vec![None]))
+                .unwrap_err();
+            assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{err:?}");
+            assert_eq!(run.state(), RunState::Finished);
+        }
     }
 }

@@ -27,12 +27,12 @@ use std::sync::Arc;
 
 use duckdb::arrow::array::{ArrayRef, RecordBatch};
 use duckdb::arrow::datatypes::{Field, Schema};
-use sdm_contract::data::{AttachmentId, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, EditSchema, ForecastStep, Materialize, Operation, OperationResult, Predict,
-    ProfileSpec, QuerySchema, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
-    ValidateQuery,
+    DescribeSource, Dtype, EditSchema, ForecastStep, Materialize, Operation, OperationResult,
+    Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestBatch, RequestState,
+    SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -42,9 +42,14 @@ use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, r
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
-use crate::case::{Case, DescribeSourceInput, MaterializeInput, PredictInput, ValidateQueryInput};
+use crate::case::{
+    Case, CoreInputs, Database, DescribeSourceInput, Index, MaterializeInput, PredictInput, Until,
+    ValidateQueryInput,
+};
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
+use crate::replay::{Recording, Replay, Replayed};
+use crate::sqlite::Sqlite;
 use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
@@ -60,6 +65,10 @@ pub struct Observed {
     /// `materialize`'s request state, when it gave one: kept apart from
     /// the answer, which a later `predict` replaces.
     pub materialized: Option<Value>,
+    /// `validate_query`'s acceptance where the call went on past it (off
+    /// DuckDB, T2.1d): kept apart from the answer, which a later
+    /// `materialize` replaces, as python-core records both.
+    pub accepted: Option<bool>,
     pub answer: Answer,
     /// The core's warnings, in the order given, each its code and fields
     /// as the `warnings` control message carries them (T1.23): what the
@@ -73,6 +82,11 @@ pub struct Observed {
     /// `core.edits`: apart from `inputs`, whose shape a gate's checkpoint
     /// fixes, and written by no observation yet.
     pub edits: Vec<Value>,
+    /// What a failed `predict` had answered before it failed, as the core
+    /// carried it on its error (`CoreError.answered`, T2.1g): the result's
+    /// columns and rows, as a predicted answer's, and the rows those calls
+    /// score. In process only; no observation writes it yet.
+    pub answered: Option<Value>,
 }
 
 /// The core's answer to the case's operation.
@@ -169,6 +183,28 @@ fn answer_of(error: &CoreError) -> Result<Answer> {
     })
 }
 
+/// What a failed run had answered before it failed, as its error carries
+/// it (`CoreError.answered`, T2.1g), the result taken from the run: its
+/// columns and rows, as a predicted answer's, and the rows those calls
+/// score; none where the error carries none.
+fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
+    let ControlMessage::Error { error } =
+        read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))?
+    else {
+        bail!("the host gave a message that is not an error");
+    };
+    let Some(answered) = error.answered else {
+        return Ok(None);
+    };
+    let Ok(Some(Attachment::Arrow(result))) = handle.take_attachment(answered.result) else {
+        bail!("the answers an error carries are not attached");
+    };
+    Ok(Some(json!({
+        "result": result_rows(&result)?,
+        "rows": answered.rows,
+    })))
+}
+
 /// The error an `error` control message carries.
 fn error_of(out: &Outgoing) -> Result<Answer> {
     match read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))? {
@@ -223,11 +259,203 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         fetches: vec![],
         described: None,
         materialized: None,
+        accepted: None,
         answer,
         warnings: vec![],
         driver: None,
         edits: vec![],
+        answered: None,
     })
+}
+
+/// `pql` as the PQL library writes a query back (`to_string()`), read
+/// through the core's adapter: the Python host sends materialize that text; `pql` as
+/// it is where it does not parse (or holds a date literal whose year needs
+/// the current one, which no host fact here places).
+fn written_back(pql: &str) -> String {
+    sdm_host::normalized_query(pql).unwrap_or_else(|| pql.to_owned())
+}
+
+/// The query schema of `description`, as the core reads a description for
+/// a query (`sdm-core`'s materialize) and the Python host builds one from a
+/// schema it described: each table's columns with their data and semantic
+/// types, its key where it has one column, its time column, and each link
+/// its columns in order.
+fn query_schema(description: &SourceDescription) -> QuerySchema {
+    QuerySchema {
+        tables: description
+            .tables
+            .iter()
+            .map(|t| QueryTable {
+                name: t.name.clone(),
+                columns: t
+                    .columns
+                    .iter()
+                    .map(|c| QueryColumn {
+                        name: c.name.clone(),
+                        dtype: query_dtype(c.dtype),
+                        stype: c.stype,
+                    })
+                    .collect(),
+                primary_key: match t.primary_key.as_slice() {
+                    [one] => Some(one.clone()),
+                    _ => None,
+                },
+                time_column: t.time_column.clone(),
+                end_time_column: None,
+            })
+            .collect(),
+        links: description
+            .links
+            .iter()
+            .map(|link| {
+                let mut group = link.clone();
+                group.sort();
+                group
+            })
+            .collect(),
+    }
+}
+
+/// A described column's data type as the Python host writes it in a query
+/// schema: through the wire's name of it, which the language spells
+/// differently for a few (`sdm_client.schema`'s `_WIRE_TO_PQL_DTYPE`):
+/// every integer `int`, every float `float`, a date or a time `time`; any
+/// other as described.
+fn query_dtype(dtype: Dtype) -> Dtype {
+    match dtype {
+        Dtype::Int | Dtype::Int64 | Dtype::Byte | Dtype::Int16 | Dtype::Int32 => Dtype::Int,
+        Dtype::Float | Dtype::Float64 | Dtype::Float32 => Dtype::Float,
+        Dtype::Date | Dtype::Time => Dtype::Time,
+        other => other,
+    }
+}
+
+/// The days since 1970-01-01 of `date`, written `YYYY-MM-DD` (Howard
+/// Hinnant's `days_from_civil`); `None` for any other text or a day the
+/// month does not hold.
+fn days_of(date: &str) -> Option<i64> {
+    let parts: Vec<&str> = date.split('-').collect();
+    let [year, month, day] = parts.as_slice() else {
+        return None;
+    };
+    let digits = |text: &str, width: usize| {
+        (text.len() == width && text.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| text.parse::<i64>().ok())
+            .flatten()
+    };
+    let (year, month, day) = (digits(year, 4)?, digits(month, 2)?, digits(day, 2)?);
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let length = match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    if !(1..=length).contains(&day) {
+        return None;
+    }
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some(era * 146_097 + doe - 719_468)
+}
+
+/// The model every case's `predict` names (`core.predict.model`).
+const MODEL: &str = "kumo-relational";
+
+/// `case` with every call it makes through its `until` named in its core
+/// operations, on `dialect`'s SQL provider, as python-core makes them off
+/// DuckDB (T2.1d, `run_python.routes_on`), where a case routes on the core
+/// only the calls DuckDB lets it make (S0's validation, a source DuckDB
+/// refuses at `from_source`): each operation the case names, its provider
+/// on `dialect`; `describe_source` of every table with no key or time
+/// column given, keys checked, where the case names none; `materialize`
+/// with the case's entities and anchor time, the default seed, where the
+/// case names none and goes past `from_source`; and `predict` with the
+/// model every case names, where it goes to `predict`. Each derived as the
+/// recorders write a case's core inputs: an entity an `i64` where it holds
+/// one and its digits otherwise, a text one as text, a date anchor its
+/// midnight in nanoseconds. A call the case's input passes more than that
+/// to (tables named, decimal entities, options) is refused, as one this
+/// derivation does not write.
+pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
+    let mut case = case.clone();
+    let provider = json!({"provider": "sql", "dialect": dialect});
+    let rewrite = |given: &mut Value| {
+        if given == &json!({"provider": "sql", "dialect": "duckdb"}) {
+            *given = provider.clone();
+        }
+    };
+    let mut core = case.core.take().unwrap_or(CoreInputs {
+        validate_query: None,
+        describe_source: None,
+        materialize: None,
+        predict: None,
+    });
+    if let Some(spec) = core.describe_source.as_mut() {
+        rewrite(&mut spec.provider);
+    }
+    if let Some(spec) = core.materialize.as_mut() {
+        rewrite(&mut spec.provider);
+    }
+    let not_derived = |what: &str| anyhow!("{}: {what}, which no derivation writes", case.id);
+    if core.describe_source.is_none() {
+        if case.input.from_source.is_some() {
+            return Err(not_derived("from_source's arguments"));
+        }
+        core.describe_source = Some(DescribeSourceInput {
+            provider: provider.clone(),
+            source: json!({"tables": [], "primary_keys": {}, "time_columns": {}}),
+            check_keys: true,
+        });
+    }
+    let given = &case.input.materialize;
+    if case.until != Until::FromSource && core.materialize.is_none() {
+        if given.indices_as.is_some()
+            || given.inference_config.is_some()
+            || given.candidates.is_some()
+            || given.top_k.is_some()
+        {
+            return Err(not_derived("materialize's options"));
+        }
+        let indices = given
+            .indices
+            .iter()
+            .map(|index| match index {
+                Index::Integer(digits) if digits.parse::<i64>().is_ok() => {
+                    json!({"t": "i64", "v": digits})
+                }
+                Index::Integer(digits) | Index::Text(digits) => json!({"t": "utf8", "v": digits}),
+            })
+            .collect();
+        let anchor_time = match &given.anchor_time {
+            None => Value::Null,
+            Some(date) => {
+                let days =
+                    days_of(date).ok_or_else(|| not_derived("an anchor time other than a date"))?;
+                let nanos = i128::from(days) * 86_400 * 1_000_000_000;
+                json!({"t": "ts", "v": nanos.to_string(), "unit": "ns", "zone": null})
+            }
+        };
+        core.materialize = Some(MaterializeInput {
+            provider: provider.clone(),
+            indices,
+            anchor_time,
+            seed: None,
+        });
+    }
+    if case.until == Until::Predict && core.predict.is_none() {
+        core.predict = Some(PredictInput {
+            model: MODEL.to_owned(),
+        });
+    }
+    case.core = Some(core);
+    Ok(case)
 }
 
 /// S0's `validate_query` with the case's query, schema and profile: what
@@ -283,6 +511,142 @@ fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
     Ok((input, answer))
 }
 
+/// Where a case's fetches are answered: its DuckDB base, through the
+/// DuckDB provider; its tables loaded into SQLite, through the dev-only
+/// `rusqlite` provider ([`crate::sqlite`], T2.2); or a Postgres server's
+/// recorded answers, replayed ([`crate::replay`], KO2-20).
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Duck(&'a duckdb::Connection),
+    Sqlite(&'a Sqlite),
+    Replay(&'a Replay<'a>),
+}
+
+impl Source<'_> {
+    /// The provider choice a run over this source names: the case's own on
+    /// DuckDB; on a Postgres replay, Postgres's SQL dialect, as the Python
+    /// host names it for a Postgres source.
+    fn provider(self, given: ProviderChoice) -> ProviderChoice {
+        match self {
+            Source::Duck(_) => given,
+            Source::Sqlite(_) => ProviderChoice::Sql {
+                dialect: Dialect::new(Database::Sqlite.name()),
+            },
+            Source::Replay(_) => ProviderChoice::Sql {
+                dialect: Dialect::new(Database::Postgres.name()),
+            },
+        }
+    }
+}
+
+/// Runs `case` over its data loaded into a new SQLite file by the contract
+/// loader ([`crate::sqlite::load`], run from `repository`) and read through
+/// the dev-only `rusqlite` provider (T2.2): every call the case makes
+/// through its `until`, on SQLite's provider ([`through_until`], T2.1d), as
+/// python-core makes them over a SQLite source; the record of what ran is
+/// the provider's own log of its statements and bindings.
+pub fn run_sqlite(case: &Case, bases: &Bases, repository: &std::path::Path) -> Result<Observed> {
+    let case = &through_until(case, Database::Sqlite.name())?;
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        bail!("{}: names no describe_source after its derivation", case.id);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    if bases.get(&case.input.base).is_none() {
+        bail!("{}: unknown base", case.id);
+    }
+    let directory = std::env::temp_dir().join(format!(
+        "sdm-case-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or_default()
+    ));
+    std::fs::create_dir_all(&directory)?;
+    let loaded = (|| -> Result<Observed> {
+        // What the loader reads of the case: its base and setup.
+        let input = directory.join("case.json");
+        std::fs::write(
+            &input,
+            serde_json::to_vec(&json!({
+                "id": case.id,
+                "input": {
+                    "base": case.input.base,
+                    "setup": case.input.setup.clone().unwrap_or_default(),
+                },
+            }))?,
+        )?;
+        let file = directory.join("case.sqlite");
+        crate::sqlite::load(repository, &input, &file)?;
+        let source = Sqlite::open(&file)?;
+        let mut log = DriverLog::default();
+        let mut observed = describe_on(case, spec, Source::Sqlite(&source), &mut log, &edits)?;
+        observed.driver = Some(log.record(&source.logged()));
+        Ok(observed)
+    })();
+    std::fs::remove_dir_all(&directory).ok();
+    loaded
+}
+
+/// Runs `case` on Postgres as [`run`] runs it on DuckDB, each fetch
+/// answered from `recording`'s fetches for the case's Postgres key
+/// (`<case>@postgres`), replayed in order: a case that reads no data runs
+/// as on DuckDB; one whose fetches are not those recorded, or that leaves
+/// recorded fetches unasked, is this host's failure. Its driver record is
+/// the statements the recording names, each with this host's read of the
+/// answer replayed.
+pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
+    // Every call the case makes through its until, as python-core makes
+    // them off DuckDB, whose fetches the recording holds (T2.1d).
+    let case = &through_until(case, Database::Postgres.name())?;
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        return run_edited(case, &Bases::default(), &[]);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    let key = format!("{}@{}", case.id, Database::Postgres.name());
+    let replay = recording.replay(&key)?;
+    let mut log = DriverLog::default();
+    let mut observed = describe_on(case, spec, Source::Replay(&replay), &mut log, &edits)?;
+    if !replay.finished() {
+        bail!("{key}: the core asked fewer fetches than were recorded: record the case again");
+    }
+    // Its query log is the statements the recording names, in the order
+    // run, as the Postgres driver's own log gave them to python-core.
+    observed.driver = Some(log.record(&replay.ran()));
+    Ok(observed)
+}
+
+/// What the driver ran for a replayed fetch, recorded as run: each
+/// statement the recording names on the fetch's own cursor, the last with
+/// this host's read of the answer replayed (or its failure), as the DuckDB
+/// provider records a fetch it runs.
+fn log_replayed(log: &mut DriverLog, replayed: &Replayed<'_>) {
+    let handle = log.cursor();
+    let Some((last, before)) = replayed.statements.split_last() else {
+        return;
+    };
+    for text in before {
+        log.statement(handle, text);
+    }
+    log.statement(handle, last);
+    match &replayed.answer {
+        Ok(fetched) => log.answered(&fetched.schema, &fetched.batches),
+        Err(_) => log.failed(),
+    }
+}
+
 /// The case's DuckDB base, built on a fresh connection.
 fn database(case: &Case, bases: &Bases) -> Result<duckdb::Connection> {
     let Some(base) = bases.get(&case.input.base) else {
@@ -323,7 +687,7 @@ fn take_warnings(handle: &HostRun, into: &mut Vec<Value>) -> Result<()> {
 fn drive(
     case: &Case,
     handle: &HostRun,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<OperationResult, Answer>> {
@@ -362,22 +726,30 @@ fn drive(
                             }
                         }
                     }
-                    let (outcome, attachments) =
-                        match duck::answer_logged(connection, step, &keys, log) {
-                            Ok(fetched) => (
-                                FetchOutcome::Data {
-                                    data: AttachmentId(1),
-                                },
-                                BTreeMap::from([(
-                                    AttachmentId(1),
-                                    Attachment::Arrow(ArrowData::new(
-                                        fetched.schema,
-                                        fetched.batches,
-                                    )),
-                                )]),
-                            ),
-                            Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
-                        };
+                    let answered = match source {
+                        Source::Duck(connection) => {
+                            duck::answer_logged(connection, step, &keys, log)
+                        }
+                        Source::Sqlite(source) => source.answer_logged(step, &keys, log),
+                        Source::Replay(replay) => {
+                            let replayed = replay.answer(step)?;
+                            log_replayed(log, &replayed);
+                            replayed.answer
+                        }
+                    };
+                    let (outcome, attachments) = match answered {
+                        Ok(fetched) => (
+                            FetchOutcome::Data {
+                                data: AttachmentId(1),
+                                continuation: None,
+                            },
+                            BTreeMap::from([(
+                                AttachmentId(1),
+                                Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
+                            )]),
+                        ),
+                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
+                    };
                     let reply = encode(&ControlMessage::FetchReply(FetchReply {
                         id: step.id,
                         outcome,
@@ -410,7 +782,7 @@ fn describe(
     // capture"), so the log holds what the case's operations ran.
     driver::enable_query_log(&connection)?;
     let mut log = DriverLog::default();
-    let mut observed = describe_on(case, spec, &connection, &mut log, edits)?;
+    let mut observed = describe_on(case, spec, Source::Duck(&connection), &mut log, edits)?;
     let logged = driver::query_log(&connection)?;
     observed.driver = Some(log.record(&logged));
     Ok(observed)
@@ -423,7 +795,7 @@ fn describe(
 fn describe_on(
     case: &Case,
     spec: &DescribeSourceInput,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     log: &mut DriverLog,
     edits: &[SchemaEdit],
 ) -> Result<Observed> {
@@ -433,14 +805,20 @@ fn describe_on(
             case.id
         )
     })?;
-    let source: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
+    let provider = source.provider(provider);
+    // Off DuckDB a case runs every call through its `until` (T2.1d).
+    let off_duckdb = !matches!(
+        &provider,
+        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+    );
+    let spec_given: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
         anyhow!(
             "{}: core.describe_source.source is not a SourceSpec",
             case.id
         )
     })?;
     // What this host sends, as it encodes it, is what it records.
-    let source_bytes = serde_json::to_vec(&source)?;
+    let source_bytes = serde_json::to_vec(&spec_given)?;
     let input = json!({
         "op": "describe_source",
         "provider": serde_json::to_value(&provider)?,
@@ -464,10 +842,12 @@ fn describe_on(
         fetches: Vec::new(),
         described: None,
         materialized: None,
+        accepted: None,
         answer: Answer::Validated(false),
         warnings: Vec::new(),
         driver: None,
         edits: Vec::new(),
+        answered: None,
     };
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
@@ -477,7 +857,7 @@ fn describe_on(
         }
     };
     log.stage = "from_source";
-    let described = match drive(case, &handle, connection, &mut observed, log)? {
+    let described = match drive(case, &handle, source, &mut observed, log)? {
         Err(answer) => {
             observed.answer = answer;
             return Ok(observed);
@@ -499,7 +879,7 @@ fn describe_on(
     let mut schema: SourceDescription = serde_json::from_value(described)
         .map_err(|_| anyhow!("{}: the description is not a SourceDescription", case.id))?;
     for edit in edits {
-        match edit_schema(case, &schema, edit, connection, &mut observed, log)? {
+        match edit_schema(case, &schema, edit, source, &mut observed, log)? {
             Ok(edited) => schema = edited,
             Err(answer) => {
                 observed.answer = answer;
@@ -507,25 +887,47 @@ fn describe_on(
             }
         }
     }
-    let Some(spec) = case.core.as_ref().and_then(|c| c.materialize.as_ref()) else {
-        // A query the client refuses before the core's materialize: the
-        // client validates it first, on S0's route by the core's
-        // validate_query (design, "Routing seam"), as the reference refuses
-        // it before any data is read; so a case that names validate_query
-        // beside describe_source runs it after the description, with the
-        // schema and profile the case gives (refuse.unknown-column, T1.32d).
-        if let Some(spec) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
-            let (input, answer) = validate(case, spec)?;
-            observed.operations.push("validate_query".into());
-            observed.inputs.push(input);
-            observed.answer = answer;
+    // A query the client refuses before the core's materialize: the client
+    // validates it first, on S0's route by the core's validate_query
+    // (design, "Routing seam"), as the reference refuses it before any
+    // data is read; so a case that names validate_query beside
+    // describe_source runs it after the description, and runs materialize
+    // only once it is accepted (refuse.unknown-column, T1.32d; whether or
+    // not the case names materialize, carried row G5). On DuckDB it is
+    // validated with the schema and profile the case gives; off DuckDB a
+    // case runs every call through its `until` (T2.1d, [`through_until`]),
+    // and the query is validated on the schema this host described, as
+    // the Python host builds its query schema from the source's.
+    let materializing = case.core.as_ref().and_then(|c| c.materialize.as_ref());
+    if let Some(validating) = case.core.as_ref().and_then(|c| c.validate_query.as_ref()) {
+        let described;
+        let given = if off_duckdb {
+            described = ValidateQueryInput {
+                profile: validating.profile.clone(),
+                schema: serde_json::to_value(query_schema(&schema))?,
+            };
+            &described
+        } else {
+            validating
+        };
+        let (input, answer) = validate(case, given)?;
+        observed.operations.push("validate_query".into());
+        observed.inputs.push(input);
+        let accepted = matches!(answer, Answer::Validated(true));
+        observed.answer = answer;
+        if !accepted {
+            return Ok(observed);
         }
+        if off_duckdb || materializing.is_some() {
+            observed.accepted = Some(true);
+        }
+    }
+    let Some(spec) = materializing else {
         return Ok(observed);
     };
     // The schema materialize samples is this host's own description, with
     // the user's edits made: never one the case carries (decision E50).
-    let Some(state) = materialize(case, spec, &schema, connection, &mut observed, log, None)?
-    else {
+    let Some(state) = materialize(case, spec, &schema, source, &mut observed, log, None)? else {
         return Ok(observed);
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
@@ -543,7 +945,7 @@ fn edit_schema(
     case: &Case,
     schema: &SourceDescription,
     edit: &SchemaEdit,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<SourceDescription, Answer>> {
@@ -577,7 +979,7 @@ fn edit_schema(
         Ok(handle) => handle,
         Err(refused) => return Ok(Err(error_of(&refused)?)),
     };
-    match drive(case, &handle, connection, observed, log)? {
+    match drive(case, &handle, source, observed, log)? {
         Err(answer) => Ok(Err(answer)),
         Ok(OperationResult::EditSchema(edited)) => {
             let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(edited.schema) else {
@@ -746,7 +1148,14 @@ pub struct HeldState {
     /// A forecast's later steps, each its number, payload and query
     /// (T1.36 fix 21).
     pub forecast: Option<Vec<HeldStep>>,
+    /// A request asked in several calls (`RequestState.batches`, contract
+    /// v26): each later call's payload and the rows it scores, in order.
+    pub batches: Option<Vec<HeldBatch>>,
 }
+
+/// A later call of a request asked in several, as this host holds it: its
+/// payload's bytes and the rows it scores.
+pub type HeldBatch = (Vec<u8>, u64);
 
 /// A forecast's later step as this host holds it: its number, and its
 /// payload's and query's bytes.
@@ -765,7 +1174,7 @@ fn materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
@@ -774,7 +1183,7 @@ fn materialize(
         case,
         spec,
         schema,
-        connection,
+        source,
         observed,
         log,
         sampler,
@@ -804,11 +1213,20 @@ fn materialize(
                 }
                 forecast = Some(later);
             }
+            let mut batches = None;
+            if let Some(calls) = &state.batches {
+                let mut later = Vec::new();
+                for call in calls {
+                    later.push((bytes(call.payload)?, call.rows));
+                }
+                batches = Some(later);
+            }
             let held = HeldState {
                 version: state.version,
                 payload: bytes(state.payload)?,
                 query: bytes(state.query)?,
                 forecast,
+                batches,
             };
             let recorded = json!({
                 "version": held.version,
@@ -835,7 +1253,7 @@ fn start_materialize(
     case: &Case,
     spec: &MaterializeInput,
     schema: &SourceDescription,
-    connection: &duckdb::Connection,
+    source: Source<'_>,
     observed: &mut Observed,
     log: &mut DriverLog,
     sampler: Option<&mut Option<HeldSampler>>,
@@ -848,6 +1266,7 @@ fn start_materialize(
             case.id
         )
     })?;
+    let provider = source.provider(provider);
     let indices: Vec<Scalar> = serde_json::from_value(Value::from(spec.indices.clone()))
         .map_err(|_| anyhow!("{}: core.materialize.indices are not scalars", case.id))?;
     let anchor_time: Option<Scalar> = serde_json::from_value(spec.anchor_time.clone())
@@ -867,7 +1286,20 @@ fn start_materialize(
     // holds it (decision E67).
     let schema_bytes = serde_json::to_vec(schema)?;
     let held_bytes = serde_json::to_vec(&edits::held(schema))?;
-    let query_bytes = serde_json::to_vec(&case.input.pql)?;
+    // Off DuckDB the call is the Python host's on the core route (T2.1d):
+    // it sends the validated query as the PQL library writes it back
+    // (`to_string()`), which `sdm-pql` writes the same way; a query it does
+    // not parse is sent as the case gives it.
+    let off_duckdb = !matches!(
+        &provider,
+        ProviderChoice::Sql { dialect } if dialect.name() == Database::Duckdb.name()
+    );
+    let query = if off_duckdb {
+        written_back(&case.input.pql)
+    } else {
+        case.input.pql.clone()
+    };
+    let query_bytes = serde_json::to_vec(&query)?;
     // The call's option values, as the client passes them (T1.28a's
     // `Materialize.values`, `_rust/materialize.py`): the context size, none
     // here, since the case format carries none, and of the options whose
@@ -911,6 +1343,8 @@ fn start_materialize(
             values: Some(AttachmentId(6)),
             options: vec![],
             most_parts: None,
+            most_entities: None,
+            most_calls: None,
             sampler_state: sampler
                 .as_ref()
                 .and_then(|held| held.as_ref())
@@ -948,7 +1382,7 @@ fn start_materialize(
             return Ok(None);
         }
     };
-    let driven = drive(case, &handle, connection, observed, log)?;
+    let driven = drive(case, &handle, source, observed, log)?;
     if let Some(held) = sampler {
         keep_sampler(&handle, held)?;
     }
@@ -981,7 +1415,13 @@ pub fn materialize_as(
     }
     let connection = database(case, bases)?;
     let mut log = DriverLog::default();
-    let mut observed = describe_on(&described_only, spec, &connection, &mut log, &[])?;
+    let mut observed = describe_on(
+        &described_only,
+        spec,
+        Source::Duck(&connection),
+        &mut log,
+        &[],
+    )?;
     let Answer::Described(described) = &observed.answer else {
         return Ok((observed, None));
     };
@@ -991,7 +1431,7 @@ pub fn materialize_as(
         case,
         materialize_spec,
         &schema,
-        &connection,
+        Source::Duck(&connection),
         &mut observed,
         &mut log,
         None,
@@ -1052,7 +1492,13 @@ pub fn materialize_repeatedly_holding(
         core.materialize = None;
         core.predict = None;
     }
-    let mut first = describe_on(&describing, describe_spec, &connection, &mut log, &[])?;
+    let mut first = describe_on(
+        &describing,
+        describe_spec,
+        Source::Duck(&connection),
+        &mut log,
+        &[],
+    )?;
     let described: SourceDescription = serde_json::from_value(
         first
             .described
@@ -1068,16 +1514,18 @@ pub fn materialize_repeatedly_holding(
             fetches: Vec::new(),
             described: None,
             materialized: None,
+            accepted: None,
             answer: Answer::Validated(false),
             warnings: Vec::new(),
             driver: None,
             edits: Vec::new(),
+            answered: None,
         };
         materialize(
             case,
             spec,
             &described,
-            &connection,
+            Source::Duck(&connection),
             &mut observed,
             &mut log,
             Some(&mut held),
@@ -1200,6 +1648,19 @@ fn predict(
                         })
                         .collect()
                 }),
+                // Each later call after the forecast's steps' attachments
+                // (none where there are batches), with this host's one
+                // constant id, as each step's.
+                batches: state.batches.as_ref().map(|calls| {
+                    (0u32..)
+                        .zip(calls)
+                        .map(|(at, (_, rows))| RequestBatch {
+                            payload: AttachmentId(3 + at),
+                            rows: *rows,
+                            request_id: Some(REQUEST_ID.into()),
+                        })
+                        .collect()
+                }),
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
@@ -1207,7 +1668,16 @@ fn predict(
             // client asks when its caller names none (T1.28b).
             outputs: vec![],
             default_outputs: true,
-            inference_asked: vec![],
+            // The inference options the case's caller set, which alone the
+            // call sends (the reference's 26ecdd28, T2.0c), as the Python
+            // host hands over the keys of the request's asked config.
+            inference_asked: case
+                .input
+                .materialize
+                .inference_config
+                .iter()
+                .flat_map(|options| options.keys().cloned())
+                .collect(),
         }),
     }));
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
@@ -1218,6 +1688,9 @@ fn predict(
     for (at, (_, payload, query)) in (0u32..).zip(state.forecast.unwrap_or_default()) {
         attachments.insert(AttachmentId(3 + 2 * at), Attachment::Bytes(payload));
         attachments.insert(AttachmentId(4 + 2 * at), Attachment::Bytes(query));
+    }
+    for (at, (payload, _)) in (0u32..).zip(state.batches.unwrap_or_default()) {
+        attachments.insert(AttachmentId(3 + at), Attachment::Bytes(payload));
     }
     let handle = match HostRun::start(&default_root(), &message, attachments) {
         Ok(handle) => handle,
@@ -1237,6 +1710,7 @@ fn predict(
         let call = match &next {
             Err(failed) => {
                 observed.answer = error_of(failed)?;
+                observed.answered = answered_of(&handle, failed)?;
                 return Ok(());
             }
             Ok(out) => match read(out).map_err(|_| anyhow!("an unreadable step"))? {
@@ -1283,7 +1757,10 @@ fn predict(
     }
     let sent = bodies.last().cloned().unwrap_or(Value::Null);
     observed.answer = match next {
-        Err(failed) => error_of(&failed)?,
+        Err(failed) => {
+            observed.answered = answered_of(&handle, &failed)?;
+            error_of(&failed)?
+        }
         Ok(out) => match read(&out).map_err(|_| anyhow!("an unreadable step"))? {
             ControlMessage::Step(Step::Done {
                 result: OperationResult::Predict(predicted),
@@ -1317,4 +1794,54 @@ fn predict(
         },
     };
     Ok(())
+}
+
+#[cfg(test)]
+mod query_dtype_tests {
+    use super::*;
+
+    /// As the Python host writes a query schema's data types: the S0 cases'
+    /// pinned schemas (`int`, `float`, `time`, `string`) from the
+    /// description's (`int64`, `float64`, `date`, `string`).
+    #[test]
+    fn a_query_schema_names_a_type_as_the_python_host_does() {
+        for (described, written) in [
+            (Dtype::Int64, Dtype::Int),
+            (Dtype::Int32, Dtype::Int),
+            (Dtype::Byte, Dtype::Int),
+            (Dtype::Float32, Dtype::Float),
+            (Dtype::Float64, Dtype::Float),
+            (Dtype::Date, Dtype::Time),
+            (Dtype::Time, Dtype::Time),
+            (Dtype::String, Dtype::String),
+            (Dtype::Bool, Dtype::Bool),
+        ] {
+            assert_eq!(query_dtype(described), written, "{described:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod written_back_tests {
+    use super::written_back;
+
+    #[test]
+    fn a_query_is_written_back_as_the_python_host_sends_it() {
+        // s0.boundary.deepest's query, its 400 redundant parentheses as the
+        // PQL library's to_string() drops them (python-core's materialize
+        // input on SQLite).
+        let deepest = format!(
+            "PREDICT COUNT(orders.* WHERE {}orders.price > 1{}, 0, 30, days) FOR EACH users.user_id",
+            "(".repeat(400),
+            ")".repeat(400)
+        );
+        assert_eq!(
+            written_back(&deepest),
+            "PREDICT COUNT(orders.* WHERE orders.price > 1, 0, 30, days) FOR EACH users.user_id"
+        );
+        let plain = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id";
+        assert_eq!(written_back(plain), plain);
+        // A query that does not parse is sent as it is.
+        assert_eq!(written_back("PREDICT COUNT("), "PREDICT COUNT(");
+    }
 }

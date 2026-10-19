@@ -162,6 +162,19 @@ fn transitions(text: &str) -> (Vec<Transition>, Vec<String>) {
         if status != "proposed" && status != "approved" {
             continue;
         }
+        // An approved entry under an improvement's decision row (KO2-35,
+        // exact decimals) may let the statement counts differ too.
+        let improvement = block.lines().any(|l| {
+            l.starts_with("  decision_ref:")
+                && IMPROVEMENT_ROWS.iter().any(|row| {
+                    l.contains(&format!("row: {row}}}")) || l.contains(&format!("row: {row},"))
+                })
+        });
+        let status = if status == "approved" && improvement {
+            "approved improvement".to_owned()
+        } else {
+            status
+        };
         let lines: Vec<&str> = block.lines().collect();
         let Some(at) = lines.iter().position(|l| l.starts_with("  refs:")) else {
             continue;
@@ -202,14 +215,27 @@ fn transitions(text: &str) -> (Vec<Transition>, Vec<String>) {
     (out, malformed)
 }
 
+/// The decision rows whose approved entries are improvements on the
+/// reference (KO2-35, exact decimals): a vector such an entry names may
+/// differ in its statement counts too, where the core reads less than the
+/// reference does.
+const IMPROVEMENT_ROWS: [&str; 1] = ["KO2-35"];
+
 /// The approved entry naming `id` with exactly the transition `old -> new`.
 fn covered(id: &str, old: &str, new: &str, entries: &[Transition]) -> Option<String> {
     entries
         .iter()
         .find(|(_, status, pattern, from, to)| {
-            status == "approved" && from == old && to == new && glob(pattern, id)
+            status.starts_with("approved") && from == old && to == new && glob(pattern, id)
         })
         .map(|(entry, ..)| entry.clone())
+}
+
+/// Whether an improvement's approved entry names `id` with `old -> new`.
+fn improved(id: &str, old: &str, new: &str, entries: &[Transition]) -> bool {
+    entries.iter().any(|(_, status, pattern, from, to)| {
+        status == "approved improvement" && from == old && to == new && glob(pattern, id)
+    })
 }
 
 /// `success` or `refusal <CODE>` of an answer in this host's terms (the
@@ -224,7 +250,8 @@ fn outcome_class(answer: &Value) -> String {
 
 /// Whether this host's answer passes the vector: the reference's, or a
 /// difference an approved entry declares exactly (a declared difference
-/// within the same outcome still holds the statement counts).
+/// within the same outcome still holds the statement counts, but under an
+/// improvement's entry).
 fn passes(id: &str, got: &Value, want: &Value, entries: &[Transition]) -> bool {
     if agrees(got, want) {
         return true;
@@ -234,7 +261,9 @@ fn passes(id: &str, got: &Value, want: &Value, entries: &[Transition]) -> bool {
     if !answered || covered(id, &old, &new, entries).is_none() {
         return false;
     }
-    old != new || (got["statements"] == want["statements"] && got["complete"] == true)
+    old != new
+        || (got["complete"] == true
+            && (got["statements"] == want["statements"] || improved(id, &old, &new, entries)))
 }
 
 // --- the case -----------------------------------------------------------------
@@ -255,7 +284,7 @@ fn core_source(from_source: &Value) -> Value {
         .as_object()
         .into_iter()
         .flatten()
-        .map(|(name, source)| json!({"name": name, "source": source}))
+        .map(|(name, source)| json!({"name": name, "source": {"source": [source]}}))
         .collect();
     let keys: Map<String, Value> = from_source["primary_keys"]
         .as_object()
@@ -800,8 +829,42 @@ fn the_vectors_are_the_reference_s_and_not_vacuous() {
         );
         assert!(!vector["columns"].as_array().unwrap().is_empty(), "{id}");
     }
-    assert!(success > 120 && refusal > 40, "{success} {refusal}");
-    assert!(marked > 0 && marked < vectors.len());
+    assert!(success > 120, "{success} {refusal}");
+    // At 6298913c (main's eb6c68eb reads a DECIMAL column as int64 or
+    // float64 where its values fit) the reference refuses six, each by
+    // name: a sum past the declared precision of a decimal whose values do
+    // not fit int64 (kept as a decimal), and the four decimal time columns.
+    let refused: Vec<&str> = vectors
+        .iter()
+        .filter(|v| v["reference"]["outcome"]["result"] == "refusal")
+        .map(|v| v["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(refusal, refused.len());
+    let mut refused = refused;
+    refused.sort_unstable();
+    assert_eq!(
+        refused,
+        [
+            // The reference reads the DECIMAL(38, 2) primary key's
+            // 10**17 + i as float64, merging the users (the pair matrix).
+            "key.pair-merging.d38-2.d38-0",
+            "overflow.d19-0.sum-past",
+            "overflow.d38-0.sum-past",
+            "time.epoch-declared",
+            "time.epoch-in-place",
+            "time.epoch-in-place-declared",
+            "time.yyyymmdd-declared",
+        ]
+    );
+    assert!(
+        vectors
+            .iter()
+            .filter(|v| v["reference"]["outcome"]["result"] == "refusal")
+            .all(|v| v["reference"]["outcome"]["code"] == "INVALID_REQUEST")
+    );
+    // None fails unnamed or with INTERNAL_ERROR, so none is marked; the
+    // comparison's test holds a marked vector, seeded.
+    assert_eq!(marked, 0);
 }
 
 #[test]
@@ -980,7 +1043,25 @@ fn the_payload_digest_and_columns_are_the_recorder_s() {
             }
         }
     }
-    assert_eq!(read, 2, "the two cases that reach a request");
+    // At 6298913c ten of the family's fifteen cases reach a request: the
+    // decimal class target (main's eb6c68eb) beside the wide feature and the
+    // decimal target, and seven of T2.0c's exact-decimal cases (the others
+    // are refused at predict for one class, or at materialize).
+    assert_eq!(read, 10, "the ten cases that reach a request");
+    for case in [
+        "decimal.class-target-38-18",
+        "decimal.compare-finer-gt",
+        "decimal.compare-finer-negative",
+        "decimal.compare-same-scale",
+        "decimal.feature-38-0-wide",
+        "decimal.feature-inexact-38-18",
+        "decimal.key-wide",
+        "decimal.sum-10-2",
+        "decimal.target-38-18",
+        "decimal.target-regression-collide",
+    ] {
+        assert!(!all["cases"][case]["payload"].is_null(), "{case}");
+    }
     // The wide decimal reached the model as text, every digit kept.
     let wide = &all["cases"]["decimal.feature-38-0-wide"]["columns"]["users.f"];
     let context = &wide["request"][0]["context"];
@@ -1076,7 +1157,7 @@ fn the_comparison_fails_closed() {
     assert_ne!(cells(&[("\"1e-9\"", 1)]), cells(&[("\"1e-09\"", 1)]));
     // A refusal: the same code and counts, and an unnamed one is never
     // matched.
-    let past = find("overflow.d4-0.sum-past");
+    let past = find("overflow.d38-0.sum-past");
     let named = wanted(&past);
     let mut refused = named.clone();
     assert!(agrees(&refused, &named));
@@ -1089,7 +1170,13 @@ fn the_comparison_fails_closed() {
     assert!(!agrees(&unnamed, &unnamed));
     // The transitions: an approved entry covers exactly the transition it
     // declares, for the vectors its glob names; a proposed one, nothing.
-    let marked = wanted(&find("class.static-three.d4-0"));
+    // class.static-three.d4-0 as the reference answered it at b413e9ad
+    // (INTERNAL_ERROR at materialize), seeded: no recorded vector fails so
+    // at 6298913c.
+    let mut seeded = find("class.static-three.d4-0");
+    seeded["reference"]["outcome"] =
+        json!({"result": "refusal", "stage": "materialize", "code": "INTERNAL_ERROR"});
+    let marked = wanted(&seeded);
     let mut core = marked.clone();
     core["code"] = json!("UNSUPPORTED_REQUEST");
     let entry = |status: &str, glob: &str, old: &str, new: &str| {
@@ -1131,17 +1218,17 @@ fn the_comparison_fails_closed() {
     assert!(!passes(id, &core, &marked, &wrong));
     // An unmarked vector, a sum past the declared precision refused by
     // name, is excused the same way only.
-    let taken = wanted(&find("overflow.d4-0.sum-at"));
-    assert!(!passes("overflow.d4-0.sum-past", &taken, &named, &[]));
+    let taken = wanted(&find("overflow.d38-0.sum-at"));
+    assert!(!passes("overflow.d38-0.sum-past", &taken, &named, &[]));
     let lifted = [entry(
         "approved",
         "overflow.*-past",
         "refusal INVALID_REQUEST",
         "success",
     )];
-    assert!(passes("overflow.d4-0.sum-past", &taken, &named, &lifted));
+    assert!(passes("overflow.d38-0.sum-past", &taken, &named, &lifted));
     let failed = json!({"outcome": "host failure"});
-    assert!(!passes("overflow.d4-0.sum-past", &failed, &named, &lifted));
+    assert!(!passes("overflow.d38-0.sum-past", &failed, &named, &lifted));
     // A declared success -> success still holds the counts.
     let same = [entry("approved", "feature.*", "success", "success")];
     let mut changed = want.clone();
@@ -1149,6 +1236,29 @@ fn the_comparison_fails_closed() {
     assert!(passes("feature.users.d4-2.spread", &changed, &want, &same));
     changed["statements"]["materialize"] = json!(99);
     assert!(!passes("feature.users.d4-2.spread", &changed, &want, &same));
+    // Under an improvement's approved entry (KO2-35) the counts may differ
+    // too, for the vectors it names alone, the capture still complete.
+    let better = [entry(
+        "approved improvement",
+        "feature.*",
+        "success",
+        "success",
+    )];
+    assert!(passes(
+        "feature.users.d4-2.spread",
+        &changed,
+        &want,
+        &better
+    ));
+    assert!(!passes("key.both.d4-0", &changed, &want, &better));
+    let mut partial = changed.clone();
+    partial["complete"] = json!(false);
+    assert!(!passes(
+        "feature.users.d4-2.spread",
+        &partial,
+        &want,
+        &better
+    ));
     // The register's text: refs of proposed and approved entries, in both
     // forms; a rejected entry's and another file's ignored; a ref naming
     // vectors with no transition malformed.
@@ -1181,9 +1291,17 @@ fn the_comparison_fails_closed() {
 fn every_vector_ref_names_its_transition() {
     let register =
         std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
-    let (_, malformed) = transitions(&register);
+    let (entries, malformed) = transitions(&register);
     assert!(
         malformed.is_empty(),
         "vector refs naming no transition `<glob> <from> -> <to>`: {malformed:?}"
     );
+    // P2B-1 (exact decimals, KO2-35) is read as an improvement's entry, and
+    // no other entry is.
+    let improving: BTreeSet<&str> = entries
+        .iter()
+        .filter(|(_, status, ..)| status == "approved improvement")
+        .map(|(entry, ..)| entry.as_str())
+        .collect();
+    assert_eq!(improving, BTreeSet::from(["P2B-1"]));
 }

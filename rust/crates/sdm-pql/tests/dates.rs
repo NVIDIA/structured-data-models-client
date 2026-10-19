@@ -214,9 +214,15 @@ fn the_generated_literals_read_as_the_reference_reads_them() {
     assert_eq!(held.packed, packed.len(), "every D8 row refused as packed");
     let plain = vectors["plain"].as_array().unwrap();
     let held = check(reader, plain, &mut failures);
-    assert!(plain.len() >= 9_000, "{}", plain.len());
+    // Recorded on Linux, the reference machine since 2026-10-16: strftime
+    // does not pad %Y there, so the padded-year literals macOS generated and
+    // warned on (690 at b413e9ad) are not generated; their padded side is
+    // held over padded-years.tsv (a_padded_year_warns_only_where_strftime_pads_it,
+    // 885 literals, both sides).
+    assert_eq!(vectors["pads_year"], false, "recorded on Linux");
+    assert!(plain.len() >= 8_500, "{}", plain.len());
     assert!(
-        held.read >= 1_000 && held.refused >= 1_000 && held.warned >= 1_000,
+        held.read >= 3_000 && held.refused >= 5_000 && held.warned >= 500,
         "{held:?}"
     );
     assert_eq!(held.packed, 0, "no plain row has a run of five digits");
@@ -263,8 +269,14 @@ fn a_padded_year_warns_only_where_strftime_pads_it() {
 
 /// Register PQL-4 (proposed), diagnostic: a day-first literal whose middle
 /// field is written as `strftime` writes its year (`13/0001/1`) makes pandas
-/// guess `%d/%Y/%m` and warn with it; the reader reads the same date and
-/// names no format, as D4 states. Every other answer of the set agrees.
+/// guess `%d/%Y/%m` and warn with it where `strftime` pads `%Y` (macOS, the
+/// recording at b413e9ad: 144 such rows); the reader reads the same date and
+/// names no format, as D4 states. The reference machine is Linux since
+/// 2026-10-16, where `strftime` does not pad and pandas guesses no `%Y` for
+/// any row of the set, so the reader with the recording's `pads_year` agrees
+/// with every row; the padded side is held by reading every row again as
+/// where `%Y` pads: the same date and offset, and never a format with the
+/// year in the middle field.
 #[test]
 fn a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named() {
     let vectors: Value = serde_json::from_str(&here("tests/dates.json")).unwrap();
@@ -291,8 +303,41 @@ fn a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named() {
             }
         }
     }
-    assert_eq!(guessed, 144, "the literals pandas guesses %Y for");
+    assert_eq!(vectors["pads_year"], false, "recorded on Linux");
+    assert_eq!(
+        guessed, 0,
+        "pandas guesses %Y for none where it is not padded"
+    );
     assert!(agreed > 800, "{agreed}");
+    // The padded side: the reader as on a platform whose strftime pads %Y.
+    let padded = Reader {
+        pads_year: true,
+        ..reader
+    };
+    let mut middle_years = 0;
+    for row in rows {
+        let literal = row[0].as_str().unwrap();
+        let got = answer(padded, literal);
+        assert_eq!(got.0.as_deref(), row[1].as_str(), "{literal} (pads)");
+        assert_eq!(got.1, row[2].as_i64(), "{literal} (pads)");
+        if let Some(format) = got.2.as_deref() {
+            assert!(
+                !format[2..].starts_with(&format!("{}%Y", &format[2..3])),
+                "{literal}: names {format}"
+            );
+        }
+        let fields: Vec<&str> = literal
+            .split(' ')
+            .next()
+            .unwrap()
+            .split(['/', '-', '.'])
+            .collect();
+        middle_years += usize::from(fields.len() == 3 && fields[1].len() == 4);
+    }
+    assert!(
+        middle_years >= 144,
+        "{middle_years} literals with the year in the middle"
+    );
 }
 
 /// T1.6c brief, "a D8 literal is refused ... `date_literal_packed`", at the

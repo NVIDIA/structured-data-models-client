@@ -252,7 +252,7 @@ fn core_source(from_source: &Value) -> Value {
         .as_object()
         .into_iter()
         .flatten()
-        .map(|(name, source)| json!({"name": name, "source": source}))
+        .map(|(name, source)| json!({"name": name, "source": {"source": [source]}}))
         .collect();
     let keys: Map<String, Value> = from_source["primary_keys"]
         .as_object()

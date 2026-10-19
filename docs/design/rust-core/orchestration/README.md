@@ -32,7 +32,7 @@ Nothing merges into `main`; the owner decides on the epic merge at the end of Ph
 - **Orchestrator**: the main session. It plans, writes briefs, starts agents, reads reports and lands packages. It never writes product code itself.
 - **Test author**: a fresh agent per package. It writes the acceptance tests and reference-recorded vectors first, in `<ID> tests: ...` commits. Owner rule: the agent that writes the code never writes its own acceptance tests.
 - **Implementer**: a fresh agent per package. It makes the tests pass without editing them, pushes and reports its SHA. It never watches CI.
-- **Two reviewers per substantive round**: a fresh Claude subagent and Codex (in a herdr pane, or headless `codex exec`). Both get the same brief and review the exact SHA.
+- **Two reviewers on every round**, confirmations and docs included, and a round passes only when both approve the same SHA (Phase 2 decision KO2-9, the owner's rule): a fresh Claude subagent and Codex (in a herdr pane, or headless `codex exec`). Both get the same brief and review the exact SHA.
   Codex in a herdr pane doesn't notify the orchestrator when it finishes, so every prompt gets a background waiter in the same turn:
   `herdr --session <s> agent prompt <pane> "<brief, naming the report file>"`, then, run in the background, `sleep 5; herdr --session <s> agent wait <pane> --timeout 3000000 >/dev/null 2>&1; ls -la <report file>`.
   If the wait returns with no report (it can return before Codex starts working), check `herdr --session <s> pane list` and re-arm it. Re-prompt after a capacity error.
@@ -135,7 +135,7 @@ Three scripts in `scripts/rust_core/orchestration/` carry the mechanical part. E
 - **Stack on the landing commit**, never on a landed candidate. Phase 1 lost a cycle when the ratchet refused a merge base that wasn't a landing commit.
 - **Clean rebases are confirmed by script** (`mech_confirm.py`; decision E130). Reviewers look again only when the move changed something.
 - **`land_chain.sh` queues one package at a time** and lands each only after the run of the package below it has completed.
-- **Judging-path changes land alone, first.** If a package changes a file `gate.sh` takes from the checkpoint (`compare.py`, `run_python.py`, `ratchet.py`, `coverage.py`, `gate.sh`, `wheel_smoke.py`, the guards `bridge_freeze.py` and `l0_*.py`, `ci.yml`) and relies on that change for its own gate, it lands in two parts: the judging change alone, then the rest. Every guard or gate change must also pass in its post-landing state.
+- **Judging-path changes land alone, first.** If a package changes a file `gate.sh` takes from the checkpoint (`compare.py`, `run_python.py`, `ratchet.py`, `coverage.py`, `gate.sh`, `wheel_smoke.py`, the guards `bridge_freeze.py` and `l0_*.py`, `ci.yml`) and relies on that change for its own gate, it lands in two parts: the judging change alone, then the rest. A judging part that only adds judgement over product already landed, which nothing it judges relies on, lands alone right after that product (Phase 2's T2.12 retirement, T2.2b, T2.3b). Every guard or gate change must also pass in its post-landing state.
 
 ## CI
 
@@ -171,7 +171,7 @@ Never edit a bash script while it's running. Bash reads scripts incrementally, s
 ## What the data says about reviews
 
 - **Two reviewers catch real bugs.** In 111 rounds where both reviewed the same SHA, 40 had a blocker, and in 31 of those 40 (78%) one reviewer alone would have approved a P1 or P2. Codex alone would have missed 17; the subagent alone 22. Keep both on round 1 and on every fix round touching product or judging-path code.
-- **Confirmation rounds almost never find anything.** All 20 paired confirmation, stack and tiny-fix rounds were approved by both. Use the script for clean moves and one reviewer for confirmations.
+- **Confirmation rounds almost never find anything.** All 20 paired confirmation, stack and tiny-fix rounds were approved by both. Use the script for clean moves; since Phase 2 (decision KO2-9), confirmations still have both reviewers, because the owner wants both to sign off.
 - **One Codex pane is a bottleneck.** It served three lanes and was queued 26 times. Run one per lane, or headless.
 - **Fix rounds introduce new bugs.** The forecast move (T1.36 fixes 21 to 28) took four rounds. Review each fix round's own diff and rerun the earlier repros.
 - **A check that fails twice the same way changes method**; it goes to the owner rather than getting a third patch.

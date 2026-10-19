@@ -21,18 +21,18 @@ use sdm_data::Data;
 /// Each request, as the contract writes it, and its statement.
 const PINS: &[(&str, &str)] = &[
     (
-        r#"{"columns": ["user_id", "age", "country", "f"], "limit": 1000, "request": "preview", "table": "users"}"#,
+        r#"{"columns": ["user_id", "age", "country", "f"], "limit": 1000, "request": "preview", "table": {"source": ["users"]}}"#,
         r#"SELECT "user_id", "age", "country", "f" FROM "users" LIMIT 1000"#,
     ),
     (
-        r#"{"columns": ["user_id"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": "users"}"#,
+        r#"{"columns": ["user_id"], "filters": [{"column": "user_id", "filter": "not_null"}], "key": ["user_id"], "n": 10000, "request": "sample_entities", "seed": {"t": "u64", "v": "42"}, "table": {"source": ["users"]}}"#,
         r#"SELECT "user_id"
 FROM (SELECT * FROM "users"
 WHERE "user_id" IS NOT NULL)
 USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)"#,
     ),
     (
-        r#"{"columns": ["user_id", "age", "country"], "key": "user_id", "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": "users"}"#,
+        r#"{"columns": ["user_id", "age", "country"], "key": ["user_id"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country"
 FROM "__sdm_seeds__" s
 JOIN "users" t
@@ -42,7 +42,7 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1"#,
     ),
     (
-        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": "user_id", "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
+        r#"{"columns": ["order_id", "user_id", "price", "ts"], "key": ["user_id"], "order": [{"as_timestamp": true, "column": "ts", "descending": true, "nulls_last": true}, {"as_timestamp": false, "column": "order_id", "descending": false, "nulls_last": true}], "per_seed": 32, "request": "neighbors", "seeds": {"attachment": 3, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "time", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": null, "upper": {"inclusive": true, "seed_column": "time"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."order_id", t."user_id", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t
@@ -55,7 +55,7 @@ QUALIFY ROW_NUMBER() OVER (
 ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC NULLS LAST"#,
     ),
     (
-        r#"{"columns": ["price", "ts"], "key": "user_id", "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": "orders", "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
+        r#"{"columns": ["price", "ts"], "key": ["user_id"], "order": null, "per_seed": null, "request": "neighbors", "seeds": {"attachment": 1, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}, {"name": "end", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}, {"name": "start", "nullable": false, "type": {"type": "timestamp", "unit": "ns", "zone": null}}]}, "table": {"source": ["orders"]}, "window": {"column": "ts", "lower": {"inclusive": false, "seed_column": "start"}, "upper": {"inclusive": true, "seed_column": "end"}}}"#,
         r#"SELECT s."batch" AS "__kumo_batch__", t."price", t."ts"
 FROM "__sdm_seeds__" s
 JOIN "orders" t

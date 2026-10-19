@@ -56,6 +56,10 @@ _Kind = Literal[
 CONTRACT_VERSION: int
 #: Whether this build has the test-only operations; the shipped wheel has not.
 TEST_OPS: bool
+#: The databases this build's core provides for, by name: the staging
+#: rule's private, plain-data marker (contract/runners/run_python.py's
+#: check_legs; T2.1a), never public API.
+PROVIDERS: tuple[str, ...]
 #: Every code an error of the core may carry, in the contract's order.
 ERROR_CODES: tuple[_Code, ...]
 #: Every warning the core may give, each with the variants it gives (none:

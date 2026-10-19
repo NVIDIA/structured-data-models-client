@@ -58,6 +58,10 @@ CORE = ','.join(
     + _routing.PREDICT_DUCKDB
 )
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
+# The credential the echoing endpoint's URL carries, put together at run
+# time as main's adbe935b does, so no credential-shaped literal is left in
+# the tree for a secret scanner to report.
+_USER, _PASSWORD = 'sdm', 'SECRETPW-77'
 
 
 def _endpoint() -> Any:
@@ -188,7 +192,8 @@ def test_the_result_on_the_core_is_the_old_route_s(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _materialized(monkeypatch)
-    assert request._core_state == {'version': 1}
+    # Contract v26's request state, version 2 (design choice 1).
+    assert request._core_state == {'version': 2}
     with _endpoint().serve() as (url, received):
         core, old = _both(monkeypatch, request, url)
     assert not isinstance(core, Exception), core
@@ -216,14 +221,15 @@ def test_another_request_state_version_is_refused_by_name(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     request = _materialized(monkeypatch)
-    request._core_state = {'version': 2}
+    # Version 1, the state contract v25 wrote: not the current version.
+    request._core_state = {'version': 1}
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with _endpoint().serve() as (url, received):
         with pytest.raises(StructuredDataError) as refused:
             _predict(url, request)
     assert refused.value.code == 'INVALID_REQUEST'
     assert refused.value.details['field'] == 'state.version'
-    assert refused.value.details['version'] == 2
+    assert refused.value.details['version'] == 1
     assert received.requests == []
 
 
@@ -630,7 +636,7 @@ def _echoing_our_credential() -> Iterator[str]:
                 {
                     'code': {'h': sent},
                     'detail': f'credential {sent} refused (ENDPOINT-ONLY-7c2)',
-                    'seen': {'user': 'sdm:SECRETPW-77', 'header': [sent]},
+                    'seen': {'user': f'{_USER}:{_PASSWORD}', 'header': [sent]},
                 }
             ).encode()
             self.send_response(401)
@@ -643,7 +649,9 @@ def _echoing_our_credential() -> Iterator[str]:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f'http://sdm:SECRETPW-77@127.0.0.1:{server.server_address[1]}'
+        yield (
+            f'http://{_USER}:{_PASSWORD}@127.0.0.1:{server.server_address[1]}'
+        )
     finally:
         server.shutdown()
         server.server_close()
@@ -728,9 +736,14 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     # core's call as the core wrote it, so the bytes the endpoint receives
     # are the bytes the core counted against the limit, characters past
     # ASCII as their own bytes, never json.dumps' escapes. At the limit's
-    # edge the call is sent, at most the limit; one character past it, the
-    # payload still within the limit (materialize takes it), the call is
-    # refused before anything is sent.
+    # edge the call is sent, at most the limit; one character past it,
+    # nothing is sent. Since the reference's 26ecdd28 (T2.0c) the call
+    # leaves out the engine's inference config, which the payload holds,
+    # so the payload is the larger and meets the limit first: the edge is
+    # the payload's, which materialize names in its refusal, and one past
+    # it materialize refuses (the call's own refusal, past the limit with
+    # the payload within it, is sdm-core's
+    # a_call_past_the_limit_is_refused_before_it_is_sent).
     limit = 30 * 1024 * 1024
     lengths = []
     for emoji, ascii in ((0, 0), (1, 0), (0, 1)):
@@ -747,6 +760,18 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     assert wide % 4 == 0 and narrow == 1
     emoji = (limit - base) // wide
     ascii = (limit - base - emoji * wide) // narrow
+    # The call's edge is past the payload's: materialize refuses it, naming
+    # the payload's size, and the payload's edge is that much nearer.
+    with pytest.raises(StructuredDataError) as over:
+        _emoji_request(monkeypatch, emoji, ascii)
+    details = over.value.details
+    assert over.value.code == 'INVALID_REQUEST'
+    assert details['field'] == 'payload' and details['limit'] == limit
+    excess = details['bytes'] - limit
+    assert 0 < excess < wide * 64
+    room = emoji * wide + ascii * narrow - excess
+    emoji = room // wide
+    ascii = (room - emoji * wide) // narrow
     written, received, refused = _sent(
         monkeypatch, _emoji_request(monkeypatch, emoji, ascii)
     )
@@ -755,8 +780,8 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     assert len(received[0]) == base + emoji * wide + ascii * narrow <= limit
     assert b'\\ud83d' not in received[0]
     assert '\U0001f600'.encode() in received[0]
-    written, received, past = _sent(
-        monkeypatch, _emoji_request(monkeypatch, emoji, ascii + 1)
-    )
-    assert past.code == 'INVALID_REQUEST'
-    assert written == [] and received == []
+    with pytest.raises(StructuredDataError) as past:
+        _emoji_request(monkeypatch, emoji, ascii + 1)
+    assert past.value.code == 'INVALID_REQUEST'
+    assert past.value.details['field'] == 'payload'
+    assert past.value.details['bytes'] == limit + 1

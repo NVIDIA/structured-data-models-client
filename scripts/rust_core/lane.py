@@ -26,7 +26,13 @@ A package owns a commit when the commit's subject starts with the
 package's ID followed by a colon or a space and names no other package
 ID: ``T1.11e: the payload``, ``T1.11e fix 1: review findings``,
 ``T1.11e tracker: the previous package landed``. Another package is
-cited in the body (``Refs: T1.11d``), which owns nothing.
+cited in the body (``Refs: T1.11d``), which owns nothing. The one
+exemption is a merge of ``main`` (T2.0e): the commits one merge commit
+the package owns brings in from ``main``, as the remote holds it when
+``check`` runs (``git ls-remote``, then fetched, never a local ref), are
+``main``'s and need no ID; a second merge, a merge of another branch or
+of a rewritten ``main`` commit exempts nothing (``land.main_merge``). A
+merge of ``main`` lands from the package's lane, like any package.
 
 ``start`` prepares the lane for a new package. ``X`` is lower-case
 letters and digits (``1b``), the package an ID such as ``T1.11e`` or
@@ -802,7 +808,7 @@ def check_lane_range(
     ).stdout.strip()
     if not base:
         raise Refusal(f'no {base_ref}; fetch {remote} first')
-    stray = commits_not_owned(tools, base, head, package)
+    stray = commits_not_owned(tools, base, head, package, remote=remote)
     if stray:
         raise Refusal(
             f'{branch} carries {package}, and these commits since '

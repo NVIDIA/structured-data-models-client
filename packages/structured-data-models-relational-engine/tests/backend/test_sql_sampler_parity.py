@@ -11,8 +11,10 @@ future fix cannot be applied to one file and forgotten in the others.
 column seeded from it detects the widening the moment it happens.
 """
 
+import importlib
 import sqlite3
 import uuid
+import warnings
 from collections.abc import Iterator
 
 import numpy as np
@@ -297,3 +299,200 @@ def test_unknown_column_cannot_reintroduce_set_ordering(sql_graph):
     columns = {'amount', 'zzz_unknown', 'aaa_unknown'}
     ordered = sampler._ordered_columns('orders', columns)
     assert ordered == ['amount', 'aaa_unknown', 'zzz_unknown']
+
+
+# The graph shapes a reviewer sampled on DuckDB and SQLite: a table reached
+# by two paths, a column linking to two copies of one table, as a view
+# joining a table twice makes, a chain and a star. Each is sampled from three
+# of its tables.
+_SHAPES = {
+    'diamond': [
+        ('orders', 'cid', 'customers'),
+        ('customers', 'aid', 'addresses'),
+        ('orders', 'aid', 'addresses'),
+    ],
+    'same-table-twice': [
+        ('orders', 'cid', 'customers'),
+        ('orders', 'cid', 'buyers'),
+    ],
+    'chain': [
+        ('lines', 'oid', 'orders'),
+        ('orders', 'cid', 'customers'),
+        ('customers', 'aid', 'addresses'),
+    ],
+    'star': [
+        ('orders', 'cid', 'customers'),
+        ('orders', 'pid', 'products'),
+        ('orders', 'sid', 'stores'),
+    ],
+}
+_KEYS = {
+    'addresses': 'aid',
+    'buyers': 'cid',
+    'customers': 'cid',
+    'lines': 'lid',
+    'orders': 'oid',
+    'products': 'pid',
+    'stores': 'sid',
+}
+
+
+def _shape_frames() -> dict[str, pd.DataFrame]:
+    start = pd.Timestamp('2024-01-01')
+    order, line = np.arange(40), np.arange(120)
+    customers = pd.DataFrame(
+        {'cid': np.arange(10), 'aid': np.arange(10) % 5, 'seg': ['x', 'y'] * 5}
+    )
+    frames = {
+        'addresses': pd.DataFrame({'aid': np.arange(5), 'city': [*'abcde']}),
+        'buyers': customers.copy(),
+        'customers': customers,
+        'lines': pd.DataFrame(
+            {
+                'lid': line,
+                'oid': line % 40,
+                'qty': line % 7,
+                'ts': start + pd.to_timedelta(line % 40, 'D'),
+            }
+        ),
+        'orders': pd.DataFrame(
+            {
+                'oid': order,
+                'cid': order % 10,
+                'aid': (order + 2) % 5,
+                'pid': order % 6,
+                'sid': order % 3,
+                'ts': start + pd.to_timedelta(order, 'D'),
+            }
+        ),
+        'products': pd.DataFrame(
+            {'pid': np.arange(6), 'price': np.arange(6.0)}
+        ),
+        'stores': pd.DataFrame({'sid': np.arange(3), 'size': np.arange(3)}),
+    }
+    # A key is no feature, so a copy of it tells the sampled rows apart.
+    for name, frame in frames.items():
+        frame['tag'] = frame[_KEYS[name]]
+    return frames
+
+
+def _shape_graph(backend: str, path: str, edges: list) -> rfm.Graph:
+    frames = _shape_frames()
+    names = sorted({table for edge in edges for table in (edge[0], edge[2])})
+    if backend == 'duckdb':
+        duckdb = pytest.importorskip('duckdb')
+        connection = duckdb.connect(path)
+        for name in names:
+            connection.register('_frame', frames[name])
+            connection.execute(f'CREATE TABLE {name} AS SELECT * FROM _frame')
+            connection.unregister('_frame')
+        connection.close()
+    elif backend == 'sqlite':
+        pytest.importorskip('adbc_driver_sqlite')
+        connection = sqlite3.connect(path)
+        for name in names:
+            frame = frames[name].astype(object)
+            if 'ts' in frame:
+                frame['ts'] = frames[name]['ts'].dt.strftime(
+                    '%Y-%m-%d %H:%M:%S'
+                )
+            connection.execute(f'CREATE TABLE {name} ({", ".join(frame)})')
+            connection.executemany(
+                f'INSERT INTO {name} VALUES ({", ".join("?" * frame.shape[1])})',
+                frame.values.tolist(),
+            )
+        connection.commit()
+        connection.close()
+    tables = [
+        dict(
+            name=name,
+            primary_key=_KEYS[name],
+            **({'time_column': 'ts'} if 'ts' in frames[name] else {}),
+        )
+        for name in names
+    ]
+    if backend == 'local':
+        graph = rfm.Graph.from_data(
+            {name: frames[name] for name in names},
+            edges=edges,
+            infer_metadata=False,
+            verbose=False,
+        )
+        for spec in tables:
+            graph[spec['name']].primary_key = spec['primary_key']
+            if 'time_column' in spec:
+                graph[spec['name']].time_column = spec['time_column']
+        return graph
+    return getattr(rfm.Graph, f'from_{backend}')(
+        path, tables=tables, edges=edges, infer_metadata=False, verbose=False
+    )
+
+
+def _sampled(graph: rfm.Graph, entity: str) -> dict[str, tuple]:
+    r"""Each table's nodes per hop, and which rows each entity reached."""
+    # Import only this graph's sampler, so one backend's driver is enough.
+    module, name = {
+        'duckdb': ('duckdb', 'DuckDBSampler'),
+        'local': ('local.sampler', 'LocalSampler'),
+        'sqlite': ('sqlite', 'SQLiteSampler'),
+    }[str(graph[entity].backend)]
+    sampler_cls = getattr(
+        importlib.import_module(f'sdm_relational_engine.rfm.backend.{module}'),
+        name,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', UserWarning)  # Missing indices.
+        sampler = sampler_cls(graph, verbose=False)
+    subgraph = sampler.sample_subgraph(
+        (entity,),
+        pd.Series([0, 1, 2]),
+        pd.Series(pd.to_datetime(['2025-01-01'] * 3)),
+        [16, 16, 16],
+    )
+    sampled = {}
+    for name, table in sorted(subgraph.tables.items()):
+        keys = table.df['tag'].astype(int).to_numpy()
+        if table.row is not None:  # Each node's row of `df`.
+            keys = keys[table.row]
+        sampled[name] = (
+            # The SQL samplers stop at the first hop that reaches nothing.
+            [
+                int(n)
+                for n in np.trim_zeros(np.asarray(table.num_sampled_nodes), 'b')
+            ],
+            sorted(
+                zip(
+                    np.asarray(table.batch).tolist(), keys.tolist(), strict=True
+                )
+            ),
+        )
+    return sampled
+
+
+@pytest.mark.parametrize('backend', ['duckdb', 'sqlite'])
+@pytest.mark.parametrize(
+    'shape, entity',
+    [
+        (shape, entity)
+        for shape, edges in _SHAPES.items()
+        for entity in sorted({e[0] for e in edges} | {e[2] for e in edges})[:3]
+    ],
+)
+def test_every_shape_samples_as_in_memory(
+    tmp_path, backend: str, shape: str, entity: str
+) -> None:
+    r"""Two paths to a table sampled a hop too deep, and a column linking
+    to two tables failed, on every SQL backend, while the in-memory
+    sampler read both right. Each backend now reaches the same rows on each
+    hop, from each table, as the in-memory sampler does.
+    """
+    edges = _SHAPES[shape]
+    graph = _shape_graph(backend, str(tmp_path / f'db.{backend}'), edges)
+    try:
+        sampled = _sampled(graph, entity)
+    finally:
+        if graph._connection is not None:
+            graph._connection.close()
+            graph._connection = None
+
+    assert sampled == _sampled(_shape_graph('local', '', edges), entity)

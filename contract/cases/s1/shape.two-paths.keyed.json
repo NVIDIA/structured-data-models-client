@@ -1,0 +1,220 @@
+{
+  "format": "sdm-case/1",
+  "id": "shape.two-paths.keyed",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE customers AS SELECT i AS cid, 'x' AS seg FROM range(10) t(i)",
+      "CREATE TABLE headers AS SELECT i AS hid, i % 10 AS cid, TIMESTAMP '2024-01-01' + to_days(i::INTEGER) AS ts FROM range(40) t(i)",
+      "CREATE TABLE details AS SELECT i AS did, i % 40 AS hid, (i + 1) % 10 AS cid, TIMESTAMP '2024-01-01' + to_days((i % 40)::INTEGER) AS ts FROM range(120) t(i)"
+    ],
+    "from_source": {
+      "tables": {
+        "customers": "customers",
+        "details": "details",
+        "headers": "headers"
+      },
+      "primary_keys": {
+        "customers": "cid",
+        "details": "did",
+        "headers": "hid"
+      },
+      "time_columns": {
+        "details": "ts",
+        "headers": "ts"
+      },
+      "relationships": [
+        {
+          "source_table": "headers",
+          "source_column": "cid",
+          "target_table": "customers",
+          "target_column": "cid"
+        },
+        {
+          "source_table": "details",
+          "source_column": "hid",
+          "target_table": "headers",
+          "target_column": "hid"
+        },
+        {
+          "source_table": "details",
+          "source_column": "cid",
+          "target_table": "customers",
+          "target_column": "cid"
+        }
+      ]
+    },
+    "pql": "PREDICT COUNT(details.*, 0, 30, days) FOR EACH customers.cid",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2024-02-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [
+          {
+            "name": "customers",
+            "source": {
+              "source": [
+                "customers"
+              ]
+            }
+          },
+          {
+            "name": "details",
+            "source": {
+              "source": [
+                "details"
+              ]
+            }
+          },
+          {
+            "name": "headers",
+            "source": {
+              "source": [
+                "headers"
+              ]
+            }
+          }
+        ],
+        "primary_keys": {
+          "customers": {
+            "value": [
+              "cid"
+            ]
+          },
+          "details": {
+            "value": [
+              "did"
+            ]
+          },
+          "headers": {
+            "value": [
+              "hid"
+            ]
+          }
+        },
+        "time_columns": {
+          "details": {
+            "value": "ts"
+          },
+          "headers": {
+            "value": "ts"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "headers",
+              "column": "cid"
+            },
+            {
+              "table": "customers",
+              "column": "cid"
+            }
+          ],
+          [
+            {
+              "table": "details",
+              "column": "hid"
+            },
+            {
+              "table": "headers",
+              "column": "hid"
+            }
+          ],
+          [
+            {
+              "table": "details",
+              "column": "cid"
+            },
+            {
+              "table": "customers",
+              "column": "cid"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1706745600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "regression; the request's context rows per table, the same on all three databases: customers 10, details 12, headers 4"
+  },
+  "why": "T2.19 (main eb6c68eb): the events reached from a customer directly and through its orders, so a table is reached by two paths in one hop, the events keyed and each line's customer not its order's; a hop's reads stop at the slices each table held when it began",
+  "source": "main's test_two_paths.py (eb6c68eb, the reference at 6298913c)"
+}

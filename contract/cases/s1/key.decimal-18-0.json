@@ -91,14 +91,11 @@
     }
   },
   "expect": {
-    "outcome": "refusal",
-    "stage": "materialize",
-    "error": "StructuredDataError",
-    "code": "INTERNAL_ERROR",
-    "message": "unsupported data type 'decimal128(18, 0)[pyarrow]' for column 'ENTITY'",
-    "today": "Schema.from_source reports user_id as int64 / ID"
+    "outcome": "success",
+    "stage": "predict",
+    "today": "Schema.from_source reports user_id as int64 / ID; at b413e9ad the reference failed INTERNAL_ERROR at materialize (unsupported data type 'decimal128(18, 0)[pyarrow]' for column 'ENTITY'), and since eb6c68eb (reference 6298913c) it reads the decimal as its declared type and answers"
   },
-  "register": "Engine failure after the schema accepted the key",
+  "register": "P2B-1 (KO2-35's permanent improvement): the reference at 6298913c answers (eb6c68eb reads the decimal as its declared type); the core answers it with exact decimals",
   "why": "Integral decimal keys are common in warehouses (NUMBER(18,0)); the first attempt left decimal keys out, then mis-keyed them",
   "source": "DV35; DV131"
 }

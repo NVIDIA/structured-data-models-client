@@ -1,0 +1,1 @@
+T2.18's filter-role column-name cases, their python-ref lines and their 15 vectors (12 per character, 3 twins), deferred until T2.10 lifts the core's `target_filter` rule; not run until T2.10's test author moves them back into `contract/cases/s1`, `contract/reference/` and `contract/column-name-vectors.json`.

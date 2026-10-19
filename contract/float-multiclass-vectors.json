@@ -1,7 +1,7 @@
 {
  "format": "sdm-float-multiclass-vectors/1",
  "recorded_by": "contract/tools/float_multiclass_record.py",
- "reference": "b413e9ad6c613e82e5f1fc2ad0bc152870f59e74",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
  "cell": "ref-pandas3",
  "environment": {
   "python": "3.12.13",
@@ -149,7 +149,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "226cb5cf9b29074caa2bd7909663f50cd33781c4a737db289a1012542aef6546",
+      "digest": "63180366b4fc8619f620b90f7004f65020b8de1b72ab589f2b69403185ee4a4d",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -390,7 +390,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "23bba6f30a0ed7bafb916f9c04b1b91950bf871b9471544b227f5bdcce98eaac",
+      "digest": "bc2e829e26457ac7ae15afb343e1dcd0dc1799ff6dd2ee699f5be34a27094d6a",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -623,7 +623,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "226cb5cf9b29074caa2bd7909663f50cd33781c4a737db289a1012542aef6546",
+      "digest": "63180366b4fc8619f620b90f7004f65020b8de1b72ab589f2b69403185ee4a4d",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -864,7 +864,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "23bba6f30a0ed7bafb916f9c04b1b91950bf871b9471544b227f5bdcce98eaac",
+      "digest": "bc2e829e26457ac7ae15afb343e1dcd0dc1799ff6dd2ee699f5be34a27094d6a",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -1097,7 +1097,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "digest": "8fb50a79fea391c89d2865c282265932b040598094ee8cdba4ed80f6dc78cd04",
       "tables": {
        "context.instance_table": {
         "rows": 5,
@@ -1327,7 +1327,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "14557b3d507f448457fe5504c63114f560ee30297d278358cb6a122999130e17",
+      "digest": "37685e1e87745f91b78c07c1bd8fb1bfd3918ca6013c8ab8f933988c7f4a4035",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -1574,7 +1574,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "a2705ac2d617a5e23a116be6c238aecba3316e4e0cd748ce6ce039dd94ba6d63",
+      "digest": "1ed0d133c7c4ac6e155f3d7b2c0d735a7b2dda995d6c1b4ab475a1a4c601e426",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -1817,7 +1817,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "1cb18fa3b1c584a7b284d313e7a2b0c5b70c6a9d30c8a9e051c24077ab0ffd25",
+      "digest": "a0880460fbcfb20244a2c1fd0c6627fa8a58c262ebaf9921c3c14898cb7f68a7",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -2046,7 +2046,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "2aa04f1beba73efa3d6fd489097f88e21d55ffcbdec0484c84e5297adfea1b78",
+      "digest": "4a29ded26550f63f9c9b4d49a372794983872e94c6c7d8ecf57a2a78c8defd08",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -2287,7 +2287,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "digest": "8fb50a79fea391c89d2865c282265932b040598094ee8cdba4ed80f6dc78cd04",
       "tables": {
        "context.instance_table": {
         "rows": 5,
@@ -2517,7 +2517,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "cbb5b26327bfad799e9127d9509563deeb5cdf7f7d6cad178ee6b8d634313580",
+      "digest": "978b7891ebe206ee325f5cfecd18a260f9585ad5ef453ab6d714b9fc979cd7ca",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -2750,7 +2750,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "7b44c08463148e36bbe998a02c1404ac8dded212a35bef797e83205b61390de2",
+      "digest": "1b4d146104f2b1addedbb35f68ad65be0b20b8e6c2dfcec6cd90d5dbc33d7ca0",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -2983,7 +2983,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "7b44c08463148e36bbe998a02c1404ac8dded212a35bef797e83205b61390de2",
+      "digest": "1b4d146104f2b1addedbb35f68ad65be0b20b8e6c2dfcec6cd90d5dbc33d7ca0",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -3216,7 +3216,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "digest": "8fb50a79fea391c89d2865c282265932b040598094ee8cdba4ed80f6dc78cd04",
       "tables": {
        "context.instance_table": {
         "rows": 5,
@@ -3446,7 +3446,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "4b6cfd0028289b6d3bfd7e729391292a88968669e6933a6728f3053ff09c16da",
+      "digest": "8fb50a79fea391c89d2865c282265932b040598094ee8cdba4ed80f6dc78cd04",
       "tables": {
        "context.instance_table": {
         "rows": 5,
@@ -3676,7 +3676,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "cbb5b26327bfad799e9127d9509563deeb5cdf7f7d6cad178ee6b8d634313580",
+      "digest": "978b7891ebe206ee325f5cfecd18a260f9585ad5ef453ab6d714b9fc979cd7ca",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -3909,7 +3909,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "e7d02251f4ac4d18d466dde5b532d25e22260fee1c33b806d7cd371672f58b5c",
+      "digest": "3d3ea53ebefb26404b11fefaf9c4c4d66b4f61b33a1dbccdbdde927ca8336dc1",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -4141,7 +4141,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "5d69fc625374dc9cf436e17a11c387cfbcb7f4345bc03c0f91e95150b726973a",
+      "digest": "f054f52a791c32490f300bccc5dd269a308d0c8e6c1e1a03218a8d3f39a7da62",
       "tables": {
        "context.instance_table": {
         "rows": 6,
@@ -4365,7 +4365,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "c9bab6ea53fb3728aa97a3027e4809fb9d42a5d800039a2026f2d5a815a0237d",
+      "digest": "cf757692bfe924a75552145843b2a72abaa3d37324216216bbd71879c506ffb5",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -4570,7 +4570,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "7202edefbfbd024ce95225d561a6e8b592aa7ce2ec8d57ed2626755920682a66",
+      "digest": "a878e4fbf440241a39eb4ca50066bb3fda22519af119ef4a7f372b07a3cbd4b7",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -4775,7 +4775,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "7202edefbfbd024ce95225d561a6e8b592aa7ce2ec8d57ed2626755920682a66",
+      "digest": "a878e4fbf440241a39eb4ca50066bb3fda22519af119ef4a7f372b07a3cbd4b7",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -4980,7 +4980,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "bd4283bb5ae6955baf74288f7b56e070da55be2c55b863e23c258c50ff672066",
+      "digest": "e76542c921c9762b33746eeb9c6c2ce92e695e30f48191a3c13ff4579fb5c5c7",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -5188,7 +5188,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "a2de21fceccef2650ce6d6ac1f8638b2414c7d8242c2b44ba6cb711ce055cdff",
+      "digest": "1d5290b475da8d10565d8a433a04cbd716d2b1507c4145dc42f9686ca2ecde08",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -5396,7 +5396,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "1c8b39341c40a1ae00cc5a161a95b87d5ac66abf7ce2605b4650431f2b615ef3",
+      "digest": "1643d5fef9ec1aadc2287263cd08cec46eddf79e728b42867e4ff1df21054065",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -5629,7 +5629,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "1c8b39341c40a1ae00cc5a161a95b87d5ac66abf7ce2605b4650431f2b615ef3",
+      "digest": "1643d5fef9ec1aadc2287263cd08cec46eddf79e728b42867e4ff1df21054065",
       "tables": {
        "context.instance_table": {
         "rows": 998,
@@ -5862,7 +5862,7 @@
      {
       "method": "POST",
       "path": "/v1/predictions",
-      "digest": "e7a0667de6865c3268a57dbe414155be28c6628ea2cdc2fa81465f074b32199b",
+      "digest": "4896ed6ff9d21860f22ce555dfad99508c105569d9527d30d3775f508c40c03b",
       "tables": {
        "context.instance_table": {
         "rows": 998,

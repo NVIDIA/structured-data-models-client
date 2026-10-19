@@ -1,9 +1,9 @@
 {
   "format": "sdm-bridge-changes/1",
-  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept) or gone (an entry that left the freeze). Entries the merge base already holds are spent and may be pruned.",
+  "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T1.32a: the entities' cast to the key's type moved into the core (sdm_engine::keys::cast); the bridge's table of the key types it cast to (_ARROW_TYPES) and its key_type refusal (_not_taken) are deleted, and it imports math for the host's own missing values"
+      "moved": "T2.18: the module gains Unresolved, a query only the core resolves, and asked, the host's reading of what the core resolved of a query (Materialized.query, contract v26)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,13 +15,13 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T1.36 fix 21: a forecast's split moved into the core: the core's later steps (number, payload, query) and step 1's query are kept from the request state, and the caller's decompose.MOST_PARTS passed as Materialize.most_parts, which the core holds a forecast to"
+      "moved": "T2.18: the run's answer of what the core resolved of the query (Materialized.query) is kept beside the state's version for asked; the caller's forecast step limit (decompose.MOST_PARTS) is sent for a query only the core resolves, whose kind only the core knows, as for a forecast; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "moved": "T1.32h (P1B-12): the boundary conversion the owner authorized on 2026-10-13 (owner decisions item 18, decision E101): the bridge writes each key and time column as the contract's Given, and the refusals of a value that is not a name or a sequence of names (_as_key_tuple's, a time column's) are the core's (sdm-schema apply_keys_and_times); with D4 (P1B-74, the owner's), the host refuses a table named by anything but a str before the run, as JSON would write it as its text"
+      "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T1.36 fix 8: the module gains _id, the host's half of the entity reading moved into the core (sdm-request's predict::layout and entity, as the reference's _named_entities and as_declared): the bridge reads the id the core gives, as the JSON text of the reference's item value where the core's column cannot hold it"
@@ -33,19 +33,82 @@
       "moved": "T1.36 fix 21: a forecast's steps predicted and merged by the core in one run: each step's payload and query passed as RequestState.forecast, the endpoint's refusal noted with the call (the step) it answered, and the answer marked as naming its step; fix 24: each later step's call given its own request id, drawn with _request_id as the adapter draws one per call"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
-      "moved": "T1.36 fix 21: a forecast the core gathered is predicted by the core in one run, its refusal said of the step the core names (about_the_part), as each part's was"
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "moved": "T1.36 fix 21: imports dataclasses and FORECAST, and adds _in_steps_on_the_core, which keeps the core's steps as the parts _in_parts kept, now that the core splits a forecast"
+      "refactor": "T2.18: _alone, whether a resolved query is the core's alone, importing the bridge on the core route only; _refuse_the_task, the task= refusal both paths raise; the forecast's steps kept together by _kept_as_steps and a query only the core resolves gathered by _on_the_core_alone; a type-checking import; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
-      "moved": "T1.36 fix 21: on the core route a forecast goes to the core, which splits it into its steps, rather than to _in_parts"
+      "moved": "T2.18: a query only the core resolves (KO2-36) is held to task= as any relational query, then gathered as itself (_on_the_core_alone): a forecast kept in the steps the core asked, the core's forecast top_k and too-many-steps refusals said in this client's words, a query the core does not resolve refused with the old validator's diagnostics, a ranking over candidates refused by name"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
-      "moved": "T1.36 fix 21: parts_of's new on_the_core keyword, the core splitting a forecast on its route"
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::parts_of": {
       "moved": "T1.36 fix 21: on the core route a forecast is not split here, the core splitting it; the refusals before anything is gathered (top_k, more steps than MOST_PARTS) stay the client's, worded as before"
+    },
+    "packages/structured-data-models-client/src/sdm_client/base.py::check_request_against_model": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::<module>": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_entity_count": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_limits": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._gather": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
+      "moved": "T2.18: on the core route the target's window and the entity table are read through _rust.materialize.asked, what the core resolved for a query only it resolves (KO2-36); the old route reads them as before"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._in_parts": {
+      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
+      "moved": "T2.18: names_a_query_cannot_say, whether a schema holds a column the old validator's language cannot say, which only the core route keeps and only the core resolves a query naming (KO2-36); it refuses nothing"
+    },
+    "packages/structured-data-models-client/src/sdm_client/schema.py::Schema.from_source": {
+      "refactor": "T2.2: a SQLite source routes as a DuckDB one (_routing.on_the_core with the backend's from-source paths); no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::build": {
+      "moved": "T2.18: the old route's column-name rule (SourceTable's check of each column's name for a dot, a backtick or a line break) no longer runs on the core route: each table is built with the columns the core described, whatever their names, which the core keeps as data and a query names apart from their table (KO2-36)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::description": {
+      "refactor": "T2.1b: a held table's source sent as contract v26 writes it, a relation of one part (codec.relation); no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::<module>": {
+      "refactor": "T2.3: imports the Postgres provider beside the DuckDB and SQLite providers; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::_predicts_on_the_core": {
+      "refactor": "T2.2: a request over a SQLite source routes as one over DuckDB (_routing.on_the_core with the backend's predict paths); no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::_provider": {
+      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_provider": {
+      "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::asked": {
+      "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps"
+    },
+    "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
+      "moved": "T2.18: where a relational materialize runs on the core over a schema holding a column the old validator's language cannot say, a query the old validator refuses is the core's to resolve as it gathers it (Unresolved, KO2-36), holding the old validator's refusal; every other query as before, the shadow check kept; the route is decided here, the interface unchanged"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
+      "moved": "T2.18: a query only the core resolves (KO2-36) holds its text and the old validator's refusal, for the one call the core does not answer (a ranking over candidates); no rule of the host's"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.to_string": {
+      "moved": "T2.18: such a query is sent to materialize as the caller wrote it; the core resolves it and writes it back"
     }
   }
 }

@@ -18,7 +18,7 @@ use sdm_data::Data;
 
 /// Each request, as the contract writes it, and its statement.
 const PINS: &[(&str, &str)] = &[(
-    r#"{"columns": ["user_id", "age", "country", "f"], "key": "user_id", "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": "users"}"#,
+    r#"{"columns": ["user_id", "age", "country", "f"], "key": ["user_id"], "request": "lookup", "seeds": {"attachment": 2, "columns": [{"name": "key", "nullable": true, "type": {"type": "int64"}}, {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}, "table": {"source": ["users"]}}"#,
     r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country", t."f"
 FROM "__sdm_seeds__" s
 JOIN "users" t

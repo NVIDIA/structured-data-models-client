@@ -13,12 +13,12 @@ use crate::response::{Span, ValidationError, ValidationResponse, ValidationWarni
 use crate::schema::{ColumnKey, SchemaDefinition};
 use crate::types::{AggregationType, ProblemType, TaskType};
 
+use super::get_rhs_lp_table;
 use super::join::{JoinFailure, JoinValidator};
 use super::model::ModelValidator;
 use super::problem_type;
 use super::time_range::TimeRangeValidator;
 use super::type_validator::TypeValidator;
-use super::{col_name, get_rhs_lp_table, table_name};
 
 pub struct PredictiveQueryValidator<'a> {
     pub schema: &'a SchemaDefinition,
@@ -138,14 +138,13 @@ impl<'a> PredictiveQueryValidator<'a> {
         let mut response = ValidationResponse::default();
         let mut unknown_tables = Vec::new();
         let mut unknown_columns = Vec::new();
-        for (fqn, location) in query.all_query_columns_with_locations() {
-            let (column, table) = (col_name(&fqn), table_name(&fqn));
-            let Some(definition) = self.schema.table(&table) else {
-                unknown_tables.push((table, location));
+        for (name, location) in query.all_query_columns_with_locations() {
+            let Some(definition) = self.schema.table(&name.table_name) else {
+                unknown_tables.push((name.table_name, location));
                 continue;
             };
-            if column != "*" && !definition.cols.iter().any(|c| c.name == column) {
-                unknown_columns.push((table, column, location));
+            if !name.is_wildcard() && !definition.cols.iter().any(|c| c.name == name.col_name) {
+                unknown_columns.push((name.table_name, name.col_name, location));
             }
         }
         for (table, location) in unknown_tables {
@@ -173,13 +172,12 @@ impl<'a> PredictiveQueryValidator<'a> {
             ));
         }
         let entity_column = query.entity_column();
-        let (entity_table, entity_pkey) = (table_name(&entity_column), col_name(&entity_column));
         if response.ok()
             && self
                 .schema
-                .table(&entity_table)
-                .and_then(|t| t.pkey.clone())
-                != Some(entity_pkey)
+                .table(&entity_column.table_name)
+                .and_then(|t| t.pkey.as_ref())
+                != Some(&entity_column.col_name)
         {
             let location = ast::get_location(&query.entity_column_obj());
             response.errors.push(ValidationError::new(
@@ -209,7 +207,7 @@ impl<'a> PredictiveQueryValidator<'a> {
     /// Warns of a target filter that reads only the entity's table.
     pub fn validate_target_filters(&self, query: &ParsedQuery) -> ValidationResponse {
         let mut response = ValidationResponse::default();
-        let entity_table = table_name(&query.entity_column());
+        let entity_table = query.entity_table();
         let mut filters = Vec::new();
         find_filters(&query.target_ast, &mut filters);
         let mut entity_filters = Vec::new();
@@ -218,8 +216,8 @@ impl<'a> PredictiveQueryValidator<'a> {
                 continue;
             };
             let tables: Vec<String> = ast::all_query_columns(condition)
-                .iter()
-                .map(|c| table_name(c))
+                .into_iter()
+                .map(|c| c.table_name)
                 .collect();
             if !tables.is_empty() && tables.iter().all(|t| *t == entity_table) {
                 entity_filters.push(ast::to_string(condition));
@@ -266,11 +264,12 @@ impl<'a> PredictiveQueryValidator<'a> {
         let Some(aggr) = ast::aggr(&target) else {
             return response;
         };
-        let target_fqn = ast::get_target_column_name(&target);
-        if col_name(&target_fqn) == "*" {
+        let target_key =
+            ast::get_target_column_name(&target).unwrap_or_else(|| ColumnKey::new("", ""));
+        if target_key.is_wildcard() {
             return response;
         }
-        let (fqn_table, fqn_col) = (table_name(&target_fqn), col_name(&target_fqn));
+        let (fqn_table, fqn_col) = (&target_key.table_name, &target_key.col_name);
         if aggr == AggregationType::ListDistinct
             && query.problem_type == Some(ProblemType::Classify)
             && ast::is_static(&target)
@@ -286,14 +285,13 @@ impl<'a> PredictiveQueryValidator<'a> {
                 span(&target),
             ));
         }
-        let table = self.schema.table_or_empty(&fqn_table);
-        if table.pkey.as_deref() == Some(fqn_col.as_str()) && aggr == AggregationType::ListDistinct
-        {
+        let table = self.schema.table_or_empty(fqn_table);
+        if table.pkey.as_ref() == Some(fqn_col) && aggr == AggregationType::ListDistinct {
             response.errors.push(ValidationError::new(
                 "Aggregation not supported on primary key columns",
                 format!(
                     "{}: LIST_DISTINCT target aggregations are not supported onprimary key \
-                     columns like {target_fqn}.",
+                     columns like {target_key}.",
                     loc_start(&target)
                 ),
                 codes::TARGET_AGGREGATION_ON_PRIMARY_KEY,
@@ -301,11 +299,7 @@ impl<'a> PredictiveQueryValidator<'a> {
             ));
             return response;
         }
-        if !self
-            .schema
-            .all_keys()
-            .contains(&&ColumnKey::new(&fqn_table, &fqn_col))
-        {
+        if !self.schema.all_keys().contains(&&target_key) {
             return response;
         }
         if matches!(aggr, AggregationType::First | AggregationType::Last) {
@@ -313,7 +307,7 @@ impl<'a> PredictiveQueryValidator<'a> {
                 "Aggregation not supported on foreign key columns",
                 format!(
                     "{}: LAST and FIRST aggregations are not supported onforeign key columns like \
-                     {target_fqn} yet. Currently, only LIST_DISTINCT is supported.",
+                     {target_key} yet. Currently, only LIST_DISTINCT is supported.",
                     loc_start(&target)
                 ),
                 codes::TARGET_AGGREGATION_ON_FOREIGN_KEY,
@@ -324,17 +318,16 @@ impl<'a> PredictiveQueryValidator<'a> {
             return response;
         }
         let rhs_key = match &query.target_ast.borrow().kind {
-            Kind::Join { rhs_key, .. } => rhs_key.clone(),
-            _ => String::new(),
+            Kind::Join { rhs_key, .. } => Some(rhs_key.clone()),
+            _ => None,
         };
-        if rhs_key == target_fqn {
+        if rhs_key.as_ref() == Some(&target_key) {
             let mut valid_entities = Vec::new();
-            let target_key = ColumnKey::new(&fqn_table, &fqn_col);
             for group in &self.schema.col_groups {
                 if group.columns.contains(&target_key) {
                     continue;
                 }
-                if !group.columns.iter().any(|c| c.table_name == fqn_table) {
+                if !group.columns.iter().any(|c| &c.table_name == fqn_table) {
                     continue;
                 }
                 for col in &group.columns {
@@ -350,7 +343,7 @@ impl<'a> PredictiveQueryValidator<'a> {
                 }
             }
             let mut message = format!(
-                "{}: Target {target_fqn} creates a loop by pointing to the entity table. A foreign \
+                "{}: Target {target_key} creates a loop by pointing to the entity table. A foreign \
                  key used in the target expression must not point to the entity table to define \
                  a valid predictive problem.",
                 loc_start(&target)
@@ -376,9 +369,9 @@ impl<'a> PredictiveQueryValidator<'a> {
             _ => None,
         };
         if let Some(condition) = filter_condition {
-            let entity_table = table_name(&query.entity_column());
-            for (fqn, location) in ast::all_query_columns_with_locations(&condition) {
-                if table_name(&fqn) == entity_table {
+            let entity_table = query.entity_table();
+            for (name, location) in ast::all_query_columns_with_locations(&condition) {
+                if name.table_name == entity_table {
                     response.errors.push(ValidationError::new(
                         "Invalid target filter",
                         format!(
@@ -395,11 +388,11 @@ impl<'a> PredictiveQueryValidator<'a> {
                 }
             }
         }
-        let target_col_name = ast::get_target_column_name(&target);
-        let target_table = table_name(&target_col_name);
+        let target_col_name = &target_key;
+        let target_table = &target_key.table_name;
         if query.target_timeframe().is_none() {
             let location_msg = loc_start(&query.target_ast);
-            if let Some(time_col) = &self.schema.table_or_empty(&target_table).time_col {
+            if let Some(time_col) = &self.schema.table_or_empty(target_table).time_col {
                 response.errors.push(ValidationError::new(
                     "Time range required for LIST_DISTINCT with time column",
                     format!(
@@ -417,7 +410,7 @@ impl<'a> PredictiveQueryValidator<'a> {
                 .schema
                 .tables
                 .iter()
-                .filter(|(name, _)| *name != target_table)
+                .filter(|(name, _)| name != target_table)
                 .filter_map(|(name, t)| t.time_col.as_ref().map(|c| format!("{name}.{c}")))
                 .collect();
             if !time_cols.is_empty() {
@@ -481,7 +474,7 @@ impl<'a> PredictiveQueryValidator<'a> {
         let condition = ast::target(&aggr).and_then(|t| t.borrow().kind_condition());
         if let Some(condition) = condition {
             for (column, location) in ast::all_query_columns_with_locations(&condition) {
-                if table_name(&column) != rhs_table {
+                if column.table_name != rhs_table {
                     response.errors.push(ValidationError::new(
                         "Invalid target filter",
                         format!(
@@ -489,7 +482,7 @@ impl<'a> PredictiveQueryValidator<'a> {
                              prediction, only conditions that refer to {rhs_table} table can be \
                              added.",
                             location.message_start(),
-                            table_name(&column),
+                            column.table_name,
                             ast::to_string(&condition)
                         ),
                         codes::REWRITE_TABLE_NOT_AVAILABLE,
@@ -540,14 +533,14 @@ fn validate_wildcard_col(node: &NodeRef) -> ValidationResponse {
     for child in ast::children(node) {
         response = response.merge(validate_wildcard_col(&child));
     }
-    if let Kind::Column { fqn, count_col } = &node.borrow().kind
-        && col_name(fqn) == "*"
+    if let Kind::Column { name, count_col } = &node.borrow().kind
+        && name.is_wildcard()
         && !count_col
     {
         response.errors.push(ValidationError::new(
             "Invalid wildcard column",
             format!(
-                "{}: Wildcard column {fqn} appeared in an invalid position. It can only be used \
+                "{}: Wildcard column {name} appeared in an invalid position. It can only be used \
                  in a `COUNT` aggregation.",
                 loc_start(node)
             ),
@@ -570,10 +563,10 @@ fn find_filters(node: &NodeRef, out: &mut Vec<NodeRef>) {
 
 /// `_target_not_entity_pkey`: the target's columns that are the entity's
 /// key, outside conditions' values, filters and aggregations.
-fn entity_pkey_columns(node: &NodeRef, entity: &str, out: &mut Vec<NodeRef>) {
+fn entity_pkey_columns(node: &NodeRef, entity: &ColumnKey, out: &mut Vec<NodeRef>) {
     match &node.borrow().kind {
-        Kind::Column { fqn, .. } => {
-            if fqn == entity {
+        Kind::Column { name, .. } => {
+            if name == entity {
                 out.push(node.clone());
             }
         }

@@ -93,3 +93,58 @@ def test_the_client_s_transport_reaches_it() -> None:
     assert [(m, p) for m, p, _ in received.requests] == [
         ('POST', '/v1/predictions')
     ]
+
+
+probability_vectors = document['probabilities']
+
+
+@pytest.mark.parametrize(
+    'vector', probability_vectors, ids=[v['name'] for v in probability_vectors]
+)
+def test_an_endpoint_told_to_answer_probabilities_answers_each_vector(
+    vector: dict[str, Any],
+) -> None:
+    # T2.8: the rule as call number ``call``, and served, after as many
+    # calls before it, each answered in turn.
+    status, answer = endpoint.answer(
+        vector['method'],
+        vector['path'],
+        vector['body'].encode(),
+        call=vector['call'],
+        probabilities=True,
+    )
+    assert status == vector['status']
+    assert json.loads(json.dumps(answer)) == vector['answer']
+    assert [
+        list(i.get('probabilities') or {}) for i in answer['predictions']
+    ] == [
+        list(i.get('probabilities') or {})
+        for i in vector['answer']['predictions']
+    ]
+    with endpoint.serve(probabilities=True) as (url, _):
+        for _ in range(vector['call'] + 1):
+            request = urllib.request.Request(
+                url + vector['path'],
+                data=vector['body'].encode(),
+                method=vector['method'],
+            )
+            with urllib.request.urlopen(request) as response:
+                status, raw = response.status, response.read()
+    assert status == vector['status']
+    assert json.loads(raw) == vector['answer']
+
+
+def test_the_probabilities_vectors_are_not_vacuous() -> None:
+    given = [
+        v
+        for v in probability_vectors
+        if 'probabilities' in v['answer']['predictions'][0]
+    ]
+    assert any(v['call'] > 0 for v in given)
+    assert len(given) < len(probability_vectors)
+    # Without being told to, the endpoint answers none.
+    for vector in given:
+        _, answer = endpoint.answer(
+            vector['method'], vector['path'], vector['body'].encode()
+        )
+        assert all('probabilities' not in i for i in answer['predictions'])

@@ -10,10 +10,10 @@
 
 r"""``Schema.from_source`` on the core: the schema bridge (T1.11b).
 
-``Schema.from_source`` comes here on the core route, for a DuckDB source,
-with tables named or none (T1.24). The core's ``describe_source`` reads the
-source through
-the DuckDB provider (:mod:`.providers.duckdb`) and infers each table, its
+``Schema.from_source`` comes here on the core route, for a DuckDB source or,
+from T2.2, a SQLite one, with tables named or none (T1.24). The core's
+``describe_source`` reads the source through its backend's provider
+(:mod:`.providers`) and infers each table, its
 columns' data and semantic types, its key and its time column, by the
 reference's rules, with the source's declared foreign keys; from T1.21d it
 assembles the schema as the client's ``Schema.from_source`` does after the
@@ -52,6 +52,8 @@ from typing import TYPE_CHECKING, Any
 
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
+from sdm_client._rust.providers.postgres import PostgresProvider
+from sdm_client._rust.providers.sqlite import SqliteProvider
 from sdm_client._rust.run import run
 from sdm_client.errors import StructuredDataError
 
@@ -70,7 +72,7 @@ def from_source(
     check_keys: bool,
 ) -> Schema:
     r"""The schema of the tables named, or of every table, of the DuckDB
-    ``source``, described on the core.
+    or SQLite ``source``, described on the core.
 
     Each key and time column is written as the contract's ``Given``: a
     value the contract's type cannot hold (a number, a set, a mapping) as
@@ -98,9 +100,11 @@ def from_source(
                 code='INVALID_REQUEST',
                 details={'field': field, 'rule': 'table_not_a_name'},
             )
+    # Each table's source a relation of one part, its name never split on
+    # a dot (contract v26, design choice 12).
     spec = {
         'tables': [
-            {'name': name, 'source': named}
+            {'name': name, 'source': codec.relation(named)}
             for name, named in (tables or {}).items()
         ],
         'primary_keys': {
@@ -131,16 +135,17 @@ def from_source(
             for link in links
         ]
         spec['relationships'] = given
+    choice, provider = _provider(source)
     operation = {
         'op': 'describe_source',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': choice,
         'source': 1,
         'check_keys': bool(check_keys),
     }
     finished = run(
         operation,
         {1: codec.attachment(spec)},
-        provider=DuckDBProvider(source.connection),
+        provider=provider,
     )
     described = json.loads(finished.take(finished.result['description']))
     return build(cls, source, described)
@@ -170,9 +175,18 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
             columns[column['name']] = Column(
                 column['name'], dtype, column['stype']
             )
+        # Every column the core described is kept, whatever its name: the
+        # core holds a query's table and column apart, so a dot, a backtick
+        # or a line break in a column's name is data (KO2-36, T2.18). The
+        # table is built without its columns, which SourceTable would check
+        # by the old route's rule, and then given them.
         table_shape = SourceTable(
-            name=name, source_name=table['source'], columns=columns
+            name=name,
+            source_name=codec.relation_name(table['source']),
+            columns={},
         )
+        table_shape.columns = columns
+        table_shape._own_columns()
         keys = tuple(table['primary_key'])
         if keys:
             table_shape.primary_key = keys[0] if len(keys) == 1 else keys
@@ -217,3 +231,16 @@ def build(cls: type[Schema], source: Any, described: dict[str, Any]) -> Schema:
     # received, whether it may be null, whether the source keys it.
     schema._core_description = described
     return schema
+
+
+def _provider(source: Any) -> tuple[dict[str, Any], Any]:
+    r"""The provider choice a run over ``source`` names, and the provider
+    answering its fetches: its backend's built-in SQL dialect, DuckDB's,
+    SQLite's (T2.2) or Postgres's (T2.3), on its connection."""
+    backend = source.backend
+    made = {
+        'duckdb': DuckDBProvider,
+        'sqlite': SqliteProvider,
+        'postgres': PostgresProvider,
+    }[backend]
+    return {'provider': 'sql', 'dialect': backend}, made(source.connection)

@@ -19,6 +19,7 @@ use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema};
+use sdm_contract::data::Relation;
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
 
@@ -206,8 +207,8 @@ pub struct UnreadTimes {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InferredTable {
     pub name: String,
-    /// The source's name of the table read.
-    pub source: String,
+    /// The relation of the source the table is read from.
+    pub source: Relation,
     pub columns: Vec<InferredColumn>,
     /// The columns left out, in table order.
     pub left_out: Vec<LeftOut>,
@@ -271,7 +272,7 @@ fn invalid_request(refusal: CoreError) -> CoreError {
 /// caller asks the source and calls [`finish`].
 pub fn table(
     name: &str,
-    source: &str,
+    source: &Relation,
     catalog: &[CatalogColumn],
     constraints: &[CatalogKey],
     schema: &Schema,
@@ -398,7 +399,7 @@ fn choose(
 /// reference's engine does (its key's guess is by that name).
 pub fn preview(
     name: &str,
-    source: &str,
+    source: &Relation,
     catalog: &[CatalogColumn],
     constraints: &[CatalogKey],
     schema: &Schema,
@@ -418,11 +419,18 @@ pub fn preview(
             .collect()
     };
     let declared_primary = single(&[KeyKind::Primary]);
-    let declared_unique = single(&[KeyKind::Primary, KeyKind::Unique]);
+    // A column the source keeps unique by itself (a SQLite rowid alias) is
+    // unique as a key of its own is.
+    let kept_unique = catalog.iter().filter(|c| c.unique).map(|c| c.name.clone());
+    // A partial unique index keeps its one column unique as the reference
+    // reads it (SQLite's `unique_keys`), but makes no key of several.
+    let mut declared_unique = single(&[KeyKind::Primary, KeyKind::Unique, KeyKind::PartialUnique]);
+    declared_unique.extend(kept_unique.clone());
     let unique = constraints
         .iter()
         .filter(|c| matches!(c.kind, KeyKind::Primary | KeyKind::Unique))
         .map(|c| c.columns.iter().cloned().collect::<BTreeSet<_>>())
+        .chain(kept_unique.map(|name| BTreeSet::from([name])))
         .collect::<Vec<_>>();
 
     let mut columns = Vec::with_capacity(catalog.len());
@@ -436,7 +444,13 @@ pub fn preview(
     let mut primary = Vec::new();
     for (index, declared) in catalog.iter().enumerate() {
         let field = schema.field(index);
-        let dtype = dtype_of(field.data_type())?;
+        // The type the column's declaration fixes, where the catalog reads
+        // one (SQLite's, as the reference types a column by it first,
+        // whatever its values); any other, its values' type.
+        let dtype = match declared.dtype {
+            Some(declared) => declared,
+            None => dtype_of(field.data_type())?,
+        };
         if matches!(
             dtype,
             Dtype::Intlist
@@ -482,7 +496,9 @@ pub fn preview(
             stype,
             stype_before_key: None,
             received: ColumnType::from_arrow(&declared.name, field.data_type())?,
-            nullable: !is_primary && !declared.not_null,
+            // A primary key holds no null, but where the source lets one
+            // (SQLite's, not its rowid alias): its catalog says.
+            nullable: !declared.not_null && (!is_primary || declared.key_nullable),
             unique: declared_unique.contains(&declared.name),
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
@@ -555,7 +571,7 @@ pub fn preview(
     Ok(Previewed {
         table: InferredTable {
             name: name.to_owned(),
-            source: source.to_owned(),
+            source: source.clone(),
             columns,
             left_out,
             unread_times,

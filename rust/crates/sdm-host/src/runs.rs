@@ -355,7 +355,7 @@ impl HostRun {
             match decode(message)? {
                 ControlMessage::FetchReply(reply) => {
                     let result = match reply.outcome {
-                        FetchOutcome::Data { data } => {
+                        FetchOutcome::Data { data, continuation } => {
                             check_attachments(&[(data, AttachmentKind::Arrow)], &attachments)?;
                             if let Some(&failure) = unreadable.get(&data) {
                                 // Not awaited: the run refuses it before it
@@ -379,7 +379,15 @@ impl HostRun {
                                 return run.submit_fetch(reply.id, FetchResult::Data(arrow));
                             }
                             match admit_from(&arrow, run.opaque_vendor()) {
-                                Ok(admitted) => FetchResult::Data(admitted),
+                                // A page, more following (design choice 1,
+                                // paging): the run asks for the next.
+                                Ok(admitted) => match continuation {
+                                    Some(continuation) => FetchResult::Page {
+                                        data: admitted,
+                                        continuation,
+                                    },
+                                    None => FetchResult::Data(admitted),
+                                },
                                 Err(refusal) => {
                                     run.end()?;
                                     return Err(refusal);

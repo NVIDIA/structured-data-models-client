@@ -40,6 +40,8 @@ Not public, and free to change in any release:
 - The exact text of an exception or warning message. Branch on the exception
   **type** and on `StructuredDataError.code`, never on the message. Codes are
   public; prose is not.
+- The text of a conversion note in `Schema.conversion_notes`.
+  The notes are for a person to read, and their wording and number may change.
 - The order of rows in a `PredictionResult`. Join on the entity key when the
   model has one, otherwise on `row_index`. Row order is not a promise.
 

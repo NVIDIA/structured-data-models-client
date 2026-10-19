@@ -27,6 +27,41 @@ and acknowledges externally reported issues addressed under its coordinated
 disclosure policy. See the
 [PSIRT policies](https://www.nvidia.com/en-us/security/psirt-policies/) page.
 
+## Verifying a release
+
+These distributions are published to PyPI by **Kitmaker**, the team that owns
+NVIDIA's PyPI organization, from artifacts attached to the corresponding
+GitHub release in this repository. Kitmaker publishes to
+[pypi.org](https://pypi.org/) and `pypi.nvidia.com` together.
+
+What that gives you is NVIDIA's ownership of the project on PyPI: the
+distribution lives under the NVIDIA organization, which is the same assurance
+that covers NVIDIA's other published packages. What it does not give you is a
+per-file signature traceable to this repository. The uploader is Kitmaker, so no PEP 740
+attestation names this repository's release workflow. Whether PyPI holds a
+Kitmaker attestation instead is Kitmaker's to say; what this repository can
+tell you is that it does not sign these files itself.
+
+You can compare a downloaded file against the asset of the same name on the
+corresponding GitHub release. The release checks this itself: the publish will
+not finish unless PyPI holds the same bytes that were built and attached, and
+the workflow never replaces an asset it has already uploaded. So the two
+should agree. It is still
+not proof of how either was built, and a release asset can be replaced by hand
+afterwards, so a mismatch is not by itself evidence of tampering on PyPI and a
+match is not evidence that this repository produced them.
+
+```bash
+pip download --no-deps structured-data-models-client==1.0.0 -d /tmp/verify
+# then compare that file's digest against the asset of the same name at
+# https://github.com/NVIDIA/structured-data-models-client/releases/tag/v1.0.0
+```
+
+None of this tells you the release is free of defects or vulnerabilities, and
+it does not establish origin: as above, a match shows two places hold the same
+bytes, not who built them. What stands behind these files is NVIDIA's ownership
+of the projects on PyPI.
+
 ## Supported versions
 
 The client is distributed as five packages: `structured-data-models-client`, `structured-data-models-api`,

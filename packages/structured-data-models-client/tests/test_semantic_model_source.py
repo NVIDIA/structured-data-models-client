@@ -13,6 +13,7 @@ Databricks SQL, which nothing local runs.
 from __future__ import annotations
 
 import re
+import sys
 import warnings
 from typing import Any
 
@@ -26,10 +27,16 @@ pytest.importorskip('yaml')
 
 from databricks.sql.client import Connection  # noqa: E402
 from sdm_connectors import DatabricksSource, SemanticModel  # noqa: E402
+from sdm_relational_engine import (  # noqa: E402
+    GraphConstructionError,
+    TableNotFoundError,
+    ViewConversionError,
+)
 
 from sdm_client import (  # noqa: E402
     Relationship,
     Schema,
+    SDMWarning,
     SourceTable,
     StructuredDataError,
 )
@@ -178,6 +185,12 @@ class _Cursor:
             return
         if 'information_schema' in sql:
             return
+        if re.match(r'SELECT \d+ AS k, COUNT\(\*\) AS n', sql):
+            # Each join's key: its rows, distinct values and missing values.
+            self._rows = [
+                self._key_count(part) for part in sql.split('\nUNION ALL\n')
+            ]
+            return
         table_match = re.search(r'FROM `[^`]+`\.`[^`]+`\.`([^`]+)`', sql)
         assert table_match is not None, f'unexpected SQL: {sql}'
         name = table_match.group(1)
@@ -210,6 +223,12 @@ class _Cursor:
         self._arrow = pa.Table.from_pandas(
             pd.DataFrame(data), preserve_index=False
         )
+
+    @staticmethod
+    def _key_count(sql: str) -> tuple[int, int, int, int]:
+        frame = _DATA[re.search(r'FROM `[^`]+`\.`[^`]+`\.`([^`]+)`', sql)[1]]
+        values = frame[re.search(r'COUNT\(DISTINCT `(\w+)`\)', sql)[1]]
+        return int(sql.split()[1]), len(values), values.nunique(), 0
 
     def fetchall(self) -> list:
         return self._rows
@@ -482,3 +501,286 @@ def test_a_model_s_column_constant_only_in_the_rows_read_is_kept(
 
     assert schema['order_lines'].time_column == 'ordered_at'
     assert said == []
+
+
+@pytest.mark.parametrize(
+    'named', [None, 'order_month'], ids=['engine-choice', 'named-otherwise']
+)
+def test_a_model_s_time_note_holds_for_the_time_column_the_schema_has(
+    named: str | None, source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""The view has only the month of `ordered_at`, which starts earliest of
+    any timestamp, so it was taken, and every window counted months. Naming
+    the month as the time column still noted that `ordered_at` was taken,
+    which the schema no longer held.
+    """
+    _month_only(monkeypatch)
+    time_columns = None if named is None else {'order_lines': named}
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(
+            source.semantic_model('sales_mv'), time_columns=time_columns
+        )
+
+    lines = schema['order_lines']
+    assert 'order_month' in lines.columns
+    taken = [n for n in schema.conversion_notes if 'time column' in n]
+    if named is None:
+        assert lines.time_column == 'ordered_at'
+        said = '\n'.join(str(item.message) for item in caught)
+        assert "time_columns={'order_lines': 'order_month'}" in said
+        (note,) = taken
+        assert "'ordered_at'" in note and "'order_month'" in note
+    else:
+        assert lines.time_column == 'order_month'
+        assert taken == []
+        assert schema.conversion_notes  # The measures' notes stay.
+
+
+def test_notes_name_the_tables_as_the_schema_names_them(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A note named the model's table, which a question asked of a schema
+    that names it otherwise cannot name.
+    """
+    _month_only(monkeypatch)
+
+    schema = _schema(source, {'lines': 'order_lines'})
+
+    notes = schema.conversion_notes
+    assert any('(lines.quantity,' in note for note in notes)
+    assert any("table 'lines'" in note for note in notes)
+    assert not any('order_lines' in note for note in notes)
+
+
+def _month_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    r"""The view holds `ordered_at` only as its month, `order_month`."""
+    view = _VIEW.replace(
+        'name: ordered_at\n    expr: source.ordered_at',
+        "name: order_month\n    expr: DATE_TRUNC('MONTH', source.ordered_at)",
+    )
+    described = {
+        'View Text': ('View Text', view, None),
+        'ordered_at': ('order_month', 'timestamp', None),
+    }
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        '_DESCRIBE',
+        [described.get(row[0], row) for row in _DESCRIBE],
+    )
+    monkeypatch.setitem(
+        _EXPRESSIONS,
+        'order_lines',
+        {
+            **_EXPRESSIONS['order_lines'],
+            'order_month': lambda df: (
+                df['ordered_at'].dt.to_period('M').dt.to_timestamp()
+            ),
+        },
+    )
+
+
+# --- what the engine says reaches the caller as the client says it ----------
+
+
+def _with_view(monkeypatch: pytest.MonkeyPatch, view: str) -> None:
+    monkeypatch.setattr(
+        sys.modules[__name__],
+        '_DESCRIBE',
+        [
+            ('View Text', view, None) if row[0] == 'View Text' else row
+            for row in _DESCRIBE
+        ],
+    )
+
+
+def test_what_a_model_loses_is_one_sdm_warning_at_the_caller(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""The engine's own warning is no `SDMWarning`, so filtering those let
+    it through, and it named this client's module rather than the call.
+    """
+    _with_view(monkeypatch, _VIEW + 'materialization:\n  mode: relaxed\n')
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        Schema.from_source(source.semantic_model('sales_mv'))
+
+    lost = [w for w in caught if 'cannot hold' in str(w.message)]
+    assert len(lost) == 1
+    assert lost[0].category is SDMWarning
+    assert lost[0].filename == __file__
+    message = str(lost[0].message)
+    assert message.endswith(
+        "so it is read in part:\n- Ignored the 'materialization' section "
+        'since it cannot be represented in a graph'
+    )
+    assert not any(
+        type(w.message).__name__ == 'ViewConversionWarning' for w in caught
+    )
+
+
+@pytest.mark.parametrize(
+    'refused, said',
+    [
+        ('joined-filter', "references the joined table 'customers'"),
+        ('query-source', 'Create a regular view with this query'),
+        ('missing-source', "order_lines' does not exist"),
+    ],
+)
+def test_a_model_the_engine_refuses_is_an_invalid_request(
+    refused: str, said: str, source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A missing source table is a request about nothing, as it is for a
+    source's own tables, but escaped as the engine's `TableNotFoundError`
+    once only its view refusals were translated.
+    """
+    if refused == 'joined-filter':
+        view = _VIEW.replace(
+            'version: 0.1\n', "version: 0.1\nfilter: customers.segment = 'a'\n"
+        )
+        _with_view(monkeypatch, view)
+    elif refused == 'query-source':
+        view = _VIEW.replace(
+            'source: cat.sch.order_lines',
+            'source: SELECT * FROM cat.sch.order_lines',
+        )
+        _with_view(monkeypatch, view)
+    else:
+        monkeypatch.delitem(_TYPES, 'order_lines')
+
+    with pytest.raises(StructuredDataError) as caught:
+        _schema(source)
+
+    assert caught.value.code == 'INVALID_REQUEST'
+    assert said in caught.value.message
+    assert caught.value.details == {'semantic_model': 'sales_mv'}
+    assert isinstance(
+        caught.value.__cause__, ViewConversionError | TableNotFoundError
+    )
+
+
+class _DriverError(Exception):
+    r"""Stands in for a warehouse driver's own exception."""
+
+
+def test_a_failure_that_is_not_a_refusal_is_not_an_invalid_request(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Every `ValueError`, a pandas or numpy failure inside the engine
+    among them, became `INVALID_REQUEST`, telling the caller to change a
+    model that has nothing wrong with it.
+    """
+
+    def _fails(frame: pd.DataFrame) -> Any:
+        raise _DriverError('the warehouse went away')
+
+    monkeypatch.setitem(_EXPRESSIONS, 'order_lines', {'discounted': _fails})
+
+    with pytest.raises(GraphConstructionError) as caught:
+        _schema(source)
+
+    assert not isinstance(caught.value, StructuredDataError)
+    assert isinstance(caught.value.__cause__, _DriverError)
+
+
+def test_no_relationship_is_inferred_beside_a_model_s_joins(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A snowflake view joins lines to orders and orders to customers, and
+    the lines' own `customer_id` matched `customers` by name, a second path
+    to customers the view never declared.
+    """
+    view = _VIEW.replace(
+        '  - name: customers\n'
+        '    source: cat.sch.customers\n'
+        '    on: source.customer_id = customers.customer_id\n',
+        '  - name: orders\n'
+        '    source: cat.sch.orders\n'
+        '    on: source.order_id = orders.order_id\n'
+        '    joins:\n'
+        '      - name: customers\n'
+        '        source: cat.sch.customers\n'
+        '        on: orders.customer_id = customers.customer_id\n',
+    ).replace(
+        'expr: customers.segment',
+        'expr: orders.customers.segment\n'
+        '  - name: customer_id\n'
+        '    expr: source.customer_id',
+    )
+    _with_view(monkeypatch, view)
+    lines = _DATA['order_lines']
+    monkeypatch.setitem(
+        _DATA, 'order_lines', lines.assign(order_id=lines['line_id'] % 4)
+    )
+    monkeypatch.setitem(
+        _TYPES, 'order_lines', {**_TYPES['order_lines'], 'order_id': 'INT'}
+    )
+    monkeypatch.setitem(
+        _DATA,
+        'orders',
+        pd.DataFrame({'order_id': range(4), 'customer_id': [1, 2, 3, 1]}),
+    )
+    monkeypatch.setitem(
+        _TYPES, 'orders', {'order_id': 'INT', 'customer_id': 'INT'}
+    )
+    monkeypatch.setitem(_EXPRESSIONS, 'orders', {})
+
+    schema = _schema(source)
+
+    assert set(schema.relationships) == {
+        Relationship('order_lines', 'order_id', 'orders', 'order_id'),
+        Relationship('orders', 'customer_id', 'customers', 'customer_id'),
+        Relationship('order_lines', 'product_id', 'products', 'product_id'),
+    }
+    # Asked for, it is added, and the model's own are replaced:
+    asked = Relationship(
+        'order_lines', 'customer_id', 'customers', 'customer_id'
+    )
+    added = _schema(source, relationships=[*schema.relationships, asked])
+    assert set(added.relationships) == {*schema.relationships, asked}
+    assert _schema(source, relationships=[asked]).relationships == [asked]
+
+
+def test_a_dimension_no_query_can_name_is_left_out_and_named(
+    source: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""`order_lines.a.b` reads as a column `a` of a table `order_lines.a`,
+    so a dimension named `a.b` refused the whole schema.
+    """
+    view = _VIEW.replace('name: discounted', 'name: "is.discounted"')
+    _with_view(monkeypatch, view)
+    monkeypatch.setitem(
+        _EXPRESSIONS,
+        'order_lines',
+        {'is.discounted': lambda df: df['discount'] > 0},
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    assert 'is.discounted' not in schema['order_lines'].columns
+    assert 'quantity' in schema['order_lines'].columns
+    (said,) = [w for w in caught if "'is.discounted'" in str(w.message)]
+    assert said.category is SDMWarning
+    assert 'a predictive query cannot name a column holding a dot' in str(
+        said.message
+    )
+
+
+def test_a_model_that_loses_nothing_converts_without_a_warning(
+    source: Any,
+) -> None:
+    r"""A view with measures loses nothing, yet every one warned that it
+    "is read in part", so a caller running with warnings as errors could
+    read no such view. The aggregation each measure is stays reachable.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        schema = Schema.from_source(source.semantic_model('sales_mv'))
+
+    (note,) = schema.conversion_notes
+    assert "'total_quantity' is SUM(order_lines.quantity, 0, 30, days)" in note
+    assert schema.snapshot().conversion_notes == schema.conversion_notes

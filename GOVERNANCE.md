@@ -46,11 +46,12 @@ Breaking changes are avoided within a major version. Where one is unavoidable,
 it is called out in [CHANGELOG.md](CHANGELOG.md) under a heading that says so,
 with the migration in the same entry.
 
-Publishing is automated. A version tag on a commit that is on `main` and
-whose CI passed builds every distribution and uploads it through PyPI
-Trusted Publishing, with no stored token. [RELEASING.md](RELEASING.md)
-describes what a maintainer does; `.github/workflows/publish.yml` is what
-actually runs.
+Building a release is automated. A version tag on a commit that is on `main`
+and whose CI passed builds every distribution and attaches it to the GitHub
+Release. Publishing those artifacts to PyPI is a separate step a maintainer
+runs, because NVIDIA's Kitmaker service, which owns the PyPI projects, is not
+reachable from a public CI runner. [RELEASING.md](RELEASING.md) describes what
+a maintainer does; `.github/workflows/publish.yml` is what actually runs.
 
 ## Changing this document
 

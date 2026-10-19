@@ -341,5 +341,202 @@
         "error": "not_found"
       }
     }
+  ],
+  "probabilities_description": "The rule of an endpoint told to answer probabilities (serve(probabilities=True), Rust answer_with_probabilities; T2.8's ranking cases): each request answered as call number call, from zero, both endpoints exactly. A classification asking for probabilities is given them, for row i of call k with d = (3k + 5i) mod 9 + 1: the first class (10 - d) / 10, the last d / 10, any other 0.0, the prediction the last class where d > 5, else the first; any other request is the rule's.",
+  "probabilities": [
+    {
+      "name": "a binary call asking for probabilities, call 0",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "false",
+            "probabilities": {
+              "false": 0.9,
+              "true": 0.1
+            }
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": "true",
+            "probabilities": {
+              "false": 0.4,
+              "true": 0.6
+            }
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": "false",
+            "probabilities": {
+              "false": 0.8,
+              "true": 0.2
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for probabilities, call 2",
+      "call": 2,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "true",
+            "probabilities": {
+              "false": 0.3,
+              "true": 0.7
+            }
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": "false",
+            "probabilities": {
+              "false": 0.7,
+              "true": 0.3
+            }
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": "true",
+            "probabilities": {
+              "false": 0.2,
+              "true": 0.8
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a multiclass call asking for probabilities, call 1",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"multiclass_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"string\", \"classes\": [\"DE\", \"IN\", \"US\"]}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "DE",
+            "probabilities": {
+              "DE": 0.6,
+              "IN": 0.0,
+              "US": 0.4
+            }
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": "US",
+            "probabilities": {
+              "DE": 0.1,
+              "IN": 0.0,
+              "US": 0.9
+            }
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": "DE",
+            "probabilities": {
+              "DE": 0.5,
+              "IN": 0.0,
+              "US": 0.5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for its prediction only is the rule's",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"prediction\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "false"
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": "false"
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": "false"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a regression is the rule's",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": 1.0
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": 1.0
+          }
+        ]
+      }
+    }
   ]
 }
