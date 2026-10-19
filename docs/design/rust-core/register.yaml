@@ -7114,9 +7114,9 @@ entries:
     Postgres.
   cases: [T2.10]
   refs: [T2.10, KO2-70]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-72}
   notes: >-
     Proposed by T2.10's implementer for the orchestrator under KO2-70 (the
     same class as KO2-70 #1, misaligned lagged values, decided there as a
@@ -7125,6 +7125,8 @@ entries:
     and one labels one example otherwise; the alternative is the
     reference's packing and, where it raises, a named refusal in E66(b)'s
     class.
+    Approved by the owner on 2026-10-19 as KO2-72 (relayed by the
+    orchestrator; T2.1p).
 
 - id: P2E-17
   title: A constant past a narrow integer column's type, or a float with a fraction in IN, is compared exactly in a filter or a logical target, where the reference casts it
@@ -7156,9 +7158,9 @@ entries:
     or past int64 in IN against an integer column (all three databases).
   cases: [T2.10]
   refs: [T2.10]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-73}
   notes: >-
     Proposed by T2.10's implementer; the fraction part decided by the owner
     as exact comparison (KO2-73, "go with option b"), over keeping the
@@ -7170,6 +7172,8 @@ entries:
     and users.age IN (21, 22.5) inside OR (reference INVALID_REQUEST on
     Postgres, 22.5 read as 22 on DuckDB and SQLite; the core matches no
     row for it).
+    Approved by the owner on 2026-10-19 as KO2-73 (relayed by the
+    orchestrator; T2.1p).
 
 - id: P2E-18
   title: A float with a fraction in an IN list of a whole-number decimal target is compared exactly, where the reference reads the column as int64 and refuses
@@ -7192,13 +7196,15 @@ entries:
     fraction.
   cases: [T2.10]
   refs: [T2.10, KO2-35, KO2-50]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-74}
   notes: >-
     Proposed by T2.10's implementer under KO2-35's exact decimals. Measured
     on the route probe: PREDICT e.big IN (10, 20.5) over a DECIMAL(38, 0)
     (reference INVALID_REQUEST, core answered).
+    Approved by the owner on 2026-10-19 as KO2-74 (relayed by the
+    orchestrator; T2.1p).
 
 - id: P2E-19
   title: LIST_DISTINCT of a foreign key, a temporal link prediction, stays refused by name until Phase 4
@@ -7220,16 +7226,25 @@ entries:
     PredictiveQuery.materialize on the core route of a target
     LIST_DISTINCT of a foreign key without RANK TOP, on DuckDB, SQLite and
     Postgres.
-  cases: [T2.10]
+  cases: [target.aggregation.list-distinct]
   refs: [T2.10, E92, P1B-3]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-75}
   notes: >-
     A refusal of an input the reference accepts: owner-only. Proposed by
     T2.10's implementer for the orchestrator: keep it refused by name
     until Phase 4 (as KO2-22 keeps model and text_time_rules), or bring
     temporal link prediction into Phase 2.
+    Approved by the owner on 2026-10-19 as KO2-75 (relayed by the
+    orchestrator; T2.1p).
+  case_outcomes:
+  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
 
 # --- lane G entries (P2G-1..19) ---
 
