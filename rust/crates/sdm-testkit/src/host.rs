@@ -1578,6 +1578,23 @@ fn start_materialize(
         .as_ref()
         .map(|given| candidates_of(given))
         .transpose()?;
+    // `lag_timesteps` as the case wrote it (T2.9's cases), as `rows_per_call`
+    // is, read as the Python host reads and hands the caller's value over
+    // (`as_python_sends`): the core holds its type and sign to what the
+    // reference's engine takes; one the Python host cannot send as JSON is
+    // refused before the run naming the option, as that host refuses it.
+    if let Some(written) = &case.input.materialize.lag_timesteps {
+        let Some(sent) = as_python_sends(&written.0)? else {
+            observed.answer = Answer::Error {
+                kind: spelled(ErrorKind::InvalidRequest)?,
+                code: spelled(ErrorCode::InvalidRequest)?,
+                fields: BTreeMap::from([("field".to_owned(), "lag_timesteps".to_owned())]),
+            };
+            return Ok(None);
+        };
+        values_bytes.pop();
+        values_bytes.extend_from_slice(format!(r#","lag_timesteps":{sent}}}"#).as_bytes());
+    }
     observed.operations.push("materialize".into());
     observed.edits.push(json!({
         "op": "materialize",
