@@ -16,16 +16,17 @@ CPU architecture: {platform.machine()}
 glibc version: {platform.libc_ver()[1]}
 
 ✅ Prebuilt wheels are published for:
-* Python versions: 3.10, 3.11, 3.12, 3.13
+* CPython versions: 3.10, 3.11, 3.12, 3.13, 3.14
 * Linux (x86_64 and arm64), glibc >=2.28
+* macOS 11 and newer (arm64 and x86_64)
+* Windows (x86_64)
 
 No source distribution is published, so `pip install structured-data-models-relational-engine` resolves on those
-platforms alone. The extension also builds from a source checkout on macOS
-(arm64) and Windows (x86_64).
+platforms alone.
 
 ❌ Not supported:
-* Python versions below 3.10, or 3.14 and later
-* macOS (x86_64), Windows (arm64)
+* CPython below 3.10, or 3.15 and later; any PyPy
+* Windows (arm64), musl-based Linux
 * glibc versions: <2.28
 
 Please create a feature request at 'https://github.com/NVIDIA/structured-data-models-client'."""

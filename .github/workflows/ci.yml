@@ -221,20 +221,32 @@ jobs:
           name: wheels
           path: dist/
 
-  # The engine's manylinux wheels, from the same `[tool.cibuildwheel]` table
-  # the release reads, each architecture on a runner of its own rather than
-  # under emulation. Databricks serverless compute can run on either
-  # architecture, and each wheel is smoke-tested on the architecture it targets.
+  # The engine's wheels, from the same `[tool.cibuildwheel]` table the release
+  # reads. One runner per platform and architecture, so every wheel is
+  # smoke-tested on the machine it targets.
   engine-wheels:
     needs: build
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: x86_64
+          - name: linux-x86_64
             runner: ubuntu-24.04
-          - arch: aarch64
+            archs: CIBW_ARCHS_LINUX=x86_64
+          - name: linux-aarch64
             runner: ubuntu-24.04-arm
+            archs: CIBW_ARCHS_LINUX=aarch64
+          - name: macos-arm64
+            runner: macos-15
+            archs: CIBW_ARCHS_MACOS=arm64
+          # macos-13 was retired in December 2025. x86_64 macOS ends with the
+          # macOS 15 image in autumn 2027, and this row ends with it.
+          - name: macos-x86_64
+            runner: macos-15-intel
+            archs: CIBW_ARCHS_MACOS=x86_64
+          - name: windows-amd64
+            runner: windows-2022
+            archs: CIBW_ARCHS_WINDOWS=AMD64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -244,15 +256,54 @@ jobs:
         with:
           name: wheels
           path: _sibling_wheels
+      # Only Linux runs in a container, where the engine's
+      # `[tool.cibuildwheel.linux]` already names /project/_sibling_wheels.
+      - name: Point the wheel test environments at the sibling wheels
+        shell: bash
+        run: |
+          echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
+          case "${{ runner.os }}" in
+            Linux) ;;
+            # cibuildwheel layers its own `environment` over the host's, so a
+            # plain variable reaches the build and test environments without
+            # displacing what the engine's pyproject sets per platform.
+            *) echo "PIP_FIND_LINKS=${{ github.workspace }}/_sibling_wheels" >> "$GITHUB_ENV" ;;
+          esac
+
       - uses: pypa/cibuildwheel@b3395e271a35f73dad77f21802abe9b986dfe299 # v4.3.1
-        env:
-          CIBW_ARCHS_LINUX: ${{ matrix.arch }}
         with:
           package-dir: packages/structured-data-models-relational-engine
           output-dir: wheelhouse
+
+      # A wheel built by the wrong compiler passes every other check here, so
+      # the evidence has to come from the wheel. MinGW's runtime travelling
+      # inside one means CMake found GCC where MSVC was intended. Every wheel
+      # is read, and an empty wheelhouse fails rather than reporting nothing
+      # found.
+      - name: No MinGW runtime rode along in a Windows wheel
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          wheels=(wheelhouse/*.whl)
+          if [ ${#wheels[@]} -eq 0 ]; then
+            echo "::error::the Windows row produced no wheel to check"
+            exit 1
+          fi
+          for wheel in "${wheels[@]}"; do
+            names=$(unzip -Z1 "$wheel")
+            if printf '%s\n' "$names" \
+              | grep -qiE "lib(gcc_s_seh-1|stdc\+\+-6|winpthread-1)[^/]*\.dll"; then
+              echo "::error::$(basename "$wheel") was built with MinGW, not MSVC"
+              printf '%s\n' "$names" | grep -iE "\.dll$"
+              exit 1
+            fi
+          done
+          echo "${#wheels[@]} Windows wheels, no MinGW runtime in any of them"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: engine-wheels-${{ matrix.arch }}
+          name: engine-wheels-${{ matrix.name }}
           path: wheelhouse/
 
   # The suite has only ever run against the source tree. What users install is
