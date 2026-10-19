@@ -2159,6 +2159,25 @@ const GOLDENS: goldens::Goldens = &[
             "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::bigint AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"order_id\", n.c1 AS \"orderid\", n.c2 AS \"user_id\", n.c3 AS \"price\", n.c4 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"order_id\" AS c0, t.\"orderid\" AS c1, t.\"user_id\" AS c2, t.\"price\" AS c3, t.\"ts\" AS c4, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"orderid\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"user_id\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"orderid\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
         ],
     ),
+    (
+        r##"{"columns":["user_id","age"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"user_id\", \"age\"\nFROM \"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"float64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT k.\"user_id\" AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"users\" AS base FROM \"users\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('user_id', r.value->0)) AS k\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"user_id\", l.c1 AS \"country\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"user_id\" AS c0, t.\"country\" AS c1,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"user_id\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"users\" t\n    ON t.\"user_id\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"float64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT k.\"user_id\" AS \"key\", (r.value->>1)::bigint AS \"batch\", w2.\"ts\" AS \"time\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n  CROSS JOIN (SELECT ROW(t.*)::\"orders\" AS base FROM \"orders\" AS t LIMIT 1) AS b\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('user_id', r.value->0)) AS k\n  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->2)) AS w2\n)\nSELECT s.\"batch\" AS \"__kumo_batch__\", n.c0 AS \"order_id\", n.c1 AS \"user_id\", n.c2 AS \"price\", n.c3 AS \"ts\", n.r AS \"__kumo_row__\"\nFROM \"__sdm_seeds__\" s\nCROSS JOIN LATERAL (\n  SELECT t.\"order_id\" AS c0, t.\"user_id\" AS c1, t.\"price\" AS c2, t.\"ts\" AS c3, ROW_NUMBER() OVER (ORDER BY t.\"ts\" DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST) AS r\n  FROM \"orders\" t\n  WHERE t.\"user_id\" = s.\"key\"\n    AND t.\"ts\" <= s.\"time\"\n  ORDER BY t.\"ts\" DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n  LIMIT 32\n) AS n\nORDER BY s.\"batch\", n.r",
+        ],
+    ),
 ];
 
 #[test]
