@@ -741,5 +741,370 @@
         ]
       }
     }
+  ],
+  "explanation_description": "The rule of an endpoint told to answer explanations (serve(explanation=True), Rust answer_told; T2.13's cases): each request answered as call number call, from zero, both endpoints exactly. A call whose output.fields names explanation is given one on each item, beside what the rule answers, for row i of call k with d = (3k + 5i) mod 9 + 1: {\"format\": \"scripted\", \"summary\": \"row <i> of call <k>\", \"score\": d / 10, \"rank\": d, \"path\": [k, i], \"detail\": {\"call\": k, \"row_index\": i, \"note\": null}}; any other request is the rule's.",
+  "explanation": [
+    {
+      "name": "a regression call asking for its prediction and an explanation, call 0",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\", \"explanation\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0,
+            "explanation": {
+              "format": "scripted",
+              "summary": "row 0 of call 0",
+              "score": 0.1,
+              "rank": 1,
+              "path": [
+                0,
+                0
+              ],
+              "detail": {
+                "call": 0,
+                "row_index": 0,
+                "note": null
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for an explanation only, call 2",
+      "call": 2,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"explanation\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "12",
+            "row_index": 0,
+            "prediction": "false",
+            "explanation": {
+              "format": "scripted",
+              "summary": "row 0 of call 2",
+              "score": 0.7,
+              "rank": 7,
+              "path": [
+                2,
+                0
+              ],
+              "detail": {
+                "call": 2,
+                "row_index": 0,
+                "note": null
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a regression call asking for an explanation over three rows, call 1",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\", \"explanation\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0,
+            "explanation": {
+              "format": "scripted",
+              "summary": "row 0 of call 1",
+              "score": 0.4,
+              "rank": 4,
+              "path": [
+                1,
+                0
+              ],
+              "detail": {
+                "call": 1,
+                "row_index": 0,
+                "note": null
+              }
+            }
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": 1.0,
+            "explanation": {
+              "format": "scripted",
+              "summary": "row 1 of call 1",
+              "score": 0.9,
+              "rank": 9,
+              "path": [
+                1,
+                1
+              ],
+              "detail": {
+                "call": 1,
+                "row_index": 1,
+                "note": null
+              }
+            }
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": 1.0,
+            "explanation": {
+              "format": "scripted",
+              "summary": "row 2 of call 1",
+              "score": 0.5,
+              "rank": 5,
+              "path": [
+                1,
+                2
+              ],
+              "detail": {
+                "call": 1,
+                "row_index": 2,
+                "note": null
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for probabilities and an explanation is given the explanation alone",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\", \"explanation\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "false",
+            "explanation": {
+              "format": "scripted",
+              "summary": "row 0 of call 0",
+              "score": 0.1,
+              "rank": 1,
+              "path": [
+                0,
+                0
+              ],
+              "detail": {
+                "call": 0,
+                "row_index": 0,
+                "note": null
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a regression call asking for its prediction only is the rule's",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": 1.0
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": 1.0
+          }
+        ]
+      }
+    }
+  ],
+  "item_metadata_description": "The rule of an endpoint told to answer item metadata (serve(item_metadata=True), Rust answer_told; T2.13's cases): each request answered as call number call, from zero, both endpoints exactly. Each item of every call the rule answers carries \"metadata\": {\"call\": k, \"row_index\": i, \"source\": \"scripted\"} for row i of call k, beside what the rule answers; a request the rule refuses is refused as before.",
+  "item_metadata": [
+    {
+      "name": "a regression call, call 0",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0,
+            "metadata": {
+              "call": 0,
+              "row_index": 0,
+              "source": "scripted"
+            }
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": 1.0,
+            "metadata": {
+              "call": 0,
+              "row_index": 1,
+              "source": "scripted"
+            }
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": 1.0,
+            "metadata": {
+              "call": 0,
+              "row_index": 2,
+              "source": "scripted"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for probabilities, call 1, is given metadata alone",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "false",
+            "metadata": {
+              "call": 1,
+              "row_index": 0,
+              "source": "scripted"
+            }
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": "false",
+            "metadata": {
+              "call": 1,
+              "row_index": 1,
+              "source": "scripted"
+            }
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": "false",
+            "metadata": {
+              "call": 1,
+              "row_index": 2,
+              "source": "scripted"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a regression call asking for an explanation, call 2, is given metadata alone",
+      "call": 2,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\", \"explanation\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0,
+            "metadata": {
+              "call": 2,
+              "row_index": 0,
+              "source": "scripted"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "no rows, no items",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": []}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": []
+      }
+    },
+    {
+      "name": "a classification without classes is refused as the rule refuses it",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\"}}, \"output\": {\"fields\": [\"prediction\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\"], \"rows\": [[10]]}}}",
+      "status": 400,
+      "answer": {
+        "error": "no_classes"
+      }
+    }
   ]
 }

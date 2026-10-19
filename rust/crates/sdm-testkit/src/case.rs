@@ -147,6 +147,14 @@ pub struct Input {
     /// model's defaults for the task.
     #[serde(default, deserialize_with = "present")]
     pub outputs: Option<Vec<String>>,
+    /// Whether the scripted endpoint answers a call asking for an
+    /// explanation with one (T2.13's cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub explanation: Option<bool>,
+    /// Whether the scripted endpoint gives each item it answers its
+    /// metadata (T2.13's cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub item_metadata: Option<bool>,
 }
 
 /// Keyword arguments to `Schema.from_source`, each as the case gives it.

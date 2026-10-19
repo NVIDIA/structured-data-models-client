@@ -2840,12 +2840,15 @@ def _call(
     with (
         # The scripted endpoint, failing the case's chosen call and
         # answering a classification with its probabilities (T2.8's ranking
-        # cases) and a regression with its quantiles (T2.9's forecast
-        # cases) where the case says so.
+        # cases), a regression with its quantiles (T2.9's forecast cases),
+        # a call asking for an explanation with one and each item with its
+        # metadata (T2.13's cases) where the case says so.
         serve(
             fail_call=given.get('fail_call'),
             probabilities=given.get('probabilities', False),
             quantiles=given.get('quantiles', False),
+            explanation=given.get('explanation', False),
+            item_metadata=given.get('item_metadata', False),
         ) as (url, received),
         warnings.catch_warnings(record=True) as shown,
     ):

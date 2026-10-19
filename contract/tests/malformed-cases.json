@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, from T2.13's test author input.explanation and input.item_metadata, each a boolean, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -1044,6 +1044,54 @@
       "value": null
     },
     {
+      "why": "explanation as text",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "explanation as a number",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": 1
+    },
+    {
+      "why": "explanation null",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": null
+    },
+    {
+      "why": "item_metadata as text",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "item_metadata as a number",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": 0
+    },
+    {
+      "why": "item_metadata null",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": null
+    },
+    {
       "why": "outputs a single text, not a list",
       "path": [
         "input",
@@ -1442,6 +1490,38 @@
       "path": [
         "input",
         "quantiles"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer explanations (T2.13)",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer explanations",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer item metadata (T2.13)",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer item metadata",
+      "path": [
+        "input",
+        "item_metadata"
       ],
       "value": false
     },

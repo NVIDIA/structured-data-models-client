@@ -30,6 +30,15 @@
 //! rule's prediction: for row `i` of call `k`, with `d` as above,
 //! `{"0.1": d - 1, "0.5": d, "0.9": d + 1}`, each a float.
 //!
+//! Told to answer explanations ([`answer_told`]; T2.13's cases, as a model
+//! explains the entity it is asked about), a call whose `output.fields`
+//! names `explanation` is answered with one on each item: for row `i` of
+//! call `k`, with `d` as above, `{"format": "scripted", "summary": "row <i>
+//! of call <k>", "score": d / 10, "rank": d, "path": [k, i], "detail":
+//! {"call": k, "row_index": i, "note": null}}`. Told to answer item
+//! metadata, each item of every call answered by the rule carries
+//! `"metadata": {"call": k, "row_index": i, "source": "scripted"}`.
+//!
 //! Calls are numbered from zero in the order received, and an endpoint
 //! told to fail a call answers that one `500` with `{"error":
 //! "scripted_failure", "call": <its number>}` and every other call by the
@@ -105,9 +114,24 @@ pub fn answer_call(
     answer(method, path, body)
 }
 
+/// What an endpoint is told to answer beside the rule's prediction (a
+/// case's `input.probabilities`, `input.quantiles`, `input.explanation`
+/// and `input.item_metadata`); the default is none of them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Told {
+    /// A classification asking for probabilities is given them.
+    pub probabilities: bool,
+    /// A regression asking for quantiles is given them.
+    pub quantiles: bool,
+    /// A call asking for an explanation is given one on each item.
+    pub explanation: bool,
+    /// Each item answered carries its metadata.
+    pub item_metadata: bool,
+}
+
 /// The rule: the status and JSON body answering one request.
 pub fn answer(method: &str, path: &str, body: &[u8]) -> (u16, Value) {
-    answered(method, path, body, None, None)
+    answered(method, path, body, 0, Told::default())
 }
 
 /// The rule answering call number `call` of an endpoint told to answer
@@ -129,26 +153,30 @@ pub fn answer_as_asked(
     probabilities: bool,
     quantiles: bool,
 ) -> (u16, Value) {
-    answered(
+    answer_told(
         method,
         path,
         body,
-        probabilities.then_some(call),
-        quantiles.then_some(call),
+        call,
+        Told {
+            probabilities,
+            quantiles,
+            ..Told::default()
+        },
     )
 }
 
-fn answered(
-    method: &str,
-    path: &str,
-    body: &[u8],
-    sure: Option<u64>,
-    spread: Option<u64>,
-) -> (u16, Value) {
+/// The rule answering call number `call` of an endpoint told what
+/// [`Told`] says to answer beside the rule's prediction.
+pub fn answer_told(method: &str, path: &str, body: &[u8], call: u64, told: Told) -> (u16, Value) {
+    answered(method, path, body, call, told)
+}
+
+fn answered(method: &str, path: &str, body: &[u8], call: u64, told: Told) -> (u16, Value) {
     if method != "POST" || path != PREDICTIONS {
         return (404, json!({"error": "not_found"}));
     }
-    match predictions(body, sure, spread) {
+    match predictions(body, call, told) {
         Ok(predictions) => (
             200,
             json!({
@@ -163,11 +191,7 @@ fn answered(
     }
 }
 
-fn predictions(
-    body: &[u8],
-    sure: Option<u64>,
-    spread: Option<u64>,
-) -> Result<Vec<Value>, &'static str> {
+fn predictions(body: &[u8], call: u64, told: Told) -> Result<Vec<Value>, &'static str> {
     // serde_json, as JSON itself, refuses NaN and Infinity.
     let payload: Value = serde_json::from_slice(body).map_err(|_| "not_json")?;
     let Value::Object(payload) = payload else {
@@ -216,10 +240,15 @@ fn predictions(
                 .collect()
         })
         .unwrap_or_default();
-    let sure = sure.filter(|_| asks("probabilities") && p.is_string() && !classes.is_empty());
+    let sure =
+        (told.probabilities && asks("probabilities") && p.is_string() && !classes.is_empty())
+            .then_some(call);
     // The call's number where the endpoint answers a regression's quantiles
     // and this call asks for them.
-    let spread = spread.filter(|_| asks("quantiles") && !p.is_string());
+    let spread = (told.quantiles && asks("quantiles") && !p.is_string()).then_some(call);
+    // Whether the endpoint answers an explanation and this call asks for
+    // one.
+    let explains = told.explanation && asks("explanation");
     // The rows again, each cell its text as written, so an id is answered
     // as its token; the body is JSON, so this reading cannot fail.
     let rows = raw_rows(body).ok_or("not_json")?;
@@ -243,6 +272,12 @@ fn predictions(
         }
         if let Some(call) = spread {
             item["quantiles"] = quantiles(call, index);
+        }
+        if explains {
+            item["explanation"] = explained(call, index);
+        }
+        if told.item_metadata {
+            item["metadata"] = json!({"call": call, "row_index": index, "source": "scripted"});
         }
         answered.push(item);
     }
@@ -273,6 +308,22 @@ fn quantiles(call: u64, index: usize) -> Value {
     let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
     let d = f64::from(u32::try_from(d).unwrap_or(1));
     json!({"0.1": d - 1.0, "0.5": d, "0.9": d + 1.0})
+}
+
+/// Row `index` of call `call`'s explanation, as an endpoint told to answer
+/// explanations gives it.
+fn explained(call: u64, index: usize) -> Value {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = u32::try_from(d).unwrap_or(1);
+    json!({
+        "format": "scripted",
+        "summary": format!("row {index} of call {call}"),
+        "score": f64::from(d) / 10.0,
+        "rank": d,
+        "path": [call, index],
+        "detail": {"call": call, "row_index": index, "note": null},
+    })
 }
 
 fn prediction(task: Option<&Value>) -> Result<Value, &'static str> {
