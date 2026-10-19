@@ -37,8 +37,10 @@ beside it (E81(c)). Each claim and what holds it:
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -197,6 +199,7 @@ def _run(
     files: dict[str, str | None],
     where: str | None = '',
     lane: bool = False,
+    cases: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     r"""The step's text in a scratch directory holding the repository's
     contract and scripts, with ``files`` as the downloaded artifacts (None:
@@ -212,8 +215,16 @@ def _run(
         where = LANE
     work = tmp_path / 'work'
     work.mkdir(parents=True)
-    for name in ('contract', 'scripts', 'docs', 'rust'):
+    for name in ('scripts', 'docs', 'rust'):
         (work / name).symlink_to(ROOT / name)
+    if cases is None:
+        (work / 'contract').symlink_to(ROOT / 'contract')
+    else:
+        # The repository's contract with `cases` in place of its cases.
+        (work / 'contract').mkdir()
+        for child in (ROOT / 'contract').iterdir():
+            target = cases if child.name == 'cases' else child
+            (work / 'contract' / child.name).symlink_to(target)
     (work / 'cross-host').mkdir()
     for name, text in files.items():
         if text is not None:
@@ -405,7 +416,10 @@ def test_the_other_baseline_cases_are_held_by_their_status(
 def test_a_diagnostic_case_s_difference_is_reported_not_gated(
     tmp_path: Path, observed: dict[str, list[Any]]
 ) -> None:
-    # A diagnostic case on whose fetches both hosts ran the core.
+    # A diagnostic case on whose fetches both hosts ran the core: from T2.12
+    # no S1 case is diagnostic, so an acceptance case with fetches stands in,
+    # its file marked diagnostic in a copy of the cases and both hosts'
+    # lines naming that file's digest.
     statuses = {
         case['id']: case['status']
         for case in (
@@ -416,11 +430,30 @@ def test_a_diagnostic_case_s_difference_is_reported_not_gated(
     [case, *_] = [
         each['case']
         for each in observed['python-core']
-        if statuses[each['case']] == 'diagnostic'
+        if statuses[each['case']] in ('diagnostic', 'acceptance')
         and (each['core'] or {}).get('fetches')
     ]
+    cases = tmp_path / 'cases'
+    shutil.copytree(ROOT / 'contract/cases', cases)
+    [path] = [
+        each
+        for each in cases.glob('*/*.json')
+        if json.loads(each.read_text(encoding='utf-8'))['id'] == case
+    ]
+    marked = json.loads(path.read_text(encoding='utf-8'))
+    marked['status'] = 'diagnostic'
+    path.write_text(json.dumps(marked, indent=2) + '\n', encoding='utf-8')
+    case_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    changed = copy.deepcopy(observed)
+    for side in ('python-core', 'rust-host'):
+        for line in changed[side]:
+            if line['case'] == case:
+                line['identity']['inputs']['case'] = case_digest
     done = _run(
-        tmp_path, _seeded(observed, 'rust-host', case, 'fetches'), lane=True
+        tmp_path,
+        _seeded(changed, 'rust-host', case, 'fetches'),
+        lane=True,
+        cases=cases,
     )
     assert done.returncode == 0, done.stdout + done.stderr
     assert f'diagnostic: core: {case}: python-core against rust-host' in (
