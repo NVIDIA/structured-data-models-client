@@ -72,3 +72,11 @@ On a scratch merge of this lane with `t210-tests` (d5068a31, never pushed), with
 - **Register**: P2E-1 (KO2-36) names the three `name.*-filter` cases on both core runners and three databases, as it names T2.18's; P2B-16 (SQLite) and P2C-7 (Postgres), KO2-56's temporary entries for the four S0 boundary queries the not-yet rules refused until T2.10, are retired (rejected, IDs kept, each saying what replaced it).
 - **Pending**: 141 keys leave `t210-pending.json` (`test_t210_targets.py`: 292 passed; `t210_targets.rs`: 3 passed); 21 stay: `rank.odd-column` and rust-host's `rank.decimal-key` (T2.8's ranking in the core), and `target.aggregation.list-distinct` (P2E-19).
 - **A link prediction's answer**: the scripted endpoint answers none, so `sdm-request`'s unit test `a_link_prediction_s_answer_is_refused_by_name_never_read_as_another_task_s` holds the core's reading of one as the endpoint writes it (each item's `rankings`, a list of objects, which the reference's bindings read with `_mapping_tuple` and its result keeps in one row): against a link prediction's payload it is refused by name (`problem_type`), against another task's its `rankings` are refused by name (`response_field`).
+
+## Gate against e1fac9ee
+
+Both DuckDB legs (python-core with python-old, about 95 s; rust-host, about 93 s; each under the heavy lock) differ only on:
+- `rank.decimal-key` and `rank.odd-column`, which wait for T2.8's ranking in the core;
+- `target.aggregation.list-distinct`, refused by name under P2E-19 until the owner decides;
+- `compare.py`'s `inputs` rule on python-core for `target.filter.and`, `target.logical.and` and `target.logical.not`: the Python host hands the core the query's canonical text (`PREDICT NOT (COUNT(orders.*, 0, 30, days) > 0) FOR EACH users.user_id`, `PREDICT (COUNT(orders.*, 0, 30, days) > 0) AND (SUM(orders.price, 0, 30, days) > 20) FOR EACH users.user_id`, `PREDICT COUNT(orders.* WHERE (orders.price > 18) AND (orders.price < 21), 0, 30, days) FOR EACH users.user_id`), the rule compares it with the case's `pql` as written; outcome, payload, statements and result are the reference's.
+`prepush.sh` (cheap tier) passes.
