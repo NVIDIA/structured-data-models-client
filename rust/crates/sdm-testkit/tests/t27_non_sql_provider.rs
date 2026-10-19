@@ -9,7 +9,7 @@
 //!
 //! ```text
 //! sdm-contract-run --kit memory [--fault truncate|silent_capability] --out REPORT
-//! sdm-contract-run --database memory --out FILE CASE...
+//! sdm-contract-run --database memory [--layer default] --out FILE CASE...
 //! ```
 //!
 //! `memory` names the non-SQL provider: each table read whole into Arrow
@@ -22,7 +22,10 @@
 //! `sdm_data::Data`, composed into its own `CompositionRoot` and handed to
 //! `HostRun::start`, with the non-SQL provider answering every fetch; each
 //! observation keyed `<case>@memory`, as `--database sqlite` keys
-//! `<case>@sqlite`.
+//! `<case>@sqlite`. With `--layer default`, the same provider answers the
+//! same case through the default composition root's layer
+//! (`sdm_host::default_root`, `sdm-data`'s), which serves host providers
+//! too: the one change between the two runs is the data layer.
 //!
 //! Each test's line says what it proves:
 //!
@@ -34,9 +37,15 @@
 //!   non-SQL provider too: a truncated page and a capability that fails
 //!   silently each fail the cases `expected.json`'s `faults` name;
 //! - "the same prediction runs on the swapped layer": S1's `base.binary`
-//!   (`from_source`, `materialize`, `predict`) on the swapped layer gives
-//!   DuckDB's outcome, description, materialized request and model call
-//!   bodies, every fetch planned as the typed request, no statement;
+//!   (`from_source`, `materialize`, `predict`) with the non-SQL provider
+//!   gives, on the swapped layer, the whole result it gives on the default
+//!   layer (outcome, description, the data it asked for, materialized
+//!   request and every model call body); and against DuckDB's SQL
+//!   provider, everything but the in-context examples' rows, which each
+//!   provider draws by its own seeded sample (DuckDB's reservoir shuffles
+//!   even a table it keeps whole; design, "Data access": a provider's own
+//!   sampling is repeatable only for that provider), every fetch on the
+//!   swapped layer planned as the typed request, no statement;
 //! - "a guard shows no domain crate changed for it": no commit of T2.7's
 //!   (subject `T2.7: `, `T2.7 fix <n>: `, `T2.7 tests: `, or its
 //!   landing) changes a file of a crate `scripts/rust_core/l0_deps.py`
@@ -415,10 +424,77 @@ fn observed(arguments: &[&str], name: &str) -> Value {
     lines.into_iter().next().unwrap()
 }
 
-/// T2.7: the same prediction runs on the swapped layer, and gives DuckDB's
-/// answer: the outcome, the description, the materialized request and the
-/// model call bodies; on the swapped layer every fetch is planned as the
-/// typed request, with no SQL statement.
+/// What two runs of one case must hold equal, whatever their provider:
+/// the calls made, the outcome, the description, and the core's error.
+const SAME: &[&str] = &[
+    "/identity/operations",
+    "/outcome",
+    "/core/accepted",
+    "/core/error",
+    "/core/described",
+];
+
+/// `value` with each model request body's in-context examples (a body:
+/// an object holding `model`, `task` and `context`) cut to their shape:
+/// each table's place, format, columns and count of rows, without the
+/// rows, which a provider's own seeded sample draws and orders.
+fn examples_shaped(value: &Value) -> Value {
+    match value {
+        Value::Object(fields) => {
+            let body = fields.contains_key("model") && fields.contains_key("task");
+            Value::Object(
+                fields
+                    .iter()
+                    .map(|(key, field)| {
+                        let field = if body && key == "context" {
+                            shaped(field)
+                        } else {
+                            examples_shaped(field)
+                        };
+                        (key.clone(), field)
+                    })
+                    .collect(),
+            )
+        }
+        Value::Array(items) => Value::Array(items.iter().map(examples_shaped).collect()),
+        other => other.clone(),
+    }
+}
+
+/// `context` with each table's `rows` replaced by their count.
+fn shaped(context: &Value) -> Value {
+    match context {
+        Value::Object(fields) => Value::Object(
+            fields
+                .iter()
+                .map(|(key, field)| match (key.as_str(), field) {
+                    ("rows", Value::Array(rows)) => (key.clone(), json!(rows.len())),
+                    _ => (key.clone(), shaped(field)),
+                })
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// The swapped run's fetches: each planned as the typed request, no
+/// statement; and their requests.
+fn host_fetches(run: &Value, which: &str) -> Vec<Value> {
+    let fetches = run["core"]["fetches"].as_array().unwrap();
+    assert!(!fetches.is_empty(), "{which}: the run reads its data");
+    for fetch in fetches {
+        assert_eq!(
+            fetch["plan"]["plan"], "host",
+            "{which}: a fetch planned as SQL: {fetch}"
+        );
+    }
+    fetches.iter().map(|f| f["request"].clone()).collect()
+}
+
+/// T2.7: the same prediction runs on the swapped layer. With the non-SQL
+/// provider, the swapped layer's run is the default layer's, whole; and
+/// it is DuckDB's but for the in-context examples' rows, every fetch
+/// planned as the typed request.
 #[test]
 fn the_same_prediction_runs_on_the_swapped_layer() {
     gated("the_same_prediction_runs_on_the_swapped_layer", || {
@@ -432,35 +508,81 @@ fn the_same_prediction_runs_on_the_swapped_layer() {
         assert!(duckdb["core"]["predicted"].is_object(), "DuckDB predicts");
         let swapped = observed(&["--database", MEMORY], MEMORY);
         assert_eq!(swapped["case"], "base.binary@memory");
-        assert_eq!(
-            swapped["identity"]["operations"], duckdb["identity"]["operations"],
-            "the same calls"
-        );
-        for field in [
-            "/outcome",
-            "/core/accepted",
-            "/core/error",
-            "/core/described",
-        ] {
-            assert_eq!(swapped.pointer(field), duckdb.pointer(field), "{field}");
-        }
-        assert_eq!(
-            swapped["core"]["materialized"], duckdb["core"]["materialized"],
-            "the materialized request"
-        );
-        assert_eq!(
-            swapped["core"]["predicted"], duckdb["core"]["predicted"],
-            "the model call bodies"
-        );
-        let fetches = swapped["core"]["fetches"].as_array().unwrap();
-        assert!(!fetches.is_empty(), "the swapped run reads its data");
-        for fetch in fetches {
+        let default = observed(&["--database", MEMORY, "--layer", "default"], "default");
+        assert_eq!(default["case"], "base.binary@memory");
+
+        // The whole result: only the data layer changed.
+        for field in SAME {
             assert_eq!(
-                fetch["plan"]["plan"], "host",
-                "a fetch planned as SQL: {fetch}"
+                swapped.pointer(field),
+                default.pointer(field),
+                "layers: {field}"
             );
         }
+        assert_eq!(
+            host_fetches(&swapped, "swapped"),
+            host_fetches(&default, "default"),
+            "layers: the data the core asked for"
+        );
+        assert_eq!(
+            swapped["core"]["materialized"], default["core"]["materialized"],
+            "layers: the materialized request"
+        );
+        assert_eq!(
+            swapped["core"]["predicted"], default["core"]["predicted"],
+            "layers: every model call body"
+        );
+
+        // Against DuckDB: all but the examples' rows.
+        for field in SAME {
+            assert_eq!(
+                swapped.pointer(field),
+                duckdb.pointer(field),
+                "DuckDB: {field}"
+            );
+        }
+        assert!(
+            swapped["core"]["predicted"]["body"]["context"].is_object(),
+            "the call holds in-context examples"
+        );
+        assert_eq!(
+            examples_shaped(&swapped["core"]["materialized"]),
+            examples_shaped(&duckdb["core"]["materialized"]),
+            "DuckDB: the materialized request"
+        );
+        assert_eq!(
+            examples_shaped(&swapped["core"]["predicted"]),
+            examples_shaped(&duckdb["core"]["predicted"]),
+            "DuckDB: every model call body"
+        );
     });
+}
+
+/// Control: cutting the examples to their shape keeps everything else of
+/// a body, and a body's other fields, a count of rows, or the examples'
+/// columns still differ.
+#[test]
+fn only_the_examples_rows_are_left_out() {
+    let body = |rows: Value, columns: Value, target: &str| {
+        json!({"payload": {"model": "m", "task": {"target": target},
+            "context": {"instance_table": {"format": "arrays", "columns": columns, "rows": rows}},
+            "predict": {"rows": [[1]]}}})
+    };
+    let one = body(json!([[1, 2], [3, 4]]), json!(["a", "b"]), "t");
+    let shuffled = body(json!([[3, 4], [1, 2]]), json!(["a", "b"]), "t");
+    assert_eq!(examples_shaped(&one), examples_shaped(&shuffled));
+    for other in [
+        body(json!([[1, 2]]), json!(["a", "b"]), "t"),
+        body(json!([[1, 2], [3, 4]]), json!(["a", "c"]), "t"),
+        body(json!([[1, 2], [3, 4]]), json!(["a", "b"]), "u"),
+    ] {
+        assert_ne!(examples_shaped(&one), examples_shaped(&other), "{other}");
+    }
+    assert_eq!(
+        examples_shaped(&one)["payload"]["predict"],
+        json!({"rows": [[1]]}),
+        "rows outside the examples are kept"
+    );
 }
 
 // --- the guard: no domain crate changed for T2.7 ---------------------------------
