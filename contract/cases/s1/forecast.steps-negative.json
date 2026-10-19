@@ -1,0 +1,131 @@
+{
+  "format": "sdm-case/1",
+  "id": "forecast.steps-negative",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.validate/accept/any",
+    "query.validate/refuse/any",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT SUM(orders.price, 0, 7, days) FORECAST -1 TIMEFRAMES FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "materialize",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "validate_query": {
+      "profile": {
+        "model": null,
+        "name": "RELATIONAL"
+      },
+      "schema": {
+        "links": [
+          [
+            {
+              "column": "user_id",
+              "table": "orders"
+            },
+            {
+              "column": "user_id",
+              "table": "users"
+            }
+          ]
+        ],
+        "tables": [
+          {
+            "columns": [
+              {
+                "dtype": "int",
+                "name": "order_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "int",
+                "name": "user_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "float",
+                "name": "price",
+                "stype": "numerical"
+              },
+              {
+                "dtype": "time",
+                "name": "ts",
+                "stype": "timestamp"
+              }
+            ],
+            "end_time_column": null,
+            "name": "orders",
+            "primary_key": "order_id",
+            "time_column": "ts"
+          },
+          {
+            "columns": [
+              {
+                "dtype": "int",
+                "name": "user_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "int",
+                "name": "age",
+                "stype": "numerical"
+              },
+              {
+                "dtype": "string",
+                "name": "country",
+                "stype": "categorical"
+              }
+            ],
+            "end_time_column": null,
+            "name": "users",
+            "primary_key": "user_id",
+            "time_column": null
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: \"FORECAST value must be at least 1, got -1.\""
+  },
+  "why": "num_forecasts of -1, refused before anything is gathered",
+  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+}

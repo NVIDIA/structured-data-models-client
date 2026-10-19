@@ -434,6 +434,39 @@ T28_RANKING = (
 )
 
 
+#: T2.9's S1 forecasting cases (the design's T2.9 row), none in the
+#: inventory: num_forecasts the reference takes and refuses, lag_timesteps
+#: on a forecast and beside one, and quantiles asked for and answered.
+T29_FORECASTING = (
+    'forecast.steps-1',
+    'forecast.steps-2',
+    'forecast.steps-3',
+    'forecast.steps-zero',
+    'forecast.steps-negative',
+    'forecast.steps-fraction',
+    'forecast.steps-past-grammar',
+    'forecast.static-target',
+    'forecast.binary-target',
+    'forecast.count-months',
+    'forecast.lag-0',
+    'forecast.lag-1',
+    'forecast.lag-2',
+    'forecast.lag-negative',
+    'forecast.lag-fraction',
+    'forecast.lag-whole-float',
+    'forecast.lag-bool',
+    'forecast.lag-text',
+    'lag.regression-2',
+    'lag.binary-2',
+    'lag.static-2',
+    'lag.static-negative',
+    'forecast.quantiles',
+    'forecast.quantiles-and-prediction',
+    'forecast.quantiles-unanswered',
+    'quantiles.regression',
+)
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -459,9 +492,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # predict, no inventory case either. T2.18 adds the column-name cases
     # (KO2-36), each carrying its call through predict; so does T2.8c its
     # multi-call cases, each an acceptance case, and T2.13 its option
-    # cases. T2.12 adds the schema rules' cases, and T2.8 the ranking cases,
-    # each carrying its call as
-    # far as the reference goes.
+    # cases. T2.12 adds the schema rules' cases, T2.8 the ranking cases and
+    # T2.9 the forecasting cases, each carrying its call as far as the
+    # reference goes.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -473,11 +506,18 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T212_RULES,
         *T28_RANKING,
         *T213_OPTIONS,
+        *T29_FORECASTING,
     }
     for case_id in (*T28C_MULTICALL, *T213_OPTIONS):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
-    for case_id in (*T20C_DECIMAL, *T218_NAMES, *T212_RULES, *T28_RANKING):
+    for case_id in (
+        *T20C_DECIMAL,
+        *T218_NAMES,
+        *T212_RULES,
+        *T28_RANKING,
+        *T29_FORECASTING,
+    ):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
     # Seeded: a core whose links or composite key are not its input's.
