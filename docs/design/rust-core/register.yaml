@@ -6602,7 +6602,7 @@ entries:
     PredictiveQuery.materialize on the core route of a temporal query whose
     target is AVG, MIN or MAX over a window, or a comparison of one, with
     lag_timesteps of 1 or more.
-  cases: [lag.average-empty-windows]
+  cases: [lag.average-empty-windows, lag.condition-per-call]
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py#KumoRelational.add_lagged_target', 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/query/pandas_executor.py#PQueryPandasExecutor.execute_join']
   more_exact:
   - case: lag.average-empty-windows
@@ -6653,6 +6653,30 @@ entries:
     - 'core.predicted.body/*/predict/instance_table/rows/*/3'
     - 'core.predicted.body/*/predict/instance_table/rows/*/4'
     null_on_one_side: true
+  - case: lag.condition-per-call
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@sqlite
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@postgres
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
@@ -6669,7 +6693,11 @@ entries:
     asked in one call, each row's lag computed by hand, on all three
     databases and both hosts; the lag cells of both core runners listed
     under more_exact on every database, rust-host's on Postgres too, where
-    it replays python-core's fetches but writes its own payload).
+    it replays python-core's fetches but writes its own payload), and
+    lag.condition-per-call (a condition's lag asked one entity a call,
+    whose columns keep their type in every call, fix 3; python-core's lag
+    cells listed; rust-host's are printed under core.predicted.calls, a
+    path more_exact does not take).
     Fixed in T2.9 fix 1.
 
 # --- lane D entries (P2D-1..19) ---
