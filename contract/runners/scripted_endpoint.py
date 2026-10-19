@@ -273,6 +273,10 @@ class Received:
 
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
+    # The reply's headers and body go out as two writes on a kept-alive
+    # connection; with Nagle's algorithm the body waits for the client's
+    # delayed acknowledgement, about 40 ms a call (T2.1l).
+    disable_nagle_algorithm = True
 
     def log_message(self, *args: object) -> None:
         pass
