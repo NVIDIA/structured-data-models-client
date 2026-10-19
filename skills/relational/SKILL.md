@@ -140,6 +140,11 @@ a row was last *edited* on a table other rows point at, since that moves after
 the fact and would leak the future into the past. Pass
 `time_columns={'t': None}` to say a table has no time column at all.
 
+What the client does when the data itself is wrong -- a key that repeats, a
+foreign key that matches nothing, a date of 9999-12-31, numbers stored as text
+-- is in [`references/data-problems.md`](references/data-problems.md): which
+problems it refuses, which it warns about, and which it answers without a word.
+
 For tables that stay in a warehouse, `Schema.from_source` describes them in
 place and `materialize()` samples them with SQL, so what leaves is bounded
 rather than the table: up to a thousand rows of each for reading its columns --
