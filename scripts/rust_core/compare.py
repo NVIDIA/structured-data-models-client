@@ -135,7 +135,9 @@ reference's are reported as diagnostic, nothing else; where the move is
 from the reference's answer to the runner's refusal at the call the row
 names, the reference's statements of that call are its only ones held,
 their ``sql.count`` and ``sql.result`` and the line's ``warnings``
-reported as diagnostic. A SQLite or
+reported as diagnostic; where the row keeps the reference's refusal at
+that call, its code the same (KO2-68), that call's ``sql.count`` and
+``sql.result`` are reported as diagnostic, nothing else. A SQLite or
 Postgres line is held, by the ``route``, ``inputs`` and core-consistency
 rules, to the case's core operations of the calls before the one it stops
 at (its effective expectation's refusal, else the reference line's), and
@@ -2575,6 +2577,35 @@ def statements_refused(
     return stage if stage in calls else None
 
 
+def statements_kept(
+    report: Report,
+    key: str,
+    who: str,
+    wanted: dict[str, Any] | None,
+    reference: dict[str, Any] | None,
+) -> str | None:
+    r"""The call both the reference and ``who`` refuse at on the line
+    ``key``, with one code, when the owner-approved entry's row keeping
+    that refusal names the call under ``statements_differ`` (KO2-68): the
+    runner reads less before the same refusal, so the reference's
+    statements there are no expectation of its own; None otherwise. With
+    no effective expectation the reference's outcome is the one held."""
+    theirs = (reference or {}).get('outcome') or {}
+    stage = theirs.get('stage')
+    if wanted is None:
+        wanted = theirs
+    if (
+        wanted.get('result') != 'refusal'
+        or theirs.get('result') != 'refusal'
+        or wanted.get('code') != theirs.get('code')
+        or wanted.get('stage') not in (None, stage)
+    ):
+        return None
+    return (
+        stage if stage in report.statements_differ.get((key, who), ()) else None
+    )
+
+
 def statements_opted_in(
     report: Report,
     key: str,
@@ -2891,6 +2922,7 @@ def compare(
                 against = without_left_out_warning(ref, named, observation)
             _core_payload(report, case, who, seen, against, stop)
             refused = statements_refused(report, case['id'], who, wanted, ref)
+            kept = statements_kept(report, case['id'], who, wanted, ref)
             if against is not None:
                 cell = observation['identity'].get('cell')
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
@@ -2918,10 +2950,11 @@ def compare(
                     seen,
                     against,
                     ordered,
-                    stop if refused is None else refused,
+                    refused or kept or stop,
                     large,
                     database,
                     answered=refused is not None
+                    or kept is not None
                     or statements_opted_in(
                         report, case['id'], who, stop, wanted
                     ),
