@@ -76,7 +76,7 @@ import struct
 import subprocess
 import sys
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -139,16 +139,194 @@ def validator(name: str) -> Any:
     schema = schemas[name] if name in schemas else {'$ref': name}
     cls = jsonschema.validators.validator_for(schemas['case'])
     cls.check_schema(schema)
+    _long_lists_held(schema)
     return cls(schema, registry=registry)
 
 
 def _invalid(validate: Any, document: Any) -> str | None:
-    r"""The first schema error's location and rule, or None; never the value."""
+    r"""The first schema error's location and rule, or None; never the value.
+
+    jsonschema walks every item of a list: a case or an observation of
+    100,000 entities takes about a second, and every tool that loads them
+    pays it on each load. So a long list's items past its leading ones are
+    checked in plain Python by their list's rule (:data:`_LONG_LISTS`), and
+    jsonschema sees the document with the list cut. A document taken that
+    way is one the whole-document validation takes; any other is
+    validated whole, so a refusal names what it names (T2.1l).
+    """
+    lists = _LONG_LISTS.get(_schema_id(validate.schema), ())
+    cut = _cut(document, lists) if lists else None
+    if cut is not None and next(iter(validate.iter_errors(cut)), None) is None:
+        return None
     error = next(iter(validate.iter_errors(document)), None)
     if error is None:
         return None
     where = '/'.join(str(part) for part in error.absolute_path) or '(root)'
     return f'{where} fails {error.validator!r}'
+
+
+#: Each item of a list, in a path into a document.
+_EACH = '*'
+#: Where a long list may be, by the schema's ``$id``: its path in the
+#: document, its path in the schema, the schema it has there (beside its
+#: description), and its items' rule as Python reads them, the rule
+#: :func:`_indices` holds an entity key to (a JSON integer or a string) or
+#: an object. A case's call lists the entities it asks about, and its core
+#: and its observation's core the Arrow column the host passed.
+_LONG_LISTS: dict[
+    str,
+    tuple[
+        tuple[
+            tuple[str, ...],
+            tuple[str | int, ...],
+            dict[str, Any],
+            Callable[[Any], bool],
+        ],
+        ...,
+    ],
+] = {
+    'urn:sdm:case:1': (
+        (
+            ('input', 'materialize', 'indices'),
+            ('$defs', 'materialize', 'properties', 'indices'),
+            {'type': 'array', 'items': {'type': ['integer', 'string']}},
+            lambda item: type(item) in (int, str),
+        ),
+        (
+            ('input', 'materialize', 'candidates'),
+            ('$defs', 'materialize', 'properties', 'candidates'),
+            {'type': 'array', 'items': {'type': ['integer', 'string']}},
+            lambda item: type(item) in (int, str),
+        ),
+        (
+            ('core', 'materialize', 'indices'),
+            (
+                'properties',
+                'core',
+                'properties',
+                'materialize',
+                'properties',
+                'indices',
+            ),
+            {'type': 'array', 'items': {'type': 'object'}},
+            lambda item: type(item) is dict,
+        ),
+    ),
+    'urn:sdm:observation:1': (
+        (
+            ('core', 'inputs', _EACH, 'indices'),
+            (
+                'properties',
+                'core',
+                'properties',
+                'inputs',
+                'items',
+                'oneOf',
+                2,
+                'properties',
+                'indices',
+            ),
+            {'type': ['array', 'null'], 'items': {'type': 'object'}},
+            lambda item: type(item) is dict,
+        ),
+    ),
+}
+#: The leading items of a long list that jsonschema still sees.
+_KEPT = 8
+
+
+def _schema_id(schema: Any) -> str:
+    return str(schema.get('$id', '')) if isinstance(schema, dict) else ''
+
+
+def _at(document: Any, where: tuple[str | int, ...]) -> Any:
+    r"""The value at ``where`` in ``document``, or None where there is
+    none."""
+    for key in where:
+        if isinstance(document, dict) and key in document:
+            document = document[key]
+        elif isinstance(document, list) and isinstance(key, int):
+            document = document[key] if key < len(document) else None
+        else:
+            return None
+    return document
+
+
+def _long_lists_held(schema: Any) -> None:
+    r"""Refuse a schema whose long lists hold more than their items' one
+    rule, or whose list a ``oneOf`` beside it could read too: the items
+    past a list's leading ones are checked by that rule alone (T2.1l)."""
+    for _, where, wanted, _ in _LONG_LISTS.get(_schema_id(schema), ()):
+        node = _at(schema, where)
+        held = isinstance(node, dict) and wanted == {
+            key: value for key, value in node.items() if key != 'description'
+        }
+        if 'oneOf' in where:
+            # Each other branch takes no key of the list's name.
+            at = where.index('oneOf')
+            branches = _at(schema, where[: at + 1])
+            held = (
+                held
+                and isinstance(branches, list)
+                and all(
+                    isinstance(branch, dict)
+                    and branch.get('additionalProperties') is False
+                    and 'patternProperties' not in branch
+                    and where[-1] not in branch.get('properties', {})
+                    for number, branch in enumerate(branches)
+                    if number != where[at + 1]
+                )
+            )
+        if not held:
+            raise RunnerFailure(
+                f'{_schema_id(schema)}: {"/".join(map(str, where))} is not '
+                'the list the validator checks item by item (T2.1l)'
+            )
+
+
+def _lists(
+    document: Any, path: tuple[str, ...]
+) -> Iterator[tuple[tuple[str | int, ...], Any]]:
+    r"""Each value at ``path`` in ``document``, with its own path."""
+    if not path:
+        yield (), document
+        return
+    head, rest = path[0], path[1:]
+    if head == _EACH:
+        if isinstance(document, list):
+            for number, item in enumerate(document):
+                for where, found in _lists(item, rest):
+                    yield (number, *where), found
+    elif isinstance(document, dict) and head in document:
+        for where, found in _lists(document[head], rest):
+            yield (head, *where), found
+
+
+def _replaced(document: Any, where: tuple[str | int, ...], value: Any) -> Any:
+    r"""``document`` with ``value`` at ``where``, copying only the objects
+    and arrays on the way, never changing ``document``."""
+    if not where:
+        return value
+    head, rest = where[0], where[1:]
+    copied: Any = (
+        list(document) if isinstance(document, list) else dict(document)
+    )
+    copied[head] = _replaced(document[head], rest, value)
+    return copied
+
+
+def _cut(document: Any, lists: Any) -> Any:
+    r"""``document`` with each long list cut to its :data:`_KEPT` leading
+    items, or None where an item past them breaks its list's rule."""
+    cut = document
+    for path, _, _, holds in lists:
+        for where, items in list(_lists(document, path)):
+            if not isinstance(items, list) or len(items) <= _KEPT:
+                continue
+            if not all(map(holds, items[_KEPT:])):
+                return None
+            cut = _replaced(cut, where, items[:_KEPT])
+    return cut
 
 
 def _indices(given: dict[str, Any]) -> str | None:
