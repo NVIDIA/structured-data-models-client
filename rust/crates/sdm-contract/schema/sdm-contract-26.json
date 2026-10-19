@@ -3825,7 +3825,7 @@
           ]
         },
         {
-          "description": "For each key, in order, one row: its label (its position, where it\ngives none), the table's rows, the key's distinct values among rows\nholding all of it, and the rows missing any part of it, as the\nreference's single `UNION ALL` reads them.",
+          "description": "For each key, in order, one row: its position, the table's rows, the\nkey's distinct values among rows holding all of it, and the rows\nmissing any part of it, as the reference's single `UNION ALL` reads\nthem.",
           "type": "object",
           "properties": {
             "keys": {
@@ -4245,15 +4245,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "label": {
-          "description": "The number a `key_counts` row for this key is labelled with, where\nnot its position among the keys asked: the reference labels each by\nits table's place among the tables with a key, a key it does not\ncount included (T2.12).",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
         }
       },
       "additionalProperties": false,

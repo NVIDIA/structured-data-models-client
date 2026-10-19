@@ -7,16 +7,17 @@ table source, held at the schema, the lock, the loaders and the public route.
 
 The design's row for T2.1b, each exit with the tests below that prove it:
 
-- **Schema lock**: v26 is the lock's one working entry, its file the one the
-  types generate (``schema_lock.rs``), and v25's merged entry and file are
-  untouched (``test_v25_*``, ``test_the_lock_*``, ``test_the_core_speaks_*``).
+- **Schema lock**: v26 is locked to its own file, and v25's merged entry
+  and file are untouched (``test_v25_*``, ``test_the_lock_*``,
+  ``test_the_core_speaks_*``). v26 was merged into rust-core mid-phase, so
+  T2.12's key label is v27, the phase's working entry beside it.
 - **Both loaders**: ``rust/crates/sdm-contract/tests/contract-26-vectors.json``
   holds accept and refuse vectors; the Python loader here validates each
   against ``sdm-contract-26.json`` (``test_the_python_loader_*``), and the
   Rust loader (written beside the implementation, in ``sdm-contract``'s
   tests) deserializes each into the type it names. Every v25 vector among
   the refusals is shown valid under v25, so its refusal is the bump's.
-- **The binding jobs green on the bump**: the native module speaks 26, and
+- **The binding jobs green on the bump**: the native module speaks 27, and
   a host speaking 25 is refused by name (``test_the_core_speaks_*``).
 - **SQL goldens unchanged**: the statements the core renders on the public
   route over the ``shop`` base, recorded at v25 by
@@ -175,11 +176,12 @@ def test_v25_stays_locked_as_merged() -> None:
     assert _schema(V25)['$id'] == 'sdm-contract/25'
 
 
-def test_the_lock_holds_v26_as_its_working_entry() -> None:
-    # Schema lock: v26 is the newest entry, locked to its own file.
+def test_the_lock_holds_v26_locked_to_its_own_file() -> None:
+    # Schema lock: v26, merged into rust-core mid-phase, is locked to its
+    # own file; v27 is the phase's working entry beside it (T2.12).
     lock = _lock_module()
     entries = lock.parse_lock(LOCK.read_text(encoding='utf-8'))
-    assert max(entries) == 26
+    assert max(entries) == 27
     digest, file = entries[26]
     assert file == 'sdm-contract-26.json'
     assert lock.digest(V26.read_bytes()) == digest
@@ -187,14 +189,15 @@ def test_the_lock_holds_v26_as_its_working_entry() -> None:
     assert lock.main(['--no-base']) == 0
 
 
-def test_the_core_speaks_v26_and_refuses_a_v25_host_by_name() -> None:
-    # The binding on the bump: the native module is v26, and a start written
-    # for v25 is refused by name, never read (decision H25).
+def test_the_core_speaks_v27_and_refuses_a_v25_host_by_name() -> None:
+    # The binding on the bump: the native module is v27 (v26 with T2.12's
+    # key label), and a start written for v25 is refused by name, never
+    # read (decision H25).
     from sdm_client._rust import codec, errors, facts
     from sdm_client._rust.run import native
 
     core = native()
-    assert core.CONTRACT_VERSION == 26
+    assert core.CONTRACT_VERSION == 27
     start = codec.encode(
         {
             'message': 'start',
