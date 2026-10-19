@@ -148,6 +148,20 @@ def _rust_host(lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
             runner='rust-host', cell=None, native=None, native_loaded=None
         )
         identity['versions'] = {'duckdb': identity['versions']['duckdb']}
+        # The endpoint's refusal of a call (python-core's code-less
+        # NimRequestError at predict, its core's INVALID_RESPONSE): the
+        # pure-Rust host has no transport or client class, so it reports
+        # its core's code for that call (T2.1g, register P2G-1).
+        outcome = line['outcome']
+        error = (line.get('core') or {}).get('error') or {}
+        if (
+            outcome['result'] == 'refusal'
+            and outcome['stage'] == 'predict'
+            and outcome['error'] == 'NimRequestError'
+            and outcome['code'] is None
+            and error.get('code') == 'INVALID_RESPONSE'
+        ):
+            outcome['code'] = 'INVALID_RESPONSE'
         for field, state in available.items():
             if state != 'unavailable':
                 continue
