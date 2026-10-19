@@ -1157,6 +1157,47 @@ fn a_regression_s_quantiles_are_laid_out_as_answered() {
     assert_eq!(quantiles.value(1), "{}");
     assert_eq!(schema.field(3).data_type(), &DataType::Utf8);
 
+    // Quantiles with no prediction (a model asked for both may leave the
+    // prediction out): no prediction column, and the prediction named is
+    // noted as left out, as the reference's `_report_absent` says it.
+    let mut run = predict_run_asking(
+        REQUEST_STATE_VERSION,
+        payload_text(),
+        "kumo-relational",
+        &["prediction", "quantiles"],
+    )
+    .unwrap();
+    let (id, _) = call(&mut run);
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"quantiles":{"0.5":1.5}},{"id":"3","row_index":1,"prediction":null,"quantiles":{"0.5":2.5}}]}"#.to_vec(),
+        },
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::Predict(predicted),
+    } = run.next().unwrap()
+    else {
+        panic!("done");
+    };
+    let warnings = run.take_warnings();
+    let [warning] = warnings.as_slice() else {
+        panic!("one notice: {warnings:?}");
+    };
+    assert_eq!(
+        warning.fields["absent"],
+        Detail::List(vec![Scalar::Utf8("prediction".into())])
+    );
+    let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
+        panic!("the result is attached");
+    };
+    let schema = result.batches[0].schema();
+    let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+    assert_eq!(names, ["row_index", "id", "quantiles", "answer_index"]);
+
     // Held by no answer, the output named is noted as left out.
     let mut run = predict_run_asking(
         REQUEST_STATE_VERSION,
