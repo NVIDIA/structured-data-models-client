@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! A Postgres replay asked a fetch past its recording (T2.8, from
-//! `s0.boundary.depth-999@postgres` on `cross-host (postgres)`): a
-//! diagnostic case, which gates nothing, writes no observation line and the
-//! run goes on to the next case; an acceptance case still fails the run by
-//! name, so a case that gates is never judged on rows it was not recorded
-//! with.
+//! `s0.boundary.depth-999@postgres` on `cross-host (postgres)`): for a
+//! diagnostic case, which gates nothing, the replay answers that fetch with
+//! a provider error naming it ("past the recording"), so the core refuses
+//! the case and rust-host writes its line as a refusal, every core leg
+//! observing every case the reference observed (the staging rule,
+//! `run_python.py legs`), and the run goes on to the next case; an
+//! acceptance case still fails the run by name, so a case that gates is
+//! never judged on rows it was not recorded with.
 //!
 //! `sdm-contract-run --replay` runs three cases over
 //! `tests/replay-past-recording.jsonl`, a recording of one fetch:
@@ -18,8 +21,8 @@
 //! `t28.replay.acceptance-past-its-recording`. Each case is `s0.accept.
 //! sum-window`'s, its id and status its own.
 //!
-//! - The diagnostic case before the answered one: the run succeeds, writes
-//!   the answered case's line and none for the diagnostic case.
+//! - The diagnostic case before the answered one: the run succeeds and
+//!   writes both lines, the diagnostic case's a refusal, `PROVIDER_ERROR`.
 //! - The acceptance case before the answered one: the run fails, naming
 //!   the case and the fetch past the recording, and writes no file.
 
@@ -65,20 +68,25 @@ fn replay(cases: &[PathBuf], out: &Path) -> Output {
         .unwrap()
 }
 
-/// The case keys of the observation lines the run wrote at `out`.
-fn keys(out: &Path) -> Vec<String> {
+/// The observation lines the run wrote at `out`.
+fn lines(out: &Path) -> Vec<Value> {
     std::fs::read_to_string(out)
         .unwrap()
         .lines()
-        .map(|line| {
-            let o: Value = serde_json::from_str(line).unwrap();
-            o["case"].as_str().unwrap().to_owned()
-        })
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+
+/// The case keys of the observation lines the run wrote at `out`.
+fn keys(out: &Path) -> Vec<String> {
+    lines(out)
+        .iter()
+        .map(|o| o["case"].as_str().unwrap().to_owned())
         .collect()
 }
 
 #[test]
-fn a_diagnostic_case_past_its_recording_is_left_out_and_an_acceptance_case_fails_the_run() {
+fn a_diagnostic_case_past_its_recording_is_refused_and_an_acceptance_case_fails_the_run() {
     let dir = std::env::temp_dir().join(format!("t28-replay-past-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let answered = case(&dir, "t28.replay.answered", "acceptance");
@@ -104,8 +112,9 @@ fn a_diagnostic_case_past_its_recording_is_left_out_and_an_acceptance_case_fails
     );
     assert_eq!(keys(&out), ["t28.replay.answered@postgres"]);
 
-    // A diagnostic case past its recording writes no line, and the run
-    // goes on to the next case.
+    // A diagnostic case past its recording is refused by the core, its
+    // fetch answered with the replay's named provider error, and writes
+    // its line as a refusal; the run goes on to the next case.
     let out = dir.join("diagnostic.jsonl");
     let done = replay(&[diagnostic, answered.clone()], &out);
     assert!(
@@ -113,7 +122,19 @@ fn a_diagnostic_case_past_its_recording_is_left_out_and_an_acceptance_case_fails
         "a diagnostic case past its recording failed the run: {}",
         String::from_utf8_lossy(&done.stderr)
     );
-    assert_eq!(keys(&out), ["t28.replay.answered@postgres"]);
+    assert_eq!(
+        keys(&out),
+        [
+            "t28.replay.diagnostic-past-its-recording@postgres",
+            "t28.replay.answered@postgres"
+        ]
+    );
+    let refused = &lines(&out)[0]["outcome"];
+    assert_eq!(
+        (&refused["result"], &refused["code"]),
+        (&Value::from("refusal"), &Value::from("PROVIDER_ERROR")),
+        "the diagnostic case past its recording: {refused}"
+    );
 
     // An acceptance case past its recording fails the run by name, and no
     // observation file is left.
