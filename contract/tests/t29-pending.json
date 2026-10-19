@@ -1,0 +1,42 @@
+{
+ "about": "T2.9's acceptance tests that failed when the test author wrote them, before the implementation (contract/tests/test_t29_forecasting.py as py:<test>[<database>]; sdm-testkit's tests/t29_forecasting.rs as rust:<test>). Each listed test must still fail (strict); the implementer takes a name out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": [
+  "py:test_lag_timesteps_as_the_reference[duckdb]",
+  "py:test_lag_timesteps_as_the_reference[sqlite]",
+  "py:test_lag_timesteps_as_the_reference[postgres]",
+  "py:test_quantiles_asked_as_the_reference[duckdb]",
+  "py:test_quantiles_asked_as_the_reference[sqlite]",
+  "py:test_quantiles_asked_as_the_reference[postgres]",
+  "py:test_response_field_for_quantiles_as_the_reference[duckdb]",
+  "py:test_response_field_for_quantiles_as_the_reference[sqlite]",
+  "py:test_response_field_for_quantiles_as_the_reference[postgres]",
+  "rust:rust_host_lag_timesteps_as_the_reference_on_duckdb",
+  "rust:rust_host_lag_timesteps_as_the_reference_on_sqlite",
+  "rust:rust_host_quantiles_asked_as_the_reference_on_duckdb",
+  "rust:rust_host_quantiles_asked_as_the_reference_on_sqlite",
+  "rust:rust_host_response_field_for_quantiles_on_duckdb",
+  "rust:rust_host_response_field_for_quantiles_on_sqlite"
+ ],
+ "authored": [
+  "py:test_num_forecasts_as_the_reference[duckdb]",
+  "py:test_num_forecasts_as_the_reference[sqlite]",
+  "py:test_num_forecasts_as_the_reference[postgres]",
+  "py:test_lag_timesteps_as_the_reference[duckdb]",
+  "py:test_lag_timesteps_as_the_reference[sqlite]",
+  "py:test_lag_timesteps_as_the_reference[postgres]",
+  "py:test_quantiles_asked_as_the_reference[duckdb]",
+  "py:test_quantiles_asked_as_the_reference[sqlite]",
+  "py:test_quantiles_asked_as_the_reference[postgres]",
+  "py:test_response_field_for_quantiles_as_the_reference[duckdb]",
+  "py:test_response_field_for_quantiles_as_the_reference[sqlite]",
+  "py:test_response_field_for_quantiles_as_the_reference[postgres]",
+  "rust:rust_host_num_forecasts_as_the_reference_on_duckdb",
+  "rust:rust_host_num_forecasts_as_the_reference_on_sqlite",
+  "rust:rust_host_lag_timesteps_as_the_reference_on_duckdb",
+  "rust:rust_host_lag_timesteps_as_the_reference_on_sqlite",
+  "rust:rust_host_quantiles_asked_as_the_reference_on_duckdb",
+  "rust:rust_host_quantiles_asked_as_the_reference_on_sqlite",
+  "rust:rust_host_response_field_for_quantiles_on_duckdb",
+  "rust:rust_host_response_field_for_quantiles_on_sqlite"
+ ]
+}
