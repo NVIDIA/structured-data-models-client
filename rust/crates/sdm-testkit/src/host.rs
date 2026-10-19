@@ -1346,11 +1346,13 @@ pub struct HeldState {
 }
 
 /// A ranking's state as this host holds it: how many candidates a row
-/// keeps, the first candidate as the result names it, and each later
+/// keeps, the first candidate by its position and as the result names it,
+/// and each later
 /// question's candidate, by its position and as the result names it, and
 /// its payload's and query's bytes.
 pub struct HeldRanking {
     pub top_k: Option<u32>,
+    pub candidate: u32,
     pub value: String,
     pub parts: Vec<(u32, String, Vec<u8>, Vec<u8>)>,
 }
@@ -1436,6 +1438,7 @@ fn materialize(
                 }
                 ranking = Some(HeldRanking {
                     top_k: ranked.top_k,
+                    candidate: ranked.candidate,
                     value: ranked.value.clone(),
                     parts,
                 });
@@ -1966,6 +1969,7 @@ fn predict(
                 // id, as each step's (T2.8).
                 ranking: state.ranking.as_ref().map(|held| Ranking {
                     top_k: held.top_k,
+                    candidate: held.candidate,
                     value: held.value.clone(),
                     parts: (0u32..)
                         .zip(&held.parts)

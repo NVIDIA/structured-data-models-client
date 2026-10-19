@@ -156,8 +156,22 @@ pub fn start(
             let ranking = match &request.state.ranking {
                 None => None,
                 Some(ranking) => {
+                    // Each candidate named by its position, the first's the
+                    // state's own, every later one's past the one before:
+                    // a state that names them otherwise would give the
+                    // answers back under other candidates' names.
+                    let positions = std::iter::once(ranking.candidate)
+                        .chain(ranking.parts.iter().map(|part| part.candidate));
+                    if !positions.clone().zip(positions.skip(1)).all(|(a, b)| a < b) {
+                        return Err(CoreError::new(
+                            ErrorKind::InvalidRequest,
+                            ErrorCode::InvalidRequest,
+                            "a ranking's questions do not name its candidates in the order given",
+                        )
+                        .with_field("field", Detail::text("state.ranking.candidate")));
+                    }
                     let mut questions = vec![(
-                        0,
+                        ranking.candidate,
                         ranking.value.clone(),
                         Vec::new(),
                         String::new(),

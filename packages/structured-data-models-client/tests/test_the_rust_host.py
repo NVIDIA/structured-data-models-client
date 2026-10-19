@@ -415,6 +415,52 @@ def test_the_mapping_keys_on_the_code_and_reads_no_message_text() -> None:
             assert not reads, function.name
 
 
+def test_a_batched_part_is_worded_by_its_part_s_kind() -> None:
+    # The core names the part's kind `part_kind` (T2.8 fix 4): `kind` is the
+    # error's own, which the details carry too.
+    def said(part_kind: str) -> str:
+        fields = {
+            'field': {'t': 'utf8', 'v': 'indices'},
+            'rule': {'t': 'utf8', 'v': 'batched_part'},
+            'part_kind': {'t': 'utf8', 'v': part_kind},
+            'entities': {'t': 'u64', 'v': '10001'},
+            'parts': {'t': 'u64', 'v': '2'},
+            'rows_per_call': {'t': 'u64', 'v': '10000'},
+        }
+        error = errors.error_from_core(
+            _error(
+                'UNSUPPORTED_REQUEST', 'm', kind='unsupported', fields=fields
+            ),
+            {},
+        )
+        assert type(error) is StructuredDataError
+        return str(error)
+
+    assert 'one per candidate' in said('ranking')
+    assert 'one per step' in said('forecast')
+
+
+def test_a_failed_call_s_counts_reach_the_caller_s_exception() -> None:
+    # A ranking's questions answered before a call failed are counted, never
+    # kept (T2.8 fix 4): the count reaches whatever the transport raised,
+    # beside the details it holds, with no answers carried.
+    from sdm_client._rust.run import _carried
+
+    core = StructuredDataError('m', code='INVALID_RESPONSE')
+    core.details = {'parts_answered': 1, 'ranking_candidate': 2}
+    raised = ValueError('oauth refresh failed')
+    _carried(core, raised)
+    assert raised.details == {'parts_answered': 1}  # type: ignore[attr-defined]
+    assert not hasattr(raised, '_answered')
+    held = StructuredDataError('m', code='INVALID_REQUEST', details={'a': 1})
+    _carried(core, held)
+    assert held.details == {'a': 1, 'parts_answered': 1}
+    # Nothing answered before it: the exception as it was.
+    untouched = ValueError('first call')
+    _carried(StructuredDataError('m', code='INVALID_RESPONSE'), untouched)
+    assert not hasattr(untouched, 'details')
+
+
 def test_details_carry_the_fields_kind_and_retryability() -> None:
     fields = {
         'sqlstate': {'t': 'utf8', 'v': '40001'},

@@ -198,7 +198,7 @@ pub(crate) async fn materialize(
         )
         .with_field("field", Detail::text("indices"))
         .with_field("rule", Detail::text("batched_part"))
-        .with_field("kind", Detail::text("ranking"))
+        .with_field("part_kind", Detail::text("ranking"))
         .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
         .with_field("parts", Detail::Scalar(Scalar::UInt64(parts)))
         .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
@@ -268,6 +268,7 @@ pub(crate) async fn materialize(
             batches: None,
             ranking: Some(Ranking {
                 top_k,
+                candidate: first.candidate,
                 value: first.value,
                 parts: attached,
             }),

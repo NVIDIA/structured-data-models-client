@@ -29,7 +29,9 @@ use arrow_array::types::{Float64Type, Int64Type};
 use arrow_schema::DataType;
 use sdm_contract::data::AttachmentId;
 use sdm_contract::facts::PlatformFacts;
-use sdm_contract::ops::{Operation, OperationResult, Predict, REQUEST_STATE_VERSION, RequestState};
+use sdm_contract::ops::{
+    Operation, OperationResult, Predict, REQUEST_STATE_VERSION, Ranking, RankingPart, RequestState,
+};
 use sdm_contract::run::{Endpoint, StartRun};
 use sdm_contract::{
     CONTRACT_VERSION, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar, Step, Unit,
@@ -206,6 +208,74 @@ fn a_request_state_of_another_version_is_refused_by_name() {
     }
     // Its own version starts a run.
     assert!(predict_run(REQUEST_STATE_VERSION, payload_text(), "kumo-relational").is_ok());
+}
+
+#[test]
+fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
+    // The first candidate's position is the state's own (T2.8 fix 4); each
+    // later question's is past the one before, or the answers would be
+    // given back under other candidates' names.
+    let run = |first: u32, later: u32| {
+        let operation = Operation::Predict(Predict {
+            state: RequestState {
+                version: REQUEST_STATE_VERSION,
+                payload: AttachmentId(1),
+                query: AttachmentId(2),
+                forecast: None,
+                batches: None,
+                ranking: Some(Ranking {
+                    top_k: None,
+                    candidate: first,
+                    value: "1".into(),
+                    parts: vec![RankingPart {
+                        candidate: later,
+                        value: "2".into(),
+                        payload: AttachmentId(3),
+                        query: AttachmentId(4),
+                        request_id: Some("sdm-0123456789ac".into()),
+                    }],
+                }),
+            },
+            model: "kumo-relational".into(),
+            request_id: "sdm-0123456789ab".into(),
+            outputs: vec![],
+            default_outputs: true,
+            inference_asked: vec![],
+        });
+        let query =
+            serde_json::to_vec("PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id")
+                .unwrap();
+        let attachments = Attachments::from([
+            (
+                AttachmentId(1),
+                Attachment::Bytes(payload_text().into_bytes()),
+            ),
+            (AttachmentId(2), Attachment::Bytes(query.clone())),
+            (
+                AttachmentId(3),
+                Attachment::Bytes(payload_text().into_bytes()),
+            ),
+            (AttachmentId(4), Attachment::Bytes(query)),
+        ]);
+        start(
+            &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+            StartRun {
+                contract: CONTRACT_VERSION,
+                facts: facts(),
+                operation,
+            },
+            attachments,
+            Arc::new(NoZones),
+        )
+    };
+    for (first, later) in [(1, 0), (2, 2)] {
+        let refused = run(first, later).err().unwrap();
+        assert_eq!(refused.code, ErrorCode::InvalidRequest);
+        assert_eq!(refused.fields["field"], text("state.ranking.candidate"));
+    }
+    // A first candidate past 0, the host having held candidate 0 a repeat,
+    // starts a run.
+    assert!(run(1, 2).is_ok());
 }
 
 #[test]

@@ -2309,7 +2309,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         )
         .with_field("field", Detail::text("indices"))
         .with_field("rule", Detail::text("batched_part"))
-        .with_field("kind", Detail::text("forecast"))
+        .with_field("part_kind", Detail::text("forecast"))
         .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
         .with_field("parts", Detail::Scalar(Scalar::UInt64(steps.count)))
         .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));

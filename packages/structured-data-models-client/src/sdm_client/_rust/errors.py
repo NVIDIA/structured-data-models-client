@@ -230,7 +230,8 @@ def _worded(code: str, details: dict[str, Any]) -> str | None:
     said = details.get('rule', details.get('remedy'))
     if said == 'most_entities' and details.get('gathered_times', 1) != 1:
         said = 'most_entities_parts'
-    if said == 'batched_part' and details.get('kind') == 'ranking':
+    # A part's kind is the core's `part_kind`: `kind` is the error's own.
+    if said == 'batched_part' and details.get('part_kind') == 'ranking':
         said = 'batched_part_ranking'
     return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
 

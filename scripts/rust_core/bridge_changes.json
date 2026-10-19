@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T2.8: a ranking's candidates sent as Materialize.candidates and top_k among the call's values (TAKEN, VALUED), the caller's part limit (decompose.MOST_PARTS) sent on every call, the core holding a forecast's steps and a ranking's candidates to it, and a ranking's state kept (each later question's candidate, its name, payload and query, and top_k); the decomposition, its refusals and the forecast's top_k and MOST_PARTS refusals are the core's"
+      "moved": "T2.8: a ranking's candidates sent as Materialize.candidates and top_k among the call's values (TAKEN, VALUED), the caller's part limit (decompose.MOST_PARTS) sent on every call, the core holding a forecast's steps and a ranking's candidates to it, and a ranking's state kept (the first candidate's position, each later question's candidate, its name, payload and query, and top_k); the decomposition, its refusals and the forecast's top_k and MOST_PARTS refusals are the core's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -30,7 +30,7 @@
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T2.8: a ranking's questions passed as RequestState.ranking with an id drawn for each, the core's notice of the candidates left out worded by the host, an endpoint refusal said of the candidate whose question it answered, and the result laid out by _ranked; T2.8b's response_field: an item's scores and rankings given back as the core lays them out; each rankings member made a mapping by _mapping"
+      "moved": "T2.8: a ranking's questions passed as RequestState.ranking, its first candidate's position among them, with an id drawn for each, the core's notice of the candidates left out worded by the host, an endpoint refusal said of the candidate whose question it answered, and the result laid out by _ranked; T2.8b's response_field: an item's scores and rankings given back as the core lays them out; each rankings member made a mapping by _mapping"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
       "moved": "T2.8c: the host's half of main's _carry_the_answers_already_paid_for and _carry_the_steps_already_paid_for (1fc5a686): the answers the core carried (CoreError.answered) read into details['answered'] as a PredictionResult, with rows_answered for a batched request; the core decides what was answered. Fix 1: on whatever exception the call raised, not only the client's own, as main's client does."

@@ -989,9 +989,13 @@ pub struct Ranking {
     /// else the query's `TOP k`); none keeps every candidate scored.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_k: Option<u32>,
+    /// The first candidate's position among the candidates `materialize`
+    /// was given (0, but where the host held the first a repeat); its
+    /// question is the state's own. Each later part's position is past it,
+    /// in increasing order, or `predict` refuses the state.
+    pub candidate: u32,
     /// The first candidate as the result's `rankings` names it, the JSON
-    /// text of its value; its question is the state's own, and it is the
-    /// first named, at position 0.
+    /// text of its value.
     pub value: String,
     /// The question of each later candidate, in the order the candidates
     /// were named.

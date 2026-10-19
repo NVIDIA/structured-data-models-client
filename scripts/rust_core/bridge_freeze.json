@@ -51,7 +51,7 @@
         "fingerprint": "e8a27ee5705c5728f41e932b7996380ab3143f341fc1effd626e89057231ff44"
       },
       "gather": {
-        "fingerprint": "be1a350a630f4333469830aff8d348ec7192359e9f4c0b051087a60828da6622"
+        "fingerprint": "45294f16c1b3b08971e23f2a4f59df08c9f9a433677e030651aa2a653eb4ed0f"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
@@ -98,7 +98,7 @@
         "fingerprint": "664c947a782ca12105ae32ac14b180960adeecd35340107d972984ae9703866c"
       },
       "predict": {
-        "fingerprint": "d24dfcad07150a22bf9a31ed08e71e39d52d885c197f97c4c1b3cd1b3d611bad"
+        "fingerprint": "e2210f1af2e16350ab75e18a06b1d5166bcd04700823bb35d07dc0ea73f3df8b"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {

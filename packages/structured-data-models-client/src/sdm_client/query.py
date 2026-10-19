@@ -557,7 +557,12 @@ class PredictiveQuery:
         ranking = state['ranking']
         gathered = []
         for position, named, payload, query in [
-            (0, ranking['value'], whole.payloads[0], state['query']),
+            (
+                ranking['candidate'],
+                ranking['value'],
+                whole.payloads[0],
+                state['query'],
+            ),
             *ranking['parts'],
         ]:
             part = Request.materialized(

@@ -409,13 +409,14 @@ def gather(
             kept['batches'].append(batch['rows'])
     if state.get('ranking') is not None:
         # A ranking, which the core asked as one binary question per
-        # candidate (T2.8): the first candidate's query and name (the JSON
-        # text of its value, as the result names it), each later one's
-        # position among the candidates given, name, payload and query, and
-        # how many candidates a row keeps.
+        # candidate (T2.8): the first candidate's position, query and name
+        # (the JSON text of its value, as the result names it), each later
+        # one's position among the candidates given, name, payload and
+        # query, and how many candidates a row keeps.
         kept['query'] = query
         kept['ranking'] = {
             'top_k': state['ranking'].get('top_k'),
+            'candidate': state['ranking']['candidate'],
             'value': state['ranking']['value'],
             'parts': [
                 (

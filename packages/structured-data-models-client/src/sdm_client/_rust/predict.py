@@ -413,6 +413,7 @@ def predict(
             )
     if request.parts is not None and ranking is not None:
         operation['state']['ranking'] = {
+            'candidate': ranking['positions'][0],
             'value': ranking['values'][0],
             'parts': [],
         }

@@ -103,6 +103,19 @@ The lane before the rebase is kept as `t28-lane-d-before-rebase-34639b61`, where
 - The test host's scripted endpoint (T2.8c) fails a case's call as before, and answers probabilities where the case asks (the `host.rs` hunk of 9c72972c).
 - Rebase fixes outside this package's files: `RequestState` literals in `sdm-core/tests/multi_call.rs` gain `ranking: None`.
 
+### Fix round 4
+
+Round 2 (Claude): one P2 and one P3.
+
+- P2: the batched-ranking refusal was worded as the forecast's ("one per step"): the core named the part's kind `kind`, which the host's error details overwrite with the error's own kind, so the ranking's words were never chosen.
+  Both `batched_part` refusals now name it `part_kind` (the forecast's too), and the host words a ranking's "one per candidate ... one cold batch would drop it from every row", as the reference does.
+  A unit test in `test_the_rust_host.py` holds both wordings, through `error_from_core`.
+- P3: `RequestState.ranking` gains `candidate` (contract v27), the first candidate's position, which dispatch took to be 0; a host whose first candidate is a repeat now has its candidates named by their own positions.
+  Dispatch refuses by name (`INVALID_REQUEST`, field `state.ranking.candidate`) a state whose positions do not increase from the first.
+- P2 (Codex): an unexpected exception from the transport on a later question (the Databricks SDK's `ValueError` for a failed OAuth refresh) was raised without the reference's `details['parts_answered']`: the core counts the questions answered but carries no answers for a ranking, and `run._carried` gave nothing to the raised exception without them.
+  It now gives the counts (`calls_answered`, `parts_answered`) whether or not answers were carried, beside the exception's own details; Codex's six probes (DuckDB, SQLite, Postgres, with and without an unscored candidate first) match the reference.
+  A unit test in `test_the_rust_host.py` holds it; the test author writes the acceptance regression.
+
 ### Deviations and questions
 
 - The contract additions were v26 additions after T2.1b, as T2.2's and T2.18's were; with v26 merged into rust-core (2e5fbd27), they are v27's from the rebase, this package opening v27 as the phase's working entry.

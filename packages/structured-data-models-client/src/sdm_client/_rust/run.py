@@ -422,19 +422,25 @@ _ANSWERED_FIELDS = ('calls_answered', 'parts_answered')
 
 
 def _carried(error: StructuredDataError, raised: Exception) -> None:
-    r"""Puts on ``raised`` what the core carried on ``error``: its answers
-    and how many calls or steps gave them, beside any ``details`` it holds,
-    whatever exception it is, as the reference's client does."""
+    r"""Puts on ``raised`` what the core carried on ``error``: how many calls
+    or parts were answered before it, and their answers where the core
+    carried them (a ranking's are counted, never kept, T2.8), beside any
+    ``details`` it holds, whatever exception it is, as the reference's
+    client does."""
     answered = getattr(error, '_answered', None)
-    if answered is None:
+    counts = {
+        name: error.details[name]
+        for name in _ANSWERED_FIELDS
+        if name in (error.details or {})
+    }
+    if answered is None and not counts:
         return
     held = getattr(raised, 'details', None)
     details = held if isinstance(held, dict) else {}
-    for name in _ANSWERED_FIELDS:
-        if name in error.details:
-            details[name] = error.details[name]
+    details.update(counts)
     raised.details = details  # type: ignore[attr-defined]
-    raised._answered = answered  # type: ignore[attr-defined]
+    if answered is not None:
+        raised._answered = answered  # type: ignore[attr-defined]
 
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
