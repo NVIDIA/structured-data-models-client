@@ -219,7 +219,9 @@ entries:
   decision_ref: {file: docs/design/rust-core/phase-0/decisions.md, row: 29}
   notes: >-
     In the plan's section 5, which the owner approved with the plan; the owner
-    confirmed these entries (decisions row 29).
+    confirmed these entries (decisions row 29). Public calls cannot reach a
+    NaN ranking score: the reference refuses a non-finite probability first,
+    INVALID_RESPONSE said of the candidate, and so does the core (T2.8).
 
 - id: PD-2
   title: The size limit counted as json.dumps bytes
@@ -6430,25 +6432,24 @@ entries:
     measured by a case.
 
 - id: P2B-16
-  title: On SQLite, four S0 queries the reference answers are refused at materialize by E92-class rules, until T2.10
+  title: On SQLite, two S0 queries the reference answers are refused at materialize by E92-class rules, until T2.10
   kind: change
   old_behavior: >-
-    On SQLite the reference answers s0.boundary.deepest,
-    s0.boundary.digits-4300 and s0.boundary.start-past-64kb (a target
+    On SQLite the reference answers s0.boundary.start-past-64kb (a target
     filtered by WHERE) and s0.boundary.escapes (a condition on the target)
     through materialize.
   new_behavior: >-
     Off DuckDB every call a case makes runs on the core (T2.1d), so these
     S0 cases reach the core's materialize on SQLite, which refuses them
-    UNSUPPORTED_REQUEST, rule target_filter (deepest, digits-4300,
-    start-past-64kb) and condition (escapes), E92's class (phase-1/not-yet-refusals.md, rows 43
+    UNSUPPORTED_REQUEST, rule target_filter (start-past-64kb) and
+    condition (escapes), E92's class (phase-1/not-yet-refusals.md, rows 43
     and 20); python-core and rust-host alike. On DuckDB their materialize
     takes the old route, as before. T2.10 (PQL targets, which lifts both
     rules) retires this entry.
   affected_inputs: >-
     PredictiveQuery.materialize over a SQLite source on the core route of a
     query whose target has a WHERE filter or a condition.
-  cases: [s0.boundary.deepest@sqlite, s0.boundary.digits-4300@sqlite, s0.boundary.escapes@sqlite, s0.boundary.start-past-64kb@sqlite]
+  cases: [s0.boundary.escapes@sqlite, s0.boundary.start-past-64kb@sqlite]
   refs: [P1B-3]
   status: approved
   approved_by: owner
@@ -6460,12 +6461,11 @@ entries:
     Temporary: it lapses when T2.10 lands, and the final gate fails while
     it remains (register.py's TEMPORARY). Its cases' SQLite lines
     (<case>@sqlite) are the ones it covers. Measured at T2.2 on python-core
-    and rust-host.
+    and rust-host. T2.8 fix 2 narrowed it from four cases to two: the
+    single comparison a ranking's questions filter by (part of T2.10's
+    target_filter, lifted in T2.8) answers s0.boundary.deepest and
+    s0.boundary.digits-4300 as the reference does.
   case_outcomes:
-  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.deepest@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.digits-4300@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
   - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
   - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
   - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
@@ -6503,6 +6503,38 @@ entries:
     fixed (T2.2 fix 14, round 2's Claude P2-B): the sampler's memo of
     decision E52 keeps the spelling across a materializer's runs, so a
     second materialize reads none, as the reference; the ID is kept.
+
+# --- lane D entries (P2D-1..19) ---
+
+- id: P2D-1
+  title: On the core route a ranking candidate Python cannot hash is refused by name, where the reference raises TypeError
+  kind: change
+  old_behavior: >-
+    The reference's PredictiveQuery.materialize of a ranking keeps each
+    candidate once with dict.fromkeys (decompose._per_candidate), which
+    raises an unnamed TypeError for a candidate Python cannot hash (a list,
+    a dict, a set).
+  new_behavior: >-
+    On the core route, which only SDM_CORE_ROUTES forces in this build, the
+    Python host hands the core each candidate as the contract's given
+    candidate (T2.8), one it cannot hash as unreadable, the contract's word
+    for a value no contract type holds (decision E101), and the core refuses
+    it before any candidate is kept: StructuredDataError, INVALID_REQUEST,
+    field candidates, rule candidate_unreadable, reason not_a_key, naming
+    the candidate by its position.
+  affected_inputs: >-
+    PredictiveQuery.materialize of a ranking (RANK TOP k) on the core route
+    over a DuckDB, SQLite or Postgres source with a candidate Python cannot
+    hash.
+  cases: [T2.8]
+  refs: [T2.8, E66, E101]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer, a named error in place of a crash (E66(b)). The
+    call answers nothing on either route. Measured by the implementer's
+    probe of the ranking's inputs (tracker-T2.8.md, Probes).
 
 # --- lane E entries (P2E-1..19) ---
 
@@ -7118,27 +7150,24 @@ entries:
     rule:seed_size, a seed of 10**38); the core's seed is 64-bit.
 
 - id: P2C-7
-  title: On Postgres four S0 boundary queries are refused at materialize by the core's not-yet target rules, until T2.10
+  title: On Postgres two S0 boundary queries are refused at materialize by the core's not-yet target rules, until T2.10
   kind: change
   old_behavior: >-
-    The reference materializes s0.boundary.deepest, s0.boundary.digits-4300,
-    s0.boundary.escapes and s0.boundary.start-past-64kb on Postgres: each
-    query's target has a filter (deepest, digits-4300, start-past-64kb) or
-    is a condition (escapes).
+    The reference materializes s0.boundary.escapes and
+    s0.boundary.start-past-64kb on Postgres: each query's target has a
+    filter (start-past-64kb) or is a condition (escapes).
   new_behavior: >-
     Off DuckDB every call a case makes runs on the core (T2.1d), so these
     queries, which the core validates and accepts, reach its materialize,
     which refuses them UNSUPPORTED_REQUEST at materialize under its
-    not-yet rules (E92's class): rule target_filter for deepest,
-    digits-4300 and start-past-64kb, rule condition for escapes. T2.10
+    not-yet rules (E92's class): rule target_filter for start-past-64kb,
+    rule condition for escapes. T2.10
     (PQL targets: condition, target_filter) lifts both and retires this
     entry.
   affected_inputs: >-
     PredictiveQuery.materialize on the core route over a Postgres source of
     a query whose target has a filter or is a condition.
   cases:
-  - s0.boundary.deepest@postgres
-  - s0.boundary.digits-4300@postgres
   - s0.boundary.escapes@postgres
   - s0.boundary.start-past-64kb@postgres
   refs: [E92, T2.10]
@@ -7155,12 +7184,11 @@ entries:
     (P2B-16). Each row names materialize under statements_differ (T2.1e),
     as P2B-16's do: the reference's materialize statements are held only
     through that call and reported as diagnostic, as the orchestrator
-    decided for the same four on SQLite.
+    decided for the same four on SQLite. T2.8 fix 2 narrowed it from four
+    cases to two, as P2B-16: T2.8's lift of the single comparison a
+    ranking's questions filter by answers s0.boundary.deepest and
+    s0.boundary.digits-4300 as the reference does.
   case_outcomes:
-  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.deepest@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.digits-4300@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
   - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
   - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
   - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
