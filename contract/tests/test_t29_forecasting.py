@@ -38,7 +38,16 @@ reference's at 6298913c. Each test's one line says what it proves:
 - ``response_field`` for quantiles: each case whose answer carries
   quantiles answers through ``predict`` with them laid out as the
   reference lays them out (``to_pandas()``'s columns and rows), each
-  step's on its own rows.
+  step's on its own rows;
+- a lagged average with empty windows (``forecast.lag-average-empty-windows``,
+  the orchestrator's decision under KO2-70 to fix the reference's
+  misalignment in the core): control, the reference packs the non-empty
+  windows' values at the top of each lag column, its targets being the
+  windows' as computed here from the shop base's orders; exit, python-core
+  sends python-ref's requests but for the lags, each lag cell the value of
+  that row's own window, computed here from the shop base's orders. The
+  comparator sees the difference, which the implementer registers naming
+  the case.
 
 Gating: ``t29-pending.json``'s ``pending`` names, as ``py:<test>[<database>]``,
 the tests that failed when written. Each must still fail (strict); once one
@@ -116,7 +125,10 @@ RESPONSE_FIELD = (
     'forecast.quantiles-and-prediction',
     'quantiles.regression',
 )
-FAMILY = (*NUM_FORECASTS, *LAG_TIMESTEPS, *QUANTILES)
+#: A lagged average whose windows are sometimes empty: the reference's lags
+#: misaligned, the core's each on its own row (KO2-70).
+LAG_ALIGNED = 'forecast.lag-average-empty-windows'
+FAMILY = (*NUM_FORECASTS, *LAG_TIMESTEPS, *QUANTILES, LAG_ALIGNED)
 #: The queries the reference refuses before anything is read.
 REFUSED_QUERIES = (
     'forecast.steps-zero',
@@ -134,6 +146,7 @@ LAGS = {
     'lag.regression-2': 2,
     'lag.binary-2': 2,
     'lag.static-2': 0,
+    LAG_ALIGNED: 2,
 }
 #: How many steps each forecast the reference answers is asked as.
 STEPS = {
@@ -147,6 +160,7 @@ STEPS = {
     'forecast.quantiles': 2,
     'forecast.quantiles-and-prediction': 2,
     'forecast.quantiles-unanswered': 2,
+    LAG_ALIGNED: 2,
 }
 QUANTILE_COLUMNS = ['quantile_0.1', 'quantile_0.5', 'quantile_0.9']
 
@@ -291,7 +305,7 @@ def test_the_cases_are_the_design_row_s() -> None:
         assert runner.case_databases(case) == DATABASES, case_id
         assert given['materialize']['indices'] == [0, 1], case_id
         assert ('lag_timesteps' in given['materialize']) == (
-            case_id in LAG_TIMESTEPS
+            case_id in (*LAG_TIMESTEPS, LAG_ALIGNED)
         ), case_id
         assert ('outputs' in given) == (case_id in QUANTILES), case_id
         if case_id in QUANTILES:
@@ -560,10 +574,213 @@ def test_response_field_for_quantiles_as_the_reference(database: str) -> None:
     )
 
 
+# --- a lagged average with empty windows (KO2-70) ---------------------------------
+
+#: The window of LAG_ALIGNED's query, in days, and its lags.
+WINDOW_DAYS = 28
+LAG_STEPS = 2
+
+
+@functools.cache
+def shop_orders() -> tuple[tuple[int, int, float], ...]:
+    r"""The shop base's orders, as ``contract/bases.yaml`` builds them:
+    order i is user ``i % 8``'s, at day ``7 i`` from 2023-01-01, priced
+    ``10 + 1.5 i``; each as (user, day, price)."""
+    bases = _runner().load_bases()
+    assert any(
+        '(i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, '
+        "TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM "
+        'range(80)' in statement
+        for statement in bases['shop']
+    ), 'the shop base is not the one this computation reads'
+    return tuple((i % 8, 7 * i, 10 + 1.5 * i) for i in range(80))
+
+
+def _day(text: str) -> int:
+    r"""A payload's anchor time as days from 2023-01-01 (each a midnight)."""
+    import datetime
+
+    at = datetime.datetime.fromisoformat(text.replace('Z', '+00:00'))
+    assert at.time() == datetime.time(0), text
+    return (at.date() - datetime.date(2023, 1, 1)).days
+
+
+def window_average(user: int, after: int, until: int) -> float | None:
+    r"""The average price of ``user``'s orders after day ``after`` and up to
+    day ``until``, or None where the window holds none."""
+    prices = [
+        p for u, day, p in shop_orders() if u == user and after < day <= until
+    ]
+    return sum(prices) / len(prices) if prices else None
+
+
+def by_hand(body: dict[str, Any], step: int) -> dict[str, list[Any]]:
+    r"""For the request of forecast step ``step`` (from 0; its window days
+    ``step * 28`` to ``(step + 1) * 28``), each instance row's target and
+    lags, by column, context rows then rows to score, as the shop base's
+    orders give them: a row's entity is the user ``__kumo_entity_ref_0``
+    names, the target the average over (anchor + start, anchor + end], and
+    lag j (``__kumo_arl<j>__``) the average over the window j + 1 steps of
+    the query's end back: (anchor - (j + 1) end + start, anchor - j end]."""
+    start, end = step * WINDOW_DAYS, (step + 1) * WINDOW_DAYS
+    out: dict[str, list[Any]] = {}
+    for half in ('context', 'predict'):
+        table = body[half]['instance_table']
+        at = {name: i for i, name in enumerate(table['columns'])}
+        for row in table['rows']:
+            user = int(row[at['__kumo_entity_ref_0']]['number'])
+            day = _day(row[at['__kumo_anchor_time']])
+            if half == 'context':
+                out.setdefault('TARGET', []).append(
+                    window_average(user, day + start, day + end)
+                )
+            for j in range(LAG_STEPS):
+                out.setdefault(f'__kumo_arl{j}__', []).append(
+                    window_average(
+                        user, day - (j + 1) * end + start, day - j * end
+                    )
+                )
+    return out
+
+
+def _cells(body: dict[str, Any], column: str) -> list[Any]:
+    r"""A column's cells over the context rows then the rows to score, each
+    number as a float, an empty cell None."""
+    out = []
+    for half in ('context', 'predict'):
+        table = body[half]['instance_table']
+        if column not in table['columns']:
+            continue
+        at = table['columns'].index(column)
+        out.extend(
+            None if row[at] is None else float(row[at]['number'])
+            for row in table['rows']
+        )
+    return out
+
+
+def test_the_reference_s_lagged_average_is_packed() -> None:
+    r"""Control: on each database python-ref's requests for the lagged
+    average are the ones computed here (every context row's target is its
+    window's average, so the entity and window reading is the engine's),
+    and each lag column holds the non-empty windows' values in row order
+    packed at the top, not each on its own row: the misalignment the core
+    fixes. Not vacuous: three lag columns are packed, and the two rows
+    scored get no second lag where their windows hold 46.0 and 47.5."""
+    runner = _runner()
+    reference = reference_lines()
+    for database in DATABASES:
+        sent = requests(reference[runner.case_key(LAG_ALIGNED, database)])
+        assert len(sent) == 2, database
+        packed = 0
+        for step, (_, _, body) in enumerate(sent):
+            hand = by_hand(body, step)
+            assert _cells(body, 'TARGET') == hand['TARGET'], (database, step)
+            for j in range(LAG_STEPS):
+                column = f'__kumo_arl{j}__'
+                own = hand[column]
+                values = [v for v in own if v is not None]
+                top = values + [None] * (len(own) - len(values))
+                assert _cells(body, column) == top, (database, step, column)
+                packed += own != top
+        assert packed == 3, database
+        last = by_hand(sent[0][2], 0)['__kumo_arl1__'][-2:]
+        assert last == [46.0, 47.5], (database, last)
+        assert _cells(sent[0][2], '__kumo_arl1__')[-2:] == [None, None]
+        # The exit's check refuses the reference's own requests, and takes
+        # them with each lag cell set to its row's own window.
+        assert len(on_their_own_rows(sent, sent)) == 3, database
+        assert on_their_own_rows(sent, aligned(sent)) == [], database
+
+
+def aligned(sent: list[Any]) -> list[Any]:
+    r"""``sent`` with each lag cell the value of its row's own window."""
+    out = []
+    for step, (method, path, body) in enumerate(sent):
+        body = json.loads(json.dumps(body))
+        hand = by_hand(body, step)
+        for j in range(LAG_STEPS):
+            column = f'__kumo_arl{j}__'
+            values = iter(hand[column])
+            for half in ('context', 'predict'):
+                table = body[half]['instance_table']
+                at = table['columns'].index(column)
+                for row in table['rows']:
+                    value = next(values)
+                    row[at] = None if value is None else {'number': repr(value)}
+        out.append((method, path, body))
+    return out
+
+
+def _without(body: dict[str, Any], columns: list[str]) -> dict[str, Any]:
+    r"""A request with ``columns`` taken out of both instance tables."""
+    body = json.loads(json.dumps(body))
+    for half in ('context', 'predict'):
+        table = body[half]['instance_table']
+        keep = [i for i, c in enumerate(table['columns']) if c not in columns]
+        table['columns'] = [table['columns'][i] for i in keep]
+        table['rows'] = [[row[i] for i in keep] for row in table['rows']]
+    return body
+
+
+def on_their_own_rows(theirs: list[Any], mine: list[Any]) -> list[str]:
+    r"""How ``mine`` (a core's requests) departs from python-ref's
+    requests ``theirs`` with each lag cell the value of its row's own
+    window: every other cell, key and value python-ref's, each lag
+    by_hand's."""
+    if len(mine) != len(theirs):
+        return [f'{len(mine)} requests where python-ref sent {len(theirs)}']
+    problems = []
+    for step, ((_, _, want), (_, _, got)) in enumerate(
+        zip(theirs, mine, strict=True)
+    ):
+        hand = by_hand(want, step)
+        lags = [f'__kumo_arl{j}__' for j in range(LAG_STEPS)]
+        for column in lags:
+            if _cells(got, column) != hand[column]:
+                problems.append(
+                    f'step {step + 1}: {column} is {_cells(got, column)}, not each '
+                    f"row's own window {hand[column]}"
+                )
+        if _without(got, lags) != _without(want, lags):
+            problems.append(
+                f"step {step + 1}: the request but its lags is not python-ref's"
+            )
+    return problems
+
+
+@pytest.mark.parametrize('database', DATABASES)
+def test_lagged_average_on_its_own_rows(database: str) -> None:
+    r""" "``lag_timesteps``", as the orchestrator decided under KO2-70:
+    python-core answers the lagged average with empty windows through
+    ``predict`` on ``database``, through the core, sending python-ref's
+    requests but for the lags, each lag cell the average of that row's own
+    window, computed here from the shop base's orders (where the reference
+    packs them at the top of the column)."""
+    if not reachable(database):
+        return
+
+    def check() -> None:
+        runner = _runner()
+        key = runner.case_key(LAG_ALIGNED, database)
+        mine = _cases_on(database)[key]
+        theirs = reference_lines()[key]
+        assert _outcome(mine) == _outcome(theirs), _outcome(mine)
+        assert mine['identity']['native_loaded']
+        assert {'describe_source', 'materialize', 'predict'} <= set(
+            mine['identity']['operations']
+        )
+        problems = on_their_own_rows(requests(theirs), requests(mine))
+        assert not problems, '\n'.join(problems)
+
+    held(f'test_lagged_average_on_its_own_rows[{database}]', check)
+
+
 #: The exit tests, each run on each database.
 EXITS = (
     'test_num_forecasts_as_the_reference',
     'test_lag_timesteps_as_the_reference',
     'test_quantiles_asked_as_the_reference',
     'test_response_field_for_quantiles_as_the_reference',
+    'test_lagged_average_on_its_own_rows',
 )

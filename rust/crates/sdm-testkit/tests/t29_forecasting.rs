@@ -37,6 +37,14 @@
 //!   and `0.9`, as this host records a map, each value the rule's for the
 //!   row's step and position.
 //!
+//! - a lagged average with empty windows (`forecast.lag-average-empty-windows`,
+//!   the orchestrator's decision under KO2-70): this host sends
+//!   python-ref's requests but for the lags, each lag cell the average of
+//!   that row's own window, computed here from the shop base's orders,
+//!   where the reference packs the non-empty windows' values at the top of
+//!   the column (`contract/tests/test_t29_forecasting.py` holds the
+//!   reference's packing and the same computation's targets).
+//!
 //! Gating: `contract/tests/t29-pending.json`'s `pending` names, as
 //! `rust:<test>`, the tests that failed when written. Each must still fail
 //! (strict); once one passes it fails, naming itself, until it is taken
@@ -406,5 +414,207 @@ fn rust_host_response_field_for_quantiles_on_duckdb() {
 fn rust_host_response_field_for_quantiles_on_sqlite() {
     gated("rust_host_response_field_for_quantiles_on_sqlite", || {
         response_field("sqlite");
+    });
+}
+
+/// A lagged average whose windows are sometimes empty (KO2-70).
+const LAG_ALIGNED: &str = "forecast.lag-average-empty-windows";
+/// Its query's window, in days, and its lags.
+const WINDOW_DAYS: i64 = 28;
+const LAG_STEPS: usize = 2;
+
+/// The shop base's orders, as `contract/bases.yaml` builds them: order `i`
+/// is user `i % 8`'s, at day `7 i` from 2023-01-01, priced `10 + 1.5 i`;
+/// each as (user, day, price).
+fn shop_orders() -> Vec<(i64, i64, f64)> {
+    let text = std::fs::read_to_string(root().join("contract/bases.yaml")).unwrap();
+    assert!(
+        text.contains(
+            "(i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, \
+             TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80)"
+        ),
+        "the shop base is not the one this computation reads"
+    );
+    (0..80_i32)
+        .map(|i| {
+            (
+                i64::from(i % 8),
+                i64::from(7 * i),
+                10.0 + 1.5 * f64::from(i),
+            )
+        })
+        .collect()
+}
+
+/// Days from 1970-01-01 of a civil date.
+fn civil(year: i64, month: i64, day: i64) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// A payload's anchor time (a midnight) as days from 2023-01-01.
+fn day_of(text: &str) -> i64 {
+    assert!(text.ends_with("T00:00:00.000000Z"), "{text}");
+    let part = |r: std::ops::Range<usize>| text[r].parse::<i64>().unwrap();
+    civil(part(0..4), part(5..7), part(8..10)) - civil(2023, 1, 1)
+}
+
+/// The average price of `user`'s orders after day `after` and up to day
+/// `until`, or `None` where the window holds none.
+fn window_average(orders: &[(i64, i64, f64)], user: i64, after: i64, until: i64) -> Option<f64> {
+    let prices: Vec<f64> = orders
+        .iter()
+        .filter(|(u, day, _)| *u == user && after < *day && *day <= until)
+        .map(|(_, _, price)| *price)
+        .collect();
+    (!prices.is_empty()).then(|| prices.iter().sum::<f64>() / prices.len() as f64)
+}
+
+/// A column's cells over the context rows then the rows to score, each
+/// number as a float, an empty cell `None`.
+fn cells(body: &Value, column: &str) -> Vec<Option<f64>> {
+    let mut out = Vec::new();
+    for half in ["context", "predict"] {
+        let table = &body[half]["instance_table"];
+        let Some(at) = table["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|c| c == column)
+        else {
+            continue;
+        };
+        for row in table["rows"].as_array().unwrap() {
+            out.push(row[at]["number"].as_str().map(|n| n.parse().unwrap()));
+        }
+    }
+    out
+}
+
+/// For the request of forecast step `step` (from 0; its window days
+/// `step * 28` to `(step + 1) * 28`), each instance row's lag `j` as the
+/// shop base's orders give it, context rows then rows to score: the
+/// average over (anchor - (j + 1) end + start, anchor - j end] of the user
+/// `__kumo_entity_ref_0` names.
+fn by_hand(body: &Value, step: i64, j: usize) -> Vec<Option<f64>> {
+    let orders = shop_orders();
+    let (start, end) = (step * WINDOW_DAYS, (step + 1) * WINDOW_DAYS);
+    let back = i64::try_from(j).unwrap();
+    let mut out = Vec::new();
+    for half in ["context", "predict"] {
+        let table = &body[half]["instance_table"];
+        let columns = table["columns"].as_array().unwrap();
+        let at = |name: &str| columns.iter().position(|c| c == name).unwrap();
+        let (entity, anchor) = (at("__kumo_entity_ref_0"), at("__kumo_anchor_time"));
+        for row in table["rows"].as_array().unwrap() {
+            let user: i64 = row[entity]["number"].as_str().unwrap().parse().unwrap();
+            let day = day_of(row[anchor].as_str().unwrap());
+            out.push(window_average(
+                &orders,
+                user,
+                day - (back + 1) * end + start,
+                day - back * end,
+            ));
+        }
+    }
+    out
+}
+
+/// A request with `columns` taken out of both instance tables.
+fn without(body: &Value, columns: &[String]) -> Value {
+    let mut body = body.clone();
+    for half in ["context", "predict"] {
+        let table = &mut body[half]["instance_table"];
+        let names = table["columns"].as_array().unwrap().clone();
+        let keep: Vec<usize> = (0..names.len())
+            .filter(|&i| !columns.iter().any(|c| names[i] == c.as_str()))
+            .collect();
+        table["columns"] = Value::Array(keep.iter().map(|&i| names[i].clone()).collect());
+        let rows = table["rows"].as_array().unwrap().clone();
+        table["rows"] = Value::Array(
+            rows.iter()
+                .map(|row| Value::Array(keep.iter().map(|&i| row[i].clone()).collect()))
+                .collect(),
+        );
+    }
+    body
+}
+
+fn lagged_average_on_its_own_rows(database: &str) {
+    let reference = reference();
+    let (key, _, seen) = observed(&[LAG_ALIGNED], database).remove(0);
+    let seen = seen.unwrap_or_else(|e| panic!("{key}: {e}"));
+    let Answer::Predicted(answer) = &seen.answer else {
+        panic!("{key}: {:?}", seen.answer);
+    };
+    let (mine, theirs) = (my_requests(answer), their_requests(&reference[&key]));
+    assert_eq!(mine.len(), theirs.len(), "{key}: requests");
+    let lags: Vec<String> = (0..LAG_STEPS).map(|j| format!("__kumo_arl{j}__")).collect();
+    let mut problems = Vec::new();
+    for (step, (got, want)) in (0_i64..).zip(mine.iter().zip(&theirs)) {
+        for (j, column) in lags.iter().enumerate() {
+            let own = by_hand(want, step, j);
+            if cells(got, column) != own {
+                problems.push(format!(
+                    "{key}: step {}: {column} is {:?}, not each row's own window {own:?}",
+                    step + 1,
+                    cells(got, column)
+                ));
+            }
+        }
+        if without(got, &lags) != without(want, &lags) {
+            problems.push(format!(
+                "{key}: step {}: the request but its lags is not python-ref's",
+                step + 1
+            ));
+        }
+    }
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
+/// Control: the computation reads the reference's requests as the engine
+/// does where nothing is dropped, and is not vacuous: python-ref's lags are
+/// the non-empty windows packed at the top of three of the four columns,
+/// and the rows scored get no second lag where their windows hold 46.0
+/// and 47.5.
+#[test]
+fn the_reference_s_lagged_average_is_packed() {
+    let reference = reference();
+    for database in ["duckdb", "sqlite", "postgres"] {
+        let theirs = their_requests(&reference[&key(LAG_ALIGNED, database)]);
+        assert_eq!(theirs.len(), 2, "{database}");
+        let mut packed = 0;
+        for (step, body) in (0_i64..).zip(&theirs) {
+            for j in 0..LAG_STEPS {
+                let own = by_hand(body, step, j);
+                let mut top: Vec<Option<f64>> =
+                    own.iter().copied().filter(Option::is_some).collect();
+                top.resize(own.len(), None);
+                assert_eq!(cells(body, &format!("__kumo_arl{j}__")), top, "{database}");
+                packed += usize::from(own != top);
+            }
+        }
+        assert_eq!(packed, 3, "{database}");
+        let own = by_hand(&theirs[0], 0, 1);
+        assert_eq!(own[own.len() - 2..], [Some(46.0), Some(47.5)], "{database}");
+    }
+}
+
+#[test]
+fn rust_host_lagged_average_on_its_own_rows_on_duckdb() {
+    gated("rust_host_lagged_average_on_its_own_rows_on_duckdb", || {
+        lagged_average_on_its_own_rows("duckdb");
+    });
+}
+
+#[test]
+fn rust_host_lagged_average_on_its_own_rows_on_sqlite() {
+    gated("rust_host_lagged_average_on_its_own_rows_on_sqlite", || {
+        lagged_average_on_its_own_rows("sqlite");
     });
 }
