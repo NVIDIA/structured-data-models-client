@@ -39,7 +39,7 @@ reference's at 6298913c. Each test's one line says what it proves:
   quantiles answers through ``predict`` with them laid out as the
   reference lays them out (``to_pandas()``'s columns and rows), each
   step's on its own rows;
-- a lagged average with empty windows (``forecast.lag-average-empty-windows``,
+- a lagged average with empty windows (``lag.average-empty-windows``, one call,
   the orchestrator's decision under KO2-70 to fix the reference's
   misalignment in the core): control, the reference packs the non-empty
   windows' values at the top of each lag column, its targets being the
@@ -127,7 +127,7 @@ RESPONSE_FIELD = (
 )
 #: A lagged average whose windows are sometimes empty: the reference's lags
 #: misaligned, the core's each on its own row (KO2-70).
-LAG_ALIGNED = 'forecast.lag-average-empty-windows'
+LAG_ALIGNED = 'lag.average-empty-windows'
 FAMILY = (*NUM_FORECASTS, *LAG_TIMESTEPS, *QUANTILES, LAG_ALIGNED)
 #: The queries the reference refuses before anything is read.
 REFUSED_QUERIES = (
@@ -160,7 +160,6 @@ STEPS = {
     'forecast.quantiles': 2,
     'forecast.quantiles-and-prediction': 2,
     'forecast.quantiles-unanswered': 2,
-    LAG_ALIGNED: 2,
 }
 QUANTILE_COLUMNS = ['quantile_0.1', 'quantile_0.5', 'quantile_0.9']
 
@@ -615,8 +614,8 @@ def window_average(user: int, after: int, until: int) -> float | None:
 
 
 def by_hand(body: dict[str, Any], step: int) -> dict[str, list[Any]]:
-    r"""For the request of forecast step ``step`` (from 0; its window days
-    ``step * 28`` to ``(step + 1) * 28``), each instance row's target and
+    r"""For the request of forecast step ``step`` (from 0, a regression's one
+    request step 0; its window days ``step * 28`` to ``(step + 1) * 28``), each instance row's target and
     lags, by column, context rows then rows to score, as the shop base's
     orders give them: a row's entity is the user ``__kumo_entity_ref_0``
     names, the target the average over (anchor + start, anchor + end], and
@@ -665,13 +664,14 @@ def test_the_reference_s_lagged_average_is_packed() -> None:
     window's average, so the entity and window reading is the engine's),
     and each lag column holds the non-empty windows' values in row order
     packed at the top, not each on its own row: the misalignment the core
-    fixes. Not vacuous: three lag columns are packed, and the two rows
-    scored get no second lag where their windows hold 46.0 and 47.5."""
+    fixes. Not vacuous: in its one request both lag columns are packed, and
+    the two rows scored get no first lag where their windows hold 34.0 and
+    35.5."""
     runner = _runner()
     reference = reference_lines()
     for database in DATABASES:
         sent = requests(reference[runner.case_key(LAG_ALIGNED, database)])
-        assert len(sent) == 2, database
+        assert len(sent) == 1, database
         packed = 0
         for step, (_, _, body) in enumerate(sent):
             hand = by_hand(body, step)
@@ -683,13 +683,13 @@ def test_the_reference_s_lagged_average_is_packed() -> None:
                 top = values + [None] * (len(own) - len(values))
                 assert _cells(body, column) == top, (database, step, column)
                 packed += own != top
-        assert packed == 3, database
-        last = by_hand(sent[0][2], 0)['__kumo_arl1__'][-2:]
-        assert last == [46.0, 47.5], (database, last)
-        assert _cells(sent[0][2], '__kumo_arl1__')[-2:] == [None, None]
+        assert packed == 2, database
+        last = by_hand(sent[0][2], 0)['__kumo_arl0__'][-2:]
+        assert last == [34.0, 35.5], (database, last)
+        assert _cells(sent[0][2], '__kumo_arl0__')[-2:] == [None, None]
         # The exit's check refuses the reference's own requests, and takes
         # them with each lag cell set to its row's own window.
-        assert len(on_their_own_rows(sent, sent)) == 3, database
+        assert len(on_their_own_rows(sent, sent)) == 2, database
         assert on_their_own_rows(sent, aligned(sent)) == [], database
 
 

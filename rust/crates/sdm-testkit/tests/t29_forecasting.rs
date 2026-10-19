@@ -37,7 +37,7 @@
 //!   and `0.9`, as this host records a map, each value the rule's for the
 //!   row's step and position.
 //!
-//! - a lagged average with empty windows (`forecast.lag-average-empty-windows`,
+//! - a lagged average with empty windows (`lag.average-empty-windows`, one call,
 //!   the orchestrator's decision under KO2-70): this host sends
 //!   python-ref's requests but for the lags, each lag cell the average of
 //!   that row's own window, computed here from the shop base's orders,
@@ -418,7 +418,7 @@ fn rust_host_response_field_for_quantiles_on_sqlite() {
 }
 
 /// A lagged average whose windows are sometimes empty (KO2-70).
-const LAG_ALIGNED: &str = "forecast.lag-average-empty-windows";
+const LAG_ALIGNED: &str = "lag.average-empty-windows";
 /// Its query's window, in days, and its lags.
 const WINDOW_DAYS: i64 = 28;
 const LAG_STEPS: usize = 2;
@@ -496,7 +496,8 @@ fn cells(body: &Value, column: &str) -> Vec<Option<f64>> {
     out
 }
 
-/// For the request of forecast step `step` (from 0; its window days
+/// For the request of forecast step `step` (from 0, a regression's one
+/// request step 0; its window days
 /// `step * 28` to `(step + 1) * 28`), each instance row's lag `j` as the
 /// shop base's orders give it, context rows then rows to score: the
 /// average over (anchor - (j + 1) end + start, anchor - j end] of the user
@@ -579,15 +580,15 @@ fn lagged_average_on_its_own_rows(database: &str) {
 
 /// Control: the computation reads the reference's requests as the engine
 /// does where nothing is dropped, and is not vacuous: python-ref's lags are
-/// the non-empty windows packed at the top of three of the four columns,
-/// and the rows scored get no second lag where their windows hold 46.0
-/// and 47.5.
+/// the non-empty windows packed at the top of both lag columns of its one
+/// request, and the rows scored get no first lag where their windows hold
+/// 34.0 and 35.5.
 #[test]
 fn the_reference_s_lagged_average_is_packed() {
     let reference = reference();
     for database in ["duckdb", "sqlite", "postgres"] {
         let theirs = their_requests(&reference[&key(LAG_ALIGNED, database)]);
-        assert_eq!(theirs.len(), 2, "{database}");
+        assert_eq!(theirs.len(), 1, "{database}");
         let mut packed = 0;
         for (step, body) in (0_i64..).zip(&theirs) {
             for j in 0..LAG_STEPS {
@@ -599,9 +600,11 @@ fn the_reference_s_lagged_average_is_packed() {
                 packed += usize::from(own != top);
             }
         }
-        assert_eq!(packed, 3, "{database}");
-        let own = by_hand(&theirs[0], 0, 1);
-        assert_eq!(own[own.len() - 2..], [Some(46.0), Some(47.5)], "{database}");
+        assert_eq!(packed, 2, "{database}");
+        let own = by_hand(&theirs[0], 0, 0);
+        assert_eq!(own[own.len() - 2..], [Some(34.0), Some(35.5)], "{database}");
+        let sent = cells(&theirs[0], "__kumo_arl0__");
+        assert_eq!(sent[sent.len() - 2..], [None, None], "{database}");
     }
 }
 

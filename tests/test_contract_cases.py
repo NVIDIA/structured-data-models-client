@@ -464,7 +464,7 @@ T29_FORECASTING = (
     'forecast.quantiles-and-prediction',
     'forecast.quantiles-unanswered',
     'quantiles.regression',
-    'forecast.lag-average-empty-windows',
+    'lag.average-empty-windows',
 )
 
 
