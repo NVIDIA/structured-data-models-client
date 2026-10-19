@@ -45,6 +45,11 @@
 //!   the column (`contract/tests/test_t29_forecasting.py` holds the
 //!   reference's packing and the same computation's targets).
 //!
+//! - a lagged condition asked one entity a call (`lag.condition-per-call`,
+//!   `rows_per_call=1`; Codex, round 2): this host's calls, as many as
+//!   python-ref's, each declare the lag columns in their schema as
+//!   python-ref's same call does (bool), whatever the call's values.
+//!
 //! Gating: `contract/tests/t29-pending.json`'s `pending` names, as
 //! `rust:<test>`, the tests that failed when written. Each must still fail
 //! (strict); once one passes it fails, naming itself, until it is taken
@@ -620,4 +625,65 @@ fn rust_host_lagged_average_on_its_own_rows_on_sqlite() {
     gated("rust_host_lagged_average_on_its_own_rows_on_sqlite", || {
         lagged_average_on_its_own_rows("sqlite");
     });
+}
+
+/// A lagged condition asked one entity a call (Codex, round 2).
+const LAG_DTYPE: &str = "lag.condition-per-call";
+
+/// Each call's lag columns as its request's schema declares them: their
+/// dtype, by name.
+fn lag_dtypes(requests: &[Value]) -> Vec<BTreeMap<String, String>> {
+    requests
+        .iter()
+        .map(|body| {
+            body["schema"]["instance_table"]["columns"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter(|(name, _)| name.starts_with("__kumo_arl"))
+                .map(|(name, column)| {
+                    (
+                        name.clone(),
+                        column["dtype"].as_str().unwrap_or_default().to_owned(),
+                    )
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn lag_dtype_per_call(database: &str) {
+    let reference = reference();
+    let (key, _, seen) = observed(&[LAG_DTYPE], database).remove(0);
+    let seen = seen.unwrap_or_else(|e| panic!("{key}: {e}"));
+    let Answer::Predicted(answer) = &seen.answer else {
+        panic!("{key}: {:?}", seen.answer);
+    };
+    let theirs = their_requests(&reference[&key]);
+    assert_eq!(theirs.len(), 2, "{key}: python-ref's calls");
+    assert_eq!(
+        lag_dtypes(&my_requests(answer)),
+        lag_dtypes(&theirs),
+        "{key}: each call's lag columns as python-ref's same call declares them"
+    );
+}
+
+#[test]
+fn rust_host_lag_dtype_per_call_as_the_reference_on_duckdb() {
+    gated(
+        "rust_host_lag_dtype_per_call_as_the_reference_on_duckdb",
+        || {
+            lag_dtype_per_call("duckdb");
+        },
+    );
+}
+
+#[test]
+fn rust_host_lag_dtype_per_call_as_the_reference_on_sqlite() {
+    gated(
+        "rust_host_lag_dtype_per_call_as_the_reference_on_sqlite",
+        || {
+            lag_dtype_per_call("sqlite");
+        },
+    );
 }

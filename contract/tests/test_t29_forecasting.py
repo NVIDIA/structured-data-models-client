@@ -39,6 +39,11 @@ reference's at 6298913c. Each test's one line says what it proves:
   quantiles answers through ``predict`` with them laid out as the
   reference lays them out (``to_pandas()``'s columns and rows), each
   step's on its own rows;
+- a lagged condition asked one entity a call (``lag.condition-per-call``,
+  ``rows_per_call=1``; Codex, round 2): control, the reference declares
+  each lag column bool in every call's schema, and one call's first lags
+  are all empty on their own rows (computed here); exit, python-core and
+  rust-host declare each call's lag columns as the reference does;
 - a lagged average with empty windows (``lag.average-empty-windows``, one call,
   the orchestrator's decision under KO2-70 to fix the reference's
   misalignment in the core): control, the reference packs the non-empty
@@ -128,7 +133,10 @@ RESPONSE_FIELD = (
 #: A lagged average whose windows are sometimes empty: the reference's lags
 #: misaligned, the core's each on its own row (KO2-70).
 LAG_ALIGNED = 'lag.average-empty-windows'
-FAMILY = (*NUM_FORECASTS, *LAG_TIMESTEPS, *QUANTILES, LAG_ALIGNED)
+#: A lagged condition asked one entity a call: each call's lag columns
+#: declared bool, as the reference declares them (Codex, round 2).
+LAG_DTYPE = 'lag.condition-per-call'
+FAMILY = (*NUM_FORECASTS, *LAG_TIMESTEPS, *QUANTILES, LAG_ALIGNED, LAG_DTYPE)
 #: The queries the reference refuses before anything is read.
 REFUSED_QUERIES = (
     'forecast.steps-zero',
@@ -147,6 +155,7 @@ LAGS = {
     'lag.binary-2': 2,
     'lag.static-2': 0,
     LAG_ALIGNED: 2,
+    LAG_DTYPE: 2,
 }
 #: How many steps each forecast the reference answers is asked as.
 STEPS = {
@@ -304,7 +313,7 @@ def test_the_cases_are_the_design_row_s() -> None:
         assert runner.case_databases(case) == DATABASES, case_id
         assert given['materialize']['indices'] == [0, 1], case_id
         assert ('lag_timesteps' in given['materialize']) == (
-            case_id in (*LAG_TIMESTEPS, LAG_ALIGNED)
+            case_id in (*LAG_TIMESTEPS, LAG_ALIGNED, LAG_DTYPE)
         ), case_id
         assert ('outputs' in given) == (case_id in QUANTILES), case_id
         if case_id in QUANTILES:
@@ -372,7 +381,9 @@ def test_the_reference_lines_are_not_vacuous() -> None:
                     sent
                 ), (case_id, database)
             else:
-                assert len(sent) == 1, (case_id, database)
+                # One call, but lag.condition-per-call's two (rows_per_call=1).
+                calls = 2 if case_id == LAG_DTYPE else 1
+                assert len(sent) == calls, (case_id, database)
                 assert 'forecast_step' not in columns, (case_id, database)
             for _, _, body in sent:
                 wanted = case['input'].get('outputs')
@@ -776,6 +787,72 @@ def test_lagged_average_on_its_own_rows(database: str) -> None:
     held(f'test_lagged_average_on_its_own_rows[{database}]', check)
 
 
+# --- a lagged condition asked one entity a call (Codex, round 2) ------------------
+
+
+def lag_dtypes(sent: list[Any]) -> list[dict[str, str]]:
+    r"""Each call's lag columns as its request's schema declares them: their
+    dtype, by name."""
+    return [
+        {
+            name: column['dtype']
+            for name, column in body['schema']['instance_table'][
+                'columns'
+            ].items()
+            if name.startswith('__kumo_arl')
+        }
+        for _, _, body in sent
+    ]
+
+
+def test_the_reference_declares_each_call_s_lags_bool() -> None:
+    r"""Control: on each database python-ref asks lag.condition-per-call in
+    two calls, one entity each, and declares both lag columns bool in each
+    call's schema. Not vacuous: computed here from the shop base's orders,
+    the second call's first lags are empty on every row once each is on its
+    own row (P2F-1), so a call's dtype read off its values alone is not
+    bool there."""
+    runner = _runner()
+    reference = reference_lines()
+    both = {'__kumo_arl0__': 'bool', '__kumo_arl1__': 'bool'}
+    for database in DATABASES:
+        sent = requests(reference[runner.case_key(LAG_DTYPE, database)])
+        assert len(sent) == 2, database
+        assert lag_dtypes(sent) == [both, both], database
+        for _, _, body in sent:
+            assert len(body['predict']['instance_table']['rows']) == 1, database
+        own = by_hand(sent[1][2], 0)['__kumo_arl0__']
+        assert own == [None] * len(own), (database, own)
+        assert any(
+            v is not None for v in by_hand(sent[0][2], 0)['__kumo_arl0__']
+        )
+
+
+@pytest.mark.parametrize('database', DATABASES)
+def test_lag_dtype_per_call_as_the_reference(database: str) -> None:
+    r""" "``lag_timesteps``", asked one entity a call: python-core answers
+    lag.condition-per-call through ``predict`` on ``database``, through the
+    core, as python-ref does (outcome, the number of calls), each call's
+    schema declaring the lag columns as python-ref's same call does (bool),
+    whatever that call's values."""
+    if not reachable(database):
+        return
+
+    def check() -> None:
+        runner = _runner()
+        key = runner.case_key(LAG_DTYPE, database)
+        mine = _cases_on(database)[key]
+        theirs = reference_lines()[key]
+        assert _outcome(mine) == _outcome(theirs), _outcome(mine)
+        assert mine['identity']['native_loaded']
+        assert {'describe_source', 'materialize', 'predict'} <= set(
+            mine['identity']['operations']
+        )
+        assert lag_dtypes(requests(mine)) == lag_dtypes(requests(theirs))
+
+    held(f'test_lag_dtype_per_call_as_the_reference[{database}]', check)
+
+
 #: The exit tests, each run on each database.
 EXITS = (
     'test_num_forecasts_as_the_reference',
@@ -783,4 +860,5 @@ EXITS = (
     'test_quantiles_asked_as_the_reference',
     'test_response_field_for_quantiles_as_the_reference',
     'test_lagged_average_on_its_own_rows',
+    'test_lag_dtype_per_call_as_the_reference',
 )
