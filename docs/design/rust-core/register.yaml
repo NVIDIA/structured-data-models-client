@@ -7177,6 +7177,37 @@ entries:
     on the route probe: PREDICT e.big IN (10, 20.5) over a DECIMAL(38, 0)
     (reference INVALID_REQUEST, core answered).
 
+- id: P2E-19
+  title: LIST_DISTINCT of a foreign key, a temporal link prediction, stays refused by name until Phase 4
+  kind: change
+  old_behavior: >-
+    The reference's validation lets PREDICT LIST_DISTINCT(t.fkey, 0, 30,
+    days) FOR EACH ... through when the column is a foreign key, and its
+    engine asks it as a temporal link prediction (_get_task_type), each
+    context row labelled with the distinct keys in its window; the
+    scripted endpoint refuses that request at predict.
+  new_behavior: >-
+    The core refuses it UNSUPPORTED_REQUEST at materialize under its
+    not-yet rule aggregation, the one form of that rule the validation
+    lets through (COUNT_DISTINCT, FIRST, LAST and a LIST_DISTINCT of any
+    other column it refuses first on both routes): link prediction is
+    Phase 4's (design, "Explicitly out"). A ranking (RANK TOP k) of the
+    same aggregation is T2.8's.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route of a target
+    LIST_DISTINCT of a foreign key without RANK TOP, on DuckDB, SQLite and
+    Postgres.
+  cases: [T2.10]
+  refs: [T2.10, E92, P1B-3]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    A refusal of an input the reference accepts: owner-only. Proposed by
+    T2.10's implementer for the orchestrator: keep it refused by name
+    until Phase 4 (as KO2-22 keeps model and text_time_rules), or bring
+    temporal link prediction into Phase 2.
+
 # --- lane G entries (P2G-1..19) ---
 
 - id: P2G-1

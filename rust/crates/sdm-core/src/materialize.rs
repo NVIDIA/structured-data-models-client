@@ -498,8 +498,7 @@ fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
 }
 
 /// A target the query's validation refuses for the relational model before
-/// it reaches here (every aggregation but `SUM`, `COUNT`, `AVG`, `MIN` and
-/// `MAX`; a window with no start; a column of another table than the
+/// it reaches here (`COUNT_DISTINCT`, `FIRST` and `LAST`; a window with no start; a column of another table than the
 /// entity's, outside an aggregation, or of another than the aggregated
 /// table's in a filter; a table's `*` or a constant as the target; an
 /// operator other than a comparison and `IN`; a condition of a condition):
@@ -540,6 +539,11 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
                 Aggregation::Avg => labels::Aggregation::Avg,
                 Aggregation::Min => labels::Aggregation::Min,
                 Aggregation::Max => labels::Aggregation::Max,
+                // `LIST_DISTINCT` of a foreign key, which the validation lets
+                // through as a temporal link prediction (`_get_task_type`):
+                // link prediction is Phase 4's (design, "Explicitly out"),
+                // refused by name until then.
+                Aggregation::ListDistinct => return Err(not_yet("aggregation")),
                 _ => return Err(unvalidated("an aggregation the model does not take")),
             };
             // A column of the aggregated table, or its rows a filter

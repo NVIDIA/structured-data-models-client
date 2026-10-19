@@ -3,6 +3,26 @@
   "about": "The refusal census's probes (contract/tools/refusal_census.py; Phase 2 design, choice 10; T2.1a): one per refusal site the tool generates from the code, each written for that site (its intended site): a case's input on the base and the call it runs to, with materialize's keyword arguments the case format does not carry (options) and the model predict asks (model). `why` says what the probe tries and, where the probe's author knows the public calls do not get to the site this way, why. The run records each probe's outcomes on both routes; which site produced an outcome is not claimed (reachability unmeasured).",
   "probes": [
     {
+      "input": {
+        "base": "shop",
+        "materialize": {
+          "anchor_time": "2024-03-01",
+          "indices": [
+            0,
+            1
+          ]
+        },
+        "pql": "PREDICT LIST_DISTINCT(buys.item_id, 0, 30, days) FOR EACH users.user_id",
+        "setup": [
+          "CREATE TABLE items AS SELECT i::BIGINT AS item_id FROM range(4) t(i)",
+          "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+        ]
+      },
+      "site": "rule:aggregation",
+      "until": "materialize",
+      "why": "LIST_DISTINCT of a foreign key, which the query validator lets through as a temporal link prediction, Phase 4's (T2.10); every other aggregation outside SUM, COUNT, AVG, MIN and MAX the validator refuses first on both routes"
+    },
+    {
       "site": "rule:anchor_entity",
       "why": "anchor_time='entity'",
       "input": {
