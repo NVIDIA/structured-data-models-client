@@ -92,3 +92,15 @@ Sources: the owner's replies in the orchestrator's chat on 2026-10-17 to the tim
 | KO2-62 | An INTERVAL column on SQLite is described as text; the reference calls it an integer because its declared type contains "INT": a permanent registered difference | "E: Ok" | approved by owner 2026-10-17 |
 | KO2-63 | A one-part Postgres table name shadowed by a temporary or `pg_catalog` relation is refused by name as not found (INVALID_REQUEST), as the core plans each read without the schema's name; the reference qualifies every read with the schema it found and answers. The full fix needs a schema field in a later contract | "F: Sounds good" | approved by owner 2026-10-17 |
 | KO2-64 | A Postgres text time column holding text Postgres cannot read as a time is refused by name; the reference parses it in Python and answers | "G: Sounds good" | approved by owner 2026-10-17 |
+
+## T2.12's schema rules (2026-10-19)
+
+Sources: the owner's replies on 2026-10-19 to the orchestrator's questions H, J, K, L and M from T2.12's review rounds.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-65 | T2.12's cases holding a NaN or a -0.0 leave out SQLite, which stores a NaN as NULL and -0.0 as 0.0, and the two NaN-encoding cases also leave out Postgres | "J: Yes" | approved by owner 2026-10-19 |
+| KO2-66 | A timedelta or a time of day given as the entity for an integer key is refused as a type, as P1B-34 refuses an entity pandas coerces; the reference casts each to its count | "K: Yes" | approved by owner 2026-10-19 |
+| KO2-67 | A primary or foreign key of several columns a Postgres catalog declares is read as no key and the core answers, as DuckDB's and SQLite's references answer, where the reference's Postgres discovery fails with an unnamed ValueError | "L: Yes" | approved by owner 2026-10-19 |
+| KO2-68 | The core drops its read of the folded composite key (`folded_key`) and refuses a schema keyed by several columns at materialize without it, one statement fewer than the reference, whose read only chooses between two refusals of one code | "M: Yes" | approved by owner 2026-10-19 |
+| KO2-69 | A Postgres column holding a two-dimensional array is left out of the schema, as a one-dimensional one is, where the reference fails `Schema.from_source` with an unnamed RuntimeError (P2C-8) | "H: Yes" | approved by owner 2026-10-19 |
