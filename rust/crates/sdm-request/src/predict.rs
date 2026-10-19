@@ -2176,4 +2176,47 @@ mod tests {
         let same = vec![("3".to_owned(), 0.5), ("3.0".to_owned(), 0.5)];
         assert_eq!(spelled(&same, AnswerType::FloatClass, spell), same);
     }
+
+    /// A temporal link prediction's answer, as the endpoint writes one: each
+    /// item ranks candidates under `rankings`, a list of objects, which the
+    /// reference's bindings read (`_mapping_tuple`) and its result keeps as
+    /// a list in one row (`PredictionResult.to_pandas`, `row['rankings']`).
+    /// The core asks no link prediction until Phase 4 (register P2E-19):
+    /// laid out against a link prediction's payload the answer is refused
+    /// by name (`problem_type`), never read as another task's; and against
+    /// a payload of a task it asks, its `rankings` are refused by name
+    /// (`response_field`), never dropped (T2.10).
+    #[test]
+    fn a_link_prediction_s_answer_is_refused_by_name_never_read_as_another_task_s() {
+        let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
+        let answer = read(
+            r#"{"id": "r1", "model": "kumo-relational", "metadata": {},
+                "predictions": [
+                  {"row_index": 0, "id": "0", "prediction": null,
+                   "rankings": [{"item": 3, "score": 0.9}, {"item": 1, "score": 0.4}]},
+                  {"row_index": 1, "id": "1",
+                   "rankings": [{"item": 2, "score": 0.7}]}]}"#,
+        );
+        let response = PredictionResponse::read(&answer).unwrap();
+        assert_eq!(response.predictions.len(), 2);
+        for item in &response.predictions {
+            assert_eq!(item.carried, ["rankings"]);
+            assert_eq!(item.prediction, None);
+        }
+        let payload = |kind: &str| {
+            read(&format!(
+                r#"{{"task": {{"kind": "{kind}", "target": {{"dtype": "float64"}}}},
+                    "predict": {{"instance_table": {{"columns": ["instance_id"],
+                                                    "rows": [[0], [1]]}}}}}}"#
+            ))
+        };
+        let spell = |x: f64| x.to_string();
+        let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap_err();
+        assert_eq!(linked.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(linked.fields["rule"], Detail::text("problem_type"));
+        let asked = layout(&payload("regression"), &response, spell).unwrap_err();
+        assert_eq!(asked.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(asked.fields["rule"], Detail::text("response_field"));
+        assert_eq!(asked.fields["field"], Detail::text("rankings"));
+    }
 }
