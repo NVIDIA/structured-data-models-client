@@ -742,7 +742,9 @@ jobs:
   # reached a release through a promise nothing checked.
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 90, not 60: the job reached 58 minutes on GitHub's runners as Phase 2's
+    # three-database corpus grew (T2.1o); the cause is being cut separately.
+    timeout-minutes: 90
     needs: [landing, native-wheel]
     strategy:
       fail-fast: false
@@ -909,7 +911,9 @@ jobs:
   contract-python-ref-pandas3:
     name: contract-python (ref-pandas3, duckdb)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 90, not 60: the phase head's own run took 57 minutes and runs vary by
+    # about 20 (T2.1o); the cause is being cut separately.
+    timeout-minutes: 90
     needs: [native-wheel, native-test-ops]
     env:
       CELL: ref-pandas3

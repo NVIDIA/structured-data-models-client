@@ -523,8 +523,15 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 
 #: The longest a job may run, in minutes: rust-test took 80.7 at most
 #: (fix round 1, P2-5); the landing job, which every other job waits on,
-#: does no more than read a few commits.
-TIMEOUT_CEILINGS = {'landing': 10, 'rust-test': 120}
+#: does no more than read a few commits; the client test matrix and the
+#: ref-pandas3 DuckDB route tests reached 57 to 60 minutes as Phase 2's
+#: corpus grew (T2.1o).
+TIMEOUT_CEILINGS = {
+    'landing': 10,
+    'rust-test': 120,
+    'test': 90,
+    'contract-python-ref-pandas3': 90,
+}
 TIMEOUT_CEILING = 60
 
 
