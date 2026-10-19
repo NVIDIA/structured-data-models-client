@@ -12,6 +12,7 @@ model as its own API would be called, and comes back as a NIM answers it.
 from __future__ import annotations
 
 import copy
+import json
 import subprocess
 import sys
 import warnings
@@ -558,6 +559,23 @@ def test_a_request_is_read_in_the_order_the_nim_reads_it(
     code, status, said = answer
     assert (error.code, error.status_code) == (code, status)
     assert said in error.message
+
+
+def test_a_row_is_answered_under_its_key_as_sent(tabular):
+    """A key named as a list answers each row under the JSON of its values
+    as they were sent, so an integer wider than a double keeps its digits
+    as a string, as a NIM keeps them."""
+    payload = _tabular_payload('classification')
+    payload['schema']['instance_table']['primary_key'] = ['person_id']
+    table = payload['predict']['instance_table']
+    position = table['columns'].index('person_id')
+    for index, row in enumerate(table['rows']):
+        row[position] = str(2**53 + 1 + index)
+    with SDMClient.in_process(tabular) as client:
+        answer = client._transport.predict(payload)
+    assert answer['predictions'][0]['id'] == json.dumps(
+        [table['rows'][0][position]]
+    )
 
 
 def test_a_model_passed_in_keeps_what_was_fitted_on_it(sdm, tabular):

@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from sdm_client.in_process.refusal import refusal
-from sdm_client.in_process.tables import read_cell, values
+from sdm_client.in_process.tables import values
 
 #: The levels a NIM reports when the request names none.
 QUANTILE_LEVELS = (0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)
@@ -25,14 +25,13 @@ _MEDIAN = 499
 
 
 def row_ids(
-    table: Mapping[str, Any],
-    primary_key: str | Sequence[str] | None,
-    dtypes: Mapping[str, str],
+    table: Mapping[str, Any], primary_key: str | Sequence[str] | None
 ) -> list[str | None]:
     r"""The id a NIM answers each row under.
 
     A key named as one column is the value itself; a key named as a list is
-    the list of its values, written as JSON.
+    the list of its values, written as JSON. Either is the value as it was
+    sent, so an integer sent as its digits stays a string.
     """
     columns = table['columns']
     if isinstance(primary_key, str) and primary_key in columns:
@@ -42,10 +41,7 @@ def row_ids(
         and primary_key
         and all(name in columns for name in primary_key)
     ):
-        cells = [
-            [read_cell(cell, dtypes.get(name)) for cell in values(table, name)]
-            for name in primary_key
-        ]
+        cells = [values(table, name) for name in primary_key]
         return [
             json.dumps(list(key), separators=(',', ':'), default=str)
             for key in zip(*cells, strict=True)

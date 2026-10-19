@@ -457,14 +457,8 @@ def _response(
     fields: list[str],
 ) -> dict[str, Any]:
     instance = schema['instance_table']
-    dtypes = {
-        name: str(column.get('dtype'))
-        for name, column in instance['columns'].items()
-    }
     ids = row_ids(
-        payload['predict']['instance_table'],
-        instance.get('primary_key'),
-        dtypes,
+        payload['predict']['instance_table'], instance.get('primary_key')
     )
     kind = task['kind']
     if kind == 'regression':
