@@ -1,0 +1,4151 @@
+{
+ "format": "sdm-t213-option-vectors/1",
+ "about": "What T2.13's cases (the query and option long tail: an entity filter, named entities, ASSUMING, EVALUATE, EXPLAIN, a null target transform, inference options given as text, an answer carrying an explanation or item metadata, and a day-first date literal before a refused one) give beside their observation lines, by case key, recorded from the reference's public calls: the rows each call scores, the result through to_pandas(), the result's explanation, each item's metadata, the warnings the exits name, and a refusal's message and details. contract/tests/test_t213_options.py holds python-core to them, observed by the same code (observe).",
+ "recorded_by": "contract/tools/option_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "vectors": {
+  "assuming.binary": {
+   "case": "55f4a6d58597f41a7e9f4ada03c6b89e1c015f9080daf76f19984ae9194c2686",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "assuming.binary@postgres": {
+   "case": "55f4a6d58597f41a7e9f4ada03c6b89e1c015f9080daf76f19984ae9194c2686",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "assuming.binary@sqlite": {
+   "case": "55f4a6d58597f41a7e9f4ada03c6b89e1c015f9080daf76f19984ae9194c2686",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "assuming.no-examples": {
+   "case": "20572bbeb8452bafde5355a953e799efa561568e75626e1b9879e31c4dc5de5b",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] Failed to collect any context examples. Is your predictive query too restrictive?",
+   "details": {}
+  },
+  "assuming.no-examples@postgres": {
+   "case": "20572bbeb8452bafde5355a953e799efa561568e75626e1b9879e31c4dc5de5b",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] Failed to collect any context examples. Is your predictive query too restrictive?",
+   "details": {}
+  },
+  "assuming.no-examples@sqlite": {
+   "case": "20572bbeb8452bafde5355a953e799efa561568e75626e1b9879e31c4dc5de5b",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] Failed to collect any context examples. Is your predictive query too restrictive?",
+   "details": {}
+  },
+  "assuming.regression": {
+   "case": "b773929c857107b4c6c2d8c0930bcc56264e49a8b1675277345b2bef6ea0f704",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "assuming.regression@postgres": {
+   "case": "b773929c857107b4c6c2d8c0930bcc56264e49a8b1675277345b2bef6ea0f704",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "assuming.regression@sqlite": {
+   "case": "b773929c857107b4c6c2d8c0930bcc56264e49a8b1675277345b2bef6ea0f704",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "assuming.static": {
+   "case": "567e46d3d2feee56a1e6acf8c0b166f10e4d7e0c18c084a369ff147a63a7898c",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING users.age > 22' is not a query a relational model can answer: row 1, column 71: ASSUMPTION condition users.age > 22 has no time range but a temporal aggregation is required.",
+   "details": {}
+  },
+  "assuming.static@postgres": {
+   "case": "567e46d3d2feee56a1e6acf8c0b166f10e4d7e0c18c084a369ff147a63a7898c",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING users.age > 22' is not a query a relational model can answer: row 1, column 71: ASSUMPTION condition users.age > 22 has no time range but a temporal aggregation is required.",
+   "details": {}
+  },
+  "assuming.static@sqlite": {
+   "case": "567e46d3d2feee56a1e6acf8c0b166f10e4d7e0c18c084a369ff147a63a7898c",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING users.age > 22' is not a query a relational model can answer: row 1, column 71: ASSUMPTION condition users.age > 22 has no time range but a temporal aggregation is required.",
+   "details": {}
+  },
+  "config-text.accepted": {
+   "case": "90df4debc523f27a5eacc176ec832eb30bb0dfa75fed0b55c311138f65020eed",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.accepted@postgres": {
+   "case": "90df4debc523f27a5eacc176ec832eb30bb0dfa75fed0b55c311138f65020eed",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.accepted@sqlite": {
+   "case": "90df4debc523f27a5eacc176ec832eb30bb0dfa75fed0b55c311138f65020eed",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.class-shuffle": {
+   "case": "109cbfd6c033da9c362a7fc385c3ee4d233c7c74100630c919c971303e2c6d98",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.class-shuffle@postgres": {
+   "case": "109cbfd6c033da9c362a7fc385c3ee4d233c7c74100630c919c971303e2c6d98",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.class-shuffle@sqlite": {
+   "case": "109cbfd6c033da9c362a7fc385c3ee4d233c7c74100630c919c971303e2c6d98",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.estimators-out-of-range": {
+   "case": "0222fb40dce38577e378c8269065e89cd4c6f8c4ae0f39cd1900ac155af8ea81",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\nnum_estimators\n  Input should be less than or equal to 4 [type=less_than_equal, input_value='5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/less_than_equal",
+   "details": {}
+  },
+  "config-text.estimators-out-of-range@postgres": {
+   "case": "0222fb40dce38577e378c8269065e89cd4c6f8c4ae0f39cd1900ac155af8ea81",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\nnum_estimators\n  Input should be less than or equal to 4 [type=less_than_equal, input_value='5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/less_than_equal",
+   "details": {}
+  },
+  "config-text.estimators-out-of-range@sqlite": {
+   "case": "0222fb40dce38577e378c8269065e89cd4c6f8c4ae0f39cd1900ac155af8ea81",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\nnum_estimators\n  Input should be less than or equal to 4 [type=less_than_equal, input_value='5', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/less_than_equal",
+   "details": {}
+  },
+  "config-text.estimators-whole-float": {
+   "case": "58b5755e356cbdd2e35cd369273b33a5eb276e7411a83f9729d7b6c0ee664a1f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.estimators-whole-float@postgres": {
+   "case": "58b5755e356cbdd2e35cd369273b33a5eb276e7411a83f9729d7b6c0ee664a1f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.estimators-whole-float@sqlite": {
+   "case": "58b5755e356cbdd2e35cd369273b33a5eb276e7411a83f9729d7b6c0ee664a1f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "config-text.estimators-word": {
+   "case": "a61c435ddb7da11b2f669f53bbcef8647b8790ca05882d4e74b2924b90bacdd9",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\nnum_estimators\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='five', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing",
+   "details": {}
+  },
+  "config-text.estimators-word@postgres": {
+   "case": "a61c435ddb7da11b2f669f53bbcef8647b8790ca05882d4e74b2924b90bacdd9",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\nnum_estimators\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='five', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing",
+   "details": {}
+  },
+  "config-text.estimators-word@sqlite": {
+   "case": "a61c435ddb7da11b2f669f53bbcef8647b8790ca05882d4e74b2924b90bacdd9",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\nnum_estimators\n  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='five', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing",
+   "details": {}
+  },
+  "config-text.shuffle-word": {
+   "case": "7d6a794316ff5e66336fa85b3d61fb5e9b10f99c377f6c892810f5df7f3b090b",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\ncolumn_shuffle\n  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='maybe', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/bool_parsing",
+   "details": {}
+  },
+  "config-text.shuffle-word@postgres": {
+   "case": "7d6a794316ff5e66336fa85b3d61fb5e9b10f99c377f6c892810f5df7f3b090b",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\ncolumn_shuffle\n  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='maybe', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/bool_parsing",
+   "details": {}
+  },
+  "config-text.shuffle-word@sqlite": {
+   "case": "7d6a794316ff5e66336fa85b3d61fb5e9b10f99c377f6c892810f5df7f3b090b",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\ncolumn_shuffle\n  Input should be a valid boolean, unable to interpret input [type=bool_parsing, input_value='maybe', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/bool_parsing",
+   "details": {}
+  },
+  "date.day-first-then-packed": {
+   "case": "7b24e5b4b67560ac5e62e65043cc8fe7a470161ab9db9ca94715f96721029ca8",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [
+    [
+     "UserWarning",
+     "Parsing dates in %d/%m/%Y format when dayfirst=False (the default) was specified. Pass `dayfirst=True` or specify a format to silence this warning."
+    ]
+   ],
+   "message": "[INVALID_REQUEST] 'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2023 AND orders.ts < 99999-01-01, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: 99999-01-01 is not a valid instance of time",
+   "details": {}
+  },
+  "date.day-first-then-packed@postgres": {
+   "case": "7b24e5b4b67560ac5e62e65043cc8fe7a470161ab9db9ca94715f96721029ca8",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [
+    [
+     "UserWarning",
+     "Parsing dates in %d/%m/%Y format when dayfirst=False (the default) was specified. Pass `dayfirst=True` or specify a format to silence this warning."
+    ]
+   ],
+   "message": "[INVALID_REQUEST] 'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2023 AND orders.ts < 99999-01-01, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: 99999-01-01 is not a valid instance of time",
+   "details": {}
+  },
+  "date.day-first-then-packed@sqlite": {
+   "case": "7b24e5b4b67560ac5e62e65043cc8fe7a470161ab9db9ca94715f96721029ca8",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [
+    [
+     "UserWarning",
+     "Parsing dates in %d/%m/%Y format when dayfirst=False (the default) was specified. Pass `dayfirst=True` or specify a format to silence this warning."
+    ]
+   ],
+   "message": "[INVALID_REQUEST] 'PREDICT COUNT(orders.* WHERE orders.ts > 13/01/2023 AND orders.ts < 99999-01-01, 0, 30, days) FOR EACH users.user_id' is not a query a relational model can answer: 99999-01-01 is not a valid instance of time",
+   "details": {}
+  },
+  "evaluate.binary": {
+   "case": "1d92f293979b086975adac2dd6652cd553488557c5d50551acc30184cf8b92ac",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "evaluate.binary@postgres": {
+   "case": "1d92f293979b086975adac2dd6652cd553488557c5d50551acc30184cf8b92ac",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "evaluate.binary@sqlite": {
+   "case": "1d92f293979b086975adac2dd6652cd553488557c5d50551acc30184cf8b92ac",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "evaluate.regression": {
+   "case": "39e6243e4141c8140b2a339a1190482e6c88f9c3cbd478d4ce8d100eae88645d",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "evaluate.regression@postgres": {
+   "case": "39e6243e4141c8140b2a339a1190482e6c88f9c3cbd478d4ce8d100eae88645d",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "evaluate.regression@sqlite": {
+   "case": "39e6243e4141c8140b2a339a1190482e6c88f9c3cbd478d4ce8d100eae88645d",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.answered": {
+   "case": "acf007d6925f4b472096406f5d48cedb952ec7b33c5288c16e86c03fa1f043a5",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.answered@postgres": {
+   "case": "acf007d6925f4b472096406f5d48cedb952ec7b33c5288c16e86c03fa1f043a5",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.answered@sqlite": {
+   "case": "acf007d6925f4b472096406f5d48cedb952ec7b33c5288c16e86c03fa1f043a5",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.explanation-only": {
+   "case": "3de8932dbe5abc11c6c3b1f8d80b1ae338d2d12a0cc8d6d259d8d2862b57fdd7",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      2,
+      false
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.explanation-only@postgres": {
+   "case": "3de8932dbe5abc11c6c3b1f8d80b1ae338d2d12a0cc8d6d259d8d2862b57fdd7",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      2,
+      false
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.explanation-only@sqlite": {
+   "case": "3de8932dbe5abc11c6c3b1f8d80b1ae338d2d12a0cc8d6d259d8d2862b57fdd7",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      2,
+      false
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.forecast": {
+   "case": "f2c4c3da21c396b446e2c047a0c9e32c63d2037dc08160db2eb788e4f523970f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      0,
+      0,
+      2,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "by_forecast_step": {
+     "1": {
+      "format": "scripted",
+      "summary": "row 0 of call 0",
+      "score": 0.1,
+      "rank": 1,
+      "path": [
+       0,
+       0
+      ],
+      "detail": {
+       "call": 0,
+       "row_index": 0,
+       "note": null
+      }
+     },
+     "2": {
+      "format": "scripted",
+      "summary": "row 0 of call 1",
+      "score": 0.4,
+      "rank": 4,
+      "path": [
+       1,
+       0
+      ],
+      "detail": {
+       "call": 1,
+       "row_index": 0,
+       "note": null
+      }
+     }
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.forecast@postgres": {
+   "case": "f2c4c3da21c396b446e2c047a0c9e32c63d2037dc08160db2eb788e4f523970f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      0,
+      0,
+      2,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "by_forecast_step": {
+     "1": {
+      "format": "scripted",
+      "summary": "row 0 of call 0",
+      "score": 0.1,
+      "rank": 1,
+      "path": [
+       0,
+       0
+      ],
+      "detail": {
+       "call": 0,
+       "row_index": 0,
+       "note": null
+      }
+     },
+     "2": {
+      "format": "scripted",
+      "summary": "row 0 of call 1",
+      "score": 0.4,
+      "rank": 4,
+      "path": [
+       1,
+       0
+      ],
+      "detail": {
+       "call": 1,
+       "row_index": 0,
+       "note": null
+      }
+     }
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.forecast@sqlite": {
+   "case": "f2c4c3da21c396b446e2c047a0c9e32c63d2037dc08160db2eb788e4f523970f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "forecast_step",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1,
+      1.0
+     ],
+     [
+      0,
+      0,
+      2,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "by_forecast_step": {
+     "1": {
+      "format": "scripted",
+      "summary": "row 0 of call 0",
+      "score": 0.1,
+      "rank": 1,
+      "path": [
+       0,
+       0
+      ],
+      "detail": {
+       "call": 0,
+       "row_index": 0,
+       "note": null
+      }
+     },
+     "2": {
+      "format": "scripted",
+      "summary": "row 0 of call 1",
+      "score": 0.4,
+      "rank": 4,
+      "path": [
+       1,
+       0
+      ],
+      "detail": {
+       "call": 1,
+       "row_index": 0,
+       "note": null
+      }
+     }
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.not-answered": {
+   "case": "abe6b002c3e405ed89756483d0142cba06a47a4786c88b093ef16e57e80f0c98",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "kumo-relational answered without ['explanation'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "explain.not-answered@postgres": {
+   "case": "abe6b002c3e405ed89756483d0142cba06a47a4786c88b093ef16e57e80f0c98",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "kumo-relational answered without ['explanation'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "explain.not-answered@sqlite": {
+   "case": "abe6b002c3e405ed89756483d0142cba06a47a4786c88b093ef16e57e80f0c98",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "kumo-relational answered without ['explanation'], which this request asked for, so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "explain.query": {
+   "case": "99dc81fd05ef46c55e46ab8c33b9b2004c45a278ba48cdd02980fd8e690b3c97",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.query@postgres": {
+   "case": "99dc81fd05ef46c55e46ab8c33b9b2004c45a278ba48cdd02980fd8e690b3c97",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.query@sqlite": {
+   "case": "99dc81fd05ef46c55e46ab8c33b9b2004c45a278ba48cdd02980fd8e690b3c97",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "explain.two-entities": {
+   "case": "54234433e009e1f82e8326ed0426802d89b5de91d8949b8d59f15209d84b1036",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] an explanation covers exactly 1 entity, and this request scores 2; ask for one at a time",
+   "details": {
+    "model": "kumo-relational",
+    "scored": 2
+   }
+  },
+  "explain.two-entities@postgres": {
+   "case": "54234433e009e1f82e8326ed0426802d89b5de91d8949b8d59f15209d84b1036",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] an explanation covers exactly 1 entity, and this request scores 2; ask for one at a time",
+   "details": {
+    "model": "kumo-relational",
+    "scored": 2
+   }
+  },
+  "explain.two-entities@sqlite": {
+   "case": "54234433e009e1f82e8326ed0426802d89b5de91d8949b8d59f15209d84b1036",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] an explanation covers exactly 1 entity, and this request scores 2; ask for one at a time",
+   "details": {
+    "model": "kumo-relational",
+    "scored": 2
+   }
+  },
+  "filter.entity-aggregation": {
+   "case": "f9001aa50f3df9102a622a14b0f3c14fc0dda814a9a4bffba7fcf9274b40380f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'COUNT(orders.*, -60, 0, days) > 0' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-aggregation@postgres": {
+   "case": "f9001aa50f3df9102a622a14b0f3c14fc0dda814a9a4bffba7fcf9274b40380f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'COUNT(orders.*, -60, 0, days) > 0' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-aggregation@sqlite": {
+   "case": "f9001aa50f3df9102a622a14b0f3c14fc0dda814a9a4bffba7fcf9274b40380f",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'COUNT(orders.*, -60, 0, days) > 0' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-column": {
+   "case": "b6e867798f6c3c47142cb5dec8cc29e6cf8752fcb0dd28bd8d5e29abea06a570",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      4,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 22' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-column@postgres": {
+   "case": "b6e867798f6c3c47142cb5dec8cc29e6cf8752fcb0dd28bd8d5e29abea06a570",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      4,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 22' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-column@sqlite": {
+   "case": "b6e867798f6c3c47142cb5dec8cc29e6cf8752fcb0dd28bd8d5e29abea06a570",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      4,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 22' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-text": {
+   "case": "b3238ec531e5c9758c8e500daea16599ceea8d36e35b5dd24cef38621662ad64",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      1,
+      false
+     ],
+     [
+      1,
+      4,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter \"users.country = 'DE'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-text@postgres": {
+   "case": "b3238ec531e5c9758c8e500daea16599ceea8d36e35b5dd24cef38621662ad64",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      1,
+      false
+     ],
+     [
+      1,
+      4,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter \"users.country = 'DE'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.entity-text@sqlite": {
+   "case": "b3238ec531e5c9758c8e500daea16599ceea8d36e35b5dd24cef38621662ad64",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      1,
+      false
+     ],
+     [
+      1,
+      4,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter \"users.country = 'DE'\" selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.event-column": {
+   "case": "fe162fcd032d623cbcaab233124b3bcdab1f335aae91b08bc4b410ab22a2f8ef",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE orders.price > 5' is not a query a relational model can answer: row 1, column 68: The entity filter condition 'orders.price > 5' references event column 'orders.price' directly. Table 'orders' can contain multiple rows for each 'users', so there is no single value to compare for each entity. Move this condition inside an aggregation. To filter events used by the prediction target, use 'SUM(orders.price WHERE orders.price > 5, 0, 30, days)'. To select entities that have matching events, use 'COUNT(orders.* WHERE orders.price > 5, -INF, 0) > 0'.",
+   "details": {}
+  },
+  "filter.event-column@postgres": {
+   "case": "fe162fcd032d623cbcaab233124b3bcdab1f335aae91b08bc4b410ab22a2f8ef",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE orders.price > 5' is not a query a relational model can answer: row 1, column 68: The entity filter condition 'orders.price > 5' references event column 'orders.price' directly. Table 'orders' can contain multiple rows for each 'users', so there is no single value to compare for each entity. Move this condition inside an aggregation. To filter events used by the prediction target, use 'SUM(orders.price WHERE orders.price > 5, 0, 30, days)'. To select entities that have matching events, use 'COUNT(orders.* WHERE orders.price > 5, -INF, 0) > 0'.",
+   "details": {}
+  },
+  "filter.event-column@sqlite": {
+   "case": "fe162fcd032d623cbcaab233124b3bcdab1f335aae91b08bc4b410ab22a2f8ef",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE orders.price > 5' is not a query a relational model can answer: row 1, column 68: The entity filter condition 'orders.price > 5' references event column 'orders.price' directly. Table 'orders' can contain multiple rows for each 'users', so there is no single value to compare for each entity. Move this condition inside an aggregation. To filter events used by the prediction target, use 'SUM(orders.price WHERE orders.price > 5, 0, 30, days)'. To select entities that have matching events, use 'COUNT(orders.* WHERE orders.price > 5, -INF, 0) > 0'.",
+   "details": {}
+  },
+  "filter.matches-none": {
+   "case": "7eb7bc4efe2046831ea2652333c0fbe729773b24f27d08ef1aad19a0ae8e7845",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 100' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": "[INVALID_REQUEST] Failed to collect any context examples. The anchor time is not the reason: it is 2023-04-01 00:00:00, and 'orders' holds data from 2023-01-01 00:00:00 to 2024-07-07 00:00:00, which leaves room after it for the query's whole window. No entity passed 'users.age > 100', so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+   "details": {}
+  },
+  "filter.matches-none@postgres": {
+   "case": "7eb7bc4efe2046831ea2652333c0fbe729773b24f27d08ef1aad19a0ae8e7845",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 100' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": "[INVALID_REQUEST] Failed to collect any context examples. The anchor time is not the reason: it is 2023-04-01 00:00:00, and 'orders' holds data from 2023-01-01 00:00:00 to 2024-07-07 00:00:00, which leaves room after it for the query's whole window. No entity passed 'users.age > 100', so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+   "details": {}
+  },
+  "filter.matches-none@sqlite": {
+   "case": "7eb7bc4efe2046831ea2652333c0fbe729773b24f27d08ef1aad19a0ae8e7845",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 100' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": "[INVALID_REQUEST] Failed to collect any context examples. The anchor time is not the reason: it is 2023-04-01 00:00:00, and 'orders' holds data from 2023-01-01 00:00:00 to 2024-07-07 00:00:00, which leaves room after it for the query's whole window. No entity passed 'users.age > 100', so there was nothing to sample: check that the values it compares against occur in the data, including their case.",
+   "details": {}
+  },
+  "filter.ranking": {
+   "case": "e32cf9ec1871ea86bee60dd882920b13dff80b43fe09cc14c4994881a7a489b5",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2,
+    2,
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      3,
+      [
+       2,
+       1
+      ],
+      [
+       {
+        "candidate": 2,
+        "score": 0.7
+       },
+       {
+        "candidate": 1,
+        "score": 0.4
+       }
+      ]
+     ],
+     [
+      1,
+      4,
+      [
+       1,
+       0
+      ],
+      [
+       {
+        "candidate": 1,
+        "score": 0.9
+       },
+       {
+        "candidate": 0,
+        "score": 0.6
+       }
+      ]
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 22' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.ranking@postgres": {
+   "case": "e32cf9ec1871ea86bee60dd882920b13dff80b43fe09cc14c4994881a7a489b5",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2,
+    2,
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      3,
+      [
+       2,
+       1
+      ],
+      [
+       {
+        "candidate": 2,
+        "score": 0.7
+       },
+       {
+        "candidate": 1,
+        "score": 0.4
+       }
+      ]
+     ],
+     [
+      1,
+      4,
+      [
+       1,
+       0
+      ],
+      [
+       {
+        "candidate": 1,
+        "score": 0.9
+       },
+       {
+        "candidate": 0,
+        "score": 0.6
+       }
+      ]
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 22' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "filter.ranking@sqlite": {
+   "case": "e32cf9ec1871ea86bee60dd882920b13dff80b43fe09cc14c4994881a7a489b5",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2,
+    2,
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction",
+     "rankings"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      3,
+      [
+       2,
+       1
+      ],
+      [
+       {
+        "candidate": 2,
+        "score": 0.7
+       },
+       {
+        "candidate": 1,
+        "score": 0.4
+       }
+      ]
+     ],
+     [
+      1,
+      4,
+      [
+       1,
+       0
+      ],
+      [
+       {
+        "candidate": 1,
+        "score": 0.9
+       },
+       {
+        "candidate": 0,
+        "score": 0.6
+       }
+      ]
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [
+    [
+     "SDMWarning",
+     "the entity filter 'users.age > 22' selects the labelled examples the model learns from, and does not narrow the 2 rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."
+    ]
+   ],
+   "message": null,
+   "details": null
+  },
+  "ids.absent": {
+   "case": "e53e4a49e0f20a6faa006d1c0ac3cbb512d75d654f5dd012f06fae622738b065",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.absent@postgres": {
+   "case": "e53e4a49e0f20a6faa006d1c0ac3cbb512d75d654f5dd012f06fae622738b065",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.absent@sqlite": {
+   "case": "e53e4a49e0f20a6faa006d1c0ac3cbb512d75d654f5dd012f06fae622738b065",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.in-list-other-indices": {
+   "case": "7fcdf3693abe7228738cc288ca187a8352ef9ad2b51e9483e2e41947cd546303",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      3,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.in-list-other-indices@postgres": {
+   "case": "7fcdf3693abe7228738cc288ca187a8352ef9ad2b51e9483e2e41947cd546303",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      3,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.in-list-other-indices@sqlite": {
+   "case": "7fcdf3693abe7228738cc288ca187a8352ef9ad2b51e9483e2e41947cd546303",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      3,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ],
+    [
+     1,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.one": {
+   "case": "e1ac4d3b9d3ddef302cde3a4a3fdd683e9c70084380ad20f4705681892a081e4",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.one@postgres": {
+   "case": "e1ac4d3b9d3ddef302cde3a4a3fdd683e9c70084380ad20f4705681892a081e4",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.one@sqlite": {
+   "case": "e1ac4d3b9d3ddef302cde3a4a3fdd683e9c70084380ad20f4705681892a081e4",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     null
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "ids.wrong-type": {
+   "case": "5947a1ff47030f7b69bcd5fb546c07c29b944a57961214a64a5a32a8c36da844",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] \"PREDICT SUM(orders.price, 0, 30, days) FOR users.user_id = 'a'\" is not a query a relational model can answer: row 1, column 43: Expression users.user_id has type int but constant 'a' has type string.",
+   "details": {}
+  },
+  "ids.wrong-type@postgres": {
+   "case": "5947a1ff47030f7b69bcd5fb546c07c29b944a57961214a64a5a32a8c36da844",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] \"PREDICT SUM(orders.price, 0, 30, days) FOR users.user_id = 'a'\" is not a query a relational model can answer: row 1, column 43: Expression users.user_id has type int but constant 'a' has type string.",
+   "details": {}
+  },
+  "ids.wrong-type@sqlite": {
+   "case": "5947a1ff47030f7b69bcd5fb546c07c29b944a57961214a64a5a32a8c36da844",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] \"PREDICT SUM(orders.price, 0, 30, days) FOR users.user_id = 'a'\" is not a query a relational model can answer: row 1, column 43: Expression users.user_id has type int but constant 'a' has type string.",
+   "details": {}
+  },
+  "metadata.items": {
+   "case": "4ab65d0923a946479c35a51d0152b2bf75910b03d3e378f6ae4d013ef91a9af6",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ],
+    [
+     1,
+     {
+      "call": 0,
+      "row_index": 1,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items-across-calls": {
+   "case": "f4835bc07818a99479afc2726a03708aaca98c452081567986c366bb3092ce80",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ],
+     [
+      2,
+      2,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ],
+    [
+     1,
+     {
+      "call": 0,
+      "row_index": 1,
+      "source": "scripted"
+     }
+    ],
+    [
+     2,
+     {
+      "call": 1,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items-across-calls@postgres": {
+   "case": "f4835bc07818a99479afc2726a03708aaca98c452081567986c366bb3092ce80",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ],
+     [
+      2,
+      2,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ],
+    [
+     1,
+     {
+      "call": 0,
+      "row_index": 1,
+      "source": "scripted"
+     }
+    ],
+    [
+     2,
+     {
+      "call": 1,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items-across-calls@sqlite": {
+   "case": "f4835bc07818a99479afc2726a03708aaca98c452081567986c366bb3092ce80",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2,
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 3,
+    "rows": [
+     [
+      0,
+      0,
+      false
+     ],
+     [
+      1,
+      1,
+      false
+     ],
+     [
+      2,
+      2,
+      false
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ],
+    [
+     1,
+     {
+      "call": 0,
+      "row_index": 1,
+      "source": "scripted"
+     }
+    ],
+    [
+     2,
+     {
+      "call": 1,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items-explained": {
+   "case": "1488a8c06d892a0590597614a1d8b506961cc94545cf8760572078bc8b3949b0",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items-explained@postgres": {
+   "case": "1488a8c06d892a0590597614a1d8b506961cc94545cf8760572078bc8b3949b0",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items-explained@sqlite": {
+   "case": "1488a8c06d892a0590597614a1d8b506961cc94545cf8760572078bc8b3949b0",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    1
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 1,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ]
+    ]
+   },
+   "explanation": {
+    "format": "scripted",
+    "summary": "row 0 of call 0",
+    "score": 0.1,
+    "rank": 1,
+    "path": [
+     0,
+     0
+    ],
+    "detail": {
+     "call": 0,
+     "row_index": 0,
+     "note": null
+    }
+   },
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items@postgres": {
+   "case": "4ab65d0923a946479c35a51d0152b2bf75910b03d3e378f6ae4d013ef91a9af6",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ],
+    [
+     1,
+     {
+      "call": 0,
+      "row_index": 1,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "metadata.items@sqlite": {
+   "case": "4ab65d0923a946479c35a51d0152b2bf75910b03d3e378f6ae4d013ef91a9af6",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "calls": [
+    2
+   ],
+   "result": {
+    "columns": [
+     "row_index",
+     "id",
+     "prediction"
+    ],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      1.0
+     ],
+     [
+      1,
+      1,
+      1.0
+     ]
+    ]
+   },
+   "explanation": null,
+   "item_metadata": [
+    [
+     0,
+     {
+      "call": 0,
+      "row_index": 0,
+      "source": "scripted"
+     }
+    ],
+    [
+     1,
+     {
+      "call": 0,
+      "row_index": 1,
+      "source": "scripted"
+     }
+    ]
+   ],
+   "warnings": [],
+   "message": null,
+   "details": null
+  },
+  "transforms.null": {
+   "case": "de07a434c02ee7d312ff88ad5c6ec391c9494575b5835caf1a35680fcf1bdce0",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+   "details": {
+    "model": "kumo-relational",
+    "unsupported": [
+     "target_transforms"
+    ]
+   }
+  },
+  "transforms.null-beside-a-name": {
+   "case": "1092df0d90faadd02133fc81a2d9dcab042cf8d4b6b037877490e1081d919949",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+   "details": {
+    "model": "kumo-relational",
+    "unsupported": [
+     "target_transforms"
+    ]
+   }
+  },
+  "transforms.null-beside-a-name@postgres": {
+   "case": "1092df0d90faadd02133fc81a2d9dcab042cf8d4b6b037877490e1081d919949",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+   "details": {
+    "model": "kumo-relational",
+    "unsupported": [
+     "target_transforms"
+    ]
+   }
+  },
+  "transforms.null-beside-a-name@sqlite": {
+   "case": "1092df0d90faadd02133fc81a2d9dcab042cf8d4b6b037877490e1081d919949",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+   "details": {
+    "model": "kumo-relational",
+    "unsupported": [
+     "target_transforms"
+    ]
+   }
+  },
+  "transforms.null-on-a-classification": {
+   "case": "b843eb68c2f3904361369bab62f0e865ade92d02cdf1a194a5c36e023a5c741f",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for ClassificationInferenceConfig\ntarget_transforms\n  Unexpected keyword argument [type=unexpected_keyword_argument, input_value=[None], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/unexpected_keyword_argument",
+   "details": {}
+  },
+  "transforms.null-on-a-classification@postgres": {
+   "case": "b843eb68c2f3904361369bab62f0e865ade92d02cdf1a194a5c36e023a5c741f",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for ClassificationInferenceConfig\ntarget_transforms\n  Unexpected keyword argument [type=unexpected_keyword_argument, input_value=[None], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/unexpected_keyword_argument",
+   "details": {}
+  },
+  "transforms.null-on-a-classification@sqlite": {
+   "case": "b843eb68c2f3904361369bab62f0e865ade92d02cdf1a194a5c36e023a5c741f",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for ClassificationInferenceConfig\ntarget_transforms\n  Unexpected keyword argument [type=unexpected_keyword_argument, input_value=[None], input_type=list]\n    For further information visit https://errors.pydantic.dev/2.13/v/unexpected_keyword_argument",
+   "details": {}
+  },
+  "transforms.null@postgres": {
+   "case": "de07a434c02ee7d312ff88ad5c6ec391c9494575b5835caf1a35680fcf1bdce0",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+   "details": {
+    "model": "kumo-relational",
+    "unsupported": [
+     "target_transforms"
+    ]
+   }
+  },
+  "transforms.null@sqlite": {
+   "case": "de07a434c02ee7d312ff88ad5c6ec391c9494575b5835caf1a35680fcf1bdce0",
+   "outcome": {
+    "result": "refusal",
+    "stage": "predict",
+    "error": "UnsupportedRequestError",
+    "code": "UNSUPPORTED_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[UNSUPPORTED_REQUEST] kumo-relational does not read inference option(s) ['target_transforms']; drop them from inference_config to send the request without them. The keys this client forwards are ['category_shuffle', 'class_shuffle', 'column_shuffle', 'hop_shuffle', 'kind', 'num_estimators'], and the endpoint decides for itself whether it serves the value given for one",
+   "details": {
+    "model": "kumo-relational",
+    "unsupported": [
+     "target_transforms"
+    ]
+   }
+  },
+  "transforms.whole-null": {
+   "case": "1a3ede74504b48d4e9a9cb941df543a22f17bb19718663700f394df76072f6b1",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\ntarget_transforms\n  Input should be a valid list [type=list_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type",
+   "details": {}
+  },
+  "transforms.whole-null@postgres": {
+   "case": "1a3ede74504b48d4e9a9cb941df543a22f17bb19718663700f394df76072f6b1",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\ntarget_transforms\n  Input should be a valid list [type=list_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type",
+   "details": {}
+  },
+  "transforms.whole-null@sqlite": {
+   "case": "1a3ede74504b48d4e9a9cb941df543a22f17bb19718663700f394df76072f6b1",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "calls": [],
+   "result": null,
+   "explanation": null,
+   "item_metadata": null,
+   "warnings": [],
+   "message": "[INVALID_REQUEST] 1 validation error for RegressionInferenceConfig\ntarget_transforms\n  Input should be a valid list [type=list_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/list_type",
+   "details": {}
+  }
+ }
+}
