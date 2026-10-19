@@ -25,7 +25,8 @@
 //!   `contract/t213-option-vectors.json` holds them from the reference's
 //!   `to_pandas()`, and, where the reference's result holds an explanation
 //!   or its items metadata, each of them somewhere in what this host's
-//!   `predict` gives back (as JSON, or as the text of JSON), which the
+//!   `predict` gives back (as JSON, or as the text of JSON; a forecast's
+//!   explanation step by step, in each row's explanation column), which the
 //!   scripted endpoint answers where the case says (`input.explanation`,
 //!   `input.item_metadata`; `endpoint::answer_told`). rust-host's Postgres
 //!   pass replays python-core's fetches (KO2-20), which `cross-host
@@ -277,6 +278,44 @@ fn result_problem(predicted: &Value, vector: &Value) -> Option<String> {
     (!found.is_empty()).then(|| found.join("; "))
 }
 
+/// Why the rows of this host's forecast `result` do not each carry, in
+/// their explanation column, the reference's explanation for their step
+/// (`steps`, the reference's `by_forecast_step`, keyed by the step's
+/// digits), or nothing where the reference has none for it. The rows are
+/// in the reference's order ([`result_problem`] holds them so).
+fn step_explanation_problem(predicted: &Value, vector: &Value, steps: &Value) -> Option<String> {
+    let result = &vector["result"];
+    let step_at = result["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|c| c == "forecast_step")
+        .expect("a forecast's result has forecast_step");
+    let got = match rows_as(predicted, &["explanation".to_owned()]) {
+        Ok(got) => got,
+        Err(why) => return Some(why),
+    };
+    for (i, row) in result["rows"].as_array().unwrap().iter().enumerate() {
+        let step = row[step_at].to_string();
+        let cell = &got[i][0];
+        match &steps[step.as_str()] {
+            Value::Null if cell.is_null() => {}
+            Value::Null => {
+                return Some(format!(
+                    "step {step}'s row has explanation {cell} where the reference has none"
+                ));
+            }
+            wanted if !holds(cell, wanted) => {
+                return Some(format!(
+                    "step {step}'s row has explanation {cell} where the reference has {wanted}"
+                ));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 /// Why this host's `observed` answer does not answer as python-ref's
 /// `line` and `vector`, if it does not.
 fn problem(observed: &host::Observed, line: &Value, vector: &Value) -> Option<String> {
@@ -327,7 +366,16 @@ fn problem(observed: &host::Observed, line: &Value, vector: &Value) -> Option<St
     if let Some(why) = result_problem(predicted, vector) {
         return Some(why);
     }
-    if !vector["explanation"].is_null() && !holds(predicted, &vector["explanation"]) {
+    if let Some(steps) = vector["explanation"].get("by_forecast_step") {
+        // A forecast's whole explanation (`{"by_forecast_step": ...}`) is
+        // on the result's Arrow schema metadata, which this host's runner
+        // does not record (python-core's test holds the whole one to the
+        // reference); here each step's explanation is held, in the rows'
+        // explanation column, to the reference's for that step.
+        if let Some(why) = step_explanation_problem(predicted, vector, steps) {
+            return Some(why);
+        }
+    } else if !vector["explanation"].is_null() && !holds(predicted, &vector["explanation"]) {
         return Some(format!(
             "predict gives back no explanation {}",
             vector["explanation"]
