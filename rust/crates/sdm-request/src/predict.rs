@@ -611,12 +611,17 @@ pub fn preflight(
     }
     let scored: usize = payloads.iter().map(|p| rows_of(p, "predict")).sum();
     if scored != EXPLANATION_PREDICT_ROWS {
+        // The output and what to change, for the host's words (T2.13).
         return Err(unsupported(model, "an explanation covers one entity")
+            .with_field("field", Detail::text("outputs"))
+            .with_field("remedy", Detail::text("one_entity"))
             .with_field("scored", count(scored)));
     }
     if asks_for_the_larger_context(payloads) {
         return Err(
             unsupported(model, "an explanation is given only in the fast run mode")
+                .with_field("field", Detail::text("outputs"))
+                .with_field("remedy", Detail::text("smaller_context"))
                 .with_field("context_rows_fast", count(CONTEXT_ROWS_FAST)),
         );
     }

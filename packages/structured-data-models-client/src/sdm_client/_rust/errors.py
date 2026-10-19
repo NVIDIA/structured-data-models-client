@@ -189,6 +189,59 @@ WORDED: dict[tuple[str, ...], str] = {
         'before any is sent. That is past the {limit:,} calls this will hold '
         'at once; ask about fewer entities at a time'
     ),
+    # T2.13: the refusals the long tail's options reach, said with what to
+    # change, as the reference's messages say it (the inference options'
+    # validation, the preflight of an explanation, an answer's item fields),
+    # never a value given.
+    ('INVALID_REQUEST', 'inference_config', 'not_an_object'): (
+        'inference_config is a mapping of option names to values'
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_an_option'): (
+        'inference_config holds {key!r}, which is not an inference option '
+        'of this task: the options are num_estimators, column_shuffle, '
+        'category_shuffle and hop_shuffle, with class_shuffle for a '
+        'classification and target_transforms and output_type for a '
+        'regression'
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_boolean'): (
+        "inference_config's {key!r} is true or false: a boolean, 0 or 1, or "
+        "text such as 'true', 'yes', 'on' or 'off'"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_whole_number'): (
+        "inference_config's {key!r} is a whole number from 1 to 4"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'out_of_range'): (
+        "inference_config's {key!r} is a whole number from 1 to 4"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_list'): (
+        "inference_config's {key!r} is a list of transforms, each 'clip', "
+        "'power', 'quantile' or None"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_transform'): (
+        "inference_config's {key!r} is a list of transforms, each 'clip', "
+        "'power', 'quantile' or None"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_an_output_type'): (
+        "inference_config's {key!r} is 'mean', 'median' or 'quantiles'"
+    ),
+    ('UNSUPPORTED_REQUEST', 'outputs', 'one_entity'): (
+        'an explanation covers exactly 1 entity, and this request scores '
+        '{scored:,}; ask for one at a time'
+    ),
+    ('UNSUPPORTED_REQUEST', 'outputs', 'smaller_context'): (
+        'an explanation is only produced in the mode the smaller context '
+        'budget selects, and this request was gathered with '
+        'num_context_samples above {context_rows_fast:,}. Re-materialize '
+        'with num_context_samples={context_rows_fast} or fewer'
+    ),
+    ('INVALID_RESPONSE', 'prediction.explanation', 'not_a_mapping'): (
+        "the model endpoint answered an item's explanation with something "
+        'that is not a mapping, where the contract requires an object'
+    ),
+    ('INVALID_RESPONSE', 'prediction.metadata', 'not_a_mapping'): (
+        "the model endpoint answered an item's metadata with something "
+        'that is not a mapping, where the contract requires an object'
+    ),
     ('UNSUPPORTED_REQUEST', 'indices', 'batched_part'): (
         '{entities:,} entities are more than the {rows_per_call:,} one call '
         'scores, and this question is asked as {parts:,} of them, one per '
@@ -224,10 +277,10 @@ AS_THE_BASE_CLASS: frozenset[tuple[str, str]] = frozenset(
 
 def _worded(code: str, details: dict[str, Any]) -> str | None:
     r"""The template :data:`WORDED` holds for an error of ``code`` with
-    ``details``: by its field and rule or remedy where one is held, else by
-    its field."""
+    ``details``: by its field and rule, remedy or reason where one is held,
+    else by its field."""
     field = str(details.get('field'))
-    said = details.get('rule', details.get('remedy'))
+    said = details.get('rule', details.get('remedy', details.get('reason')))
     if said == 'most_entities' and details.get('gathered_times', 1) != 1:
         said = 'most_entities_parts'
     # A part's kind is the core's `part_kind`: `kind` is the error's own.
