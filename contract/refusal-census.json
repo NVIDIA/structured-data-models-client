@@ -3,22 +3,6 @@
   "about": "The refusal census's probes (contract/tools/refusal_census.py; Phase 2 design, choice 10; T2.1a): one per refusal site the tool generates from the code, each written for that site (its intended site): a case's input on the base and the call it runs to, with materialize's keyword arguments the case format does not carry (options) and the model predict asks (model). `why` says what the probe tries and, where the probe's author knows the public calls do not get to the site this way, why. The run records each probe's outcomes on both routes; which site produced an outcome is not claimed (reachability unmeasured).",
   "probes": [
     {
-      "site": "rule:aggregation",
-      "why": "an aggregation outside SUM, COUNT, AVG, MIN and MAX; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT COUNT_DISTINCT(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
       "site": "rule:anchor_entity",
       "why": "anchor_time='entity'",
       "input": {
@@ -71,22 +55,6 @@
         }
       },
       "until": "from_source"
-    },
-    {
-      "site": "rule:condition",
-      "why": "a target compared with text",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT users.country = 'US' FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
     },
     {
       "site": "rule:condition_value",
@@ -229,22 +197,6 @@
       "until": "materialize"
     },
     {
-      "site": "rule:logical_target",
-      "why": "AND in the target",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 AND SUM(orders.price, 0, 30, days) > 100 FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
       "site": "rule:max_pq_iterations",
       "why": "the max_pq_iterations option",
       "input": {
@@ -338,22 +290,6 @@
       }
     },
     {
-      "site": "rule:open_window",
-      "why": "an aggregation with no window start; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, -inf, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
       "site": "rule:parent_table",
       "why": "an entity table with a foreign key",
       "input": {
@@ -438,38 +374,6 @@
       "options": {
         "random_seed": 100000000000000000000000000000000000000
       }
-    },
-    {
-      "site": "rule:static_target",
-      "why": "a static column of another table; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT orders.price FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
-      "site": "rule:target_filter",
-      "why": "an aggregation of a filtered column",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT COUNT(orders.* WHERE orders.price > 1, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
     },
     {
       "site": "rule:target_stype",

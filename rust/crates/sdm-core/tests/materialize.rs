@@ -550,33 +550,13 @@ fn rule(err: &CoreError) -> String {
 
 #[test]
 fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
-    for (query, wanted) in [
-        (
-            "PREDICT SUM(orders.price, 0, 30, days) > 1 AND COUNT(orders.*, 0, 30, days) > 2 \
-             FOR EACH users.user_id",
-            "logical_target",
-        ),
-        // A row filter of one comparison is read (T2.8, a ranking's
-        // questions); one of several is not yet.
-        (
-            "PREDICT COUNT(orders.* WHERE orders.price > 10 AND orders.price < 20, 0, 30, days) \
-             FOR EACH users.user_id",
-            "target_filter",
-        ),
-        (
-            "PREDICT users.country = 'US' FOR EACH users.user_id",
-            "condition",
-        ),
-        (
-            "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'",
-            "entity_filter",
-        ),
-    ] {
-        let mut run = materialize(host(), &shop(), query, None).unwrap();
-        let err = refusal(&mut run);
-        assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{query}: {err:?}");
-        assert_eq!(rule(&err), wanted, "{query}");
-    }
+    // An entity filter; the target's rules are lifted (T2.10).
+    let query =
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'";
+    let mut run = materialize(host(), &shop(), query, None).unwrap();
+    let err = refusal(&mut run);
+    assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{query}: {err:?}");
+    assert_eq!(rule(&err), "entity_filter", "{query}");
     // A table the entity table refers to, which this build does not sample.
     let mut parent = shop();
     parent.tables[1].columns.push(column(

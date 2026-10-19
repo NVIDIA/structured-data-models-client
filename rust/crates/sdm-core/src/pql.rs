@@ -321,10 +321,12 @@ impl ForecastPlan {
 
 /// A forecast's plan, the regressions the client's `_per_step` asks it as
 /// (T1.36 fix 21), written by [`ForecastPlan::step`]; none for a query that
-/// is not a forecast. A forecast whose target ends in no aggregation, or
-/// whose window has no start, the reference cannot split (an
-/// `AttributeError` or `TypeError`), refused by name, as the regression it
-/// would ask is. Nothing is written per step here (T1.36 fix 23).
+/// is not a forecast. A forecast whose target ends in no aggregation the
+/// reference cannot split (an `AttributeError`), refused by name, as the
+/// regression it would ask is; one whose window has no start the query's
+/// validation refuses first ("TARGET cannot have an aggregation in the
+/// past"), so reaching it here is a fault of this build (T2.10). Nothing is
+/// written per step here (T1.36 fix 23).
 fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, CoreError> {
     let query = &validated.query;
     if query.problem_type != Some(t::ProblemType::Forecast) {
@@ -337,13 +339,13 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
         Kind::Aggregation { aggr, target, .. } => (aggr.value(), ast::to_string(target)),
         _ => return Err(internal("a final aggregation is not an aggregation")),
     };
-    let window =
-        ast::date_offset_range(&aggregation).ok_or_else(|| sdm_engine::not_yet("open_window"))?;
+    let window = ast::date_offset_range(&aggregation)
+        .ok_or_else(|| internal("a forecast's aggregation has no window"))?;
     let window = window.borrow();
     let start = i128::from(
         window
             .start
-            .ok_or_else(|| sdm_engine::not_yet("open_window"))?,
+            .ok_or_else(|| internal("a forecast's window has no start"))?,
     );
     let count = query
         .num_forecasts
