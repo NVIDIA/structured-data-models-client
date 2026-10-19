@@ -1,6 +1,6 @@
 # T2.10: PQL targets
 
-Lane f's worktree, on the phase head after T2.8c's landing (34639b61).
+Lane f's worktree, started on the phase head after T2.8c's landing (34639b61), rebased onto T2.7's (e1fac9ee) with the test author's five commits (`T2.10 tests:`, a1bdb1e9..19154a3e) cherry-picked unedited.
 The design's row: `aggregation`, `open_window`, `condition`, `logical_target`, `target_filter`, `static_target`, each as the reference does, with label vectors from the reference and cases per rule (the test author's, on `t210-tests`).
 Carried: the deferred filter-role column-name cases and vectors (`contract/deferred/t210-column-filter/`); a ranking with `candidates=` naming an odd column and a ranking over a DECIMAL key refused under `target_filter` (both from T2.8's reviews, waiting on T2.8's landing, below).
 
@@ -65,3 +65,10 @@ On a scratch merge of this lane with `t210-tests` (d5068a31, never pushed), with
 - `contract/tests/test_t210_targets.py` on DuckDB, SQLite and Postgres: every key the pending list names passes now (112 tests fail only by naming themselves for removal from `t210-pending.json`), but `target.aggregation.list-distinct` (P2E-19), `rank.odd-column` (the Python host's ranking spells the candidate's column unquoted, refused INVALID_REQUEST: T2.8's, which moves the ranking into the core) and the three `name.*-filter` cases, which answer through predict as their twins do and wait only for P2E-1 (KO2-36) to name them, as it names T2.18's.
 - `rank.decimal-key` passes on all three databases already: the client's candidate question filters on the DECIMAL key, which the filter reads exactly.
 - `sdm-testkit`'s `tests/t210_targets.rs` and `tests/t218_column_names.rs` on DuckDB and SQLite: the same.
+
+## After the rebase onto e1fac9ee
+
+- **Goldens**: T2.4's run check over python-core's run of the target cases, the three name filter cases and the S0 boundary cases on DuckDB, SQLite and Postgres 17 found 21, 24 and 21 requests no golden held; each is now pinned in `sdm-data`'s `tests/<database>_goldens.rs`, whose render and run checks pass.
+- **Register**: P2E-1 (KO2-36) names the three `name.*-filter` cases on both core runners and three databases, as it names T2.18's; P2B-16 (SQLite) and P2C-7 (Postgres), KO2-56's temporary entries for the four S0 boundary queries the not-yet rules refused until T2.10, are retired (rejected, IDs kept, each saying what replaced it).
+- **Pending**: 141 keys leave `t210-pending.json` (`test_t210_targets.py`: 292 passed; `t210_targets.rs`: 3 passed); 21 stay: `rank.odd-column` and rust-host's `rank.decimal-key` (T2.8's ranking in the core), and `target.aggregation.list-distinct` (P2E-19).
+- **A link prediction's answer**: the scripted endpoint answers none, so `sdm-request`'s unit test `a_link_prediction_s_answer_is_refused_by_name_never_read_as_another_task_s` holds the core's reading of one as the endpoint writes it (each item's `rankings`, a list of objects, which the reference's bindings read with `_mapping_tuple` and its result keeps in one row): against a link prediction's payload it is refused by name (`problem_type`), against another task's its `rankings` are refused by name (`response_field`).
