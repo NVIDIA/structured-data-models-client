@@ -28,6 +28,7 @@ fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
         rankings: None,
         explanation: None,
         metadata: None,
+        quantiles: None,
     }
 }
 

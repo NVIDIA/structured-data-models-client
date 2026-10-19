@@ -558,6 +558,31 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
             "prediction.probabilities",
             "not_finite",
         ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":[0.5]}"#.to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.quantiles",
+            "not_an_object",
+        ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.5":"x"}}"#.to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.quantiles",
+            "not_a_number",
+        ),
+        (
+            response(&[
+                r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.5":Infinity}}"#
+                    .to_owned(),
+                item("3", "1"),
+            ]),
+            "prediction.quantiles",
+            "not_finite",
+        ),
     ];
     for (answer, field, reason) in cases {
         let (_, step) = answered(200, answer.as_bytes());
@@ -576,15 +601,16 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
 #[test]
 fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
     let base = r#"{"id":"r1","model":"m","metadata":{},"predictions":[ITEM,{"id":"3","row_index":1,"prediction":1.0}]}"#;
-    // Quantiles alone are not carried yet: an item's explanation and
-    // metadata are from T2.13, its scores and rankings from T2.8.
-    let item = r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.5":1.0}}"#;
+    // Embeddings alone are not carried yet: an item's quantiles are from
+    // T2.9, its explanation and metadata from T2.13, its scores and
+    // rankings from T2.8.
+    let item = r#"{"id":"2","row_index":0,"prediction":1.0,"embeddings":[0.5]}"#;
     let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
     let error = step.unwrap_err();
     assert_eq!(error.code, ErrorCode::UnsupportedRequest);
     assert_eq!(rule(&error), Some(&text("response_field")));
     assert_eq!(error.fields["operation"], text("predict"));
-    assert_eq!(error.fields["field"], text("quantiles"));
+    assert_eq!(error.fields["field"], text("embeddings"));
     // An item's scores and rankings are laid out (T2.8), read as the
     // bindings read them: a scores field not a list, or a ranking no dict
     // makes, is the endpoint's fault.
@@ -1078,6 +1104,87 @@ fn a_request_with_no_rows_is_answered_without_a_call() {
         panic!("the metadata is attached");
     };
     assert_eq!(metadata, b"{}");
+}
+
+/// A regression's quantiles (T2.9): each answer's, keyed as the answer
+/// wrote them and in its order, laid out after the prediction as the JSON
+/// text of the mapping (the one encoding of a mapping-valued field), each
+/// value the double it reads as; one an answer gave as `{}` is `{}`, and
+/// one it left out null; named in the outputs and held by one answer, it is
+/// carried, so no notice; held by none, it is noted as left out.
+#[test]
+fn a_regression_s_quantiles_are_laid_out_as_answered() {
+    let mut run = predict_run_asking(
+        REQUEST_STATE_VERSION,
+        payload_text(),
+        "kumo-relational",
+        &["prediction", "quantiles"],
+    )
+    .unwrap();
+    let (id, body) = call(&mut run);
+    let sent: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(sent["output"]["fields"], json!(["prediction", "quantiles"]));
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"3","row_index":1,"prediction":2.0,"quantiles":{}},{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.9":3.5,"0.10":"0.25","0.5":1}}]}"#.to_vec(),
+        },
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::Predict(predicted),
+    } = run.next().unwrap()
+    else {
+        panic!("done");
+    };
+    assert!(run.take_warnings().is_empty());
+    let Some(Attachment::Arrow(result)) = run.take_attachment(predicted.result) else {
+        panic!("the result is attached");
+    };
+    let batch = &result.batches[0];
+    let schema = batch.schema();
+    let names: Vec<&str> = schema.fields().iter().map(|f| f.name().as_str()).collect();
+    assert_eq!(
+        names,
+        ["row_index", "id", "prediction", "quantiles", "answer_index"]
+    );
+    let quantiles = batch.column(3).as_string::<i32>();
+    // Row 0 (the endpoint's second answer) first, keyed as written, text
+    // and an integer alike the double they read as; row 1's `{}`.
+    assert_eq!(quantiles.value(0), r#"{"0.9":3.5,"0.10":0.25,"0.5":1.0}"#);
+    assert_eq!(quantiles.value(1), "{}");
+    assert_eq!(schema.field(3).data_type(), &DataType::Utf8);
+
+    // Held by no answer, the output named is noted as left out.
+    let mut run = predict_run_asking(
+        REQUEST_STATE_VERSION,
+        payload_text(),
+        "kumo-relational",
+        &["quantiles"],
+    )
+    .unwrap();
+    let (id, _) = call(&mut run);
+    run.submit_model(
+        id,
+        ModelResult::Response {
+            status: 200,
+            content_type: "application/json".into(),
+            body: br#"{"id":"r1","model":"m","metadata":{},"predictions":[{"id":"2","row_index":0,"prediction":1.0,"quantiles":{}},{"id":"3","row_index":1,"prediction":2.0,"quantiles":null}]}"#.to_vec(),
+        },
+    )
+    .unwrap();
+    assert!(matches!(run.next().unwrap(), Step::Done { .. }));
+    let warnings = run.take_warnings();
+    let [warning] = warnings.as_slice() else {
+        panic!("one notice: {warnings:?}");
+    };
+    assert_eq!(warning.code, "OUTPUTS_ABSENT");
+    assert_eq!(
+        warning.fields["absent"],
+        Detail::List(vec![Scalar::Utf8("quantiles".into())])
+    );
 }
 
 /// An output the caller named that the answer leaves out is given as a

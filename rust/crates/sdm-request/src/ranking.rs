@@ -893,6 +893,7 @@ mod tests {
                     rankings: None,
                     explanation: None,
                     metadata: None,
+                    quantiles: None,
                 })
                 .collect(),
             answers: crate::predict::AnswerType::Bool,

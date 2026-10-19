@@ -27,8 +27,13 @@
 //! bindings' `_dict_or_none` reads them, Python's `dict` of the value
 //! ([`mapping`], the one reader T2.8 lands).
 //!
+//! From T2.9 an item's `quantiles` is read as the bindings' `_float_dict`
+//! reads it, as `probabilities` is (an object, each member's value a
+//! finite number, each refusal naming `prediction.quantiles`), and kept as
+//! the [`mapping`] it is, each value written as the double it reads as.
+//!
 //! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it, and its other fields (`embeddings`, `quantiles`) are
+//! bindings take it, and its other field (`embeddings`) is
 //! not read or type-checked: when one is there and not null, it is named in
 //! [`PredictionItem::carried`], for the caller to refuse by name as a field
 //! the result does not carry yet (`UNSUPPORTED_REQUEST`, register P1B-4),
@@ -54,7 +59,7 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
-pub const UNREAD_ITEM_FIELDS: [&str; 2] = ["embeddings", "quantiles"];
+pub const UNREAD_ITEM_FIELDS: [&str; 1] = ["embeddings"];
 
 /// One answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +87,10 @@ pub struct PredictionItem {
     /// The item's own metadata, a mapping as [`mapping`] lays one out;
     /// absent and `null` alike are `None` (T2.13).
     pub metadata: Option<Value>,
+    /// The item's quantiles, a mapping as [`mapping`] lays one out, each
+    /// value the double it reads as; absent and `null` alike are `None`
+    /// (T2.9).
+    pub quantiles: Option<Value>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
 }
@@ -185,6 +194,14 @@ impl PredictionItem {
             None | Some(Value::Null) => None,
             Some(given) => Some(mapping(given, "prediction.metadata")?),
         };
+        let quantiles = match value.get("quantiles") {
+            None | Some(Value::Null) => None,
+            Some(given @ Value::Object(_)) => Some(numbers(
+                mapping(given, "prediction.quantiles")?,
+                "prediction.quantiles",
+            )?),
+            Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
+        };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
             .filter(|name| !matches!(value.get(name), None | Some(Value::Null)))
@@ -199,6 +216,7 @@ impl PredictionItem {
             rankings,
             explanation,
             metadata,
+            quantiles,
             carried,
         })
     }
@@ -239,6 +257,27 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 /// Python's `float` reads ([`numeric_text`]), never a boolean, and finite.
 fn probability(value: &Value) -> Result<f64, Refused> {
     number(value, "prediction.probabilities")
+}
+
+/// A mapping whose every value is a number, as the bindings' `_float_dict`
+/// holds one: each value read as [`number`] reads it (refused naming
+/// `field`), and written as the double it reads as, so text a float reads
+/// and an integer alike are that double.
+fn numbers(mapping: Value, field: &'static str) -> Result<Value, Refused> {
+    let Value::Object(members) = mapping else {
+        return Err(refused(field, "not_an_object"));
+    };
+    members
+        .into_iter()
+        .map(|(name, v)| {
+            let read = number(&v, field)?;
+            Ok((
+                name,
+                Value::float(read).ok_or(refused(field, "not_finite"))?,
+            ))
+        })
+        .collect::<Result<_, Refused>>()
+        .map(Value::Object)
 }
 
 /// One mapping of a response field, as Python's `dict` makes one of the

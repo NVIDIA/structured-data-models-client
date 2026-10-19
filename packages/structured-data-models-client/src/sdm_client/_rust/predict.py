@@ -28,8 +28,9 @@ adapter draws one; it makes the call the adapter makes, which this host
 sends through the client's own transport, reads the answer as the client's
 bindings read it, and lays it out: one row per answer, ordered by
 ``row_index``, under the entity it is about, with its prediction (a class
-as the target's own type), its probabilities and, from T2.13, its
-explanation and metadata, beside the result's explanation. The endpoint's answer
+as the target's own type), its probabilities, from T2.13 its explanation
+and metadata, beside the result's explanation, and from T2.9 a
+regression's quantiles. The endpoint's answer
 reaches the core as its JSON, every non-finite number Python's reader made
 of it written as a token the core reads as the same number (an infinity as
 the overflowing ``1e400``, a NaN as ``NaN``), so both hosts read it alike.
@@ -578,6 +579,12 @@ def _result(
                 metadata=None
                 if row.get('metadata') is None
                 else _mapping(row['metadata']),
+                # A regression's quantiles (T2.9), keyed as the endpoint
+                # wrote them, each value a double, read by the same reader;
+                # to_pandas spreads them as quantile_<key>.
+                quantiles=None
+                if row.get('quantiles') is None
+                else _mapping(row['quantiles']),
             )
             for row in rows
         ],

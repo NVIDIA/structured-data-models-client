@@ -37,10 +37,10 @@
 //!
 //! What the result does not carry yet is refused by name, never dropped
 //! (`UNSUPPORTED_REQUEST`, register P1B-4): an item's `scores`, `rankings`,
-//! `embeddings` or `quantiles`, a classification answer that is not of its
-//! target's type, and the tabular model. From T2.13 an item's
-//! `explanation` and `metadata` are carried (each item's, and the
-//! result's explanation, [`Part::explanation`]).
+//! `embeddings`, a classification answer that is not of its target's type,
+//! and the tabular model. From T2.13 an item's `explanation` and
+//! `metadata` are carried (each item's, and the result's explanation,
+//! [`Part::explanation`]), and from T2.9 a regression's `quantiles`.
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -947,6 +947,9 @@ pub struct Row {
     pub explanation: Option<Value>,
     /// The item's own metadata, a mapping as the explanation (T2.13).
     pub metadata: Option<Value>,
+    /// Each quantile's value, keyed as the answer wrote it, in the order
+    /// written, a mapping as the explanation (T2.9).
+    pub quantiles: Option<Value>,
 }
 
 /// The answer to one call, or the parts of one request put together.
@@ -1231,6 +1234,7 @@ pub fn layout(
             rankings: item.rankings.clone(),
             explanation: item.explanation.clone(),
             metadata: item.metadata.clone(),
+            quantiles: item.quantiles.clone(),
         });
     }
     let explanation = response
@@ -1439,10 +1443,10 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
 /// The outputs the caller named that the answer does not carry
 /// (`PredictionResult.absent`), each once, in the order named: none for an
 /// answer with no rows; `prediction` when no answer holds one,
-/// `probabilities` when none holds any, `explanation` when the result has
-/// none ([`Part::explanation`]), and the fields this build refuses an answer
-/// for carrying always; a name the result does not know is taken as
-/// carried.
+/// `probabilities` or `quantiles` when none holds any, `explanation` when
+/// the result has none ([`Part::explanation`]), and the fields this build
+/// refuses an answer for carrying always; a name the result does not know
+/// is taken as carried.
 pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
     if part.rows.is_empty() {
         return vec![];
@@ -1465,8 +1469,13 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
                 .rows
                 .iter()
                 .all(|r| r.rankings.as_ref().is_none_or(Vec::is_empty)),
+            "quantiles" => part.rows.iter().all(|r| {
+                r.quantiles
+                    .as_ref()
+                    .is_none_or(|q| matches!(q, Value::Object(m) if m.is_empty()))
+            }),
             "explanation" => part.explanation.is_none(),
-            "quantiles" | "embeddings" => true,
+            "embeddings" => true,
             _ => false,
         })
         .cloned()
@@ -1534,8 +1543,9 @@ pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) 
 /// integer widened, a class written as a non-finite number) and
 /// `probabilities` when any answer holds them (a map of each class, as its
 /// column spells it, to its probability, in the order written),
-/// `explanation` and `metadata` when any answer carries one (utf8, the JSON
-/// text of each answer's mapping, null where it had none; T2.13), and last
+/// `quantiles`, `explanation` and `metadata` when any answer carries one
+/// (utf8, the JSON text of each answer's mapping, null where it had none;
+/// T2.9 and T2.13), and last
 /// `answer_index` (int64, the answer's place in the endpoint's order, which
 /// the result's items keep, as the reference's do). The result's own
 /// explanation ([`Part::explanation`]), where it has one, is the JSON text
@@ -1723,13 +1733,15 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         fields.push(Field::new("rankings", column.data_type().clone(), true));
         columns.push(Arc::new(column));
     }
-    // Each answer's explanation and own metadata (T2.13), where any answer
-    // carries one: the JSON text of the mapping, null where it had none.
+    // Each answer's quantiles (T2.9), explanation and own metadata (T2.13),
+    // where any answer carries one: the JSON text of the mapping, null where
+    // it had none.
     for (name, of) in [
         (
-            "explanation",
-            (|r: &Row| r.explanation.as_ref()) as fn(&Row) -> Option<&Value>,
+            "quantiles",
+            (|r: &Row| r.quantiles.as_ref()) as fn(&Row) -> Option<&Value>,
         ),
+        ("explanation", |r: &Row| r.explanation.as_ref()),
         ("metadata", |r: &Row| r.metadata.as_ref()),
     ] {
         if rows.iter().any(|r| of(r).is_some()) {
