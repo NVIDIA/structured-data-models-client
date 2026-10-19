@@ -6451,7 +6451,7 @@ entries:
     query whose target has a WHERE filter or a condition.
   cases: [s0.boundary.escapes@sqlite, s0.boundary.start-past-64kb@sqlite]
   refs: [P1B-3]
-  status: approved
+  status: rejected
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
   notes: >-
@@ -6465,11 +6465,11 @@ entries:
     single comparison a ranking's questions filter by (part of T2.10's
     target_filter, lifted in T2.8) answers s0.boundary.deepest and
     s0.boundary.digits-4300 as the reference does.
-  case_outcomes:
-  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
-  - {case: s0.boundary.start-past-64kb@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'the SQLite line: refused by an E92-class rule until T2.10'}
+
+    Retired by T2.10 under KO2-56's lapse (rejected; the ID is kept): the
+    core labels a target filtered by WHERE and a condition of any column as
+    the reference does (sdm-engine labels::truth, aggregate_kept), so the
+    remaining SQLite lines answer through materialize as the reference's.
 
 - id: P2B-17
   title: On SQLite, a stored time's spelling is read once per call, where the reference reads it once per materializer
@@ -6778,8 +6778,9 @@ entries:
     from the parser to the request, and is answered on DuckDB, SQLite and
     Postgres as the same data under a name the reference can spell
     (contract/column-name-vectors.json, each vector against its twin
-    a_b). The filter role is T2.10's, which lifts the core's not-yet
-    rule target_filter (P2E-2, rejected). Two quirk rows of
+    a_b). The filter role is T2.10's, which lifted the core's not-yet
+    rule target_filter (P2E-2, rejected), its three cases named here
+    from T2.10. Two quirk rows of
     the PQL table the reference refuses as syntax (a quoted name holding
     a dot, one holding a line feed) the core refuses by name as an unknown
     table and an unknown column (sdm-core tests/pql/quirks.json,
@@ -6788,7 +6789,7 @@ entries:
     Schema.from_source, PredictiveQuery.materialize and SDMClient.predict on
     the core route over a DuckDB, SQLite or Postgres source with a column
     whose name holds a dot, a backtick, a line feed or a carriage return.
-  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-target]
+  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-filter, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-filter, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-filter, name.line-break-target]
   core_only_columns:
   - users.a.b
   - users.a`b
@@ -6875,6 +6876,24 @@ entries:
   - {case: name.line-break-target@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.line-break-target@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.line-break-target@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.18: a query naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.backtick-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.dot-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-filter, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-filter, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-filter@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: name.line-break-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
 
 - id: P2E-2
   title: A target filter on a column only the core names is refused by the core's not-yet rule target_filter, until T2.10
@@ -7533,7 +7552,7 @@ entries:
   - s0.boundary.escapes@postgres
   - s0.boundary.start-past-64kb@postgres
   refs: [E92, T2.10]
-  status: approved
+  status: rejected
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-56}
   notes: >-
@@ -7550,11 +7569,11 @@ entries:
     cases to two, as P2B-16: T2.8's lift of the single comparison a
     ranking's questions filter by answers s0.boundary.deepest and
     s0.boundary.digits-4300 as the reference does.
-  case_outcomes:
-  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule condition, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
-  - {case: s0.boundary.start-past-64kb@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.3: the core not-yet rule target_filter, until T2.10 (KO2-56)'}
+
+    Retired by T2.10 under KO2-56's lapse (rejected; the ID is kept): the
+    core labels a target filtered by WHERE and a condition of any column as
+    the reference does (sdm-engine labels::truth, aggregate_kept), so the
+    remaining Postgres lines answer through materialize as the reference's.
 
 - id: P2C-8
   title: On Postgres a multi-dimensional array column is left out, where the reference fails the source's description
