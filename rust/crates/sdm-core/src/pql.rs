@@ -138,12 +138,13 @@ pub fn validate_warned(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> (Result<QueryValidation, CoreError>, Vec<CoreWarning>) {
-    on_adapter_stack(
-        || match resolve_here(query, schema, profile, facts, zones) {
+    on_adapter_stack(|| {
+        let resolved = resolve_here(query, schema, profile, facts, zones);
+        match resolved {
             Ok(validation) => (Ok(validation.to_result()), validation.warnings),
             Err(Halted { error, warnings }) => (Err(*error), warnings),
-        },
-    )
+        }
+    })
 }
 
 /// A validation that ended with an error, and D4's warnings for the
