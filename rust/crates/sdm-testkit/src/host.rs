@@ -1992,10 +1992,11 @@ fn predict(
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
-            // The case names no outputs: the task's default ones, as the
+            // The outputs the case's caller named, as the Python host
+            // hands them over; none named, the task's default ones, as the
             // client asks when its caller names none (T1.28b).
-            outputs: vec![],
-            default_outputs: true,
+            outputs: case.input.outputs.clone().unwrap_or_default(),
+            default_outputs: case.input.outputs.is_none(),
             // The inference options the case's caller set, which alone the
             // call sends (the reference's 26ecdd28, T2.0c), as the Python
             // host hands over the keys of the request's asked config.
@@ -2073,21 +2074,27 @@ fn predict(
         bodies.push(sent);
         // The test's script where one stands in for the rule on this thread
         // (`endpoint::answered_by`), its bytes as they travel; else the
-        // scripted endpoint, failing the case's call, a classification's
-        // probabilities given where the case asks the endpoint for them
-        // (T2.8), by the call's number.
+        // scripted endpoint, failing the case's call, and answering beside
+        // the rule's prediction what the case tells it to (probabilities,
+        // quantiles, an explanation, item metadata), as the Python runner
+        // serves it (T2.8, T2.9, T2.13), by the call's number.
         let (status, answered) = match endpoint::scripted(&body) {
             Some(given) => given,
             None => {
                 let call = scripted.calls();
-                let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
-                let (status, answered) = if case.input.probabilities == Some(true)
-                    && case.input.fail_call != Some(call)
-                {
-                    endpoint::answer_with_probabilities("POST", endpoint::PREDICTIONS, &body, call)
-                } else {
-                    (status, answered)
+                let told = endpoint::Told {
+                    probabilities: case.input.probabilities.unwrap_or(false),
+                    quantiles: case.input.quantiles.unwrap_or(false),
+                    explanation: case.input.explanation.unwrap_or(false),
+                    item_metadata: case.input.item_metadata.unwrap_or(false),
                 };
+                let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
+                let (status, answered) =
+                    if told != endpoint::Told::default() && case.input.fail_call != Some(call) {
+                        endpoint::answer_told("POST", endpoint::PREDICTIONS, &body, call, told)
+                    } else {
+                        (status, answered)
+                    };
                 (status, serde_json::to_vec(&answered)?)
             }
         };
