@@ -340,6 +340,12 @@ def test_a_refused_lag_is_said_plainly_under_the_reference_s_code(
         ('PREDICT users.age FOR EACH users.user_id', Decimal(2), 0),
         ('PREDICT users.age FOR EACH users.user_id', Fraction(2, 1), 0),
         ('PREDICT users.age FOR EACH users.user_id', Decimal('0.1'), 0),
+        # Past what a double reaches, held at the nearest of the same sign
+        # (T2.9 fix 3): taken on a static query, refused on a temporal one.
+        ('PREDICT users.age FOR EACH users.user_id', Decimal('1e-400'), 0),
+        ('PREDICT users.age FOR EACH users.user_id', Decimal('1e400'), 0),
+        (QUERY, Decimal('1e-400'), None),
+        (QUERY, Decimal('1e400'), None),
         (QUERY, Decimal(0), 0),
         (QUERY, Fraction(0), 0),
         (QUERY, Decimal(2), None),
@@ -364,6 +370,18 @@ def test_a_decimal_or_fraction_lag_is_met_as_the_reference_meets_it(
 
 
 @pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
+def test_a_decimal_seed_is_said_as_the_reference_says_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T2.9 fix 3 (round 2's P3-2): a Decimal seed reaches the core as a
+    # float and is refused there, in the reference's words.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(random_seed=Decimal(3))
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'random_seed must be a whole number' in str(refused.value)
+
+
 def test_a_nan_lag_is_refused_on_the_core_route_only(
     monkeypatch: pytest.MonkeyPatch, value: float
 ) -> None:

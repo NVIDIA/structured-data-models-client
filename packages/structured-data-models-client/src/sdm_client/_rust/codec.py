@@ -24,7 +24,6 @@ Input-sized fields of a ``start`` travel as bytes attachments of their JSON
 from __future__ import annotations
 
 import base64
-import contextlib
 import decimal
 import fractions
 import json
@@ -32,6 +31,7 @@ import math
 import numbers
 import re
 import struct
+import sys
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
@@ -309,14 +309,24 @@ def _scalar(value: Any) -> Any:
     if isinstance(value, (decimal.Decimal, fractions.Fraction)):
         # From T2.9, a finite decimal or fraction as its nearest double,
         # its sign and whether it is zero kept, which is all an option the
-        # core reads as a number asks of it (lag_timesteps=Decimal(2) on a
-        # static query, which the reference takes and ignores; a temporal
-        # one refused as not whole, as the reference refuses it); any other
-        # refused, as the encoder refuses it.
-        with contextlib.suppress(ArithmeticError, ValueError, OverflowError):
-            double = float(value)
-            if math.isfinite(double) and (double == 0) == (value == 0):
-                return double
+        # core reads as a number asks of it: one a double cannot reach is
+        # held at the double nearest it of the same sign (the least
+        # positive one, or the largest finite), so lag_timesteps=Decimal(2),
+        # Decimal('1e-400') or Decimal('1e400') on a static query is taken
+        # and ignored, and on a temporal one refused as not whole, as the
+        # reference meets each; a NaN or an infinity refused, as the
+        # encoder refuses it.
+        if not isinstance(value, decimal.Decimal) or value.is_finite():
+            sign = 1.0 if value > 0 else -1.0
+            try:
+                double = float(value)
+            except OverflowError:
+                double = math.inf
+            if math.isinf(double):
+                return math.copysign(sys.float_info.max, sign)
+            if double == 0 and value != 0:
+                return math.copysign(5e-324, sign)
+            return double
         raise TypeError(
             f'Object of type {type(value).__name__} is not JSON serializable'
         )
@@ -340,12 +350,14 @@ def encode(message: dict[str, Any]) -> bytes:
     return data
 
 
-def attachment(value: Any) -> bytes:
+def attachment(value: Any, *, named: bool = False) -> bytes:
     r"""An input-sized field as a bytes attachment of its JSON. A value JSON
     cannot hold (one of a type the encoder does not know, a number that is
     not finite, one nested past what the encoder writes) is refused as the
     client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
-    call's option values travel here as the caller gave them."""
+    call's option values travel here as the caller gave them, and from
+    T2.9 (``named``, for them alone) the refusal names the first option
+    whose value JSON cannot hold, in ``details['field']``."""
 
     def written(item: Any) -> bytes:
         return json.dumps(
@@ -367,21 +379,23 @@ def attachment(value: Any) -> bytes:
 
     # A mapping's first member JSON cannot hold is named (T2.9: the call's
     # option values, a NaN or an infinity among them, say which option).
-    named = next(
+    option = next(
         (
             str(name)
-            for name, item in (value.items() if isinstance(value, dict) else ())
+            for name, item in (
+                value.items() if named and isinstance(value, dict) else ()
+            )
             if not writes(item)
         ),
         None,
     )
     raise StructuredDataError(
         'this request carries a value that cannot be sent as JSON'
-        if named is None
-        else f'{named} carries a value that cannot be sent as JSON (a NaN, '
+        if option is None
+        else f'{option} carries a value that cannot be sent as JSON (a NaN, '
         f'an infinity, or a type JSON has no form for)',
         code='INVALID_REQUEST',
-        details=None if named is None else {'field': named},
+        details=None if option is None else {'field': option},
     )
 
 

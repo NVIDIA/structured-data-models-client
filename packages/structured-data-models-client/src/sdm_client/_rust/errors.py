@@ -285,6 +285,11 @@ WORDED: dict[tuple[str, ...], str] = {
     ('INVALID_REQUEST', 'lag_timesteps'): _LAG,
     # A refused lag in plain words by the core's reason (T2.9 fix 2),
     # never the reason's token.
+    # A seed given of another type than a whole number, as the reference
+    # says it (T2.9 fix 3, round 2's P3-2).
+    ('INVALID_REQUEST', 'random_seed', 'not_a_whole_number'): (
+        'random_seed must be a whole number'
+    ),
     ('INVALID_REQUEST', 'lag_timesteps', 'negative'): (
         _LAG_IS + '; it cannot be negative'
     ),

@@ -365,13 +365,14 @@ def gather(
         # Each as the caller gave it, a value JSON cannot hold refused as
         # the client's transport refuses it; a context size of none is none.
         5: codec.attachment(
-            {
+            named=True,
+            value={
                 'num_context_samples': num_context_samples,
                 **{
                     name: options[name]
                     for name in sorted(set(options) & VALUED)
                 },
-            }
+            },
         ),
     }
     # The ceilings on what one materialize holds, which the caller may set

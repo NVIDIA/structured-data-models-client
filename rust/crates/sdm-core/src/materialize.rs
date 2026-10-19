@@ -3105,6 +3105,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // The labelled context's examples before narrowing, then the entities
     // predicted for: the examples the lags were read for (T2.9).
     let labelled_examples = gathered;
+    // The request's lagged columns, made once (T2.9 fix 3), and how many
+    // entities the whole request scores.
+    let mut lag_columns: Option<Vec<sdm_request::payload::LagColumn>> = None;
+    let all_scored = num_test;
     let mut gathered = Vec::with_capacity(calls);
     let mut sent = BTreeSet::new();
     let mut answering = 0;
@@ -3220,14 +3224,32 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         sent.extend(walked.tables.iter().map(|t| t.name.clone()));
         // The lagged columns of this call's examples (T2.9): the narrowed
         // context's, then this call's own entities, each its own row's.
-        let lags = match &lag {
-            None => vec![],
-            Some(lag) => lag.columns(
-                &(0..num_train)
-                    .chain(labelled_examples + start..labelled_examples + start + num_test)
-                    .collect::<Vec<_>>(),
-            )?,
-        };
+        // The lagged columns of this call's examples (T2.9): the narrowed
+        // context's, then this call's own entities, each its own row's,
+        // sliced from the whole request's columns, so each column's type
+        // is the request's whatever this call's rows hold (fix 3); the
+        // columns are computed at the first call's payload, where the
+        // reference's size refusal falls, held to the largest call's rows.
+        if lag_columns.is_none()
+            && let Some(lag) = &lag
+        {
+            lag.fits(num_train + largest)?;
+            lag_columns = Some(
+                lag.columns(
+                    &(0..num_train)
+                        .chain(labelled_examples..labelled_examples + all_scored)
+                        .collect::<Vec<_>>(),
+                )?,
+            );
+        }
+        let rows: Vec<usize> = (0..num_train)
+            .chain(num_train + start..num_train + start + num_test)
+            .collect();
+        let lags = lag_columns
+            .iter()
+            .flatten()
+            .map(|column| column.rows(&rows))
+            .collect();
 
         let built = payload::build(&Sampled {
             num_train,

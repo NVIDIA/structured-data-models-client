@@ -6645,6 +6645,14 @@ entries:
     - 'public.payloads/*/2/predict/instance_table/rows/*/3'
     - 'public.payloads/*/2/predict/instance_table/rows/*/4'
     null_on_one_side: true
+  - case: lag.average-empty-windows@postgres
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/context/instance_table/rows/*/4'
+    - 'core.predicted.body/*/context/instance_table/rows/*/5'
+    - 'core.predicted.body/*/predict/instance_table/rows/*/3'
+    - 'core.predicted.body/*/predict/instance_table/rows/*/4'
+    null_on_one_side: true
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
@@ -6660,7 +6668,8 @@ entries:
     and the test author's case lag.average-empty-windows (one regression
     asked in one call, each row's lag computed by hand, on all three
     databases and both hosts; the lag cells of both core runners listed
-    under more_exact, rust-host on Postgres replaying python-core's).
+    under more_exact on every database, rust-host's on Postgres too, where
+    it replays python-core's fetches but writes its own payload).
     Fixed in T2.9 fix 1.
 
 # --- lane D entries (P2D-1..19) ---

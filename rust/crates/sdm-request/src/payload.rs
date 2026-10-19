@@ -136,18 +136,45 @@ pub struct SampledLink {
 pub enum LagValues {
     Float(Vec<Option<f32>>),
     Bool(Vec<Option<bool>>),
+    /// A condition's column that no example of the whole request has a
+    /// value in, so many rows: `float64` nulls, as pandas types a column of
+    /// booleans with nothing in it (T2.9 fix 3: decided over the request,
+    /// not over one call's rows).
+    Empty(usize),
 }
 
 /// One lagged target column of the instance table (T2.9), as the reference's
 /// engine adds it to the task (`add_lagged_target`) and lays it out
 /// (`_instance_dataframe`): after the label, with no semantic type; an
 /// aggregation's as `float64`, its float32s as doubles; a condition's as
-/// `bool`, or `float64` where no example has a value, as pandas types a
-/// column of booleans with nothing in it; a missing value null.
+/// `bool`, or `float64` where no example of the whole request has a value
+/// ([`LagValues::Empty`]), whatever rows one call of it holds; a missing
+/// value null.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LagColumn {
     pub name: String,
     pub values: LagValues,
+}
+
+impl LagColumn {
+    /// The column at `rows`, its type kept: a call's slice of the
+    /// request's column (T2.9 fix 3), a condition's `bool` though the
+    /// call's rows hold no value.
+    pub fn rows(&self, rows: &[usize]) -> LagColumn {
+        fn picked<T: Copy>(values: &[Option<T>], rows: &[usize]) -> Vec<Option<T>> {
+            rows.iter()
+                .map(|&at| values.get(at).copied().flatten())
+                .collect()
+        }
+        LagColumn {
+            name: self.name.clone(),
+            values: match &self.values {
+                LagValues::Float(v) => LagValues::Float(picked(v, rows)),
+                LagValues::Bool(v) => LagValues::Bool(picked(v, rows)),
+                LagValues::Empty(_) => LagValues::Empty(rows.len()),
+            },
+        }
+    }
 }
 
 /// What a request is built from.
@@ -723,16 +750,13 @@ fn lag_column(lag: &LagColumn, examples: usize) -> Result<FrameColumn, CoreError
                 .collect::<Result<_, _>>()?,
         ),
         LagValues::Bool(values) => (
-            if values.iter().any(Option::is_some) {
-                Dtype::Bool
-            } else {
-                Dtype::Float64
-            },
+            Dtype::Bool,
             values
                 .iter()
                 .map(|v| v.map_or(Value::Null, Value::Bool))
                 .collect(),
         ),
+        LagValues::Empty(rows) => (Dtype::Float64, vec![Value::Null; *rows]),
     };
     if cells.len() != examples {
         return Err(internal("a lagged column does not align with the examples"));

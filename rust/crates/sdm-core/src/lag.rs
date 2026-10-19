@@ -125,16 +125,14 @@ pub(crate) struct Lag {
 }
 
 impl Lag {
-    /// The lagged columns of the examples at `kept` (positions among the
-    /// examples the lags were read for), `__kumo_arl0__` first. A request
-    /// they would make larger than the endpoint takes is refused before
-    /// any is computed, as the payload's limit refuses it.
-    pub fn columns(&self, kept: &[usize]) -> Result<Vec<LagColumn>, CoreError> {
+    /// Refuses lags that would make a payload of `rows` instance rows
+    /// larger than the endpoint takes, before any column is computed, as
+    /// the payload's limit refuses it.
+    pub fn fits(&self, rows: usize) -> Result<(), CoreError> {
         let least = usize::try_from(self.steps)
             .ok()
             .and_then(|steps| {
-                kept.len()
-                    .checked_mul(CELL_BYTES)?
+                rows.checked_mul(CELL_BYTES)?
                     .checked_add(COLUMN_BYTES)?
                     .checked_mul(steps)
             })
@@ -152,6 +150,16 @@ impl Lag {
                 Detail::Scalar(Scalar::UInt64(PAYLOAD_BYTES as u64)),
             ));
         }
+        Ok(())
+    }
+
+    /// The lagged columns of the examples at `kept` (positions among the
+    /// examples the lags were read for: the whole request's), `__kumo_arl0__`
+    /// first; a condition's that none of them has a value in
+    /// [`LagValues::Empty`]. A call takes its slice with
+    /// [`LagColumn::rows`], so each column's type is the request's (T2.9
+    /// fix 3).
+    pub fn columns(&self, kept: &[usize]) -> Result<Vec<LagColumn>, CoreError> {
         let examples = self.shifted.len();
         (0..self.steps)
             .map(|k| {
@@ -204,11 +212,17 @@ impl Lag {
                             .map(|&at| own(at).and_then(|i| v.get(i).copied()))
                             .collect(),
                     ),
-                    Labels::Bool(v) => LagValues::Bool(
-                        kept.iter()
+                    Labels::Bool(v) => {
+                        let values: Vec<Option<bool>> = kept
+                            .iter()
                             .map(|&at| own(at).and_then(|i| v.get(i).copied()))
-                            .collect(),
-                    ),
+                            .collect();
+                        if values.iter().any(Option::is_some) {
+                            LagValues::Bool(values)
+                        } else {
+                            LagValues::Empty(values.len())
+                        }
+                    }
                     Labels::Int(_) | Labels::Text(_) => {
                         return Err(CoreError::new(
                             ErrorKind::Internal,
@@ -353,6 +367,44 @@ mod tests {
         );
     }
 
+    /// A condition's lag column takes its type from the whole request
+    /// (T2.9 fix 3): `bool` where any example has a value, kept so in a
+    /// call whose own rows hold none; `float64` nulls only where no example
+    /// of the request has one.
+    #[test]
+    fn a_condition_s_lag_type_is_the_request_s_in_every_call() {
+        // Example 0's window holds a row, example 1's none.
+        let w = window(1, days(0), days(10), &[100 * DAY, 100 * DAY]).unwrap();
+        let lag = |rows: Rows| Lag {
+            steps: 1,
+            aggregation: Aggregation::Avg,
+            start: days(0),
+            end: days(10),
+            condition: Some((RelOp::Gt, Some(Constant::Int(1)))),
+            shifted: w.shifted.clone(),
+            rows,
+        };
+        let some = lag(Rows {
+            batches: vec![0],
+            values: labels::Values::Float(vec![Some(3.0)]),
+            times: vec![Some(95 * DAY)],
+        })
+        .columns(&[0, 1])
+        .unwrap();
+        assert_eq!(some[0].values, LagValues::Bool(vec![Some(true), None]));
+        // The call holding example 1 alone keeps the column's type.
+        assert_eq!(some[0].rows(&[1]).values, LagValues::Bool(vec![None]));
+        let none = lag(Rows {
+            batches: vec![],
+            values: labels::Values::Float(vec![]),
+            times: vec![],
+        })
+        .columns(&[0, 1])
+        .unwrap();
+        assert_eq!(none[0].values, LagValues::Empty(2));
+        assert_eq!(none[0].rows(&[1]).values, LagValues::Empty(1));
+    }
+
     /// A month's window is moved by the calendar, as pandas moves it: from
     /// 31 March, two months back is 31 January, and the step after it ends
     /// on the last of February.
@@ -389,7 +441,7 @@ mod tests {
                 times: vec![],
             },
         };
-        let e = lag.columns(&[0, 1]).err().unwrap();
+        let e = lag.fits(2).err().unwrap();
         assert_eq!(e.code, ErrorCode::InvalidRequest);
         assert_eq!(e.fields["field"], Detail::text("payload"));
     }

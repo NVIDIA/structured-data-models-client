@@ -290,7 +290,7 @@ fn lagged_target_columns_follow_the_label_in_both_halves() {
         },
         LagColumn {
             name: "__kumo_arl2__".into(),
-            values: LagValues::Bool(vec![None; 5]),
+            values: LagValues::Empty(5),
         },
     ];
     let payload = built(&sampled);
@@ -299,6 +299,19 @@ fn lagged_target_columns_follow_the_label_in_both_halves() {
     assert_eq!(columns["__kumo_arl0__"], json!({"dtype": "float64"}));
     assert_eq!(columns["__kumo_arl1__"], json!({"dtype": "bool"}));
     assert_eq!(columns["__kumo_arl2__"], json!({"dtype": "float64"}));
+    // A call's slice keeps a condition's column bool though its own rows
+    // hold no value (T2.9 fix 3).
+    let mut slice = shop();
+    slice.lags = sampled
+        .lags
+        .iter()
+        .map(|lag| lag.rows(&[2, 3, 2, 3, 2]))
+        .collect();
+    let sliced = built(&slice);
+    assert_eq!(
+        sliced["schema"]["instance_table"]["columns"]["__kumo_arl1__"],
+        json!({"dtype": "bool"})
+    );
     let context = &payload["context"]["instance_table"];
     let names: Vec<&str> = context["columns"]
         .as_array()
