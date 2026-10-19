@@ -23,9 +23,12 @@
 //! `rankings` as their `_mapping_tuple` reads it (each member a mapping,
 //! [`mappings`]).
 //!
+//! From T2.13 an item's `explanation` and `metadata` are each read as the
+//! bindings' `_dict_or_none` reads them, Python's `dict` of the value
+//! ([`mapping`], the one reader T2.8 lands).
+//!
 //! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it, and its other fields (`embeddings`, `quantiles`,
-//! `explanation`, `metadata`) are
+//! bindings take it, and its other fields (`embeddings`, `quantiles`) are
 //! not read or type-checked: when one is there and not null, it is named in
 //! [`PredictionItem::carried`], for the caller to refuse by name as a field
 //! the result does not carry yet (`UNSUPPORTED_REQUEST`, register P1B-4),
@@ -51,7 +54,7 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
-pub const UNREAD_ITEM_FIELDS: [&str; 4] = ["embeddings", "quantiles", "explanation", "metadata"];
+pub const UNREAD_ITEM_FIELDS: [&str; 2] = ["embeddings", "quantiles"];
 
 /// One answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -73,6 +76,12 @@ pub struct PredictionItem {
     /// The item's rankings, each a mapping as a JSON object, in the order
     /// written; absent and `null` alike are `None` (T2.8).
     pub rankings: Option<Vec<Value>>,
+    /// The item's explanation, a mapping as [`mapping`] lays one out;
+    /// absent and `null` alike are `None` (T2.13).
+    pub explanation: Option<Value>,
+    /// The item's own metadata, a mapping as [`mapping`] lays one out;
+    /// absent and `null` alike are `None` (T2.13).
+    pub metadata: Option<Value>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
 }
@@ -168,6 +177,14 @@ impl PredictionItem {
             None | Some(Value::Null) => None,
             Some(given) => Some(mappings(given)?),
         };
+        let explanation = match value.get("explanation") {
+            None | Some(Value::Null) => None,
+            Some(given) => Some(mapping(given, "prediction.explanation")?),
+        };
+        let metadata = match value.get("metadata") {
+            None | Some(Value::Null) => None,
+            Some(given) => Some(mapping(given, "prediction.metadata")?),
+        };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
             .filter(|name| !matches!(value.get(name), None | Some(Value::Null)))
@@ -180,6 +197,8 @@ impl PredictionItem {
             probabilities,
             scores,
             rankings,
+            explanation,
+            metadata,
             carried,
         })
     }
@@ -507,6 +526,69 @@ mod tests {
 
     fn read(text: &str) -> Value {
         crate::json::read(text.as_bytes()).unwrap()
+    }
+
+    /// A response as the transport reads one, `NaN` and the infinities
+    /// taken (`json::read_answer`).
+    fn answer(text: &str) -> Value {
+        crate::json::read_answer(text.as_bytes()).unwrap()
+    }
+
+    /// T2.13: `dict(value)` as the bindings' `_dict_or_none` makes it, each
+    /// answer recorded through the reference's `PredictionItem.from_dict`
+    /// (an item's explanation), a key kept as first written.
+    #[test]
+    fn a_mapping_is_made_as_python_s_dict_makes_one() {
+        for (given, wanted) in [
+            ("{}", "{}"),
+            (r#"{"a":1,"b":[1,2]}"#, r#"{"a":1,"b":[1,2]}"#),
+            (r#""""#, "{}"),
+            ("[]", "{}"),
+            (r#"[["a",1],["b",2]]"#, r#"{"a":1,"b":2}"#),
+            (r#"[["a",1],["a",2]]"#, r#"{"a":2}"#),
+            (r#"["ab","cd"]"#, r#"{"a":"b","c":"d"}"#),
+            (r#"["ab","ac"]"#, r#"{"a":"c"}"#),
+            (r#"[{"x":1,"y":2}]"#, r#"{"x":"y"}"#),
+            (r#"[[1,"one"],[1.0,"uno"],[true,"si"]]"#, r#"[[1,"si"]]"#),
+            ("[[null,1]]", "[[null,1]]"),
+            (r#"[[1,2],["1",3]]"#, r#"[[1,2],["1",3]]"#),
+            (r#"[["a",1],[2,3]]"#, r#"[["a",1],[2,3]]"#),
+            (r#"[[-0,"z"],[0.0,"y"]]"#, r#"[[-0,"y"]]"#),
+            ("[[NaN,1],[NaN,2]]", "[[NaN,2]]"),
+            ("[[1e400,1],[1e999,2]]", "[[1e400,2]]"),
+            (r#"["\u00e9\u00e8"]"#, r#"{"\u00e9":"\u00e8"}"#),
+            (
+                "[[9007199254740993,1],[9007199254740992.0,2]]",
+                "[[9007199254740993,1],[9007199254740992.0,2]]",
+            ),
+            ("[[100,1],[1e2,2]]", "[[100,2]]"),
+        ] {
+            assert_eq!(
+                mapping(&answer(given), "prediction.explanation").unwrap(),
+                answer(wanted),
+                "{given}"
+            );
+        }
+        for given in [
+            r#""ab""#,
+            r#""a""#,
+            r#"[{"x":1}]"#,
+            "[[[1],2]]",
+            r#"[[{"a":1},2]]"#,
+            r#"[["a"]]"#,
+            r#"[["a",1,2]]"#,
+            "[1]",
+            "[null]",
+            "1",
+            "true",
+        ] {
+            let refused = mapping(&answer(given), "prediction.metadata").unwrap_err();
+            assert_eq!(
+                (refused.field, refused.reason),
+                ("prediction.metadata", "not_a_mapping"),
+                "{given}"
+            );
+        }
     }
 
     #[test]

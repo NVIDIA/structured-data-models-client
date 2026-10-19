@@ -33,7 +33,7 @@ use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar}
 use sdm_request::predict::{
     Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, call_starts,
     empty, layout, merge, nothing_to_score, numbered_from, predict_rows, preflight, prepare,
-    refused, table,
+    refused, steps_unexplained, table,
 };
 use sdm_wire::json::{self, Value};
 use sdm_wire::response::PredictionResponse;
@@ -42,8 +42,9 @@ use crate::run::{ArrowData, Asker, Attachment, ModelResult, Reply, internal};
 
 /// Predict's notices, each with the variants it gives (none: one
 /// sentence), which a host words (decision E59(d)): a regression's constant
-/// context, by how the target is named, and an output the caller named
-/// that the answer left out.
+/// context, by how the target is named, an output the caller named that
+/// the answer left out, and a forecast explained in some steps and not
+/// others (T2.13).
 pub const WARNINGS: &[(&str, &[&str])] = &[
     (
         sdm_request::predict::CONTEXT_CONSTANT,
@@ -51,6 +52,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     ),
     (sdm_request::predict::OUTPUTS_ABSENT, &[]),
     (crate::ranking::CANDIDATES_UNSCORED, &[]),
+    (sdm_request::predict::STEPS_UNEXPLAINED, &[]),
 ];
 
 /// A forecast's later step: its number, payload, query and request id.
@@ -180,6 +182,14 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
         }
         rows = rows.saturating_add(scored);
         answers.push((step, answer));
+    }
+    // The steps asked to be explained that came back with none, while
+    // another did (`_warn_of_steps_that_carry_no_explanation`).
+    if !inputs.default_outputs {
+        let steps: Vec<(u32, &Part)> = answers.iter().map(|(s, p)| (*s, p)).collect();
+        if let Some(notice) = steps_unexplained(&inputs.model, &inputs.outputs, &steps) {
+            warn(&asker, notice);
+        }
     }
     finish(&asker, by_step(answers)?, outputs)
 }

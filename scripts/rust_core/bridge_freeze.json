@@ -56,7 +56,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
       "<module>": {
-        "fingerprint": "f3c8341593eb780dc18f898ed40dbd8470daca008d45ecb0cc80c95b5515b0b5"
+        "fingerprint": "0156bc5e2ee029aef5194531f2d22713167d8dfc7e01ec34dec3e427256475b2"
       },
       "_adapter": {
         "fingerprint": "f40725046a4dc6e6d4843f595dc9907a872a039e056a9e7794cefc585046fef9"
@@ -65,13 +65,16 @@
         "fingerprint": "4e2da16f138742ace0f2fba35ac329bb91bf7264670a363fa01b21e2c8536c92"
       },
       "_carry_the_answers": {
-        "fingerprint": "b35feceaf6894253d79a2c55d48e9f76c4313694f83de86d64efd9b30d15362a"
+        "fingerprint": "e80fd63657cd967f295d34dfbb2a66349c25b853a43b9c709725505523b994ce"
       },
       "_copied": {
         "fingerprint": "58e3fda97077418be3f92af5a1a8e1b816bd21d54d146f4951a4490bd45b8cbb"
       },
       "_encoded": {
         "fingerprint": "f6bc6bcb2531586a957eb581aeaf812de9a73bc4e0759cb561e8c99ea0dc8cd3"
+      },
+      "_explanation": {
+        "fingerprint": "aa840c67684457a8c086ecb6b8bb48c02b0739a14e73eab2ab0272e66346f04f"
       },
       "_id": {
         "fingerprint": "07f444e73ad5cf801ec843054ba7481c828c172c754e33d43d4f100ad66eb721"
@@ -89,16 +92,19 @@
         "fingerprint": "e77c413784f97bb64785920923f9bfa9ccf2cf43293f9997ead0fef5bfa46a4d"
       },
       "_result": {
-        "fingerprint": "42de1940ff08393885eaccf636b14aca71961e21622e25d8f49a2933c8554146"
+        "fingerprint": "3115b589bc66b30c58c23cdb36892f70ddcdf1dbcfab5a81665a612107112231"
       },
       "_rows": {
         "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
+      },
+      "_table": {
+        "fingerprint": "cd4dd88b279fff2339d627ed4c4707ef6f760dec24cc1c58f347c0bdbab7b88e"
       },
       "_unscored": {
         "fingerprint": "664c947a782ca12105ae32ac14b180960adeecd35340107d972984ae9703866c"
       },
       "predict": {
-        "fingerprint": "e2210f1af2e16350ab75e18a06b1d5166bcd04700823bb35d07dc0ea73f3df8b"
+        "fingerprint": "3db385e7915514021a7cdcd4adf973825e013029f39201c71eba4352642e0a00"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/client.py": {

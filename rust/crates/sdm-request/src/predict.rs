@@ -37,8 +37,10 @@
 //!
 //! What the result does not carry yet is refused by name, never dropped
 //! (`UNSUPPORTED_REQUEST`, register P1B-4): an item's `scores`, `rankings`,
-//! `embeddings`, `quantiles`, `explanation` or `metadata`, a classification
-//! answer that is not of its target's type, and the tabular model.
+//! `embeddings` or `quantiles`, a classification answer that is not of its
+//! target's type, and the tabular model. From T2.13 an item's
+//! `explanation` and `metadata` are carried (each item's, and the
+//! result's explanation, [`Part::explanation`]).
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -116,6 +118,10 @@ pub const CONTEXT_CONSTANT: &str = "CONTEXT_CONSTANT";
 /// The notice of an output the caller named that the answer left out
 /// (`_report_absent`), worded by the host.
 pub const OUTPUTS_ABSENT: &str = "OUTPUTS_ABSENT";
+
+/// The notice of a forecast whose steps were explained but not every one
+/// (`_warn_of_steps_that_carry_no_explanation`, T2.13), worded by the host.
+pub const STEPS_UNEXPLAINED: &str = "STEPS_UNEXPLAINED";
 
 /// The shapes a request may need of a model (`SHAPE_CAPABILITIES`), in the
 /// reference's order.
@@ -918,6 +924,11 @@ pub struct Row {
     /// the order written (T2.8).
     pub scores: Option<Vec<f64>>,
     pub rankings: Option<Vec<Value>>,
+    /// The item's explanation, a mapping as `sdm_wire::response::mapping`
+    /// lays one out (T2.13).
+    pub explanation: Option<Value>,
+    /// The item's own metadata, a mapping as the explanation (T2.13).
+    pub metadata: Option<Value>,
 }
 
 /// The answer to one call, or the parts of one request put together.
@@ -933,6 +944,24 @@ pub struct Part {
     /// Whether an entity's key is text (else an integer), for the result's
     /// `id` column where no answer's entity gives its type.
     pub text_ids: bool,
+    /// The result's explanation (`PredictionResult.explanation`, T2.13):
+    /// the first answer's in the endpoint's order that holds a mapping not
+    /// empty (`normalize`), the first part's that has one across a merge's
+    /// parts, and for a forecast `{"by_forecast_step": [[step,
+    /// explanation], ...]}`, each step that has one in step order, a
+    /// mapping keyed by the step's number written as the list of its pairs
+    /// (`_by_step`); none where no answer explains.
+    pub explanation: Option<Value>,
+}
+
+/// Whether a mapping as `sdm_wire::response::mapping` lays one out is one
+/// Python takes as true: not empty.
+fn holds(mapping: &Value) -> bool {
+    match mapping {
+        Value::Object(members) => !members.is_empty(),
+        Value::Array(pairs) => !pairs.is_empty(),
+        _ => true,
+    }
 }
 
 /// The answer to a request with no rows, made without a call
@@ -945,6 +974,7 @@ pub fn empty(model: &str, payload: &Value) -> Part {
         rows: vec![],
         answers: answer_type(payload).unwrap_or(AnswerType::Float),
         text_ids: entity_dtype(payload).as_deref() == Some("string"),
+        explanation: None,
     }
 }
 
@@ -1181,8 +1211,16 @@ pub fn layout(
                 .map(|given| spelled(given, answers, float_text)),
             scores: item.scores.clone(),
             rankings: item.rankings.clone(),
+            explanation: item.explanation.clone(),
+            metadata: item.metadata.clone(),
         });
     }
+    let explanation = response
+        .predictions
+        .iter()
+        .filter_map(|item| item.explanation.as_ref())
+        .find(|e| holds(e))
+        .cloned();
     Ok(Part {
         model: response.model.clone(),
         request_id: response.id.clone(),
@@ -1190,6 +1228,7 @@ pub fn layout(
         rows: laid,
         answers,
         text_ids,
+        explanation,
     })
 }
 
@@ -1309,9 +1348,13 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
         .chain(rest.iter().map(|p| p.request_id.as_str()))
         .collect();
     metadata.set("batch_request_ids", Value::texts(ids));
+    let mut explanation = first.explanation;
     let mut rows = first.rows;
     for part in rest {
         rows.extend(part.rows);
+        if explanation.is_none() {
+            explanation = part.explanation;
+        }
     }
     for (at, row) in rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
@@ -1323,6 +1366,7 @@ pub fn merge(parts: Vec<Part>) -> Result<Part, CoreError> {
         rows,
         answers: first.answers,
         text_ids: first.text_ids,
+        explanation,
     })
 }
 
@@ -1341,31 +1385,46 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
         ));
     };
     let mut rows = Vec::new();
-    for (step, part) in std::iter::once((step, first.rows)).chain(steps.map(|(s, p)| (s, p.rows))) {
+    let mut explained = Vec::new();
+    let (model, request_id, answers, text_ids) =
+        (first.model, first.request_id, first.answers, first.text_ids);
+    for (step, part, explanation) in std::iter::once((step, first.rows, first.explanation))
+        .chain(steps.map(|(s, p)| (s, p.rows, p.explanation)))
+    {
         rows.extend(part.into_iter().map(|row| Row {
             forecast_step: Some(i64::from(step)),
             ..row
         }));
+        if let Some(explanation) = explanation {
+            explained.push(Value::Array(vec![Value::int(i64::from(step)), explanation]));
+        }
     }
     for (at, row) in rows.iter_mut().enumerate() {
         row.answer_index = i64::try_from(at).unwrap_or(i64::MAX);
     }
     Ok(Part {
-        model: first.model,
-        request_id: first.request_id,
+        model,
+        request_id,
         metadata: Value::Object(vec![]),
         rows,
-        answers: first.answers,
-        text_ids: first.text_ids,
+        answers,
+        text_ids,
+        explanation: (!explained.is_empty()).then(|| {
+            Value::Object(vec![(
+                "by_forecast_step".to_owned(),
+                Value::Array(explained),
+            )])
+        }),
     })
 }
 
 /// The outputs the caller named that the answer does not carry
 /// (`PredictionResult.absent`), each once, in the order named: none for an
 /// answer with no rows; `prediction` when no answer holds one,
-/// `probabilities` when none holds any, `explanation` and the fields this
-/// build refuses an answer for carrying always; a name the result does not
-/// know is taken as carried.
+/// `probabilities` when none holds any, `explanation` when the result has
+/// none ([`Part::explanation`]), and the fields this build refuses an answer
+/// for carrying always; a name the result does not know is taken as
+/// carried.
 pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
     if part.rows.is_empty() {
         return vec![];
@@ -1388,7 +1447,8 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
                 .rows
                 .iter()
                 .all(|r| r.rankings.as_ref().is_none_or(Vec::is_empty)),
-            "explanation" | "quantiles" | "embeddings" => true,
+            "explanation" => part.explanation.is_none(),
+            "quantiles" | "embeddings" => true,
             _ => false,
         })
         .cloned()
@@ -1407,6 +1467,39 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
     }
 }
 
+/// A forecast's steps the caller asked to be explained (an `explanation`
+/// among the outputs it named) that came back with none, while another
+/// step came back with one (`_warn_of_steps_that_carry_no_explanation`):
+/// the notice naming the model, how many steps were explained of how many,
+/// and the steps with none, in step order; `None` where every step or none
+/// was explained, or none was asked for.
+pub fn steps_unexplained(model: &str, named: &[String], steps: &[(u32, &Part)]) -> Option<Notice> {
+    if !named.iter().any(|n| n == "explanation") {
+        return None;
+    }
+    let missing: Vec<u32> = steps
+        .iter()
+        .filter(|(_, part)| part.explanation.is_none())
+        .map(|(step, _)| *step)
+        .collect();
+    if missing.is_empty() || missing.len() == steps.len() {
+        return None;
+    }
+    Some(Notice {
+        code: STEPS_UNEXPLAINED,
+        message: "a forecast's steps were explained, but not every one",
+        fields: vec![
+            ("model", Detail::text(model)),
+            ("explained", count(steps.len() - missing.len())),
+            ("steps", count(steps.len())),
+            (
+                "missing",
+                Detail::List(missing.into_iter().map(Scalar::UInt32).collect()),
+            ),
+        ],
+    })
+}
+
 /// The result of a part: one row per answer, ordered by `row_index` (as
 /// `PredictionResult.to_pandas` orders them; the order is stable among
 /// equal ones, which a merge of parts holds), with `row_index` (int64),
@@ -1422,9 +1515,13 @@ pub fn absent_notice(model: &str, absent: &[String]) -> Notice {
 /// the reference's item value, or null, where the column changed one: an
 /// integer widened, a class written as a non-finite number) and
 /// `probabilities` when any answer holds them (a map of each class, as its
-/// column spells it, to its probability, in the order written), and last
+/// column spells it, to its probability, in the order written),
+/// `explanation` and `metadata` when any answer carries one (utf8, the JSON
+/// text of each answer's mapping, null where it had none; T2.13), and last
 /// `answer_index` (int64, the answer's place in the endpoint's order, which
-/// the result's items keep, as the reference's do).
+/// the result's items keep, as the reference's do). The result's own
+/// explanation ([`Part::explanation`]), where it has one, is the JSON text
+/// on the schema's metadata under `explanation`.
 pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     let mut rows: Vec<&Row> = part.rows.iter().collect();
     rows.sort_by_key(|r| r.row_index);
@@ -1608,11 +1705,39 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         fields.push(Field::new("rankings", column.data_type().clone(), true));
         columns.push(Arc::new(column));
     }
+    // Each answer's explanation and own metadata (T2.13), where any answer
+    // carries one: the JSON text of the mapping, null where it had none.
+    for (name, of) in [
+        (
+            "explanation",
+            (|r: &Row| r.explanation.as_ref()) as fn(&Row) -> Option<&Value>,
+        ),
+        ("metadata", |r: &Row| r.metadata.as_ref()),
+    ] {
+        if rows.iter().any(|r| of(r).is_some()) {
+            fields.push(Field::new(name, DataType::Utf8, true));
+            columns.push(Arc::new(StringArray::from_iter(rows.iter().map(|r| {
+                of(r).map(|v| String::from_utf8_lossy(&v.to_bytes()).into_owned())
+            }))));
+        }
+    }
     fields.push(Field::new("answer_index", DataType::Int64, false));
     columns.push(Arc::new(Int64Array::from_iter_values(
         rows.iter().map(|r| r.answer_index),
     )));
-    RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| internal_layout())
+    // The result's explanation (T2.13), as the JSON text of
+    // [`Part::explanation`], on the schema's metadata under `explanation`.
+    let mut schema = Schema::new(fields);
+    if let Some(explanation) = &part.explanation {
+        schema = schema.with_metadata(
+            [(
+                "explanation".to_owned(),
+                String::from_utf8_lossy(&explanation.to_bytes()).into_owned(),
+            )]
+            .into(),
+        );
+    }
+    RecordBatch::try_new(Arc::new(schema), columns).map_err(|_| internal_layout())
 }
 
 /// The result's `id` column, and `id_as_written` where it is needed, of

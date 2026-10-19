@@ -597,6 +597,15 @@ SAID: dict[str, dict[str | None, str]] = {
             'the rest of the request is unaffected.'
         )
     },
+    # A forecast explained in some steps and not others (T2.13), as the
+    # client's _warn_of_steps_that_carry_no_explanation says it.
+    'STEPS_UNEXPLAINED': {
+        None: (
+            '{model} explained {explained} of {steps} forecast steps, and '
+            'step {missing!c} carries none, so the explanation this request '
+            'asked for is not there for every step.'
+        )
+    },
     'TWO_WAYS_TO_A_TABLE': {
         None: (
             '{source_table!r} reaches {target_table!r} through {columns!l}, '

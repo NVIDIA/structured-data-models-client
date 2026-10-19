@@ -24,19 +24,19 @@
       "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T2.8: the module gains _ranked, the host's presentation of the core's ranking (each candidate given back as the caller gave it, by its position), _unscored, and _mapping, an item's rankings member made the reference's mapping, the words of the core's CANDIDATES_UNSCORED notice naming the candidates as given; the ranking's checks, its questions, PD-1's order and the reassembly are the core's"
+      "moved": "T2.13: the module gains _table (the result attachment as a table, keeping its schema's metadata) and _explanation (the result's explanation, a forecast's under by_forecast_step, keyed by the step); each item's explanation and metadata, and the result's, are made the reference's dict by T2.8's _mapping, the one reader of a mapping the core gives as JSON text; reading each as dict(value) and choosing the result's explanation are the core's (sdm-wire response::mapping, sdm-request predict's Part.explanation)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T2.8: a ranking's questions passed as RequestState.ranking, its first candidate's position among them, with an id drawn for each, the core's notice of the candidates left out worded by the host, an endpoint refusal said of the candidate whose question it answered, and the result laid out by _ranked; T2.8b's response_field: an item's scores and rankings given back as the core lays them out; each rankings member made a mapping by _mapping"
+      "moved": "T2.13: the result read as a table and its explanation taken from the schema's metadata, where the core puts the result's explanation (sdm-request predict's table); no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
-      "moved": "T2.8c: the host's half of main's _carry_the_answers_already_paid_for and _carry_the_steps_already_paid_for (1fc5a686): the answers the core carried (CoreError.answered) read into details['answered'] as a PredictionResult, with rows_answered for a batched request; the core decides what was answered. Fix 1: on whatever exception the call raised, not only the client's own, as main's client does."
+      "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
-      "moved": "T2.8b's response_field: an item's scores and rankings given back as the core lays them out (columns contract v26 declares), each rankings member made the reference's mapping by _mapping; no rule of its own"
+      "moved": "T2.13: each item's explanation and metadata, and the result's explanation, which the core reads (response::mapping) and chooses (Part.explanation), handed to PredictionItem and PredictionResult as the reference holds them, each mapping made by T2.8's _mapping; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
       "moved": "T2.8: a ranking the core gathered is predicted by the core, as a forecast is (T1.36 fix 21): its outputs' check, the check of every question before any is sent, the candidates left out, each question's call and the reassembly are the core's; the old route's are unchanged"
@@ -127,6 +127,12 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_mapping": {
       "moved": "T2.8: the host's half of the moved rankings reading (sdm_wire's response::mappings): a member the core gives as a JSON object, or as the list of its pairs where a key is not text, made the mapping the reference's item holds; no rule of its own"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_explanation": {
+      "moved": "T2.13: the result's explanation as the core gives it, for a forecast each step's under by_forecast_step keyed by the step's number, as the client's _by_step holds it; which steps explain is sdm-request predict's by_step"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_table": {
+      "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
     }
   }
 }

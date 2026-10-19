@@ -891,10 +891,13 @@ mod tests {
                     probabilities: Some(vec![("False".into(), 1.0 - p), ("True".into(), *p)]),
                     scores: None,
                     rankings: None,
+                    explanation: None,
+                    metadata: None,
                 })
                 .collect(),
             answers: crate::predict::AnswerType::Bool,
             text_ids: false,
+            explanation: None,
         }
     }
 

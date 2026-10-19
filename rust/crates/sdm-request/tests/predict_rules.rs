@@ -26,6 +26,8 @@ fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
         probabilities: None,
         scores: None,
         rankings: None,
+        explanation: None,
+        metadata: None,
     }
 }
 
@@ -37,6 +39,7 @@ fn part(request_id: &str, rows: Vec<Row>) -> Part {
         rows,
         answers: AnswerType::Float,
         text_ids: false,
+        explanation: None,
     }
 }
 

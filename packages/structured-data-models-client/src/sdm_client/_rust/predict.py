@@ -28,7 +28,8 @@ adapter draws one; it makes the call the adapter makes, which this host
 sends through the client's own transport, reads the answer as the client's
 bindings read it, and lays it out: one row per answer, ordered by
 ``row_index``, under the entity it is about, with its prediction (a class
-as the target's own type) and its probabilities. The endpoint's answer
+as the target's own type), its probabilities and, from T2.13, its
+explanation and metadata, beside the result's explanation. The endpoint's answer
 reaches the core as its JSON, every non-finite number Python's reader made
 of it written as a token the core reads as the same number (an infinity as
 the overflowing ``1e400``, a NaN as ``NaN``), so both hosts read it alike.
@@ -83,6 +84,31 @@ def _rows(stream: Any) -> list[dict[str, Any]]:
         stream.__arrow_c_stream__()
     )
     return reader.read_all().to_pylist()
+
+
+def _table(stream: Any) -> Any:
+    r"""An Arrow attachment the core gave, as a table, which keeps its
+    schema's metadata (T2.13: the result's explanation)."""
+    import pyarrow as pa
+
+    reader = pa.RecordBatchReader._import_from_c_capsule(
+        stream.__arrow_c_stream__()
+    )
+    return reader.read_all()
+
+
+def _explanation(text: str | None, by_step: bool) -> Any:
+    r"""The result's explanation the core gives (T2.13), ``None`` where there
+    is none: a mapping as :func:`_mapping` reads one, or, for a forecast, each step's under
+    ``by_forecast_step``, keyed by the step's number."""
+    if text is None:
+        return None
+    if not by_step:
+        return _mapping(text)
+    steps = json.loads(text)['by_forecast_step']
+    return {
+        'by_forecast_step': {step: dict(explained) for step, explained in steps}
+    }
 
 
 def _payload(payload: dict[str, Any]) -> bytes:
@@ -486,13 +512,17 @@ def predict(
             key=lambda row: row['answer_index'],
         )
         return _ranked(answered, rows, metadata, given)
+    table = _table(finished.take(answered['result']))
+    # The result's explanation, on the result's schema (T2.13).
+    explained = (table.schema.metadata or {}).get(b'explanation')
     return _result(
-        _rows(finished.take(answered['result'])),
+        table.to_pylist(),
         model=answered['model'],
         request_id=answered['request_id'],
         metadata=metadata,
         outputs=tuple(answered['outputs']),
         by_step=request.parts is not None,
+        explanation=None if explained is None else explained.decode(),
     )
 
 
@@ -504,8 +534,11 @@ def _result(
     metadata: dict[str, Any],
     outputs: tuple[str, ...],
     by_step: bool,
+    explanation: str | None = None,
 ) -> PredictionResult:
-    r"""The core's result rows as this client's result."""
+    r"""The core's result rows as this client's result: each item's
+    explanation and metadata, and the result's explanation, as the core
+    gives them (T2.13)."""
     from sdm_api.generated.tfm_api import PredictionItem
 
     from sdm_client.result import PredictionResult
@@ -534,11 +567,20 @@ def _result(
                 rankings=None
                 if row.get('rankings') is None
                 else tuple(_mapping(text) for text in row['rankings']),
+                # Its explanation and own metadata (T2.13), each the JSON
+                # text of a mapping, read by the same reader.
+                explanation=None
+                if row.get('explanation') is None
+                else _mapping(row['explanation']),
+                metadata=None
+                if row.get('metadata') is None
+                else _mapping(row['metadata']),
             )
             for row in rows
         ],
         metadata=metadata,
         outputs=outputs,
+        explanation=_explanation(explanation, by_step),
     )
     # A forecast's answer names its step, rows or none (`_by_step`).
     result._names_its_step = by_step
@@ -651,6 +693,7 @@ def _carry_the_answers(error: Exception, by_step: bool) -> None:
         metadata=json.loads(named.get('metadata', '{}')),
         outputs=tuple(json.loads(named.get('outputs', '[]'))),
         by_step=by_step,
+        explanation=named.get('explanation'),
     )
     if not by_step:
         details['rows_answered'] = rows
