@@ -618,21 +618,19 @@ fn column_of(node: &PqlNode) -> Option<&ColumnRef> {
 }
 
 /// The query's shape, or the rule it takes that this build does not port.
+///
+/// `EVALUATE` and `EXPLAIN`, and the entities `FOR t.c = 1` or
+/// `FOR t.c IN (1, 2)` names, gather what the same query without them
+/// gathers, as the reference's engine gathers it: its task table reads
+/// neither prefix, and the entities scored are the call's indices
+/// (`_get_task_table`, a forecast's named entity replaced by the first
+/// index). The query text the payload carries keeps them as written.
 fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
-    if query.evaluate {
-        return Err(not_yet("evaluate"));
-    }
-    if query.explain {
-        return Err(not_yet("explain"));
-    }
     if query.problem_type.is_some() || query.num_forecasts != 1 || query.top_k.is_some() {
         return Err(not_yet("problem_type"));
     }
     if query.assuming.is_some() {
         return Err(not_yet("assuming"));
-    }
-    if query.entity_ids.is_some() {
-        return Err(not_yet("entity_ids"));
     }
     let entity = column_of(&query.entity).ok_or_else(|| not_yet("entity_filter"))?;
     let target = shape(&query.target, &entity.table)?;
