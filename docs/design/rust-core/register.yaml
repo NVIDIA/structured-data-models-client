@@ -6602,10 +6602,10 @@ entries:
     PredictiveQuery.materialize on the core route of a temporal query whose
     target is AVG, MIN or MAX over a window, or a comparison of one, with
     lag_timesteps of 1 or more.
-  cases: [forecast.lag-average-empty-windows]
+  cases: [lag.average-empty-windows]
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py#KumoRelational.add_lagged_target', 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/query/pandas_executor.py#PQueryPandasExecutor.execute_join']
   more_exact:
-  - case: forecast.lag-average-empty-windows
+  - case: lag.average-empty-windows
     runners: [python-core]
     fields:
     - 'public.payloads/*/2/context/instance_table/rows/*/4'
@@ -6613,7 +6613,15 @@ entries:
     - 'public.payloads/*/2/predict/instance_table/rows/*/3'
     - 'public.payloads/*/2/predict/instance_table/rows/*/4'
     null_on_one_side: true
-  - case: forecast.lag-average-empty-windows@sqlite
+  - case: lag.average-empty-windows
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/context/instance_table/rows/*/4'
+    - 'core.predicted.body/*/context/instance_table/rows/*/5'
+    - 'core.predicted.body/*/predict/instance_table/rows/*/3'
+    - 'core.predicted.body/*/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.average-empty-windows@sqlite
     runners: [python-core]
     fields:
     - 'public.payloads/*/2/context/instance_table/rows/*/4'
@@ -6621,7 +6629,15 @@ entries:
     - 'public.payloads/*/2/predict/instance_table/rows/*/3'
     - 'public.payloads/*/2/predict/instance_table/rows/*/4'
     null_on_one_side: true
-  - case: forecast.lag-average-empty-windows@postgres
+  - case: lag.average-empty-windows@sqlite
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.body/*/context/instance_table/rows/*/4'
+    - 'core.predicted.body/*/context/instance_table/rows/*/5'
+    - 'core.predicted.body/*/predict/instance_table/rows/*/3'
+    - 'core.predicted.body/*/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.average-empty-windows@postgres
     runners: [python-core]
     fields:
     - 'public.payloads/*/2/context/instance_table/rows/*/4'
@@ -6641,8 +6657,10 @@ entries:
     an_average_s_value_is_on_its_own_example) and the route test
     test_an_average_s_lag_is_each_row_s_own_window; measured by T2.9's
     40-source differential (every payload difference is such a column),
-    and the test author's case forecast.lag-average-empty-windows (each
-    row's lag computed by hand, on all three databases and both hosts).
+    and the test author's case lag.average-empty-windows (one regression
+    asked in one call, each row's lag computed by hand, on all three
+    databases and both hosts; the lag cells of both core runners listed
+    under more_exact, rust-host on Postgres replaying python-core's).
     Fixed in T2.9 fix 1.
 
 # --- lane D entries (P2D-1..19) ---
