@@ -13,7 +13,8 @@ The query and option long tail: `entity_filter`, `entity_ids`, `assuming`, `eval
 Both mark examples by a condition over the entity's row and its windowed aggregations (the reference's executor: `execute`'s entity mask, `ASSUMING` and-ed into it), which is the labelling T2.10 rewrites (`labels::truth`, conditions with text and `IN`, `NOT`, `AND`, `OR`, the windowed fetches merged across a query's aggregations).
 Built here on e1fac9ee they would duplicate T2.10's evaluator and conflict with it.
 Until T2.13b they stay refused by name, `UNSUPPORTED_REQUEST` with rule `entity_filter` or `assuming`, as before.
-The test author's `filter.*` and `assuming.*` cases are T2.13b's exits: `filter.entity-column`, `filter.entity-text`, `filter.entity-aggregation`, `filter.matches-none`, `filter.ranking`, `assuming.binary`, `assuming.regression` and `assuming.no-examples` fail here by the refusal, while `filter.event-column` and `assuming.static`, which the validator refuses, pass.
+The test author moved the eight cases that need them (`filter.entity-column`, `filter.entity-text`, `filter.entity-aggregation`, `filter.matches-none`, `filter.ranking`, `assuming.binary`, `assuming.regression`, `assuming.no-examples`), with their reference lines, vectors and pending keys, to `t213b-tests` (`T2.13 tests: the entity filter and ASSUMING cases move to T2.13b`), so the phase-wide tests that hold every acceptance case (`t22_sqlite.rs` among them) hold none of them here.
+`filter.event-column` and `assuming.static`, which the validator refuses, stay and pass.
 
 ### What changed
 
@@ -48,10 +49,13 @@ The test author's `filter.*` and `assuming.*` cases are T2.13b's exits: `filter.
 
 ### Exits
 
-See the before-handoff section below for the runs.
+- Every T2.13 case left here passes on python-core (DuckDB, SQLite and Postgres) and rust-host (DuckDB and SQLite): `contract/tests/t213-pending.json`'s `pending` is empty, 257 keys authored (`test_t213_options.py`, `t213_options.rs`).
+- `rust:explain.forecast` holds each row's step explanation to the reference's (the test author's change, by the orchestrator's decision); the whole `by_forecast_step` explanation is held on python-core, where the Python user reads it. Recording a result's explanation and item metadata in both runners, so the gate compares them across hosts, is carried as a judging item for before the slice gate.
+- The implementer's own tests: `test_the_query_long_tail.py` (22, against the old route), the option vectors in `options.rs`, the `dict()` vectors in `response.rs`, U1's in `pql.rs`.
 
 ### Deviations and questions
 
 - `sdm-wire`'s `tests/json.rs::a_wide_object_reads_in_n_log_n` failed once under the machine's load (a timing ratio past 24) and passed on rerun; not this package's code.
 - Disk: the root file system was full when the first wheel build ran; this package's lane target's debug profile was cleaned (`cargo clean --profile dev`, 64.8 GiB) before the orchestrator's rule that build output is deleted only on asking.
+- `t21d_through_until.rs` assumed every derived materialize input was base.regression's anchor; the test author generalized it to each case's own (`T2.13 tests: a derived materialize input's anchor is the case's own`).
 - T2.8's `sdm_wire::response::mappings` (rankings) and this package's `response::mapping` read the same `dict()`; whichever lands second should make `mappings` call `mapping` (T2.8's reads an object element of a pair list as no pair, where Python takes its two names).
