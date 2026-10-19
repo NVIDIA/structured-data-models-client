@@ -373,12 +373,12 @@ T213_OPTIONS = (
 #: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
 #: each of a dot, a backtick and a line break in a column's name, as a
 #: feature the query does not name, the target, the entity (users' declared
-#: primary key) and an aggregation's column. The filter role waits for
-#: T2.10 (contract/deferred/t210-column-filter/).
+#: primary key), a filter inside the target's aggregation (back from its
+#: deferral, held by T2.10's tests) and an aggregation's column.
 T218_NAMES = tuple(
     f'name.{name}-{role}'
     for name in ('dot', 'backtick', 'line-break')
-    for role in ('feature', 'target', 'entity', 'aggregation')
+    for role in ('feature', 'target', 'entity', 'filter', 'aggregation')
 )
 
 

@@ -6,12 +6,13 @@
 //! name (KO2-36). `contract/tests/test_t218_column_names.py` holds
 //! `python-core` to the same exits and to the reference's vectors.
 //!
-//! The family is the twelve `name.*` S1 cases: a column named `a.b`, one
-//! named with a backtick and one with a line feed, each as a feature the
-//! query does not name, the target, the entity (users' declared primary
-//! key) and an aggregation's column (the filter role waits for T2.10, in
-//! `contract/deferred/t210-column-filter/`). Each test's line says what
-//! it proves:
+//! The family is twelve of the fifteen `name.*` S1 cases: a column named
+//! `a.b`, one named with a backtick and one with a line feed, each as a
+//! feature the query does not name, the target, the entity (users'
+//! declared primary key) and an aggregation's column. The filter role's
+//! three (`name.*-filter`) need the core's `target_filter` rule lifted,
+//! which is T2.10's: `tests/t210_targets.rs` holds them. Each test's line
+//! says what it proves:
 //!
 //! - step 1, "the core keeps every column as data": on DuckDB and SQLite,
 //!   the description `describe_source` answers for each case holds the
@@ -92,10 +93,14 @@ fn family() -> (Vec<Case>, bases::Bases) {
     let mut cases: Vec<Case> = loaded
         .into_iter()
         .map(|l| l.case)
-        .filter(|c| c.id.starts_with("name."))
+        .filter(|c| c.id.starts_with("name.") && !c.id.ends_with("-filter"))
         .collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
-    assert_eq!(cases.len(), 12, "three names in four roles");
+    assert_eq!(
+        cases.len(),
+        12,
+        "three names in four roles, T2.10's filter left out"
+    );
     (cases, bases::load(&contract.join("bases.yaml")).unwrap())
 }
 

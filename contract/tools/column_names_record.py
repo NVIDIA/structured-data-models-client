@@ -23,8 +23,10 @@ is one character in one column's name, in one role, on one database:
 - the roles, over the contract's ``shop`` base (users and their orders):
   ``feature``, a column of users the query does not name; ``target``, a
   text class of users predicted; ``entity``, users' declared primary key,
-  which ``orders.user_id`` references, the query's entity; ``aggregation``, the
-  column of orders the target sums;
+  which ``orders.user_id`` references, the query's entity; ``filter``, a
+  column of orders filtering the target's aggregation (back from its
+  deferral to T2.10, whose tests hold it); ``aggregation``, the column of
+  orders the target sums;
 - the databases: DuckDB, and SQLite and Postgres loaded from the DuckDB
   tables by the contract loader, as a case is (``run_python._open``).
 
@@ -70,10 +72,9 @@ CHARACTERS = {
     'carriage-return': '\r',
 }
 #: The roles recorded. ``filter`` (a column of orders filtering the
-#: target's aggregation) is kept in :func:`scenario` but recorded under
-#: ``contract/deferred/t210-column-filter/`` until T2.10 lifts the core's
-#: ``target_filter`` rule, which refuses any filter, a plain name's too.
-ROLES = ('feature', 'target', 'entity', 'aggregation')
+#: target's aggregation) needs the core's ``target_filter`` rule lifted,
+#: so ``contract/tests/test_t210_targets.py`` holds it, not T2.18's tests.
+ROLES = ('feature', 'target', 'entity', 'filter', 'aggregation')
 TWIN = 'a_b'
 
 

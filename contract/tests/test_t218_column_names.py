@@ -23,8 +23,7 @@ vector's (:func:`as_named`). Each test's one line says what it proves:
 
 - control: the ``name.*`` S1 cases are the design row's (``a.b``, a
   backtick and a line break, each as a feature, the target, the entity, a
-  aggregation's column, the entity users' primary key; the filter role is
-  deferred to T2.10, ``contract/deferred/t210-column-filter/``), each
+  filter and an aggregation's column, the entity users' primary key), each
   the recorder's scenario, each with python-ref's line on all three
   databases;
 - control: the vectors are the reference's, and not vacuous: the reference
@@ -47,6 +46,11 @@ vector's (:func:`as_named`). Each test's one line says what it proves:
   permanent decision row; IDs are kept), and T2.1a's temporary-approval
   rule passes for them": P2B-2 is kept, rejected or citing a permanent
   row, and ``ratchet.check_temporary`` names no entry about column names.
+
+The filter role (a column filtering the target's aggregation) needs the
+core's ``target_filter`` rule lifted, which is T2.10's: its vectors and
+cases are held on the core by ``contract/tests/test_t210_targets.py``,
+and the core-run tests here leave them out (:data:`T210_ROLE`).
 
 Gating: ``t218-pending.json``'s ``pending`` names, as ``py:<test>`` (with
 ``[<database>]`` for a test run per database), the tests that failed when
@@ -87,6 +91,8 @@ UMBRELLAS = ('P1B-1', 'P1B-2', 'P1B-3', 'P1B-4')
 #: The design row's names, by the case IDs' word for each.
 CASE_NAMES = {'dot': 'a.b', 'backtick': 'a`b', 'line-break': 'a\nb'}
 #: The character each case name holds, as the vectors label it.
+#: The role T2.10's tests hold on the core (``test_t210_targets.py``).
+T210_ROLE = 'filter'
 CASE_CHARACTERS = {
     'dot': 'dot',
     'backtick': 'backtick',
@@ -232,17 +238,21 @@ def _texts(value: Any) -> list[str]:
 
 
 def _vectors(database: str) -> list[dict[str, Any]]:
+    r"""The vectors on ``database`` the core-run tests here hold: every
+    character's but the filter role's, which T2.10's tests hold."""
     return [
         vector
         for vector in RECORDED['vectors']
-        if vector['database'] == database and vector['character'] is not None
+        if vector['database'] == database
+        and vector['character'] is not None
+        and vector['role'] != T210_ROLE
     ]
 
 
 def test_the_cases_are_the_design_row_s() -> None:
     r"""Control: the ``name.*`` cases are each of ``a.b``, a backtick and a
     line break as a feature, the target, the entity (users' declared
-    primary key) and an aggregation's column; each case's data
+    primary key), a filter and an aggregation's column; each case's data
     and query are the recorder's scenario for its name and role, through
     ``predict``, run on all three databases, with python-ref's committed
     line on each, whose outcome is the case's ``expect``."""
@@ -416,7 +426,8 @@ def test_a_query_names_any_column_in_every_role(database: str) -> None:
     query, a doubled backtick inside a quoted name, line breaks inside
     quotes": for each vector on ``database`` (each character as the
     target, the entity and an aggregation's column, and as a
-    feature no query names), python-core's ``materialize`` answers as its
+    feature no query names; the filter role is T2.10's), python-core's
+    ``materialize`` answers as its
     twin does on the reference: the outcome, the warnings, and the
     request's payloads, the twin's name and query read as the vector's."""
     if not reachable(database):
@@ -448,7 +459,11 @@ def test_a_query_names_any_column_in_every_role(database: str) -> None:
 def _cases_on(database: str) -> dict[str, dict[str, Any]]:
     r"""python-core over the ``name.*`` cases on ``database``, as that
     database's job runs it: each observation by its key."""
-    paths = sorted((ROOT / 'contract/cases/s1').glob('name.*.json'))
+    paths = sorted(
+        path
+        for path in (ROOT / 'contract/cases/s1').glob('name.*.json')
+        if not path.name.endswith(f'-{T210_ROLE}.json')
+    )
     with tempfile.TemporaryDirectory(prefix='t218-cases-') as tmp:
         out = Path(tmp) / 'python-core.jsonl'
         done = subprocess.run(
@@ -482,8 +497,9 @@ def test_each_case_answers_through_predict_and_its_difference_is_registered(
     database: str,
 ) -> None:
     r""" "Cases written for all three databases" and "the differences from
-    ``main`` registered": python-core runs each ``name.*`` case on
-    ``database`` on the core route through ``predict`` (as each twin
+    ``main`` registered": python-core runs each ``name.*`` case but the
+    filter role's (T2.10's) on ``database`` on the core route through
+    ``predict`` (as each twin
     answers on the reference), its core operations the case's, and an
     approved entry citing no temporary approval names each key whose
     outcome is not python-ref's committed line's."""
@@ -496,6 +512,8 @@ def test_each_case_answers_through_predict_and_its_difference_is_registered(
         reference = reference_lines()
         problems = []
         for case_id, case in sorted(_cases().items()):
+            if case_id.endswith(f'-{T210_ROLE}'):
+                continue
             key = runner.case_key(case_id, database)
             line = observed[key]
             outcome = line['outcome']
