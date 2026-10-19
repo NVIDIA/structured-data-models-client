@@ -33,7 +33,8 @@
     "setup": [
       "DROP TABLE orders",
       "DROP TABLE users",
-      "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (i % 7)::DOUBLE AS score FROM range(100101) t(i)"
+      "CREATE TABLE users (user_id BIGINT PRIMARY KEY, score DOUBLE)",
+        "INSERT INTO users SELECT i::BIGINT, (i % 7)::DOUBLE FROM range(100101) t(i)"
     ],
     "pql": "PREDICT users.score FOR EACH users.user_id",
     "materialize": {
@@ -71,6 +72,6 @@
     "code": "UNSUPPORTED_REQUEST",
     "message": "100,001 entities is past the 100,000 one materialize() will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time"
   },
-  "why": "100,001 entities, one past the 100,000 one materialize() gathers: refused UNSUPPORTED_REQUEST from the count, before anything is read",
+  "why": "100,001 entities, one past the 100,000 one materialize() gathers: refused UNSUPPORTED_REQUEST from the count, before anything is read; user_id is declared the key, as the core and the reference read it either way, so the loader indexes it on SQLite and Postgres and a lookup there is not a scan of 100,101 rows",
   "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
 }
