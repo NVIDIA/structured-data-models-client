@@ -212,7 +212,9 @@ def test_lag_timesteps_builds_the_request_the_old_route_builds(
     payload = _both_routes(monkeypatch, query=query, lag_timesteps=2)
     columns = payload['context']['instance_table']['columns']
     lagged = [c for c in columns if c.startswith('__kumo_arl')]
-    assert lagged == ([] if 'users.age' in query else ['__kumo_arl0__', '__kumo_arl1__'])
+    assert lagged == (
+        [] if 'users.age' in query else ['__kumo_arl0__', '__kumo_arl1__']
+    )
 
 
 def test_a_nan_lag_is_refused_on_the_core_route_only(

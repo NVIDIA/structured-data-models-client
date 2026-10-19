@@ -99,9 +99,13 @@ impl AskedLag {
     /// as lagged features, which are none for a static one.
     pub fn refusal(self, temporal: bool) -> Result<u64, CoreError> {
         let refused = |message: &str, reason: &'static str| {
-            CoreError::new(ErrorKind::InvalidRequest, ErrorCode::InvalidRequest, message)
-                .with_field("field", Detail::text("lag_timesteps"))
-                .with_field("reason", Detail::text(reason))
+            CoreError::new(
+                ErrorKind::InvalidRequest,
+                ErrorCode::InvalidRequest,
+                message,
+            )
+            .with_field("field", Detail::text("lag_timesteps"))
+            .with_field("reason", Detail::text(reason))
         };
         match self {
             AskedLag::Unordered => Err(mistyped("lag_timesteps", "not_a_number")),
