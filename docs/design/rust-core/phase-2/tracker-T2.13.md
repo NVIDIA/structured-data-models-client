@@ -1,7 +1,7 @@
 # Phase 2 tracker: T2.13
 
 The design branch owns `tracker.md`; this file holds T2.13's section until it folds in.
-Lane c, on the phase head after the lane's previous landing (e1fac9ee), then the test author's acceptance tests (`T2.13 tests:`, from `t213-tests`), then this package (`T2.13:` commits).
+Lane c, on the phase head after T2.12's landing (347ffa31; T2.1n's landing, cb8d6fb4, and T2.1o's, dd285821, before it), then the test author's acceptance tests (`T2.13 tests:`, from `t213-tests`), then this package (`T2.13:` commits).
 
 ## T2.13
 
@@ -26,7 +26,7 @@ The test author moved the eight cases that need them (`filter.entity-column`, `f
   `num_estimators`: Unicode white space around it dropped (Rust's `str::trim`, which keeps 0x1C as pydantic does), an optional sign, ASCII digits, and an optional point followed by one or more zeros.
   `an_option_given_as_text_is_read_as_the_engine_reads_it` holds 25 accepted and 18 refused booleans and 32 accepted and 43 refused whole numbers, each probed through `RegressionInferenceConfig` on the reference; `probe_ic.py` confirmed the payload through the reference's public `materialize`.
 - **A null target transform** (`options.rs`, `sdm-wire/src/payload.rs`): taken and written as null, as the engine's `list[TargetTransform | None]` writes it.
-  The payload's `target_transforms` items become a name or null: contract v27, the phase's working entry beside the merged v26 (lock line, `sdm-contract-27.json`, `state-payload.json` regenerated; `CONTRACT_VERSION` 27; the binding's test messages; T2.1b's tests hold v26 to its own file).
+  The payload's `target_transforms` items become a name or null: a field of contract v27, the phase's working entry, which T2.12 opened: on the rebase onto 347ffa31 its `sdm-contract-27.json` was regenerated from the types, T2.12's entry with this one field (`items` a name or null), and its lock line rewritten as a working entry's is (`state-payload.json` regenerated too).
   The test-only schema check reads a list of types and `null` for it (`schema_check.rs`, with tests).
   As in the reference, `predict` then refuses `target_transforms` as an option `kumo-relational` does not read.
 - **U1** (`sdm-core/src/pql.rs`, `dispatch.rs`, `_rust/s0.py`): `validate_query` gives D4's warnings for the day-first literals read before the error a query ends with (a packed literal, a two-digit year the run's zone cannot place) on the run's warnings channel, then the error (`pql::validate_warned`); the Python host shows the warnings it held for the shadow check when the run ends with an error, since no shadow check follows.
@@ -56,6 +56,7 @@ The test author moved the eight cases that need them (`filter.entity-column`, `f
 ### Deviations and questions
 
 - `sdm-wire`'s `tests/json.rs::a_wide_object_reads_in_n_log_n` failed once under the machine's load (a timing ratio past 24) and passed on rerun; not this package's code.
+- The rebase onto 347ffa31 met T2.12 in three test-author files, each merged mechanically with nothing of either side dropped: `tests/test_contract_cases.py` (both packages' case sets), the reference recording (T2.12's lines and T2.13's, the moved cases' 24 lines taken out as the move-out commit takes them) and `empty-null.json`'s citation (on its line again).
 - Disk: the root file system was full when the first wheel build ran; this package's lane target's debug profile was cleaned (`cargo clean --profile dev`, 64.8 GiB) before the orchestrator's rule that build output is deleted only on asking.
 - `t21d_through_until.rs` assumed every derived materialize input was base.regression's anchor; the test author generalized it to each case's own (`T2.13 tests: a derived materialize input's anchor is the case's own`).
 - T2.8's `sdm_wire::response::mappings` (rankings) and this package's `response::mapping` read the same `dict()`; whichever lands second should make `mappings` call `mapping` (T2.8's reads an object element of a pair list as no pair, where Python takes its two names).
