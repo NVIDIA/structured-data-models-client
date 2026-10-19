@@ -305,6 +305,9 @@ EVERY_TABLE = {
         (['Refusal', 'Cause'], False),
     ],
     'skills/tabular/references/pql.md': [(['Clause', 'On one table'], True)],
+    'skills/relational/references/data-problems.md': [
+        (['In the data', 'The client', 'What it says', 'What to do'], True)
+    ],
 }
 
 
@@ -2525,3 +2528,346 @@ def test_a_session_answers_only_the_question_it_pinned(schema):
     assert 'SUM(orders.price' in str(raised.value), (
         'the refusal does not name the question that was asked instead'
     )
+
+
+# -- When the data is wrong ---------------------------------------------------
+
+DATA_PROBLEMS = SKILLS / 'relational' / 'references' / 'data-problems.md'
+SPAN = re.compile(r'`([^`]+)`')
+EVERY_DAY = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
+
+
+def _frames():
+    import pandas as pd
+
+    users = pd.DataFrame({'user_id': range(12), 'segment': list('abc') * 4})
+    orders = pd.DataFrame(
+        {
+            'order_id': range(120),
+            'user_id': [i % 12 for i in range(120)],
+            'item': [i % 4 for i in range(120)],
+            'price': [10.0 + i for i in range(120)],
+            'ordered_at': pd.date_range('2026-01-01', periods=120, freq='D'),
+        }
+    )
+    items = pd.DataFrame({'item': range(4), 'kind': list('abcd')})
+    return {'users': users, 'orders': orders, 'items': items}
+
+
+def _relationships():
+    from sdm_client import Relationship
+
+    return [
+        Relationship('orders', 'user_id', 'users', 'user_id'),
+        Relationship('orders', 'item', 'items', 'item'),
+    ]
+
+
+def _ask(frames, query=EVERY_DAY, time_columns=None, relationships=None):
+    """Describe the frames as declared, and gather a request for three users.
+
+    Returns what was refused, if anything, and every warning said on the way.
+    """
+    from sdm_client import KumoRelational, PredictiveQuery, Schema
+    from sdm_client.errors import StructuredDataError
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        try:
+            schema = Schema.from_data(
+                frames,
+                primary_keys={
+                    'users': 'user_id',
+                    'orders': 'order_id',
+                    'items': 'item',
+                },
+                time_columns=time_columns or {'orders': 'ordered_at'},
+                relationships=(
+                    _relationships() if relationships is None else relationships
+                ),
+            )
+            schema.check_consistent()
+            PredictiveQuery(query, schema).materialize(
+                indices=[1, 2, 3], model=KumoRelational()
+            )
+            refused = None
+        except StructuredDataError as error:
+            refused = error
+    return refused, [str(w.message) for w in caught]
+
+
+def _changed(change):
+    def build():
+        frames = _frames()
+        change(frames)
+        return _ask(frames)
+
+    return build
+
+
+def _repeat_one_key(frames):
+    frames['orders'].loc[5, 'order_id'] = 4
+
+
+def _repeat_many_keys(frames):
+    frames['orders']['order_id'] = [i % 50 for i in range(120)]
+
+
+def _item_as_text(frames):
+    frames['orders']['item'] = frames['orders']['item'].astype(str)
+
+
+def _items_rekeyed(frames):
+    frames['items']['item'] = range(100, 104)
+
+
+def _some_orphans(frames):
+    frames['orders'].loc[:10, 'item'] = 99
+
+
+def _item_as_float(frames):
+    frames['orders']['item'] = frames['orders']['item'].astype(float)
+
+
+def _a_list(frames):
+    import numpy as np
+
+    frames['items']['tags'] = [np.array(['x', 'y'])] * 4
+
+
+def _a_dot(frames):
+    frames['items'] = frames['items'].rename(columns={'kind': 'kind.name'})
+
+
+def _yyyymmdd(frames):
+    orders = frames['orders']
+    orders['ordered_at'] = orders['ordered_at'].dt.strftime('%Y%m%d')
+    orders['ordered_at'] = orders['ordered_at'].astype('int64')
+
+
+def _year_9999(frames):
+    import datetime
+
+    orders = frames['orders']
+    orders['ordered_at'] = [stamp.date() for stamp in orders['ordered_at']]
+    orders.loc[3, 'ordered_at'] = datetime.date(9999, 12, 31)
+
+
+def _mixed_offsets(frames):
+    offsets = ['+00:00', '-05:00', '+05:30', '']
+    frames['orders']['ordered_at'] = [
+        stamp.strftime('%Y-%m-%dT12:00:00') + offsets[i % 4]
+        for i, stamp in enumerate(frames['orders']['ordered_at'])
+    ]
+
+
+def _a_month_of_history(frames):
+    import pandas as pd
+
+    frames['orders']['ordered_at'] = pd.date_range(
+        '2026-01-01', periods=120, freq='6h'
+    )
+
+
+def _price_as_text(frames):
+    frames['orders']['price'] = [
+        f'${price:,.2f} USD' for price in frames['orders']['price']
+    ]
+
+
+def _an_infinity(frames):
+    frames['orders'].loc[2, 'price'] = float('inf')
+
+
+def _yes_spelled_six_ways(frames):
+    frames['orders']['gift'] = ['yes', 'Y', 'no', '', 'on', 'off'] * 20
+
+
+def _several_dates():
+    import pandas as pd
+    from sdm_client import Schema
+
+    frames = _frames()
+    orders = frames['orders']
+    orders['shipped_at'] = orders['ordered_at'] + pd.Timedelta(days=2)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        Schema.from_data(
+            frames,
+            primary_keys={
+                'users': 'user_id',
+                'orders': 'order_id',
+                'items': 'item',
+            },
+            relationships=_relationships(),
+        )
+    return None, [str(w.message) for w in caught]
+
+
+def _a_flag_as_text():
+    frames = _frames()
+    frames['orders']['flag'] = ['0', '1'] * 60
+    return _ask(
+        frames,
+        query='PREDICT COUNT(orders.* WHERE orders.flag = 1, 0, 30, days) '
+        'FOR EACH users.user_id',
+    )
+
+
+#: How each row of the table is made to happen: the frames from the skill's
+#: own example, with one thing wrong in them.
+PROBLEMS = {
+    'A primary key repeats in a few rows': _changed(_repeat_one_key),
+    'A primary key repeats in more than 1% of rows': _changed(
+        _repeat_many_keys
+    ),
+    'A relationship joins two different types': _changed(_item_as_text),
+    'A foreign key matches no row of its parent': _changed(_items_rekeyed),
+    'A foreign key matches only some rows of its parent': _changed(
+        _some_orphans
+    ),
+    'Integer ids stored as floats': _changed(_item_as_float),
+    'A table no relationship reaches': lambda: _ask(
+        _frames(), relationships=_relationships()[:1]
+    ),
+    'A column holding lists': _changed(_a_list),
+    'A dot in a column name': _changed(_a_dot),
+    'A time column of integers, such as 20250630': _changed(_yyyymmdd),
+    'A date outside 1677 to 2262, such as 9999-12-31': _changed(_year_9999),
+    'Times written as text, some with a UTC offset and some without': _changed(
+        _mixed_offsets
+    ),
+    'Several date columns, and none named as the time column': _several_dates,
+    'No time column, and a query with a time window': lambda: _ask(
+        _frames(), time_columns={'orders': None}
+    ),
+    "Less history than the query's window": _changed(_a_month_of_history),
+    'Numbers, lists or prose stored as text': _changed(_price_as_text),
+    'An infinite number': _changed(_an_infinity),
+    'Yes and no spelled several ways': _changed(_yes_spelled_six_ways),
+    'A query naming a column the table does not have': lambda: _ask(
+        _frames(),
+        query='PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id',
+    ),
+    'A query comparing a text column with a number': _a_flag_as_text,
+}
+
+
+def test_every_data_problem_the_reference_lists_is_made_to_happen():
+    listed = table(DATA_PROBLEMS, 'A dot in a column name')
+    del listed['In the data']
+    assert sorted(listed) == sorted(PROBLEMS), (
+        'the data-problems table and PROBLEMS list different problems'
+    )
+
+
+@pytest.mark.parametrize('problem', sorted(PROBLEMS))
+def test_a_data_problem_gets_the_answer_the_reference_gives(problem):
+    pytest.importorskip('sdm_relational_engine')
+    pytest.importorskip('pandas')
+    does, says, _ = table(DATA_PROBLEMS, problem)[problem]
+    quoted = SPAN.findall(says)
+    clean = set(_ask(_frames())[1])
+    refused, said = PROBLEMS[problem]()
+    new = [message for message in said if message not in clean]
+    if does == 'refuses':
+        assert refused is not None, f'{problem}: nothing was refused'
+        code, *parts = quoted
+        assert refused.code == code, f'{problem}: refused as {refused.code}'
+        for part in parts:
+            assert part in str(refused), f'{problem}: {refused} lacks {part!r}'
+    elif does == 'warns':
+        assert refused is None, f'{problem}: refused, {refused}'
+        for part in quoted:
+            assert any(part in message for message in new), (
+                f'{problem}: no warning says {part!r}; said {new}'
+            )
+    else:
+        assert does == 'says nothing', f'{problem}: {does!r} is not a verdict'
+        assert refused is None, f'{problem}: refused, {refused}'
+        assert not new, f'{problem}: said {new}'
+        assert not quoted, f'{problem} says nothing and quotes something'
+
+
+def _inferred(frames):
+    from sdm_client import Schema
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        schema = Schema.from_data(frames)
+    return schema, [str(w.message) for w in caught]
+
+
+def _customers(**columns):
+    import pandas as pd
+
+    customers = pd.DataFrame(
+        {'customer_code': [f'C{i:03d}' for i in range(30)], **columns}
+    )
+    orders = pd.DataFrame(
+        {
+            'order_id': range(300),
+            'customer_code': [f'C{i % 30:03d}' for i in range(300)],
+            'ordered_at': pd.date_range('2026-01-01', periods=300, freq='D'),
+        }
+    )
+    return {'customers': customers, 'orders': orders}
+
+
+def test_a_surrogate_id_is_taken_as_the_key_without_a_word():
+    pytest.importorskip('sdm_relational_engine')
+    from sdm_client.schema import _KEY_SUFFIXES
+
+    assert _KEY_SUFFIXES == ('_id', '_key', 'id', 'key'), (
+        'the reference says a key is inferred from a name ending in id or key'
+    )
+    schema, said = _inferred(
+        _customers(customer_id=[f'X{i:03d}' for i in range(30)])
+    )
+    assert schema['customers'].primary_key == 'customer_id'
+    assert not any('customer_code' in message for message in said), said
+    assert not [
+        link
+        for link in schema.relationships
+        if link.source_column == 'customer_code'
+    ]
+
+
+def test_a_shared_unique_column_leaves_its_table_without_a_key():
+    pytest.importorskip('sdm_relational_engine')
+    schema, said = _inferred(_customers(segment=list('ab') * 15))
+    assert schema['customers'].primary_key is None
+    assert any(
+        'has no primary key' in message and 'primary_keys=' in message
+        for message in said
+    ), said
+
+
+def test_a_foreign_key_of_another_type_makes_no_relationship():
+    pytest.importorskip('sdm_relational_engine')
+    frames = _frames()
+    frames['items'] = frames['items'].rename(columns={'item': 'item_id'})
+    frames['orders'] = frames['orders'].rename(columns={'item': 'item_id'})
+    frames['orders']['item_id'] = frames['orders']['item_id'].astype(str)
+    schema, said = _inferred(frames)
+    assert schema['items'].primary_key == 'item_id'
+    assert not [
+        link for link in schema.relationships if link.source_column == 'item_id'
+    ]
+    assert any(
+        'so no relationship was made from it' in message for message in said
+    ), said
+
+
+def test_the_earliest_date_column_is_taken_as_the_time():
+    pytest.importorskip('sdm_relational_engine')
+    pd = pytest.importorskip('pandas')
+    frames = _frames()
+    orders = frames['orders']
+    orders['shipped_at'] = orders['ordered_at'] + pd.Timedelta(days=2)
+    schema, said = _inferred(frames)
+    assert schema['orders'].time_column == 'ordered_at'
+    assert any(
+        'was taken as the time column' in message and 'shipped_at' in message
+        for message in said
+    ), said
