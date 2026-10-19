@@ -116,9 +116,14 @@ Round 2 (Claude): one P2 and one P3.
   It now gives the counts (`calls_answered`, `parts_answered`) whether or not answers were carried, beside the exception's own details; Codex's six probes (DuckDB, SQLite, Postgres, with and without an unscored candidate first) match the reference.
   A unit test in `test_the_rust_host.py` holds it; the test author writes the acceptance regression.
 
+### Rebase onto T2.12 (347ffa31)
+
+T2.12 landed first and opened contract v27; the lane was rebased onto it and this package's contract fields added to that working entry (the schema and the lock's v27 line regenerated, `contract_lock.py`: 2 merged and unchanged, 1 working).
+The rebase took T2.12's version-bump changes to the v26 vectors' test and `tests/test_t21b_contract_v26.py` as they are; the reference lines are T2.12's (its edit cases re-recorded) and this package's new ones; the census keeps T2.12's probes without the four this package lifted; the L4 goldens hold both packages' entries; a refusal-map citation follows its line.
+
 ### Deviations and questions
 
-- The contract additions were v26 additions after T2.1b, as T2.2's and T2.18's were; with v26 merged into rust-core (2e5fbd27), they are v27's from the rebase, this package opening v27 as the phase's working entry.
+- The contract additions were v26 additions after T2.1b, as T2.2's and T2.18's were; with v26 merged into rust-core (2e5fbd27), they are v27's from the rebase, the phase's working entry, which T2.12 opened when it landed (347ffa31) and to which this package's fields were added at the rebase onto it.
 - The row filter of a ranking's questions is part of T2.10's `target_filter`, lifted here for the one form the questions need, since no ranking can be gathered without it.
 - A difference not measured, only read: an endpoint answering an instance id equal to Python's repr of a list or object instance id is taken by the reference and refused by the core (`INVALID_RESPONSE`); no payload the core writes holds such an id.
 - Judging-path files touched: `contract/runners/run_python.py` (a ranking's question ids, list cells); `rust/crates/sdm-testkit/src/host.rs` (protected: candidates, `top_k`, a ranking's state). The gate overlays the checkpoint's `run_python.py`, whose request-id check fails a ranking that reaches predict, so the runner change lands first, alone.

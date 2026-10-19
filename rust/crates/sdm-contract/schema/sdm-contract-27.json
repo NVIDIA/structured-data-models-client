@@ -288,6 +288,12 @@
         "Materialize.values": {
           "$ref": "#/$defs/CallValues"
         },
+        "Materialize.candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/GivenCandidate"
+          }
+        },
         "SamplerState.memo": {
           "$ref": "#/$defs/SamplerMemo"
         },
@@ -305,6 +311,12 @@
         },
         "RequestBatch.payload": {
           "$ref": "#/$defs/StatePayload"
+        },
+        "RankingPart.payload": {
+          "$ref": "#/$defs/StatePayload"
+        },
+        "RankingPart.query": {
+          "type": "string"
         },
         "Predicted.metadata": {
           "$ref": "#/$defs/EndpointMetadata"
@@ -324,12 +336,15 @@
         "Materialize.held",
         "Materialize.query",
         "Materialize.values",
+        "Materialize.candidates",
         "SamplerState.memo",
         "RequestState.payload",
         "RequestState.query",
         "ForecastStep.payload",
         "ForecastStep.query",
         "RequestBatch.payload",
+        "RankingPart.payload",
+        "RankingPart.query",
         "Predicted.metadata"
       ]
     },
@@ -1854,6 +1869,66 @@
     "CallValues": {
       "type": "object"
     },
+    "GivenCandidate": {
+      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "repeat",
+            "unreadable"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "$ref": "#/$defs/Scalar"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "integer": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "integer"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "decimal": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "decimal"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "spelled": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "spelled"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "SamplerMemo": {
       "description": "[`SamplerState`]'s memo: what the runs read, and of what.",
       "type": "object",
@@ -1997,6 +2072,12 @@
                 },
                 "anchor_time_column": {
                   "type": "string"
+                },
+                "top_k": {
+                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
                 }
               },
               "additionalProperties": false,
@@ -2062,6 +2143,12 @@
                 },
                 "anchor_time_column": {
                   "type": "string"
+                },
+                "top_k": {
+                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
                 }
               },
               "additionalProperties": false,
@@ -2123,6 +2210,12 @@
                 },
                 "anchor_time_column": {
                   "type": "string"
+                },
+                "top_k": {
+                  "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
                 }
               },
               "additionalProperties": false,
@@ -2919,6 +3012,17 @@
                 }
               ]
             },
+            "candidates": {
+              "description": "The rows a ranking (`RANK TOP k`) is over, as the caller named them\n(contract v27, optional, T2.8): a bytes attachment of a JSON list of\n[`GivenCandidate`]s, each candidate as the host's value is written,\nso values of several types keep each its own. The core asks a\nranking as one question per distinct candidate, writing each into\nits question by the type of the column ranked, and refuses\ncandidates on any other question.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/AttachmentId"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "anchor_time": {
               "description": "The anchor time, a `ts` scalar.",
               "anyOf": [
@@ -2950,7 +3054,7 @@
               "type": "boolean"
             },
             "values": {
-              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read from T2.8c). The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.",
+              "description": "A bytes attachment of a JSON object of the call's option values the\ncore reads (T1.28a), each as the caller gave it and the host's JSON\nwrites it, a member only where the call names the option:\n`num_context_samples`, the context size, whose run mode the core\nchooses and bounds; `num_hops` and `num_neighbors`, whose hops it\nbounds before it refuses them by name; `prediction_statistic`, which\nit checks and records; `inference_config`, which it reads by the\nengine's rules and writes into the payload (decision E45(a)); and\n`random_seed`, in place of `seed` and `unseeded` where it is given\n(`null`, an unseeded sample); from contract v26, `rows_per_call`,\nthe most rows one model call scores, which only lowers the profile's\n(`main`'s multi-call `predict`, read from T2.8c); and `top_k`, how\nmany candidates a ranking keeps, in place of the query's `TOP k`,\nread from T2.8. The core reads it with `sdm-wire`'s\nbounded reader and holds each value's type to what the reference's\nclient takes, so the host checks none of them.",
               "anyOf": [
                 {
                   "$ref": "#/$defs/AttachmentId"
@@ -2961,7 +3065,7 @@
               ]
             },
             "options": {
-              "description": "The names of the call's other sampling options, which this message\ncarries no value of (the reference's `context_anchor_time`,\n`exclude_cols_dict`, `lag_timesteps`,\n`max_pq_iterations`, `num_hops`, `num_neighbors`,\n`return_embeddings`, `top_k` and `use_prediction_time`): the core\ntakes none of them yet and refuses the first in name order by its\nname, and another name as `INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
+              "description": "The names of the call's other sampling options, which this message\ncarries no value of (the reference's `context_anchor_time`,\n`exclude_cols_dict`, `lag_timesteps`,\n`max_pq_iterations`, `num_hops`, `num_neighbors`,\n`return_embeddings` and `use_prediction_time`): the core\ntakes none of them yet and refuses the first in name order by its\nname, and another name as `INVALID_REQUEST` (decision E61). The host\npasses each the call gave, so it refuses none of its own.",
               "type": "array",
               "items": {
                 "type": "string"
@@ -3426,6 +3530,17 @@
           "items": {
             "$ref": "#/$defs/RequestBatch"
           }
+        },
+        "ranking": {
+          "description": "A ranking (`RANK TOP k`), which the core asks as one binary question\nper distinct candidate, whether the entity reaches it in the window\n(the client's `_per_candidate`, contract v27, optional, T2.8):\n`payload` and `query` are the first candidate's question, and this\nholds every later one's, in order. Absent for any other request.\n`predict` asks each and gives the answers back as one ranking.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Ranking"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -3491,6 +3606,82 @@
       "required": [
         "payload",
         "rows"
+      ]
+    },
+    "Ranking": {
+      "description": "A ranking's request state ([`RequestState::ranking`]).",
+      "type": "object",
+      "properties": {
+        "top_k": {
+          "description": "How many candidates each row keeps, best first (the call's `top_k`,\nelse the query's `TOP k`); none keeps every candidate scored.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "candidate": {
+          "description": "The first candidate's position among the candidates `materialize`\nwas given (0, but where the host held the first a repeat); its\nquestion is the state's own. Each later part's position is past it,\nin increasing order, or `predict` refuses the state.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "value": {
+          "description": "The first candidate as the result's `rankings` names it, the JSON\ntext of its value.",
+          "type": "string"
+        },
+        "parts": {
+          "description": "The question of each later candidate, in the order the candidates\nwere named.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RankingPart"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "value",
+        "parts"
+      ]
+    },
+    "RankingPart": {
+      "description": "One later candidate's question of a ranking's request state.",
+      "type": "object",
+      "properties": {
+        "candidate": {
+          "description": "The candidate this question asks after: its position among the\ncandidates `materialize` was given, its first where it was named\nmore than once.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "value": {
+          "description": "The candidate as the result's `rankings` names it: the JSON text of\nits value.",
+          "type": "string"
+        },
+        "payload": {
+          "description": "A bytes attachment of this question's payload as JSON, as\n[`RequestState::payload`].",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "query": {
+          "description": "This question's text: a bytes attachment of a JSON string.",
+          "$ref": "#/$defs/AttachmentId"
+        },
+        "request_id": {
+          "description": "The id this question's call carries, as [`ForecastStep::request_id`];\n`materialize` writes none, and `predict` refuses a later candidate's\nquestion without one (`INVALID_REQUEST`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "candidate",
+        "value",
+        "payload",
+        "query"
       ]
     },
     "ReplyId": {
@@ -4633,7 +4824,7 @@
           "type": "object",
           "properties": {
             "result": {
-              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `id_as_written` where\nthe ids are not all integers or all text (utf8: the JSON text of the\nreference's item value, null where there was none), `forecast_step`\nwhere an answer given as written carries one, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).\n\nContract v26 fixes the columns ranking and forecasting add (design\nchoice 1; written from T2.8b and T2.9), after `probabilities` and\nbefore `answer_index`, each where an answer carries it: `scores`\n(list of float64, a ranking's score of each candidate, in the\nendpoint's order), `rankings` (list of utf8, a ranking's candidates,\nbest first, each the JSON text of the reference's item value), and\n`quantiles` (list of struct `quantile` float64, `value` float64, a\nforecast's quantiles in the endpoint's order).",
+              "description": "An Arrow attachment, one row per answer, ordered by `row_index` as\nthe reference's result frame orders them (T1.28b), whose schema\nnames its columns in order: `row_index`, `id`, `id_as_written` where\nthe ids are not all integers or all text (utf8: the JSON text of the\nreference's item value, null where there was none), `forecast_step`\nwhere an answer given as written carries one, `prediction` where an\nanswer carries one, `prediction_as_answered` where the prediction\ncolumn changed an answer (utf8: the JSON text of the reference's item\nvalue, null where there was none; present only for a regression's\ninteger widened among doubles or a class written as a non-finite\nnumber), `probabilities` where an answer carries them, and\n`answer_index`, each answer's place in the endpoint's order\n(`sdm_request::predict::table`).\n\nContract v26 fixes the columns ranking and forecasting add (design\nchoice 1; written from T2.8 and T2.9), after `probabilities` and\nbefore `answer_index`, each where an answer carries it: `scores`\n(list of float64, an item's scores in the endpoint's order),\n`rankings` (list of utf8, an item's rankings, each the JSON text of\nthe reference's item value), and `quantiles` (list of struct\n`quantile` float64, `value` float64, a forecast's quantiles in the\nendpoint's order).\n\nA ranking's result (T2.8, contract v27), one row per entity asked\nabout, in place\nof `prediction` and `probabilities`: `rankings` (the candidates the\nrow ranks, best first, at most `top_k`, each the JSON text of its\nvalue, as the state names it), `scores` (how sure the endpoint was\nof each, in the same order) and `candidates` (list of int64, each\none's position among the candidates `materialize` was given, its\nfirst where it was given more than once, in the same order), which a\nhost gives back as the outputs named in `outputs`, each candidate as\nthe value it was given as, found by its position.",
               "$ref": "#/$defs/AttachmentId"
             },
             "model": {
@@ -4653,6 +4844,15 @@
               "type": "array",
               "items": {
                 "type": "string"
+              }
+            },
+            "unscored_candidates": {
+              "description": "A ranking's candidates no question was sent for, the context sampled\nfor each holding one answer only (T2.8): each its position among the\ncandidates `materialize` was given, in the order named. Empty for\nany other result.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
               }
             },
             "op": {
