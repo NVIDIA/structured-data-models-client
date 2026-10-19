@@ -1744,20 +1744,15 @@ const FOLDED_NAME_MOST: usize = 200;
 /// each such key into one identity as the materializer keys its tables, in
 /// table order (`Table._set_composite_primary_key`), refusing a float among
 /// the key's columns (`refuse_unfoldable_dtypes`), a derived name past 200
-/// characters (`encode_identity`) or one a column holds already, and
-/// otherwise reading the source's fold of the first rows
-/// (`_assert_warehouse_folds_like_pandas`, a `folded_key` request here, of
-/// a provider that declares one); then its SQL samplers refuse every such
-/// table, whose folded column is named with the prefix they reserve
-/// (`_reject_reserved_columns`). Each
-/// refusal is `INVALID_REQUEST` naming the table and the key's columns. The
-/// reference compares the source's fold with its own of its preview, which
-/// chooses only between two refusals of that code; the core keeps no
-/// preview and compares nothing. `Ok` for a schema with no such key.
-async fn refuse_folded_keys(
-    asker: &Asker,
-    description: &SourceDescription,
-) -> Result<(), CoreError> {
+/// characters (`encode_identity`) or one a column holds already; then its
+/// SQL samplers refuse every such table, whose folded column is named with
+/// the prefix they reserve (`_reject_reserved_columns`). Each refusal is
+/// `INVALID_REQUEST` naming the table and the key's columns. Between the
+/// two the reference reads the source's fold of the first rows
+/// (`_assert_warehouse_folds_like_pandas`), which chooses only between two
+/// refusals of that code; the core makes no such read, one statement fewer
+/// (KO2-68). `Ok` for a schema with no such key.
+fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreError> {
     let refused = |table: &str, key: &[String], message: &str| {
         invalid(message, "schema")
             .with_field("table", Detail::text(table))
@@ -1766,13 +1761,7 @@ async fn refuse_folded_keys(
                 Detail::List(key.iter().map(|c| Scalar::Utf8(c.clone())).collect()),
             )
     };
-    // A provider that declares no such read (one that is not SQL) is asked
-    // none: the read is the SQL engines' alone.
-    let reads_folds = asker
-        .capabilities()?
-        .optional
-        .contains(&OptionalRequest::FoldedKey);
-    let mut folded = None;
+    let mut first = None;
     for table in &description.tables {
         let key = table.primary_key.as_slice();
         if key.len() < 2 {
@@ -1811,21 +1800,9 @@ async fn refuse_folded_keys(
                 "a column holds the name a key of several columns is folded into",
             ));
         }
-        if reads_folds {
-            ask(
-                asker,
-                DataRequest::FoldedKey {
-                    table: table.source.clone(),
-                    key: key.to_vec(),
-                    column: name,
-                    limit: sdm_schema::infer::PREVIEW_ROWS,
-                },
-            )
-            .await?;
-        }
-        folded.get_or_insert((table.name.clone(), key.to_vec()));
+        first.get_or_insert((table.name.clone(), key.to_vec()));
     }
-    match folded {
+    match first {
         None => Ok(()),
         Some((table, key)) => Err(refused(
             &table,
@@ -2368,7 +2345,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
                 "query",
             ));
         }
-        refuse_folded_keys(asker, &description).await?;
+        refuse_composite_keys(&description)?;
     }
 
     let graph = Graph::new(&description)?;

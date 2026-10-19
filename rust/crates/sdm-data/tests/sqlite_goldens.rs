@@ -2040,12 +2040,6 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"column":"__kumo_key_6f726465725f6964_6c696e65","key":["order_id","line"],"limit":1000,"request":"folded_key","table":{"source":["orders"]}}"##,
-        &[
-            "SELECT REPLACE(REPLACE(CAST(\"order_id\" AS TEXT), CHAR(92), CHAR(92) || CHAR(92)), CHAR(31), CHAR(92) || 'u') || CHAR(31) || REPLACE(REPLACE(CAST(\"line\" AS TEXT), CHAR(92), CHAR(92) || CHAR(92)), CHAR(31), CHAR(92) || 'u') AS \"__kumo_key_6f726465725f6964_6c696e65\" FROM \"orders\" ORDER BY rowid LIMIT 1000",
-        ],
-    ),
-    (
         r##"{"columns":["user","age","country"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
         &["SELECT \"user\", \"age\", \"country\" FROM \"users\" ORDER BY rowid LIMIT 1000"],
     ),

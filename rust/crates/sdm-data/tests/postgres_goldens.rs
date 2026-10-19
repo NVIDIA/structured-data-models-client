@@ -2077,12 +2077,6 @@ const GOLDENS: goldens::Goldens = &[
         ],
     ),
     (
-        r##"{"column":"__kumo_key_6f726465725f6964_6c696e65","key":["order_id","line"],"limit":1000,"request":"folded_key","table":{"source":["orders"]}}"##,
-        &[
-            "SELECT REPLACE(REPLACE(CAST(\"order_id\" AS TEXT), CHR(92), CHR(92) || CHR(92)), CHR(31), CHR(92) || 'u') || CHR(31) || REPLACE(REPLACE(CAST(\"line\" AS TEXT), CHR(92), CHR(92) || CHR(92)), CHR(31), CHR(92) || 'u') AS \"__kumo_key_6f726465725f6964_6c696e65\" FROM \"orders\" LIMIT 1000",
-        ],
-    ),
-    (
         r##"{"columns":["user_id","age","country","score"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
         &["SELECT \"user_id\", \"age\", \"country\", \"score\" FROM \"users\" LIMIT 1000"],
     ),

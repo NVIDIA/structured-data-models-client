@@ -452,15 +452,6 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             out.push_count("rows", scanned.batch.num_rows());
             held.finish(out)
         }
-        // A key folded into a source's own text, which the core reads only
-        // of a provider declaring the read (T2.12): the fallback has no
-        // source's text to fold by.
-        DataRequest::FoldedKey { .. } => Err(not_kept(
-            request,
-            "key",
-            "the in-memory fallback does not fold a key into a source's text",
-        )
-        .into()),
         DataRequest::Describe { .. } | DataRequest::Scan { .. } => {
             Err(internal("a request every provider answers reached the fallback").into())
         }

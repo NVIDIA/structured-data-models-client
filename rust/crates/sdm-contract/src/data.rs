@@ -407,19 +407,6 @@ pub enum DataRequest {
     /// holds, among the rows holding every part of it, as the reference
     /// reads one to show a repeated key (`_repeated_key_sql`).
     RepeatedKey { table: Relation, key: Vec<String> },
-    /// The first `limit` rows of `table`, as a preview reads them, one text
-    /// per row in the one column `column` names: the columns of `key`, in
-    /// order, each cast to the source's text, a backslash in it doubled and
-    /// the unit separator (U+001F) written as a backslash and `u`, joined
-    /// by the unit separator. The reference's engine folds a key of several
-    /// columns so (`composite_key.sql_expression`) and reads it before its
-    /// SQL samplers refuse the table (T2.12).
-    FoldedKey {
-        table: Relation,
-        key: Vec<String>,
-        column: String,
-        limit: u64,
-    },
     /// A seeded sample of `n` entities of `table` by `key`: `columns` in
     /// order, from the rows meeting every filter. `key_dtype`, where given,
     /// is the data type of a key of one column the draw orders by: the type
@@ -477,7 +464,6 @@ impl DataRequest {
             DataRequest::TimeBounds { .. } => "time_bounds",
             DataRequest::ColumnRanges { .. } => "column_ranges",
             DataRequest::RepeatedKey { .. } => "repeated_key",
-            DataRequest::FoldedKey { .. } => "folded_key",
             DataRequest::SampleEntities { .. } => "sample_entities",
             DataRequest::Neighbors { .. } => "neighbors",
             DataRequest::Lookup { .. } => "lookup",
@@ -495,7 +481,6 @@ impl DataRequest {
             DataRequest::TimeBounds { .. } => Some(OptionalRequest::TimeBounds),
             DataRequest::ColumnRanges { .. } => Some(OptionalRequest::ColumnRanges),
             DataRequest::RepeatedKey { .. } => Some(OptionalRequest::RepeatedKey),
-            DataRequest::FoldedKey { .. } => Some(OptionalRequest::FoldedKey),
             DataRequest::SampleEntities { .. } => Some(OptionalRequest::SampleEntities),
             DataRequest::Neighbors { .. } => Some(OptionalRequest::Neighbors),
             DataRequest::Lookup { .. } => Some(OptionalRequest::Lookup),
@@ -522,9 +507,6 @@ impl DataRequest {
                 return Err(refused(self, "columns", "no column is named"));
             }
             DataRequest::RepeatedKey { key, .. } if key.is_empty() => {
-                return Err(refused(self, "key", "a key names no columns"));
-            }
-            DataRequest::FoldedKey { key, .. } if key.is_empty() => {
                 return Err(refused(self, "key", "a key names no columns"));
             }
             DataRequest::Neighbors {
@@ -632,7 +614,6 @@ pub enum OptionalRequest {
     TimeBounds,
     ColumnRanges,
     RepeatedKey,
-    FoldedKey,
     SampleEntities,
     Neighbors,
     Lookup,
@@ -648,7 +629,6 @@ impl OptionalRequest {
             OptionalRequest::TimeBounds => "time_bounds",
             OptionalRequest::ColumnRanges => "column_ranges",
             OptionalRequest::RepeatedKey => "repeated_key",
-            OptionalRequest::FoldedKey => "folded_key",
             OptionalRequest::SampleEntities => "sample_entities",
             OptionalRequest::Neighbors => "neighbors",
             OptionalRequest::Lookup => "lookup",
@@ -1058,7 +1038,6 @@ impl DataRequest {
             | DataRequest::CountRows { .. }
             | DataRequest::ColumnRanges { .. }
             | DataRequest::RepeatedKey { .. }
-            | DataRequest::FoldedKey { .. }
             | DataRequest::SampleEntities { .. }
             | DataRequest::Neighbors { .. }
             | DataRequest::Lookup { .. } => return ExpectedSchema::Discover {},
