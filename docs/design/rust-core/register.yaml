@@ -3562,7 +3562,8 @@ entries:
     T2.12 adds one ref, FR P3-8's two vectors (a timedelta and a time of
     day of one microsecond into an integer key, which the reference casts
     to 1 and the core refuses as a type, reason type): the coercion this
-    entry approves refusing; for the reviewers to hold to its meaning.
+    entry approves refusing. The two refs approved by the owner on
+    2026-10-19 as KO2-66 ("K: Yes"), relayed by the orchestrator.
 
 - id: P1B-35
   title: Numbers mixed with text are cast as their text, where the reference refuses the mix
@@ -6747,11 +6748,13 @@ entries:
   - 'contract/composite-key-vectors.json#foreign.*@postgres refusal UNNAMED -> success'
   - 'contract/postgres-regression-vectors.json#key.composite-primary refusal UNNAMED -> success'
   - 'contract/postgres-regression-vectors.json#key.composite-foreign refusal UNNAMED -> success'
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-67}
   notes: >-
-    Approver: owner. An answer where the reference fails unnamed, the
+    Approver: owner. Approved by the owner on 2026-10-19 as KO2-67 ("L:
+    Yes"), relayed by the orchestrator. An answer where the reference
+    fails unnamed, the
     answer DuckDB's and SQLite's references give the same source (E66(b)
     approves a named refusal in place of such a failure, not an answer).
     The alternative keeps P2C-11's named refusal under a rule outside
@@ -7138,14 +7141,16 @@ entries:
     multi-dimensional array column.
   cases: [T2.3]
   refs: [E66]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-69}
   notes: >-
     Approver: owner: an answer where the reference raises an unnamed error,
     beyond E66(b)'s named refusal. Found at T2.3's fix round 1 with the
     review's probe (integer[] of ARRAY[ARRAY[n, n]]) on Postgres 17, against
     python-ref at 6298913c.
+    Approved by the owner on 2026-10-19 as KO2-69 ("H: Yes"), relayed by
+    the orchestrator.
 - id: P2C-9
   title: On Postgres under a DateStyle other than ISO the core fails as the provider's error, where the reference raises NotImplementedError
   kind: change
