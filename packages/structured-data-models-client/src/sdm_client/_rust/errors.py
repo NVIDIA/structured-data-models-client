@@ -167,6 +167,12 @@ _ONE_MATERIALIZE_HOLDS = (
     'batch is built, with its own context, before any is sent; ask about '
     'fewer entities at a time'
 )
+_UNREAD_OPTIONS = (
+    '{model} does not read inference option(s) {unsupported!r}; drop them '
+    'from inference_config to send the request without them. The keys this '
+    'client forwards are {forwarded!r}, and the endpoint decides for itself '
+    'whether it serves the value given for one'
+)
 WORDED: dict[tuple[str, ...], str] = {
     ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
     ('INVALID_REQUEST', 'payload', 'smaller_calls'): _ASK_IN_SMALLER_CALLS,
@@ -233,6 +239,12 @@ WORDED: dict[tuple[str, ...], str] = {
         'budget selects, and this request was gathered with '
         'num_context_samples above {context_rows_fast:,}. Re-materialize '
         'with num_context_samples={context_rows_fast} or fewer'
+    ),
+    ('UNSUPPORTED_REQUEST', 'inference_config', 'drop'): _UNREAD_OPTIONS,
+    ('UNSUPPORTED_REQUEST', 'inference_config', 'drop_or_statistic'): (
+        _UNREAD_OPTIONS
+        + ". A regression's statistic is chosen with materialize(..., "
+        "prediction_statistic=...) instead: 'median', the default, or 'mean'"
     ),
     ('INVALID_RESPONSE', 'prediction.explanation', 'not_a_mapping'): (
         "the model endpoint answered an item's explanation with something "

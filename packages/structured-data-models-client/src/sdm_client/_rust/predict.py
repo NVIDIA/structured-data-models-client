@@ -99,15 +99,18 @@ def _table(stream: Any) -> Any:
 
 def _explanation(text: str | None, by_step: bool) -> Any:
     r"""The result's explanation the core gives (T2.13), ``None`` where there
-    is none: a mapping as :func:`_mapping` reads one, or, for a forecast, each step's under
-    ``by_forecast_step``, keyed by the step's number."""
+    is none: a mapping as :func:`_mapping` reads one, or, for a forecast,
+    each step's under ``by_forecast_step``, keyed by the step's number,
+    which the core writes in decimal digits."""
     if text is None:
         return None
     if not by_step:
         return _mapping(text)
     steps = json.loads(text)['by_forecast_step']
     return {
-        'by_forecast_step': {step: dict(explained) for step, explained in steps}
+        'by_forecast_step': {
+            int(step): dict(explained) for step, explained in steps.items()
+        }
     }
 
 

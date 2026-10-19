@@ -798,13 +798,26 @@ pub fn body(
                     .collect();
                 refused.sort();
                 if !refused.is_empty() {
+                    // The option field and what to change, for the host's
+                    // words (T2.13): drop the options, and choose a
+                    // regression's statistic where `output_type` is one.
+                    let mut forwarded = INFERENCE_OPTIONS;
+                    forwarded.sort_unstable();
+                    let remedy = if refused.iter().any(|n| *n == "output_type") {
+                        "drop_or_statistic"
+                    } else {
+                        "drop"
+                    };
                     return Err(CoreError::new(
                         ErrorKind::Unsupported,
                         ErrorCode::UnsupportedRequest,
                         "the model does not read an inference option the call set",
                     )
+                    .with_field("field", Detail::text("inference_config"))
+                    .with_field("remedy", Detail::text(remedy))
                     .with_field("model", Detail::text(model))
-                    .with_field("unsupported", texts(refused.iter().map(|n| n.as_str()))));
+                    .with_field("unsupported", texts(refused.iter().map(|n| n.as_str())))
+                    .with_field("forwarded", texts(forwarded)));
                 }
                 let sent: Vec<(String, Value)> = config
                     .iter()
@@ -952,9 +965,9 @@ pub struct Part {
     /// The result's explanation (`PredictionResult.explanation`, T2.13):
     /// the first answer's in the endpoint's order that holds a mapping not
     /// empty (`normalize`), the first part's that has one across a merge's
-    /// parts, and for a forecast `{"by_forecast_step": [[step,
-    /// explanation], ...]}`, each step that has one in step order, a
-    /// mapping keyed by the step's number written as the list of its pairs
+    /// parts, and for a forecast `{"by_forecast_step": {"<step>":
+    /// explanation, ...}}`, each step that has one in step order, keyed by
+    /// the step's number in decimal digits, as JSON keys a mapping
     /// (`_by_step`); none where no answer explains.
     pub explanation: Option<Value>,
 }
@@ -1401,7 +1414,7 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
             ..row
         }));
         if let Some(explanation) = explanation {
-            explained.push(Value::Array(vec![Value::int(i64::from(step)), explanation]));
+            explained.push((step.to_string(), explanation));
         }
     }
     for (at, row) in rows.iter_mut().enumerate() {
@@ -1417,7 +1430,7 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
         explanation: (!explained.is_empty()).then(|| {
             Value::Object(vec![(
                 "by_forecast_step".to_owned(),
-                Value::Array(explained),
+                Value::Object(explained),
             )])
         }),
     })
