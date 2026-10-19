@@ -55,6 +55,7 @@ fn shop() -> Sampled {
         statistic: Some("mean".into()),
         top_k: None,
         rows_per_call: 1,
+        lags: vec![],
         float_text: |x| format!("{x:?}"),
         tables: vec![
             SampledTable {
@@ -136,6 +137,7 @@ fn family() -> Sampled {
         statistic: None,
         top_k: None,
         rows_per_call: 1,
+        lags: vec![],
         float_text: |x| format!("{x:?}"),
         tables: vec![
             SampledTable {
@@ -186,6 +188,7 @@ fn classified(kind: Kind, labels: Labels) -> Sampled {
         statistic: None,
         top_k: None,
         rows_per_call: 1,
+        lags: vec![],
         ..shop()
     }
 }
@@ -263,6 +266,68 @@ fn the_payload_the_producer_builds_is_the_locked_definition_s() {
         shop["schema"]["relationships"][1]
             .get("source_table")
             .is_some()
+    );
+}
+
+/// Lagged target columns (`lag_timesteps`, T2.9) are laid out after the
+/// label in both halves, with no semantic type, as the reference's engine
+/// lays out its task table's columns: an aggregation's as `float64`, its
+/// float32s as doubles and a missing one null; a condition's as `bool`, or
+/// as `float64` where no example has one; and the payload holds the locked
+/// definition.
+#[test]
+fn lagged_target_columns_follow_the_label_in_both_halves() {
+    use sdm_request::payload::{LagColumn, LagValues};
+    let mut sampled = shop();
+    sampled.lags = vec![
+        LagColumn {
+            name: "__kumo_arl0__".into(),
+            values: LagValues::Float(vec![Some(0.1), None, Some(2.0), Some(3.5), None]),
+        },
+        LagColumn {
+            name: "__kumo_arl1__".into(),
+            values: LagValues::Bool(vec![Some(true), Some(false), None, None, Some(true)]),
+        },
+        LagColumn {
+            name: "__kumo_arl2__".into(),
+            values: LagValues::Bool(vec![None; 5]),
+        },
+    ];
+    let payload = built(&sampled);
+    assert_eq!(check("StatePayload", &payload), Ok(()));
+    let columns = &payload["schema"]["instance_table"]["columns"];
+    assert_eq!(columns["__kumo_arl0__"], json!({"dtype": "float64"}));
+    assert_eq!(columns["__kumo_arl1__"], json!({"dtype": "bool"}));
+    assert_eq!(columns["__kumo_arl2__"], json!({"dtype": "float64"}));
+    let context = &payload["context"]["instance_table"];
+    let names: Vec<&str> = context["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
+    let at = names.iter().position(|n| *n == "TARGET").unwrap();
+    assert_eq!(
+        names[at + 1..],
+        ["__kumo_arl0__", "__kumo_arl1__", "__kumo_arl2__"]
+    );
+    let first = context["rows"][0].as_array().unwrap();
+    assert_eq!(
+        first[at + 1..],
+        [json!(0.10000000149011612), json!(true), Value::Null]
+    );
+    let predict = &payload["predict"]["instance_table"];
+    let names: Vec<&str> = predict["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
+    assert!(!names.contains(&"TARGET"));
+    let last = predict["rows"][1].as_array().unwrap();
+    assert_eq!(
+        last[names.len() - 3..],
+        [Value::Null, json!(true), Value::Null]
     );
 }
 

@@ -704,16 +704,19 @@ pub struct Materialize {
     /// `random_seed`, in place of `seed` and `unseeded` where it is given
     /// (`null`, an unseeded sample); from contract v26, `rows_per_call`,
     /// the most rows one model call scores, which only lowers the profile's
-    /// (`main`'s multi-call `predict`, read from T2.8c); and `top_k`, how
+    /// (`main`'s multi-call `predict`, read from T2.8c); `top_k`, how
     /// many candidates a ranking keeps, in place of the query's `TOP k`,
-    /// read from T2.8. The core reads it with `sdm-wire`'s
+    /// read from T2.8; and from contract v27, `lag_timesteps`, the past
+    /// steps of a temporal target added as features (T2.9), any value,
+    /// which the core refuses where the reference's engine refuses it, once
+    /// the context is labelled. The core reads it with `sdm-wire`'s
     /// bounded reader and holds each value's type to what the reference's
     /// client takes, so the host checks none of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<AttachmentId>,
     /// The names of the call's other sampling options, which this message
     /// carries no value of (the reference's `context_anchor_time`,
-    /// `exclude_cols_dict`, `lag_timesteps`,
+    /// `exclude_cols_dict`,
     /// `max_pq_iterations`, `num_hops`, `num_neighbors`,
     /// `return_embeddings` and `use_prediction_time`): the core
     /// takes none of them yet and refuses the first in name order by its
@@ -1113,9 +1116,10 @@ pub struct Predicted {
     /// before `answer_index`, each where an answer carries it: `scores`
     /// (list of float64, an item's scores in the endpoint's order),
     /// `rankings` (list of utf8, an item's rankings, each a mapping), and
-    /// `quantiles` (list of struct
-    /// `quantile` float64, `value` float64, a forecast's quantiles in the
-    /// endpoint's order).
+    /// `quantiles` (a regression's quantiles, each named as the endpoint
+    /// named it, in the order written; from contract v27, T2.9, a
+    /// mapping-valued field, laid out as the next paragraph says, an
+    /// answer's `{}` the text `{}`, none null).
     ///
     /// A mapping-valued field (T2.8, contract v27) is laid out as JSON
     /// object text in a Utf8 column, and a list of mappings as a list of

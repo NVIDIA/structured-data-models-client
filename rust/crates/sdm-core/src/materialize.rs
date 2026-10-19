@@ -1892,7 +1892,6 @@ fn option_not_taken(name: &str) -> CoreError {
     match name {
         "context_anchor_time" => not_yet("context_anchor_time"),
         "exclude_cols_dict" => not_yet("exclude_cols_dict"),
-        "lag_timesteps" => not_yet("lag_timesteps"),
         "max_pq_iterations" => not_yet("max_pq_iterations"),
         "num_hops" => not_yet("num_hops"),
         "num_neighbors" => not_yet("num_neighbors"),
@@ -2520,6 +2519,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         inference_config,
         top_k,
         rows_per_call,
+        lag_timesteps,
         ..
     } = asked_values;
     // The most context examples asked for, which narrows the context the
@@ -2949,8 +2949,66 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             .into(),
         });
     }
+    // The target's own past as features (`lag_timesteps`, T2.9), where the
+    // reference's engine adds them: its value refused, as the engine
+    // refuses it, once the context is labelled; for a temporal query, the
+    // rows the lags aggregate read for the context's examples and the
+    // entities predicted for, in that order, before the context is
+    // narrowed ([`crate::lag`]).
     // The stored values the labels' reads spelled their bounds by, kept.
     keep_stored_times(&mut memo, &read_times);
+    let steps = match lag_timesteps {
+        None => 0,
+        Some(asked) => asked.refusal(aggregated.is_some())?,
+    };
+    let lag = match steps {
+        0 => None,
+        steps => {
+            let (windowed, table, edge) = aggregated
+                .as_ref()
+                .ok_or_else(|| internal("a lag without its aggregation"))?;
+            let context: Vec<usize> = labelled_rows[..gathered]
+                .iter()
+                .map(|&row| examples.index[row])
+                .collect();
+            let keys = arrow_select::concat::concat(&[
+                take(&entity_key, &context)?.as_ref(),
+                indices.as_ref(),
+            ])
+            .map_err(|_| internal("the examples' keys do not concatenate"))?;
+            let mut lag_anchors: Vec<i64> = labelled_rows[..gathered]
+                .iter()
+                .map(|&row| examples.anchors[row])
+                .collect();
+            lag_anchors.extend(std::iter::repeat_n(anchor, indices.len()));
+            let window = crate::lag::window(steps, windowed.start, windowed.end, &lag_anchors)?;
+            let rows = window_rows(
+                asker,
+                &read_times,
+                windowed,
+                table,
+                edge,
+                keys,
+                &window.starts,
+                &window.ends,
+            )
+            .await?;
+            let condition = match &asked.target {
+                Shape::Condition { op, constant, .. } => Some((*op, *constant)),
+                _ => None,
+            };
+            keep_stored_times(&mut memo, &read_times);
+            Some(crate::lag::Lag {
+                steps,
+                aggregation: windowed.aggregation,
+                start: windowed.start,
+                end: windowed.end,
+                condition,
+                shifted: window.shifted,
+                rows,
+            })
+        }
+    };
     // The default mode capped the context at as many examples as it takes:
     // said, as the client says it, the caller having chosen no size.
     if num_context_samples.is_none() && gathered >= options::RunMode::Fast.context_examples() {
@@ -3044,6 +3102,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let largest = per_call.min(num_test);
     let train_anchors = anchors.len();
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
+    // The labelled context's examples before narrowing, then the entities
+    // predicted for: the examples the lags were read for (T2.9).
+    let labelled_examples = gathered;
     let mut gathered = Vec::with_capacity(calls);
     let mut sent = BTreeSet::new();
     let mut answering = 0;
@@ -3157,6 +3218,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             .with_field("limit", count(SUBGRAPH_TABLES)));
         }
         sent.extend(walked.tables.iter().map(|t| t.name.clone()));
+        // The lagged columns of this call's examples (T2.9): the narrowed
+        // context's, then this call's own entities, each its own row's.
+        let lags = match &lag {
+            None => vec![],
+            Some(lag) => lag.columns(
+                &(0..num_train)
+                    .chain(labelled_examples + start..labelled_examples + start + num_test)
+                    .collect::<Vec<_>>(),
+            )?,
+        };
 
         let built = payload::build(&Sampled {
             num_train,
@@ -3174,6 +3245,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             statistic: statistic.clone(),
             rows_per_call: largest,
             top_k,
+            lags,
             float_text: crate::pql::float_text,
         })?;
         answering += built.answering;
@@ -3327,73 +3399,111 @@ impl Labelling<'_> {
         };
         let ends = shifted(windowed.end)?;
         let starts = shifted(windowed.start)?;
-        let time_column = aggregated
-            .time_column
-            .clone()
-            .ok_or_else(|| internal("the aggregated table has no time column"))?;
-        let mut label_columns = BTreeSet::from([time_column.clone()]);
-        if let Some(column) = &windowed.column {
-            label_columns.insert(column.clone());
-        }
-        // The filter's column, which the reference reads with the query's
-        // other columns (`_get_query_columns_dict`).
-        if let Some(filter) = &windowed.filter {
-            label_columns.insert(filter.column.clone());
-        }
-        let seeds = sample::seeds(
-            example_keys,
-            vec![(SEED_END, ends.clone()), (SEED_START, starts.clone())],
-        )?;
-        let rows = self.times.read(
+        let rows = window_rows(
             self.asker,
+            self.times,
+            windowed,
             aggregated,
-            one_batch(
-                &ask(
-                    self.asker,
-                    self.times
-                        .windowed(
-                            self.asker,
-                            aggregated,
-                            sample::by_time(
-                                aggregated,
-                                &edge.fkey,
-                                aggregated.ordered(&label_columns),
-                                key_set(self.asker, seeds)?,
-                                true,
-                            )?,
-                        )
-                        .await?,
-                )
-                .await?,
-            )?,
-        )?;
-        let mut values = match &windowed.column {
-            Some(column) => label_values(named(&rows, column)?)?,
-            None => labels::Values::Ones(rows.num_rows()),
-        };
-        let mut batch = batches(&rows, examples)?;
-        let mut times = times_ns(named(&rows, &time_column)?, &time_column)?;
-        // The rows the target's filter keeps (`execute_filter`), the rest
-        // aggregated by no example.
-        if let Some(filter) = &windowed.filter {
-            let keep = filter_keeps(named(&rows, &filter.column)?, filter)?;
-            values = values.retain(&keep);
-            let kept = |at: &usize| keep[*at];
-            batch = (0..batch.len()).filter(kept).map(|at| batch[at]).collect();
-            times = (0..times.len()).filter(kept).map(|at| times[at]).collect();
-        }
+            edge,
+            example_keys,
+            &starts,
+            &ends,
+        )
+        .await?;
         labels::aggregate(
             windowed.aggregation,
             examples,
-            &batch,
-            &values,
-            &times,
+            &rows.batches,
+            &rows.values,
+            &rows.times,
             labels::Bounds {
                 starts: Some(&starts),
                 ends: &ends,
             },
         )
     }
+}
+
+/// The rows of `aggregated` whose foreign key `edge` names the entity of
+/// each example (`keys`, one per example), after its `starts` and not
+/// after its `ends` (`_by_time`, one statement): the example each belongs
+/// to, the column `windowed` aggregates (its table's `*`, one each) and
+/// each row's time, of the rows its filter keeps where it has one.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one read's inputs, each the reference's own argument"
+)]
+async fn window_rows(
+    asker: &Asker,
+    times: &Times,
+    windowed: &Windowed,
+    aggregated: &Table,
+    edge: &Edge,
+    keys: ArrayRef,
+    starts: &[i64],
+    ends: &[i64],
+) -> Result<crate::lag::Rows, CoreError> {
+    let examples = keys.len();
+    let time_column = aggregated
+        .time_column
+        .clone()
+        .ok_or_else(|| internal("the aggregated table has no time column"))?;
+    let mut label_columns = BTreeSet::from([time_column.clone()]);
+    if let Some(column) = &windowed.column {
+        label_columns.insert(column.clone());
+    }
+    // The filter's column, which the reference reads with the query's
+    // other columns (`_get_query_columns_dict`).
+    if let Some(filter) = &windowed.filter {
+        label_columns.insert(filter.column.clone());
+    }
+    let seeds = sample::seeds(
+        keys,
+        vec![(SEED_END, ends.to_vec()), (SEED_START, starts.to_vec())],
+    )?;
+    let rows = times.read(
+        asker,
+        aggregated,
+        one_batch(
+            &ask(
+                asker,
+                times
+                    .windowed(
+                        asker,
+                        aggregated,
+                        sample::by_time(
+                            aggregated,
+                            &edge.fkey,
+                            aggregated.ordered(&label_columns),
+                            key_set(asker, seeds)?,
+                            true,
+                        )?,
+                    )
+                    .await?,
+            )
+            .await?,
+        )?,
+    )?;
+    let mut values = match &windowed.column {
+        Some(column) => label_values(named(&rows, column)?)?,
+        None => labels::Values::Ones(rows.num_rows()),
+    };
+    let mut batch = batches(&rows, examples)?;
+    let mut times = times_ns(named(&rows, &time_column)?, &time_column)?;
+    // The rows the target's filter keeps (`execute_filter`), the rest
+    // aggregated by no example.
+    if let Some(filter) = &windowed.filter {
+        let keep = filter_keeps(named(&rows, &filter.column)?, filter)?;
+        values = values.retain(&keep);
+        let kept = |at: &usize| keep[*at];
+        batch = (0..batch.len()).filter(kept).map(|at| batch[at]).collect();
+        times = (0..times.len()).filter(kept).map(|at| times[at]).collect();
+    }
+    Ok(crate::lag::Rows {
+        batches: batch,
+        values,
+        times,
+    })
 }
 
 /// The test-only `labels` operation's result: the context's examples, each

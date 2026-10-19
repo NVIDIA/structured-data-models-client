@@ -15,6 +15,7 @@ pub mod dispatch;
 mod edit;
 pub mod exact_number;
 mod fallback;
+mod lag;
 pub mod materialize;
 pub mod pql;
 mod predict;

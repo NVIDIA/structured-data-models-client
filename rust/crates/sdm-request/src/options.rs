@@ -36,6 +36,92 @@ pub enum AskedSeed {
     Given(String),
 }
 
+/// The `lag_timesteps` the call names (T2.9), as the reference's engine
+/// meets it: it compares the value with zero once the context is labelled
+/// (`_get_task_table`), and for a temporal query multiplies the target's
+/// window by a positive one (`sample_lagged_target`), so each value is read
+/// here and refused only where, and as, the engine refuses it
+/// ([`AskedLag::refusal`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AskedLag {
+    /// A whole number of steps (`false` and a float zero are none).
+    Steps(u64),
+    /// A whole number past `u64`, which the engine cannot multiply a window
+    /// by (`OverflowError`).
+    TooLarge,
+    /// Below zero, an integer's or a float's: `'lag_timesteps' cannot be
+    /// negative`.
+    Negative,
+    /// Above zero and not an integer (a float, or `true`): no window is
+    /// multiplied by it (`TypeError`), so a temporal query is refused; a
+    /// static one adds no lag, and takes it.
+    NotWhole,
+    /// Text, a null, a list or a mapping, which is not ordered against
+    /// zero (`TypeError`), refused for any query.
+    Unordered,
+}
+
+impl AskedLag {
+    /// Reads the value given, as the engine meets it.
+    fn of(value: &Value) -> AskedLag {
+        match value {
+            Value::Number(token) if sdm_wire::json::is_integer_token(token) => {
+                let (negative, digits) = match token.strip_prefix('-') {
+                    Some(digits) => (true, digits),
+                    None => (false, token.as_str()),
+                };
+                let digits = digits.trim_start_matches('0');
+                if digits.is_empty() {
+                    AskedLag::Steps(0)
+                } else if negative {
+                    AskedLag::Negative
+                } else {
+                    digits.parse().map_or(AskedLag::TooLarge, AskedLag::Steps)
+                }
+            }
+            // A float: below zero refused as negative, zero (either sign)
+            // or a NaN no lag, which neither comparison takes, and any other
+            // (an infinity too) not whole.
+            Value::Number(token) => match token.parse::<f64>() {
+                Ok(f) if f < 0.0 => AskedLag::Negative,
+                Ok(f) if f > 0.0 => AskedLag::NotWhole,
+                _ => AskedLag::Steps(0),
+            },
+            Value::Bool(true) => AskedLag::NotWhole,
+            Value::Bool(false) => AskedLag::Steps(0),
+            _ => AskedLag::Unordered,
+        }
+    }
+
+    /// The engine's refusal of this value for a query that is `temporal`
+    /// or not, as its client gives it (`INVALID_REQUEST`, naming
+    /// `lag_timesteps` and why), or none: the steps a temporal query adds
+    /// as lagged features, which are none for a static one.
+    pub fn refusal(self, temporal: bool) -> Result<u64, CoreError> {
+        let refused = |message: &str, reason: &'static str| {
+            CoreError::new(ErrorKind::InvalidRequest, ErrorCode::InvalidRequest, message)
+                .with_field("field", Detail::text("lag_timesteps"))
+                .with_field("reason", Detail::text(reason))
+        };
+        match self {
+            AskedLag::Unordered => Err(mistyped("lag_timesteps", "not_a_number")),
+            AskedLag::Negative => Err(refused(
+                "the past steps added as features cannot be negative",
+                "negative",
+            )),
+            _ if !temporal => Ok(0),
+            AskedLag::NotWhole => Err(mistyped("lag_timesteps", "not_a_whole_number")),
+            AskedLag::TooLarge => Err(CoreError::new(
+                ErrorKind::Unsupported,
+                ErrorCode::ValueOutOfRange,
+                "a time is outside what nanoseconds since the epoch hold",
+            )
+            .with_field("field", Detail::text("lag_timesteps"))),
+            AskedLag::Steps(steps) => Ok(steps),
+        }
+    }
+}
+
 /// The call's option values the core reads ([`values`]).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Asked {
@@ -54,6 +140,8 @@ pub struct Asked {
     /// at least one, `u64::MAX` standing for any larger one, which lowers
     /// nothing ([`rows_per_call`]).
     pub rows_per_call: Option<u64>,
+    /// The `lag_timesteps` given (T2.9), none where the call names none.
+    pub lag_timesteps: Option<AskedLag>,
 }
 
 /// A value of the wrong type for its option, refused as the client
@@ -135,6 +223,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         seed: AskedSeed::Absent,
         top_k: None,
         rows_per_call: None,
+        lag_timesteps: None,
     };
     let Some(given) = given else {
         return Ok(asked);
@@ -170,6 +259,9 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
                 asked.seed = AskedSeed::Given(format!("{sign}0x{}", hexadecimal(&digits)));
             }
             ("top_k", v) => asked.top_k = Some(v.clone()),
+            // Any value, refused only where the engine refuses it, after the
+            // context is labelled (T2.9).
+            ("lag_timesteps", v) => asked.lag_timesteps = Some(AskedLag::of(v)),
             _ => return Err(mistyped(name, "not_an_option")),
         }
     }
@@ -1080,6 +1172,61 @@ mod tests {
             let e = values(Some(&read(text))).unwrap_err();
             assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
         }
+    }
+
+    /// `lag_timesteps` read as the engine meets each value (T2.9): refused
+    /// for any query where it is negative or not ordered against zero, for
+    /// a temporal one where it is not whole or past `u64`, and otherwise
+    /// the steps a temporal query adds, none for a static one.
+    #[test]
+    fn lag_timesteps_is_refused_where_the_engine_refuses_it() {
+        let lag = |text: &str| {
+            values(Some(&read(&format!(r#"{{"lag_timesteps": {text}}}"#))))
+                .unwrap()
+                .lag_timesteps
+                .unwrap()
+        };
+        let taken = |text: &str, temporal: bool| lag(text).refusal(temporal);
+        for (text, steps) in [
+            ("0", 0),
+            ("-0", 0),
+            ("3", 3),
+            ("0.0", 0),
+            ("-0.0", 0),
+            ("false", 0),
+            ("18446744073709551615", u64::MAX),
+        ] {
+            assert_eq!(taken(text, true).unwrap(), steps, "{text}");
+            assert_eq!(taken(text, false).unwrap(), 0, "{text}");
+        }
+        for (text, reason) in [
+            ("-1", "negative"),
+            ("-1.5", "negative"),
+            ("-1e400", "negative"),
+            ("-99999999999999999999999", "negative"),
+            (r#""2""#, "not_a_number"),
+            ("null", "not_a_number"),
+            ("[1]", "not_a_number"),
+            (r#"{"a": 1}"#, "not_a_number"),
+        ] {
+            for temporal in [true, false] {
+                let e = taken(text, temporal).unwrap_err();
+                assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
+                assert_eq!(e.fields["field"], Detail::text("lag_timesteps"));
+                assert_eq!(e.fields["reason"], Detail::text(reason), "{text}");
+            }
+        }
+        for text in ["1.5", "2.0", "1e400", "true"] {
+            let e = taken(text, true).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
+            assert_eq!(e.fields["reason"], Detail::text("not_a_whole_number"));
+            assert_eq!(taken(text, false).unwrap(), 0, "{text}");
+        }
+        let past = taken("18446744073709551616", true).unwrap_err();
+        assert_eq!(past.code, ErrorCode::ValueOutOfRange);
+        assert_eq!(past.fields["field"], Detail::text("lag_timesteps"));
+        assert_eq!(taken("18446744073709551616", false).unwrap(), 0);
+        assert_eq!(values(Some(&read("{}"))).unwrap().lag_timesteps, None);
     }
 
     #[test]

@@ -229,25 +229,6 @@
       "until": "materialize"
     },
     {
-      "site": "rule:lag_timesteps",
-      "why": "the lag_timesteps option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "lag_timesteps": 2
-      }
-    },
-    {
       "site": "rule:logical_target",
       "why": "AND in the target",
       "input": {

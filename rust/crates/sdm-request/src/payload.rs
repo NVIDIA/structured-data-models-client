@@ -129,6 +129,27 @@ pub struct SampledLink {
     pub pairs: Vec<(usize, usize)>,
 }
 
+/// The values of one lagged target column (`__kumo_arl<k>__`, T2.9), one
+/// per example of the request, a missing one `None`: an aggregation's at
+/// float32, or a condition's.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LagValues {
+    Float(Vec<Option<f32>>),
+    Bool(Vec<Option<bool>>),
+}
+
+/// One lagged target column of the instance table (T2.9), as the reference's
+/// engine adds it to the task (`add_lagged_target`) and lays it out
+/// (`_instance_dataframe`): after the label, with no semantic type; an
+/// aggregation's as `float64`, its float32s as doubles; a condition's as
+/// `bool`, or `float64` where no example has a value, as pandas types a
+/// column of booleans with nothing in it; a missing value null.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LagColumn {
+    pub name: String,
+    pub values: LagValues,
+}
+
 /// What a request is built from.
 #[derive(Debug, Clone)]
 pub struct Sampled {
@@ -166,6 +187,9 @@ pub struct Sampled {
     /// size a refusal of a payload past the endpoint's limit names as the
     /// one to ask below.
     pub rows_per_call: usize,
+    /// The lagged target columns (`lag_timesteps`, T2.9), in order; none
+    /// where the call asks for none.
+    pub lags: Vec<LagColumn>,
     /// The text a float's class is spelled in: the shortest digits that
     /// read back to the double, laid out as the reference's `str` lays them
     /// out (`_class_label`). The parser crate holds it; the caller passes
@@ -685,6 +709,41 @@ fn target(
     })
 }
 
+/// A lagged target column of the instance table ([`LagColumn`]).
+fn lag_column(lag: &LagColumn, examples: usize) -> Result<FrameColumn, CoreError> {
+    let (dtype, cells): (Dtype, Vec<Value>) = match &lag.values {
+        LagValues::Float(values) => (
+            Dtype::Float64,
+            values
+                .iter()
+                .map(|v| match v {
+                    Some(v) => float_cell(f64::from(*v), &lag.name),
+                    None => Ok(Value::Null),
+                })
+                .collect::<Result<_, _>>()?,
+        ),
+        LagValues::Bool(values) => (
+            if values.iter().any(Option::is_some) {
+                Dtype::Bool
+            } else {
+                Dtype::Float64
+            },
+            values
+                .iter()
+                .map(|v| v.map_or(Value::Null, Value::Bool))
+                .collect(),
+        ),
+    };
+    if cells.len() != examples {
+        return Err(internal("a lagged column does not align with the examples"));
+    }
+    Ok(FrameColumn {
+        name: lag.name.clone(),
+        dtype,
+        cells,
+    })
+}
+
 /// The instance ids of the context examples that answer the question: a
 /// context row whose entity is a predicted row's, at that row's anchor
 /// for a windowed target and at any anchor for a static one
@@ -759,7 +818,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             first[instance] = Some(row);
         }
     }
+    // The lagged target columns are the task's own, which the wire's names
+    // keep clear of (`occupied`).
     let mut occupied = vec![INSTANCE_ID.to_owned(), TARGET.to_owned()];
+    occupied.extend(sampled.lags.iter().map(|lag| lag.name.clone()));
     let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_0"));
     occupied.push(reference.clone());
     let mut instance = Frame {
@@ -810,6 +872,9 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         dtype: target_dtype,
         cells: target_cells,
     });
+    for lag in &sampled.lags {
+        instance.columns.push(lag_column(lag, examples)?);
+    }
 
     // The related tables: each row with the example it belongs to, and a
     // key of its own where the table sends none.

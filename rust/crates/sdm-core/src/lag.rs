@@ -1,0 +1,344 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! `lag_timesteps` (T2.9): the target's own past as features of each
+//! example, as the reference's engine adds them to a temporal task
+//! (`KumoRelational.add_lagged_target`, `Sampler.sample_lagged_target`),
+//! once the context is labelled and before it is narrowed.
+//!
+//! With `n` steps and the target's window `(start, end]`, each example's
+//! anchor is moved back by `n` windows' ends (`anchor_time - n * offset`,
+//! the offset the window's end, a month's by the calendar as pandas moves
+//! one), and the rows of the aggregated table from there are read once,
+//! after the moved anchor plus the window's start and not after it plus
+//! `n` times the window's end (`_sample_query_data`'s `_by_time`, one
+//! statement, as the reference runs it), for the context's examples and
+//! the entities predicted for, in that order. Column `__kumo_arl<k>__` is
+//! the target over step `n - 1 - k`'s window, whose anchor is the moved one
+//! plus that many windows' ends: `__kumo_arl0__` the window just before
+//! each example's own.
+//!
+//! Each step's target is labelled as the reference's executor labels it
+//! there (`execute` with `filter_na=False` over a query whose aggregation
+//! is joined, so `execute_join` drops what has no value): an aggregation
+//! (a sum or a count of every example; an average, a minimum or a maximum
+//! of only the examples whose window holds a value) or its comparison, its
+//! values in the examples' order, the first value the first example's,
+//! and an example past the values none, as the engine's frame of the steps
+//! lines them up by position (`pd.DataFrame`, then `pd.concat` with the
+//! examples). That is the reference's: an average, a minimum or a maximum
+//! moves each value to the first examples rather than its own, which this
+//! matches (T2.9's tracker).
+
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_engine::labels::{self, Aggregation, Constant, Labels, RelOp, Target};
+use sdm_engine::sample::out_of_range;
+use sdm_engine::time::offset::Offset;
+use sdm_request::payload::{LagColumn, LagValues, PAYLOAD_BYTES};
+
+/// The field a lag's refusal names.
+const FIELD: &str = "lag_timesteps";
+
+/// The fewest bytes a lagged column adds to a payload: its declaration in
+/// the instance table's schema (`"__kumo_arl0__": {"dtype": "bool"}`).
+const COLUMN_BYTES: usize = 30;
+
+/// The fewest bytes one lagged cell adds: the shortest value (`0.0`, `true`
+/// or `null`) and its separator.
+const CELL_BYTES: usize = 4;
+
+/// `offset` taken `times` times, as pandas multiplies a `DateOffset`: a
+/// count of its unit `times` as large; past what the count holds, refused
+/// as a time out of range naming `lag_timesteps`, as pandas overflows.
+fn times(offset: Offset, times: u64) -> Result<Offset, CoreError> {
+    i64::try_from(times)
+        .ok()
+        .and_then(|times| offset.count.checked_mul(times))
+        .map(|count| Offset {
+            count,
+            unit: offset.unit,
+        })
+        .ok_or_else(|| out_of_range(FIELD))
+}
+
+/// Each example's anchor moved back by `steps` windows' ends (`anchor_time
+/// - lag_timesteps * offset`), and the window the rows are read in from it:
+/// after it plus `start`, not after it plus `steps` times `end`.
+pub(crate) struct Window {
+    pub shifted: Vec<i64>,
+    pub starts: Vec<i64>,
+    pub ends: Vec<i64>,
+}
+
+/// The window `steps` lags read for examples anchored at `anchors`, a
+/// time outside what nanoseconds hold refused naming `lag_timesteps`.
+pub(crate) fn window(
+    steps: u64,
+    start: Offset,
+    end: Offset,
+    anchors: &[i64],
+) -> Result<Window, CoreError> {
+    let back = times(end, steps)?.negated();
+    let reach = times(end, steps)?;
+    let shifted = anchors
+        .iter()
+        .map(|a| back.add_to(*a, FIELD))
+        .collect::<Result<Vec<_>, _>>()?;
+    let starts = shifted
+        .iter()
+        .map(|a| start.add_to(*a, FIELD))
+        .collect::<Result<_, _>>()?;
+    let ends = shifted
+        .iter()
+        .map(|a| reach.add_to(*a, FIELD))
+        .collect::<Result<_, _>>()?;
+    Ok(Window {
+        shifted,
+        starts,
+        ends,
+    })
+}
+
+/// The rows read for the lags: the example each belongs to, the aggregated
+/// column's values (a table's `*`, one each) and each row's time.
+pub(crate) struct Rows {
+    pub batches: Vec<usize>,
+    pub values: labels::Values,
+    pub times: Vec<Option<i64>>,
+}
+
+/// What a request's lags are computed from, read once the context is
+/// labelled; [`Lag::columns`] computes the columns of the examples a
+/// payload sends.
+pub(crate) struct Lag {
+    pub steps: u64,
+    pub aggregation: Aggregation,
+    pub start: Offset,
+    pub end: Offset,
+    /// The target's comparison, where it makes one.
+    pub condition: Option<(RelOp, Option<Constant>)>,
+    /// Each example's moved anchor ([`Window::shifted`]): the context's
+    /// examples, then the entities predicted for.
+    pub shifted: Vec<i64>,
+    pub rows: Rows,
+}
+
+impl Lag {
+    /// The lagged columns of the examples at `kept` (positions among the
+    /// examples the lags were read for), `__kumo_arl0__` first. A request
+    /// they would make larger than the endpoint takes is refused before
+    /// any is computed, as the payload's limit refuses it.
+    pub fn columns(&self, kept: &[usize]) -> Result<Vec<LagColumn>, CoreError> {
+        let least = usize::try_from(self.steps)
+            .ok()
+            .and_then(|steps| {
+                kept.len()
+                    .checked_mul(CELL_BYTES)?
+                    .checked_add(COLUMN_BYTES)?
+                    .checked_mul(steps)
+            })
+            .unwrap_or(usize::MAX);
+        if least > PAYLOAD_BYTES {
+            return Err(CoreError::new(
+                ErrorKind::InvalidRequest,
+                ErrorCode::InvalidRequest,
+                "the request is larger than the endpoint takes",
+            )
+            .with_field("field", Detail::text("payload"))
+            .with_field("lag_timesteps", Detail::Scalar(Scalar::UInt64(self.steps)))
+            .with_field(
+                "limit",
+                Detail::Scalar(Scalar::UInt64(PAYLOAD_BYTES as u64)),
+            ));
+        }
+        let examples = self.shifted.len();
+        (0..self.steps)
+            .map(|k| {
+                // Column k is step steps - 1 - k, anchored that many windows'
+                // ends after the moved anchor.
+                let step = times(self.end, self.steps - 1 - k)?;
+                let anchors = self
+                    .shifted
+                    .iter()
+                    .map(|a| step.add_to(*a, FIELD))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let ends = anchors
+                    .iter()
+                    .map(|a| self.end.add_to(*a, FIELD))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let starts = anchors
+                    .iter()
+                    .map(|a| self.start.add_to(*a, FIELD))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let aggregated = labels::aggregate(
+                    self.aggregation,
+                    examples,
+                    &self.rows.batches,
+                    &self.rows.values,
+                    &self.rows.times,
+                    labels::Bounds {
+                        starts: Some(&starts),
+                        ends: &ends,
+                    },
+                )?;
+                let target = match self.condition {
+                    None => Target::Aggregated(aggregated),
+                    Some((op, constant)) => Target::Condition {
+                        target: Box::new(Target::Aggregated(aggregated)),
+                        op,
+                        constant,
+                    },
+                };
+                // The values of the examples that have one, in order, each
+                // at the position of the first examples (see the module).
+                let values = match labels::label(&target)?.labels {
+                    Labels::Float(v) => {
+                        LagValues::Float(kept.iter().map(|&at| v.get(at).copied()).collect())
+                    }
+                    Labels::Bool(v) => {
+                        LagValues::Bool(kept.iter().map(|&at| v.get(at).copied()).collect())
+                    }
+                    Labels::Int(_) | Labels::Text(_) => {
+                        return Err(CoreError::new(
+                            ErrorKind::Internal,
+                            ErrorCode::InternalError,
+                            "a lagged target is neither a number nor a condition",
+                        ));
+                    }
+                };
+                Ok(LagColumn {
+                    name: format!("__kumo_arl{k}__"),
+                    values,
+                })
+            })
+            .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sdm_contract::pql::TimeUnit;
+
+    const DAY: i64 = 86_400_000_000_000;
+
+    fn days(n: i32) -> Offset {
+        Offset::of(n, TimeUnit::Days)
+    }
+
+    /// Two examples anchored at days 100 and 50, a 10-day sum, two steps:
+    /// the rows are read from day 80 (and 30) to day 100 (and 50); step 1's
+    /// window, `__kumo_arl0__`, is (90, 100], step 0's (80, 90].
+    #[test]
+    fn each_step_is_the_window_that_many_ends_back() {
+        let anchors = [100 * DAY, 50 * DAY];
+        let w = window(2, days(0), days(10), &anchors).unwrap();
+        assert_eq!(w.shifted, [80 * DAY, 30 * DAY]);
+        assert_eq!(w.starts, [80 * DAY, 30 * DAY]);
+        assert_eq!(w.ends, [100 * DAY, 50 * DAY]);
+        // Rows of example 0 at days 85 and 95 (1.0, 2.0), of example 1 at
+        // day 45 (4.0).
+        let lag = Lag {
+            steps: 2,
+            aggregation: Aggregation::Sum,
+            start: days(0),
+            end: days(10),
+            condition: None,
+            shifted: w.shifted,
+            rows: Rows {
+                batches: vec![0, 0, 1],
+                values: labels::Values::Float(vec![Some(1.0), Some(2.0), Some(4.0)]),
+                times: vec![Some(85 * DAY), Some(95 * DAY), Some(45 * DAY)],
+            },
+        };
+        let columns = lag.columns(&[0, 1]).unwrap();
+        assert_eq!(columns[0].name, "__kumo_arl0__");
+        assert_eq!(
+            columns[0].values,
+            LagValues::Float(vec![Some(2.0), Some(4.0)])
+        );
+        assert_eq!(
+            columns[1].values,
+            LagValues::Float(vec![Some(1.0), Some(0.0)])
+        );
+    }
+
+    /// An average has a value only where its window holds one, and the
+    /// values line up with the first examples (the reference's frame);
+    /// a comparison of it likewise.
+    #[test]
+    fn an_average_s_values_line_up_with_the_first_examples() {
+        let w = window(1, days(0), days(10), &[100 * DAY, 50 * DAY]).unwrap();
+        let lag = |condition| Lag {
+            steps: 1,
+            aggregation: Aggregation::Avg,
+            start: days(0),
+            end: days(10),
+            condition,
+            shifted: w.shifted.clone(),
+            rows: Rows {
+                // Only the second example's window holds a row.
+                batches: vec![1],
+                values: labels::Values::Float(vec![Some(3.0)]),
+                times: vec![Some(45 * DAY)],
+            },
+        };
+        assert_eq!(
+            lag(None).columns(&[0, 1]).unwrap()[0].values,
+            LagValues::Float(vec![Some(3.0), None])
+        );
+        assert_eq!(
+            lag(Some((RelOp::Gt, Some(Constant::Int(1)))))
+                .columns(&[0, 1])
+                .unwrap()[0]
+                .values,
+            LagValues::Bool(vec![Some(true), None])
+        );
+        assert_eq!(
+            lag(Some((RelOp::Eq, None))).columns(&[1]).unwrap()[0].values,
+            LagValues::Bool(vec![None])
+        );
+    }
+
+    /// A month's window is moved by the calendar, as pandas moves it: from
+    /// 31 March, two months back is 31 January, and the step after it ends
+    /// on the last of February.
+    #[test]
+    fn months_are_moved_by_the_calendar() {
+        let month = Offset::of(1, TimeUnit::Months);
+        let march_31 = 1_680_220_800 * 1_000_000_000_i64;
+        let january_31 = 1_675_123_200 * 1_000_000_000_i64;
+        let w = window(2, Offset::of(0, TimeUnit::Months), month, &[march_31]).unwrap();
+        assert_eq!(w.shifted, [january_31]);
+        assert_eq!(w.ends, [march_31]);
+    }
+
+    /// Steps that reach outside what nanoseconds hold, or past what a count
+    /// holds, are refused naming `lag_timesteps`; a payload they would make
+    /// larger than the endpoint takes, before anything is computed.
+    #[test]
+    fn too_many_steps_are_refused_by_name() {
+        for steps in [100_000, u64::MAX] {
+            let e = window(steps, days(0), days(30), &[0]).err().unwrap();
+            assert_eq!(e.code, ErrorCode::ValueOutOfRange);
+            assert_eq!(e.fields["field"], Detail::text(FIELD));
+        }
+        let lag = Lag {
+            steps: 10_000_000,
+            aggregation: Aggregation::Count,
+            start: Offset::of(0, TimeUnit::Seconds),
+            end: Offset::of(1, TimeUnit::Seconds),
+            condition: None,
+            shifted: vec![0, 0],
+            rows: Rows {
+                batches: vec![],
+                values: labels::Values::Ones(0),
+                times: vec![],
+            },
+        };
+        let e = lag.columns(&[0, 1]).err().unwrap();
+        assert_eq!(e.code, ErrorCode::InvalidRequest);
+        assert_eq!(e.fields["field"], Detail::text("payload"));
+    }
+}

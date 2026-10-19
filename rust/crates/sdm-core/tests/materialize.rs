@@ -1001,8 +1001,8 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         run.next()
     };
     assert_eq!(
-        refused(&|m| m.options = vec!["num_neighbors".into(), "lag_timesteps".into()]),
-        "lag_timesteps"
+        refused(&|m| m.options = vec!["num_neighbors".into(), "max_pq_iterations".into()]),
+        "max_pq_iterations"
     );
     assert_eq!(refused(&|m| m.unseeded = true), "unseeded");
     assert_eq!(refused(&|m| m.anchor_entity = true), "anchor_entity");
@@ -1077,7 +1077,6 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     for name in [
         "context_anchor_time",
         "exclude_cols_dict",
-        "lag_timesteps",
         "max_pq_iterations",
         "num_hops",
         "return_embeddings",

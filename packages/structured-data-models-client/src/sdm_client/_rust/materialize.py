@@ -72,7 +72,8 @@ if TYPE_CHECKING:
 
 #: The options the contract carries in fields of their own (from T1.28a
 #: the seed, the statistic and the inference options among the call's
-#: values). The core is told the names of the rest (decision E61).
+#: values; from T2.9, contract v27, ``lag_timesteps`` among them). The core
+#: is told the names of the rest (decision E61).
 TAKEN = frozenset(
     {
         'anchor_time',
@@ -81,11 +82,13 @@ TAKEN = frozenset(
         'inference_config',
         'top_k',
         'rows_per_call',
+        'lag_timesteps',
     }
 )
 
 #: The options whose values the core reads, as the caller gave them, in the
-#: call's values (T1.28a): their types and bounds are the core's.
+#: call's values (T1.28a; ``lag_timesteps`` from T2.9): their types and
+#: bounds are the core's.
 VALUED = frozenset(
     {
         'random_seed',
@@ -95,6 +98,7 @@ VALUED = frozenset(
         'inference_config',
         'top_k',
         'rows_per_call',
+        'lag_timesteps',
     }
 )
 
