@@ -3,7 +3,11 @@
  "pending": [
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.composite-key-declared@postgres]",
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.composite-foreign-key-declared@postgres]",
-  "py:test_python_core_holds_the_composite_key_pair_matrix[postgres]"
+  "py:test_python_core_holds_the_composite_key_pair_matrix[postgres]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-payload-key-tie]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-payload-category]",
+  "rust:rule.float-nan-payload-key-tie",
+  "rust:rule.float-nan-payload-category"
  ],
  "authored": [
   "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-feature]",
@@ -136,6 +140,10 @@
   "rust:rule.float-signed-nan-category-float",
   "rust:rule.float-nan-key-static-double",
   "rust:rule.float-nan-key-static-float",
-  "rust:rule.float-nan-key-static-linked-double"
+  "rust:rule.float-nan-key-static-linked-double",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-payload-key-tie]",
+  "py:test_python_core_answers_each_case_as_the_reference_does[rule.float-nan-payload-category]",
+  "rust:rule.float-nan-payload-key-tie",
+  "rust:rule.float-nan-payload-category"
  ]
 }
