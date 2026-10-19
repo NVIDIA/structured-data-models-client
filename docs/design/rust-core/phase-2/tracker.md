@@ -27,9 +27,9 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.7 | Non-SQL provider and swapped data layer | C | not started | – | |
 | T2.8a | Ranking, materialize side | D | not started | – | |
 | T2.8b | Ranking, predict side | D | not started | – | |
-| T2.8c | Multi-call `predict` | G (run in lane f's worktree) | in progress | – | `main`'s 1fc5a686; 6–8 h; first wave; [tracker-T2.8c.md](tracker-T2.8c.md) |
+| T2.8c | Multi-call `predict` | G (run in lane f's worktree) | landed | 34639b61 | `main`'s 1fc5a686; 6–8 h; first wave; [tracker-T2.8c.md](tracker-T2.8c.md) |
 | T2.9 | Forecasting | E | not started | – | |
-| T2.10 | PQL targets | E | not started | – | |
+| T2.10 | PQL targets | E (run in lane f's worktree) | in progress | – | [tracker-T2.10.md](tracker-T2.10.md) |
 | T2.13 | Query and option long tail | D | not started | – | |
 | T2.12 | Schema rules | F | not started | – | `float_nan` first; lands after T2.3 |
 | T2.11 | Sampling options | F | not started | – | |
