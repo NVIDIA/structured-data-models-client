@@ -23,13 +23,13 @@
 //! there (`execute` with `filter_na=False` over a query whose aggregation
 //! is joined, so `execute_join` drops what has no value): an aggregation
 //! (a sum or a count of every example; an average, a minimum or a maximum
-//! of only the examples whose window holds a value) or its comparison, its
-//! values in the examples' order, the first value the first example's,
-//! and an example past the values none, as the engine's frame of the steps
-//! lines them up by position (`pd.DataFrame`, then `pd.concat` with the
-//! examples). That is the reference's: an average, a minimum or a maximum
-//! moves each value to the first examples rather than its own, which this
-//! matches (T2.9's tracker).
+//! of only the examples whose window holds a value) or its comparison, each
+//! value on its own example and an example whose window holds none
+//! without one. The reference's engine lines the values up by position
+//! instead (`pd.DataFrame`, then `pd.concat` with the examples), so an
+//! average's, a minimum's or a maximum's move to the first examples rather
+//! than their own; the core puts each on its own row (T2.9 fix 1, a
+//! registered difference decided under KO2-70).
 
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_engine::labels::{self, Aggregation, Constant, Labels, RelOp, Target};
@@ -190,15 +190,25 @@ impl Lag {
                         constant,
                     },
                 };
-                // The values of the examples that have one, in order, each
-                // at the position of the first examples (see the module).
-                let values = match labels::label(&target)?.labels {
-                    Labels::Float(v) => {
-                        LagValues::Float(kept.iter().map(|&at| v.get(at).copied()).collect())
-                    }
-                    Labels::Bool(v) => {
-                        LagValues::Bool(kept.iter().map(|&at| v.get(at).copied()).collect())
-                    }
+                // Each value on its own example: the labels are those of the
+                // examples `mask` marks, in order (see the module).
+                let labelled = labels::label(&target)?;
+                let mut at_example = vec![None; examples];
+                for (slot, example) in (0..examples).filter(|&e| labelled.mask[e]).enumerate() {
+                    at_example[example] = Some(slot);
+                }
+                let own = |at: usize| at_example.get(at).copied().flatten();
+                let values = match labelled.labels {
+                    Labels::Float(v) => LagValues::Float(
+                        kept.iter()
+                            .map(|&at| own(at).and_then(|i| v.get(i).copied()))
+                            .collect(),
+                    ),
+                    Labels::Bool(v) => LagValues::Bool(
+                        kept.iter()
+                            .map(|&at| own(at).and_then(|i| v.get(i).copied()))
+                            .collect(),
+                    ),
                     Labels::Int(_) | Labels::Text(_) => {
                         return Err(CoreError::new(
                             ErrorKind::Internal,
@@ -264,11 +274,12 @@ mod tests {
         );
     }
 
-    /// An average has a value only where its window holds one, and the
-    /// values line up with the first examples (the reference's frame);
-    /// a comparison of it likewise.
+    /// An average has a value only where its window holds one, each on
+    /// its own example, the first example's none (the reference's frame
+    /// would move the second's value to it; T2.9 fix 1); a comparison of
+    /// it likewise.
     #[test]
-    fn an_average_s_values_line_up_with_the_first_examples() {
+    fn an_average_s_value_is_on_its_own_example() {
         let w = window(1, days(0), days(10), &[100 * DAY, 50 * DAY]).unwrap();
         let lag = |condition| Lag {
             steps: 1,
@@ -286,18 +297,59 @@ mod tests {
         };
         assert_eq!(
             lag(None).columns(&[0, 1]).unwrap()[0].values,
-            LagValues::Float(vec![Some(3.0), None])
+            LagValues::Float(vec![None, Some(3.0)])
         );
         assert_eq!(
             lag(Some((RelOp::Gt, Some(Constant::Int(1)))))
                 .columns(&[0, 1])
                 .unwrap()[0]
                 .values,
-            LagValues::Bool(vec![Some(true), None])
+            LagValues::Bool(vec![None, Some(true)])
         );
         assert_eq!(
-            lag(Some((RelOp::Eq, None))).columns(&[1]).unwrap()[0].values,
-            LagValues::Bool(vec![None])
+            lag(Some((RelOp::Eq, None))).columns(&[1, 0]).unwrap()[0].values,
+            LagValues::Bool(vec![Some(false), None])
+        );
+    }
+
+    /// Examples whose windows hold a value, none, then a value, over two
+    /// steps (T2.9 fix 1): a maximum's each on its own row, a gap where a
+    /// window is empty, for the context and the entities predicted for
+    /// alike; a sum's every row.
+    #[test]
+    fn a_maximum_s_values_keep_their_rows_across_gaps() {
+        let anchors = [100 * DAY, 100 * DAY, 100 * DAY];
+        let w = window(2, days(0), days(10), &anchors).unwrap();
+        // Example 0: rows at days 85 (5.0) and 95 (7.0); example 1: none;
+        // example 2: a row at day 88 (2.0) only.
+        let rows = || Rows {
+            batches: vec![0, 0, 2],
+            values: labels::Values::Float(vec![Some(5.0), Some(7.0), Some(2.0)]),
+            times: vec![Some(85 * DAY), Some(95 * DAY), Some(88 * DAY)],
+        };
+        let lag = |aggregation| Lag {
+            steps: 2,
+            aggregation,
+            start: days(0),
+            end: days(10),
+            condition: None,
+            shifted: w.shifted.clone(),
+            rows: rows(),
+        };
+        let max = lag(Aggregation::Max).columns(&[0, 1, 2]).unwrap();
+        // __kumo_arl0__ is (90, 100], __kumo_arl1__ (80, 90].
+        assert_eq!(max[0].values, LagValues::Float(vec![Some(7.0), None, None]));
+        assert_eq!(
+            max[1].values,
+            LagValues::Float(vec![Some(5.0), None, Some(2.0)])
+        );
+        // The rows a request keeps, in their own order.
+        let kept = lag(Aggregation::Max).columns(&[2, 0]).unwrap();
+        assert_eq!(kept[1].values, LagValues::Float(vec![Some(2.0), Some(5.0)]));
+        let sum = lag(Aggregation::Sum).columns(&[0, 1, 2]).unwrap();
+        assert_eq!(
+            sum[1].values,
+            LagValues::Float(vec![Some(5.0), Some(0.0), Some(2.0)])
         );
     }
 

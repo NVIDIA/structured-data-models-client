@@ -36,10 +36,12 @@ T2.9 is forecasting's options on top of the split already in the core (E153): `n
 
 ### Deviations and questions
 
-- **An average, a minimum or a maximum's lag is the reference's, misaligned** (matched, a question for the orchestrator).
+- **An average's, a minimum's or a maximum's lag on its own row** (fix 1, decided by the orchestrator under KO2-70 on 2026-10-19).
   The reference's executor labels a lag through `execute_join`, which drops the examples whose window holds no value, and the engine's frame of the lags lines the rest up by position, so each value moves to the first examples rather than its own, and the last examples get none (shown: user 0's predicted row at 2023-08-01 gets no lag where its window holds 112.0).
-  The core matches it (`lag.rs`, its module docs), so the payloads are equal.
-  Fixing it (each value on its own example) is one line in `Lag::columns` and a register entry; it changes what the model is told, so it is the orchestrator's to decide (KO2-70).
+  The core puts each value on its own example (`lag.rs`'s `Lag::columns`, by the labels' mask), so these columns differ from the reference's; a sum's, a count's and every comparison of them are unchanged.
+  Held by `lag.rs`'s `a_maximum_s_values_keep_their_rows_across_gaps` and `an_average_s_value_is_on_its_own_example`, and the route test `test_an_average_s_lag_is_each_row_s_own_window` (each predicted row's lag its own window's average, read from the data; nothing else of the request differs from the old route's).
+  The 40-source differential after the fix: every payload difference is an average's, a minimum's or a maximum's lag column (or a comparison of one), none elsewhere.
+  Its register entry waits for an ID (lane b's block, P2B-1 to P2B-19, is spent) and for KO2-70 on the phase head, as does P2B-19's approval.
 - **Wording of the refused lags** (the orchestrator's note): the reference refuses `-1` with its engine's own sentence (`'lag_timesteps' cannot be negative (got -1)`), and `1.5`, `2.0` and `true` (`unsupported operand type(s) for *: 'float' and 'DateOffset'`) and `"2"` (`'<' not supported between instances of 'str' and 'int'`) with Python's TypeError text, all `INVALID_REQUEST`.
   The core route gives the same code and class, details `field: lag_timesteps` and `reason` (`negative`, `not_a_whole_number`, `not_a_number`), and the Python host says plainly: "lag_timesteps is how many past steps of the target are added as features, a whole number of zero or more; this one is refused (<reason>)" (`_rust/errors.py`'s `WORDED`; test `test_a_refused_lag_is_said_plainly_under_the_reference_s_code`).
   A lag past the time range is said as "lag_timesteps reaches further back than a time can be held (before 1677); ask for fewer steps" (P2B-18). The cases hold codes, not messages (H17).

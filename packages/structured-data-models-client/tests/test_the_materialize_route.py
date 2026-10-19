@@ -199,7 +199,6 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
     [
         QUERY,
         BINARY,
-        'PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id',
         'PREDICT users.age FOR EACH users.user_id',
     ],
 )
@@ -215,6 +214,56 @@ def test_lag_timesteps_builds_the_request_the_old_route_builds(
     assert lagged == (
         [] if 'users.age' in query else ['__kumo_arl0__', '__kumo_arl1__']
     )
+
+
+def test_an_average_s_lag_is_each_row_s_own_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T2.9 fix 1 (registered, decided under KO2-70): the reference's engine
+    # lines an average's lagged values up by position, so they land on the
+    # first rows rather than their own; the core puts each on its own row.
+    # Each predicted row's lag is its own window's average, read here from
+    # the data, and nothing else of the request differs from the old route.
+    query = 'PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id'
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _materialize(query=query, lag_timesteps=2)._payloads[0]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    table = core['predict']['instance_table']
+    at = table['columns'].index('__kumo_arl0__')
+    connection = _connection()
+    for row, user in zip(table['rows'], [0, 1], strict=True):
+        for k, (start, end) in enumerate(
+            [('2024-01-31', '2024-03-01'), ('2024-01-01', '2024-01-31')]
+        ):
+            [(mean,)] = connection.execute(
+                'SELECT AVG(price) FROM orders WHERE user_id = ? '
+                'AND ts > ?::TIMESTAMP AND ts <= ?::TIMESTAMP',
+                [user, start, end],
+            ).fetchall()
+            got = row[at + k]
+            if mean is None:
+                assert got is None
+            else:
+                assert got == float(np.float32(mean))
+    if _old_route_needs_the_engine():
+        return
+    old = _materialize(query=query, lag_timesteps=2)._payloads[0]
+    old = json.loads(json.dumps(old, default=str))
+
+    def without_lags(payload: dict[str, Any]) -> dict[str, Any]:
+        payload = json.loads(json.dumps(payload))
+        for half in ('context', 'predict'):
+            table = payload[half]['instance_table']
+            keep = [
+                i
+                for i, c in enumerate(table['columns'])
+                if not c.startswith('__kumo_arl')
+            ]
+            table['columns'] = [table['columns'][i] for i in keep]
+            table['rows'] = [[r[i] for i in keep] for r in table['rows']]
+        return payload
+
+    assert without_lags(core) == without_lags(old)
 
 
 @pytest.mark.parametrize(
