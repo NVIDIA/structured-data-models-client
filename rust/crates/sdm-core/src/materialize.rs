@@ -1733,11 +1733,6 @@ fn nan_rows(array: &ArrayRef) -> BTreeSet<usize> {
     }
 }
 
-/// Whether `array` is a float column holding a NaN.
-fn holds_nan(array: &ArrayRef) -> bool {
-    !nan_rows(array).is_empty()
-}
-
 /// The prefix of the column the reference's engine folds a key of several
 /// columns into (`composite_key.DERIVED_PREFIX`), and the longest name it
 /// gives one (`MAX_DERIVED_NAME`).
@@ -2609,19 +2604,6 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     if sampled.num_rows() == 0 {
         return Err(invalid("the entity table holds no row to sample", "query"));
     }
-    // A NaN key a source hands over, which the reference reads as missing
-    // where it reads floats into NumPy-backed pandas (Postgres's rows), is
-    // a missing key its sampler cannot coerce to seed the next read
-    // (`_coerce_id`'s `int` or `float` of `NA`), which it refuses as the
-    // caller's error before that read (T2.12).
-    if asker.reads_nan_as_missing() && holds_nan(named(&sampled, &key)?) {
-        return Err(invalid(
-            "an entity sampled has no value for its table's primary key",
-            "query",
-        )
-        .with_field("table", Detail::text(&entity.name))
-        .with_field("column", Detail::text(&key)));
-    }
     let sampled_keys = keys::read(named(&sampled, &key)?)?;
     let mut seen = BTreeSet::new();
     let kept: Vec<usize> = (0..sampled_keys.len())
@@ -2670,6 +2652,25 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
         }
     };
 
+    // A NaN key a source hands over, which the reference reads as missing
+    // where it reads floats into NumPy-backed pandas (Postgres's rows), is
+    // a missing key its sampler cannot coerce (`_coerce_id`'s `int` or
+    // `float` of `NA`) where an example's key seeds the read of a windowed
+    // target's rows (`_by_time`): refused as the caller's error before that
+    // read. A static target reads no rows by the key, and such an example
+    // is left out once labelled, below (T2.12).
+    let nan_key = nan_rows(&entity_key);
+    if asker.reads_nan_as_missing()
+        && aggregated.is_some()
+        && examples.index.iter().any(|i| nan_key.contains(i))
+    {
+        return Err(invalid(
+            "an entity sampled has no value for its table's primary key",
+            "query",
+        )
+        .with_field("table", Detail::text(&entity.name))
+        .with_field("column", Detail::text(&key)));
+    }
     // Their labels, as the reference's executor computes them over the
     // rows read for them (decision E19).
     let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
@@ -2691,11 +2692,8 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
         labels::label(&target)?
     };
     null_compared(&asked.target, &labelled.mask)?;
-    // An example of an entity whose key is NaN, which a source reading
-    // floats as Arrow-backed pandas hands over as a value, is left out of
-    // the context once labelled, as the reference leaves it out (T2.12; a
-    // NaN key read as missing is refused above).
-    let nan_key = nan_rows(&entity_key);
+    // An example of an entity whose key is NaN is left out of the context
+    // once labelled, as the reference leaves it out (T2.12).
     if !nan_key.is_empty() {
         let keep: Vec<bool> = (0..labelled.mask.len())
             .filter(|&row| labelled.mask[row])
