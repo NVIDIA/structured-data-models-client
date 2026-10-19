@@ -148,3 +148,61 @@ def test_the_probabilities_vectors_are_not_vacuous() -> None:
             vector['method'], vector['path'], vector['body'].encode()
         )
         assert all('probabilities' not in i for i in answer['predictions'])
+
+
+quantile_vectors = document['quantiles']
+
+
+@pytest.mark.parametrize(
+    'vector', quantile_vectors, ids=[v['name'] for v in quantile_vectors]
+)
+def test_an_endpoint_told_to_answer_quantiles_answers_each_vector(
+    vector: dict[str, Any],
+) -> None:
+    # T2.9: the rule as call number ``call``, and served, after as many
+    # calls before it, each answered in turn.
+    status, answer = endpoint.answer(
+        vector['method'],
+        vector['path'],
+        vector['body'].encode(),
+        call=vector['call'],
+        quantiles=True,
+    )
+    assert status == vector['status']
+    assert json.loads(json.dumps(answer)) == vector['answer']
+    assert [list(i.get('quantiles') or {}) for i in answer['predictions']] == [
+        list(i.get('quantiles') or {}) for i in vector['answer']['predictions']
+    ]
+    with endpoint.serve(quantiles=True) as (url, _):
+        for _ in range(vector['call'] + 1):
+            request = urllib.request.Request(
+                url + vector['path'],
+                data=vector['body'].encode(),
+                method=vector['method'],
+            )
+            with urllib.request.urlopen(request) as response:
+                status, raw = response.status, response.read()
+    assert status == vector['status']
+    assert json.loads(raw) == vector['answer']
+
+
+def test_the_quantiles_vectors_are_not_vacuous() -> None:
+    given = [
+        v
+        for v in quantile_vectors
+        if 'quantiles' in v['answer']['predictions'][0]
+    ]
+    assert any(v['call'] > 0 for v in given)
+    assert len(given) < len(quantile_vectors)
+    # Without being told to, or told to answer probabilities only, the
+    # endpoint answers none.
+    for vector in given:
+        for told in ({}, {'probabilities': True}):
+            _, answer = endpoint.answer(
+                vector['method'],
+                vector['path'],
+                vector['body'].encode(),
+                call=vector['call'],
+                **told,
+            )
+            assert all('quantiles' not in i for i in answer['predictions'])

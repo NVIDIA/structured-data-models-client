@@ -200,3 +200,64 @@ fn the_rule_answers_each_probabilities_vector() {
         assert_eq!(classes(&answered), classes(&vector["answer"]), "{name}");
     }
 }
+
+/// T2.9: an endpoint told to answer quantiles answers each of the file's
+/// `quantiles` vectors, as call number `call`, as the Python endpoint
+/// does: the status, the answer, and each item's quantiles in the order
+/// given; told to answer probabilities only, or nothing, it answers none.
+#[test]
+fn the_rule_answers_each_quantiles_vector() {
+    let document = vectors();
+    let vectors = document["quantiles"].as_array().unwrap();
+    // Not vacuous: quantiles given on calls past the first, and a call
+    // asking for none, and a classification, answered by the rule.
+    assert!(vectors.len() >= 5, "{}", vectors.len());
+    let given = |v: &Value| v["answer"]["predictions"][0].get("quantiles").is_some();
+    assert!(vectors.iter().any(|v| given(v) && v["call"] != 0));
+    assert!(vectors.iter().any(|v| !given(v)));
+    let spread = |answer: &Value| -> Vec<Vec<String>> {
+        answer["predictions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                item.get("quantiles")
+                    .and_then(Value::as_object)
+                    .map(|q| q.keys().cloned().collect())
+                    .unwrap_or_default()
+            })
+            .collect()
+    };
+    for vector in vectors {
+        let name = vector["name"].as_str().unwrap();
+        let asked = (
+            vector["method"].as_str().unwrap(),
+            vector["path"].as_str().unwrap(),
+            vector["body"].as_str().unwrap().as_bytes(),
+            vector["call"].as_u64().unwrap(),
+        );
+        let (status, answered) =
+            sdm_testkit::endpoint::answer_as_asked(asked.0, asked.1, asked.2, asked.3, false, true);
+        assert_eq!(
+            u64::from(status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, vector["answer"], "{name}");
+        assert_eq!(spread(&answered), spread(&vector["answer"]), "{name}");
+        for (probabilities, quantiles) in [(false, false), (true, false)] {
+            let (_, answered) = sdm_testkit::endpoint::answer_as_asked(
+                asked.0,
+                asked.1,
+                asked.2,
+                asked.3,
+                probabilities,
+                quantiles,
+            );
+            assert!(
+                spread(&answered).iter().all(Vec::is_empty),
+                "{name}: quantiles where none were to be given"
+            );
+        }
+    }
+}

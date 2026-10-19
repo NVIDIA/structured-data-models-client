@@ -24,6 +24,12 @@
 //! `(10 - d) / 10`, the last `d / 10` and any other `0.0`, the prediction
 //! the last class where `d > 5`, else the first.
 //!
+//! Told to answer quantiles ([`answer_as_asked`]; T2.9's forecast cases, as
+//! a model answers the spread of a regression), a regression call whose
+//! `output.fields` names `quantiles` is answered with them beside the
+//! rule's prediction: for row `i` of call `k`, with `d` as above,
+//! `{"0.1": d - 1, "0.5": d, "0.9": d + 1}`, each a float.
+//!
 //! Calls are numbered from zero in the order received, and an endpoint
 //! told to fail a call answers that one `500` with `{"error":
 //! "scripted_failure", "call": <its number>}` and every other call by the
@@ -101,20 +107,48 @@ pub fn answer_call(
 
 /// The rule: the status and JSON body answering one request.
 pub fn answer(method: &str, path: &str, body: &[u8]) -> (u16, Value) {
-    answered(method, path, body, None)
+    answered(method, path, body, None, None)
 }
 
 /// The rule answering call number `call` of an endpoint told to answer
 /// probabilities: a classification asking for them is given them.
 pub fn answer_with_probabilities(method: &str, path: &str, body: &[u8], call: u64) -> (u16, Value) {
-    answered(method, path, body, Some(call))
+    answer_as_asked(method, path, body, call, true, false)
 }
 
-fn answered(method: &str, path: &str, body: &[u8], sure: Option<u64>) -> (u16, Value) {
+/// The rule answering call number `call` of an endpoint told whether to
+/// answer probabilities and whether to answer quantiles (a case's
+/// `input.probabilities` and `input.quantiles`): a classification asking
+/// for probabilities is given them where `probabilities` says so, and a
+/// regression asking for quantiles is given them where `quantiles` does.
+pub fn answer_as_asked(
+    method: &str,
+    path: &str,
+    body: &[u8],
+    call: u64,
+    probabilities: bool,
+    quantiles: bool,
+) -> (u16, Value) {
+    answered(
+        method,
+        path,
+        body,
+        probabilities.then_some(call),
+        quantiles.then_some(call),
+    )
+}
+
+fn answered(
+    method: &str,
+    path: &str,
+    body: &[u8],
+    sure: Option<u64>,
+    spread: Option<u64>,
+) -> (u16, Value) {
     if method != "POST" || path != PREDICTIONS {
         return (404, json!({"error": "not_found"}));
     }
-    match predictions(body, sure) {
+    match predictions(body, sure, spread) {
         Ok(predictions) => (
             200,
             json!({
@@ -129,7 +163,11 @@ fn answered(method: &str, path: &str, body: &[u8], sure: Option<u64>) -> (u16, V
     }
 }
 
-fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static str> {
+fn predictions(
+    body: &[u8],
+    sure: Option<u64>,
+    spread: Option<u64>,
+) -> Result<Vec<Value>, &'static str> {
     // serde_json, as JSON itself, refuses NaN and Infinity.
     let payload: Value = serde_json::from_slice(body).map_err(|_| "not_json")?;
     let Value::Object(payload) = payload else {
@@ -159,11 +197,13 @@ fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static st
     let p = prediction(payload.get("task"))?;
     // The call's number where the endpoint answers a classification's
     // probabilities and this call asks for them.
-    let asks = payload
-        .get("output")
-        .and_then(|o| o.get("fields"))
-        .and_then(Value::as_array)
-        .is_some_and(|fields| fields.iter().any(|f| f == "probabilities"));
+    let asks = |field: &str| {
+        payload
+            .get("output")
+            .and_then(|o| o.get("fields"))
+            .and_then(Value::as_array)
+            .is_some_and(|fields| fields.iter().any(|f| f == field))
+    };
     let classes: Vec<String> = payload
         .get("task")
         .and_then(|t| t.get("target"))
@@ -176,7 +216,10 @@ fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static st
                 .collect()
         })
         .unwrap_or_default();
-    let sure = sure.filter(|_| asks && p.is_string() && !classes.is_empty());
+    let sure = sure.filter(|_| asks("probabilities") && p.is_string() && !classes.is_empty());
+    // The call's number where the endpoint answers a regression's quantiles
+    // and this call asks for them.
+    let spread = spread.filter(|_| asks("quantiles") && !p.is_string());
     // The rows again, each cell its text as written, so an id is answered
     // as its token; the body is JSON, so this reading cannot fail.
     let rows = raw_rows(body).ok_or("not_json")?;
@@ -198,6 +241,9 @@ fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static st
             item["prediction"] = prediction;
             item["probabilities"] = given;
         }
+        if let Some(call) = spread {
+            item["quantiles"] = quantiles(call, index);
+        }
         answered.push(item);
     }
     Ok(answered)
@@ -218,6 +264,15 @@ fn how_sure(classes: &[String], call: u64, index: usize) -> (Value, Value) {
     given.insert(last.clone(), json!(f64::from(d) / 10.0));
     let prediction = if d > 5 { last } else { first };
     (Value::String(prediction.clone()), Value::Object(given))
+}
+
+/// Row `index` of call `call`'s quantiles, as an endpoint told to answer
+/// quantiles gives them.
+fn quantiles(call: u64, index: usize) -> Value {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = f64::from(u32::try_from(d).unwrap_or(1));
+    json!({"0.1": d - 1.0, "0.5": d, "0.9": d + 1.0})
 }
 
 fn prediction(task: Option<&Value>) -> Result<Value, &'static str> {

@@ -154,7 +154,8 @@ def _invalid(validate: Any, document: Any) -> str | None:
 def _indices(given: dict[str, Any]) -> str | None:
     r"""An entity key is a JSON integer literal of any size, or a string,
     in ``indices`` and ``candidates`` alike; ``top_k`` and ``fail_call``
-    are integers (``rows_per_call`` is passed as written, whatever it is).
+    are integers (``rows_per_call`` and ``lag_timesteps`` are passed as
+    written, whatever they are).
 
     JSON Schema counts ``1.0`` as an integer; ``json`` reads it as a float,
     and a bool is no index either, so the type read is checked too, as
@@ -2435,10 +2436,11 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
         arguments['candidates'] = list(spec['candidates'])
     if 'top_k' in spec:
         arguments['top_k'] = spec['top_k']
-    if 'rows_per_call' in spec:
-        # As written (T2.8c's cases): a value the reference refuses is the
-        # case's input.
-        arguments['rows_per_call'] = spec['rows_per_call']
+    for key in ('rows_per_call', 'lag_timesteps'):
+        if key in spec:
+            # As written (T2.8c's and T2.9's cases): a value the reference
+            # refuses is the case's input.
+            arguments[key] = spec[key]
     return arguments
 
 
@@ -2659,11 +2661,13 @@ def _call(
         log.stage = stage
     with (
         # The scripted endpoint, failing the case's chosen call and
-        # answering a classification with its probabilities where the case
-        # says so (T2.8's ranking cases).
+        # answering a classification with its probabilities (T2.8's ranking
+        # cases) and a regression with its quantiles (T2.9's forecast
+        # cases) where the case says so.
         serve(
             fail_call=given.get('fail_call'),
             probabilities=given.get('probabilities', False),
+            quantiles=given.get('quantiles', False),
         ) as (url, received),
         warnings.catch_warnings(record=True) as shown,
     ):
@@ -2688,8 +2692,17 @@ def _call(
                 stage = 'predict'
                 if log is not None:
                     log.stage = stage
+                # The output fields the case names, as written (T2.9's
+                # quantile cases); none named, the model's defaults.
+                outputs = (
+                    {'outputs': list(given['outputs'])}
+                    if 'outputs' in given
+                    else {}
+                )
                 with SDMClient(url) as client:
-                    result = client.predict(request, model=KumoRelational())
+                    result = client.predict(
+                        request, model=KumoRelational(), **outputs
+                    )
                 public['result'] = _result_projection(result)
             outcome = _outcome('success', stage)
         except RunnerFailure:

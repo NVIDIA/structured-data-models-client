@@ -138,6 +138,15 @@ pub struct Input {
     /// for probabilities with them (T2.8's ranking cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub probabilities: Option<bool>,
+    /// Whether the scripted endpoint answers a regression call asking for
+    /// quantiles with them (T2.9's forecast cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub quantiles: Option<bool>,
+    /// The output fields `predict` asks for (the public call's
+    /// `outputs=`), as written (T2.9's quantile cases); absent, the
+    /// model's defaults for the task.
+    #[serde(default, deserialize_with = "present")]
+    pub outputs: Option<Vec<String>>,
 }
 
 /// Keyword arguments to `Schema.from_source`, each as the case gives it.
@@ -449,6 +458,12 @@ pub struct Materialize {
     /// refuses is the case's input.
     #[serde(default, deserialize_with = "present")]
     pub rows_per_call: Option<Written>,
+    /// How many past steps of the target are added as lagged features
+    /// (T2.9), kept as written, whatever JSON scalar it is, as
+    /// `rows_per_call` is, so a value the reference refuses is the case's
+    /// input.
+    #[serde(default, deserialize_with = "present")]
+    pub lag_timesteps: Option<Written>,
 }
 
 /// A JSON scalar other than `null` (a number, a bool or a string), kept as

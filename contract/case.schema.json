@@ -64,6 +64,15 @@
         "probabilities": {
           "description": "Whether the scripted endpoint answers a classification call asking for probabilities with them, as a model does (contract/runners/scripted_endpoint.py; T2.8's ranking cases, whose order is their probabilities): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
+        },
+        "quantiles": {
+          "description": "Whether the scripted endpoint answers a regression call asking for quantiles with them, as a model does (contract/runners/scripted_endpoint.py; T2.9's forecast cases): a JSON boolean; absent, the rule answers none.",
+          "type": "boolean"
+        },
+        "outputs": {
+          "description": "The output fields SDMClient.predict asks for (its outputs=), passed as written (T2.9's quantile cases); absent, the call names none and the model's defaults for the task are asked.",
+          "type": "array",
+          "items": {"type": "string"}
         }
       }
     },
@@ -277,6 +286,10 @@
         },
         "rows_per_call": {
           "description": "How many entities one model call scores (main's 1fc5a686, T2.8c), passed as written: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "type": ["integer", "number", "boolean", "string"]
+        },
+        "lag_timesteps": {
+          "description": "How many past steps of the target materialize adds as lagged features (T2.9), passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
           "type": ["integer", "number", "boolean", "string"]
         }
       }

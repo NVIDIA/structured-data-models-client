@@ -356,7 +356,8 @@ ANSWERS: dict[str, list[dict[str, Any]]] = {
 def _answering(predictions: list[dict[str, Any]]) -> Callable[..., Any]:
     # A stand-in for the scripted endpoint's rule, taking what the endpoint
     # passes the rule: the request, the call's number and whether to answer
-    # probabilities (the crafted answer is the same for every call).
+    # probabilities and quantiles (the crafted answer is the same for every
+    # call).
     def answer(
         method: str,
         path: str,
@@ -364,6 +365,7 @@ def _answering(predictions: list[dict[str, Any]]) -> Callable[..., Any]:
         *,
         call: int = 0,
         probabilities: bool = False,
+        quantiles: bool = False,
     ) -> tuple[int, Any]:
         return 200, {
             'object': 'prediction.response',
