@@ -148,11 +148,11 @@ _TOO_LARGE = (
 #: Python's own errors (a TypeError's ``'<' not supported between ...`` or
 #: ``unsupported operand type(s) for *``, an OverflowError), which this
 #: client says plainly, the code the reference's.
-_LAG = (
+_LAG_IS = (
     'lag_timesteps is how many past steps of the target are added as '
-    'features, a whole number of zero or more; this one is refused '
-    '({reason})'
+    'features, a whole number of zero or more'
 )
+_LAG = _LAG_IS + '; this one is refused'
 _LAG_RANGE = (
     'lag_timesteps reaches further back than a time can be held (before '
     '1677); ask for fewer steps'
@@ -283,6 +283,17 @@ WORDED: dict[tuple[str, ...], str] = {
         'at a time'
     ),
     ('INVALID_REQUEST', 'lag_timesteps'): _LAG,
+    # A refused lag in plain words by the core's reason (T2.9 fix 2),
+    # never the reason's token.
+    ('INVALID_REQUEST', 'lag_timesteps', 'negative'): (
+        _LAG_IS + '; it cannot be negative'
+    ),
+    ('INVALID_REQUEST', 'lag_timesteps', 'not_a_whole_number'): (
+        _LAG_IS + '; a fraction or a boolean is not one'
+    ),
+    ('INVALID_REQUEST', 'lag_timesteps', 'not_a_number'): (
+        _LAG_IS + '; text, None or a collection is not one'
+    ),
     ('VALUE_OUT_OF_RANGE', 'lag_timesteps'): _LAG_RANGE,
 }
 

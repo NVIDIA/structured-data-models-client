@@ -24,7 +24,9 @@ Input-sized fields of a ``start`` travel as bytes attachments of their JSON
 from __future__ import annotations
 
 import base64
+import contextlib
 import decimal
+import fractions
 import json
 import math
 import numbers
@@ -304,6 +306,20 @@ def _scalar(value: Any) -> Any:
         value, (str, bytes, bytearray)
     ):
         return list(value)
+    if isinstance(value, (decimal.Decimal, fractions.Fraction)):
+        # From T2.9, a finite decimal or fraction as its nearest double,
+        # its sign and whether it is zero kept, which is all an option the
+        # core reads as a number asks of it (lag_timesteps=Decimal(2) on a
+        # static query, which the reference takes and ignores; a temporal
+        # one refused as not whole, as the reference refuses it); any other
+        # refused, as the encoder refuses it.
+        with contextlib.suppress(ArithmeticError, ValueError, OverflowError):
+            double = float(value)
+            if math.isfinite(double) and (double == 0) == (value == 0):
+                return double
+        raise TypeError(
+            f'Object of type {type(value).__name__} is not JSON serializable'
+        )
     return _integral(value)
 
 
@@ -330,17 +346,43 @@ def attachment(value: Any) -> bytes:
     not finite, one nested past what the encoder writes) is refused as the
     client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
     call's option values travel here as the caller gave them."""
-    try:
-        return json.dumps(
-            value, ensure_ascii=False, allow_nan=False, default=_scalar
-        ).encode()
-    except (TypeError, ValueError, RecursionError):
-        from sdm_client.errors import StructuredDataError
 
-        raise StructuredDataError(
-            'this request carries a value that cannot be sent as JSON',
-            code='INVALID_REQUEST',
-        ) from None
+    def written(item: Any) -> bytes:
+        return json.dumps(
+            item, ensure_ascii=False, allow_nan=False, default=_scalar
+        ).encode()
+
+    def writes(item: Any) -> bool:
+        try:
+            written(item)
+        except (TypeError, ValueError, RecursionError):
+            return False
+        return True
+
+    try:
+        return written(value)
+    except (TypeError, ValueError, RecursionError):
+        pass
+    from sdm_client.errors import StructuredDataError
+
+    # A mapping's first member JSON cannot hold is named (T2.9: the call's
+    # option values, a NaN or an infinity among them, say which option).
+    named = next(
+        (
+            str(name)
+            for name, item in (value.items() if isinstance(value, dict) else ())
+            if not writes(item)
+        ),
+        None,
+    )
+    raise StructuredDataError(
+        'this request carries a value that cannot be sent as JSON'
+        if named is None
+        else f'{named} carries a value that cannot be sent as JSON (a NaN, '
+        f'an infinity, or a type JSON has no form for)',
+        code='INVALID_REQUEST',
+        details=None if named is None else {'field': named},
+    )
 
 
 # --- a caller's value as the contract's Given ----------------------------------

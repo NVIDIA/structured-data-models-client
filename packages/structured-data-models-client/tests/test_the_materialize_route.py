@@ -25,6 +25,7 @@ import subprocess
 import sys
 import textwrap
 import warnings
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -289,21 +290,66 @@ def test_a_refused_lag_is_said_plainly_under_the_reference_s_code(
     assert refused.value.details['field'] == 'lag_timesteps'
     assert refused.value.details['reason'] == reason
     assert 'a whole number of zero or more' in str(refused.value)
+    # Plain words, never a reason's token (not_a_whole_number).
+    assert '(' not in str(refused.value)
+    assert 'not_a_' not in str(refused.value)
 
 
-def test_a_nan_lag_is_refused_on_the_core_route_only(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    ('query', 'value', 'lags'),
+    [
+        # Whole, fractional and zero decimals and fractions, as the
+        # reference's engine meets them: a static query takes and ignores
+        # them; a temporal one adds none for zero, else refuses (T2.9 fix 2).
+        ('PREDICT users.age FOR EACH users.user_id', Decimal(2), 0),
+        ('PREDICT users.age FOR EACH users.user_id', Fraction(2, 1), 0),
+        ('PREDICT users.age FOR EACH users.user_id', Decimal('0.1'), 0),
+        (QUERY, Decimal(0), 0),
+        (QUERY, Fraction(0), 0),
+        (QUERY, Decimal(2), None),
+        (QUERY, Fraction(1, 3), None),
+        (QUERY, Decimal(-1), None),
+    ],
+)
+def test_a_decimal_or_fraction_lag_is_met_as_the_reference_meets_it(
+    monkeypatch: pytest.MonkeyPatch, query: str, value: Any, lags: int | None
 ) -> None:
-    # Register P2B-19 (proposed, diagnostic): the reference compares a NaN
-    # with zero both ways, finds neither, and adds no lag; the core route
-    # cannot send a NaN as the JSON the call's values travel in, and is
-    # refused as the client's transport refuses such a value.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    if lags is None:
+        with pytest.raises(StructuredDataError) as refused:
+            _materialize(query=query, lag_timesteps=value)
+        assert refused.value.code == 'INVALID_REQUEST'
+        assert refused.value.details['field'] == 'lag_timesteps'
+        return
+    columns = _materialize(query=query, lag_timesteps=value)._payloads[0][
+        'context'
+    ]['instance_table']['columns']
+    assert len([c for c in columns if c.startswith('__kumo_arl')]) == lags
+
+
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
+def test_a_nan_lag_is_refused_on_the_core_route_only(
+    monkeypatch: pytest.MonkeyPatch, value: float
+) -> None:
+    # Register P2B-19 (approved, KO2-70): the reference adds no lag for a
+    # NaN and refuses an infinity after labelling (a TypeError, or as
+    # negative); the core route cannot send either as the JSON the call's
+    # values travel in, and refuses each before anything is read, naming
+    # lag_timesteps.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     with pytest.raises(StructuredDataError) as refused:
-        _materialize(lag_timesteps=float('nan'))
+        _materialize(lag_timesteps=value)
     assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details == {'field': 'lag_timesteps'}
+    assert str(refused.value).startswith(
+        '[INVALID_REQUEST] lag_timesteps carries a value'
+    )
     monkeypatch.delenv(_routing.ENVIRONMENT)
-    if not _old_route_needs_the_engine():
+    if value == value and not _old_route_needs_the_engine():
+        with pytest.raises(StructuredDataError) as old:
+            _materialize(lag_timesteps=value)
+        assert old.value.code == 'INVALID_REQUEST'
+    elif not _old_route_needs_the_engine():
         columns = _materialize(lag_timesteps=float('nan'))._payloads[0][
             'context'
         ]['instance_table']['columns']
