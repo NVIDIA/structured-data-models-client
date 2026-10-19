@@ -201,10 +201,13 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         'condition', f'PREDICT COUNT(orders.*, {WINDOW}) IN (1, 2) {EACH}'
     ),
     # logical_target: AND, OR and NOT, of windowed and of static conditions.
+    # The three of these that are S1 cases are written in the canonical
+    # text the Python host hands the core (each operand of AND and NOT
+    # parenthesized), which the gate's inputs rule holds to the case's pql.
     'logical.and': _scenario(
         'logical_target',
-        f'PREDICT COUNT(orders.*, {WINDOW}) > 0 AND '
-        f'SUM(orders.price, {WINDOW}) > 20 {EACH}',
+        f'PREDICT (COUNT(orders.*, {WINDOW}) > 0) AND '
+        f'(SUM(orders.price, {WINDOW}) > 20) {EACH}',
     ),
     'logical.or': _scenario(
         'logical_target',
@@ -212,7 +215,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         f'SUM(orders.price, {WINDOW}) < 18 {EACH}',
     ),
     'logical.not': _scenario(
-        'logical_target', f'PREDICT NOT COUNT(orders.*, {WINDOW}) > 0 {EACH}'
+        'logical_target', f'PREDICT NOT (COUNT(orders.*, {WINDOW}) > 0) {EACH}'
     ),
     'logical.static-and': _scenario(
         'logical_target',
@@ -251,8 +254,8 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     ),
     'filter.and': _scenario(
         'target_filter',
-        'PREDICT COUNT(orders.* WHERE orders.price > 18 AND '
-        f'orders.price < 21, {WINDOW}) {EACH}',
+        'PREDICT COUNT(orders.* WHERE (orders.price > 18) AND '
+        f'(orders.price < 21), {WINDOW}) {EACH}',
     ),
     'filter.or': _scenario(
         'target_filter',

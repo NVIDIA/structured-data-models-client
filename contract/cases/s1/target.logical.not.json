@@ -30,7 +30,7 @@
   ],
   "input": {
     "base": "shop",
-    "pql": "PREDICT NOT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+    "pql": "PREDICT NOT (COUNT(orders.*, 0, 30, days) > 0) FOR EACH users.user_id",
     "materialize": {
       "indices": [
         0,

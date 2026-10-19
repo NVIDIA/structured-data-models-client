@@ -30,7 +30,7 @@
   ],
   "input": {
     "base": "shop",
-    "pql": "PREDICT COUNT(orders.*, 0, 30, days) > 0 AND SUM(orders.price, 0, 30, days) > 20 FOR EACH users.user_id",
+    "pql": "PREDICT (COUNT(orders.*, 0, 30, days) > 0) AND (SUM(orders.price, 0, 30, days) > 20) FOR EACH users.user_id",
     "materialize": {
       "indices": [
         0,
