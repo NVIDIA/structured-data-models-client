@@ -518,6 +518,21 @@ def _without(table: dict, column: str) -> None:
             ('VALIDATION_FAILED', 422, 'bogus: Extra inputs are not'),
         ),
         ('tabular', lambda p: p.update(schema_=p.pop('schema')), None),
+        (
+            'tabular',
+            lambda p: p.update(
+                inference={'run_mode': 7, 'inference_config': [1]},
+                metadata={'source_query': 'x' * 1025},
+            ),
+            (
+                'VALIDATION_FAILED',
+                422,
+                'inference.run_mode: Input should be a valid string; '
+                'inference.inference_config: Input should be a valid '
+                'dictionary; metadata.source_query: String should have at '
+                'most 1024 characters',
+            ),
+        ),
     ],
 )
 def test_a_request_is_read_in_the_order_the_nim_reads_it(

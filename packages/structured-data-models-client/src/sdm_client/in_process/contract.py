@@ -17,6 +17,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from sdm_client.errors import format_invalid_params
+from sdm_client.in_process.inference import inference_problems
 from sdm_client.in_process.refusal import refusal
 
 _TEXT = 1024
@@ -70,7 +71,9 @@ def _problems(
     }
     for field in fields:
         value = payload.get(field)
-        if field in readers and isinstance(value, Mapping):
+        if field == 'inference':
+            yield from inference_problems(value)
+        elif field in readers and isinstance(value, Mapping):
             yield from readers[field](field, value)
     yield from _extra('', payload, fields)
 

@@ -11,64 +11,72 @@ boolean it spells, so ``'no'`` asks for nothing.
 
 from __future__ import annotations
 
-from typing import Any, NoReturn
-
-from sdm_client.in_process.refusal import refusal
+from collections.abc import Iterator
+from typing import Any
 
 _MAX_TEXT = 1024
 _TRUE = frozenset({'1', 'on', 't', 'true', 'y', 'yes'})
 _FALSE = frozenset({'0', 'off', 'f', 'false', 'n', 'no'})
 
 
-def read_inference(inference: Any) -> dict[str, Any]:
-    r"""The inference options, typed, with each field a NIM fills in by
-    default present."""
+def inference_problems(inference: Any) -> Iterator[tuple[str, str]]:
+    r"""Each way the block fails the NIM's typing, in the NIM's order."""
     if inference is None:
-        inference = {}
+        return
     if not isinstance(inference, dict):
-        _invalid(
+        yield (
             'inference',
             'Input should be a valid dictionary or object to extract fields '
             'from',
         )
+        return
+    run_mode = inference.get('run_mode')
+    if run_mode is not None and not isinstance(run_mode, str):
+        yield 'inference.run_mode', 'Input should be a valid string'
+    if isinstance(run_mode, str) and len(run_mode) > _MAX_TEXT:
+        yield (
+            'inference.run_mode',
+            f'String should have at most {_MAX_TEXT} characters',
+        )
+    if 'use_prediction_time' in inference:
+        value = inference['use_prediction_time']
+        if _boolean(value) is None:
+            unread = isinstance(value, (int, str))
+            yield (
+                'inference.use_prediction_time',
+                'Input should be a valid boolean'
+                + (', unable to interpret input' if unread else ''),
+            )
+    if not isinstance(inference.get('inference_config', {}), dict):
+        yield (
+            'inference.inference_config',
+            'Input should be a valid dictionary',
+        )
+
+
+def read_inference(inference: Any) -> dict[str, Any]:
+    r"""The inference options, typed, with each field a NIM fills in by
+    default present.
+
+    Read once :func:`inference_problems` finds none.
+    """
     options = {
         'run_mode': None,
         'use_prediction_time': False,
         'inference_config': {},
-        **inference,
+        **(inference or {}),
     }
-    run_mode = options['run_mode']
-    if run_mode is not None and not isinstance(run_mode, str):
-        _invalid('inference.run_mode', 'Input should be a valid string')
-    if isinstance(run_mode, str) and len(run_mode) > _MAX_TEXT:
-        _invalid(
-            'inference.run_mode',
-            f'String should have at most {_MAX_TEXT} characters',
-        )
-    options['use_prediction_time'] = _boolean(options['use_prediction_time'])
-    if not isinstance(options['inference_config'], dict):
-        _invalid(
-            'inference.inference_config', 'Input should be a valid dictionary'
-        )
+    options['use_prediction_time'] = bool(
+        _boolean(options['use_prediction_time'])
+    )
     return options
 
 
-def _boolean(value: Any) -> bool:
+def _boolean(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
     if isinstance(value, str) and value.lower() in _TRUE | _FALSE:
         return value.lower() in _TRUE
     if isinstance(value, (int, float)) and value in (0, 1):
         return bool(value)
-    unread = isinstance(value, (int, str))
-    _invalid(
-        'inference.use_prediction_time',
-        'Input should be a valid boolean'
-        + (', unable to interpret input' if unread else ''),
-    )
-
-
-def _invalid(name: str, reason: str) -> NoReturn:
-    raise refusal(
-        'VALIDATION_FAILED', f'Request validation failed. {name}: {reason}'
-    )
+    return None
