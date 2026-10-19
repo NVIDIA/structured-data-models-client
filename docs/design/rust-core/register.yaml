@@ -6528,13 +6528,17 @@ entries:
     more.
   cases: []
   refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/sampler.py#Sampler.sample_lagged_target', P1B-3]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
-    Approver: reviewer (both refuse the input; the core names the field and
-    a code that says what is wrong, where the reference reports its own
-    failure). Measured at T2.9 by its differential (lag_timesteps 10,000 and
+    Approved by both of T2.9's round 1 reviewers, recorded by the
+    orchestrator (reviews/T2.9-r1-claude.md, codex-reports/T2.9-r1.md):
+    both refuse the input at the same point, after the same statements;
+    the core names the field and a code that says what is wrong
+    ("lag_timesteps reaches further back than a time can be held (before
+    1677); ask for fewer steps"), where the reference reports its own
+    failure. Measured at T2.9 by its differential (lag_timesteps 10,000 and
     2**64 on the shop base, reference INTERNAL_ERROR, core
     VALUE_OUT_OF_RANGE); no contract case asks such a lag.
 
