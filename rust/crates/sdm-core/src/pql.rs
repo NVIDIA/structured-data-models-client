@@ -141,7 +141,7 @@ pub fn validate_warned(
     on_adapter_stack(
         || match resolve_here(query, schema, profile, facts, zones) {
             Ok(validation) => (Ok(validation.to_result()), validation.warnings),
-            Err(Halted { error, warnings }) => (Err(error), warnings),
+            Err(Halted { error, warnings }) => (Err(*error), warnings),
         },
     )
 }
@@ -149,14 +149,14 @@ pub fn validate_warned(
 /// A validation that ended with an error, and D4's warnings for the
 /// day-first literals read before it.
 struct Halted {
-    error: CoreError,
+    error: Box<CoreError>,
     warnings: Vec<CoreWarning>,
 }
 
 impl From<CoreError> for Halted {
     fn from(error: CoreError) -> Self {
         Halted {
-            error,
+            error: Box::new(error),
             warnings: vec![],
         }
     }
@@ -206,7 +206,7 @@ pub fn resolve(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
-    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones).map_err(|h| h.error))
+    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones).map_err(|h| *h.error))
 }
 
 fn resolve_here(
@@ -235,7 +235,7 @@ fn resolve_here(
     let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
     // An error after a literal was read keeps the literal's warning (U1).
     let halted = |error: CoreError| Halted {
-        error,
+        error: Box::new(error),
         warnings: warnings.clone(),
     };
     let parsed = match parse.outcome {
