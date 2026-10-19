@@ -1226,8 +1226,10 @@ def moves(
         line, now = before.get(case), after.get(case)
         if now is None:
             continue
-        changed = line is None or semantic(line, ordered) != semantic(
-            now, ordered
+        # Equal copies project equally: only lines that differ are
+        # projected (T2.1q, most of a check's time otherwise).
+        changed = line is None or (
+            line != now and semantic(line, ordered) != semantic(now, ordered)
         )
         # Where this change re-records the line, its stop and outcome are
         # the new line's, the one the comparator relaxes from (fix 2).
