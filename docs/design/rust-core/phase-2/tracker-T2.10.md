@@ -80,3 +80,9 @@ Both DuckDB legs (python-core with python-old, about 95 s; rust-host, about 93 s
 - `target.aggregation.list-distinct`, refused by name under P2E-19 until the owner decides;
 - `compare.py`'s `inputs` rule on python-core for `target.filter.and`, `target.logical.and` and `target.logical.not`: the Python host hands the core the query's canonical text (`PREDICT NOT (COUNT(orders.*, 0, 30, days) > 0) FOR EACH users.user_id`, `PREDICT (COUNT(orders.*, 0, 30, days) > 0) AND (SUM(orders.price, 0, 30, days) > 20) FOR EACH users.user_id`, `PREDICT COUNT(orders.* WHERE (orders.price > 18) AND (orders.price < 21), 0, 30, days) FOR EACH users.user_id`), the rule compares it with the case's `pql` as written; outcome, payload, statements and result are the reference's.
 `prepush.sh` (cheap tier) passes.
+
+## Rebased onto dd285821
+
+Rebased onto T2.1o's landing (dd285821) with the test author's two fixes cherry-picked unedited (the three logical and filter cases' queries in the canonical text, and their python-ref lines recorded again).
+Both DuckDB gate legs (about 90 s each, under the heavy lock) now differ only on `rank.decimal-key` and `rank.odd-column` (T2.8) and `target.aggregation.list-distinct` (P2E-19); the `inputs` differences are gone.
+P2E-16 to P2E-19 stay proposed until the owner's rows (KO2-72 to KO2-75) land.
