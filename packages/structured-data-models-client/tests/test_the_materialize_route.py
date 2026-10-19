@@ -369,7 +369,6 @@ def test_a_decimal_or_fraction_lag_is_met_as_the_reference_meets_it(
     assert len([c for c in columns if c.startswith('__kumo_arl')]) == lags
 
 
-@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
 def test_a_decimal_seed_is_said_as_the_reference_says_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -382,6 +381,7 @@ def test_a_decimal_seed_is_said_as_the_reference_says_it(
     assert 'random_seed must be a whole number' in str(refused.value)
 
 
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
 def test_a_nan_lag_is_refused_on_the_core_route_only(
     monkeypatch: pytest.MonkeyPatch, value: float
 ) -> None:
