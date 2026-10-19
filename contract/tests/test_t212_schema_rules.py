@@ -125,6 +125,10 @@ RULES = {
         'rule.float-nan-key-static-double',
         'rule.float-nan-key-static-float',
         'rule.float-nan-key-static-linked-double',
+        # T2.12 round 3: two encodings of a FLOAT NaN, which DuckDB alone
+        # stores apart.
+        'rule.float-nan-payload-key-tie',
+        'rule.float-nan-payload-category',
     ),
     'float_signed_zero': (
         'rule.float-signed-zero-feature',
@@ -200,11 +204,18 @@ def keys_of(case_id: str) -> list[str]:
     ]
 
 
+#: The float cases DuckDB alone can hold: two encodings of a NaN, which
+#: Postgres and SQLite do not keep apart.
+DUCKDB_ONLY = (
+    'rule.float-nan-payload-key-tie',
+    'rule.float-nan-payload-category',
+)
 KEYS_ALL = tuple(
     runner().case_key(c, d)
     for d in DATABASES
     for c in CASE_IDS
     if not (d == 'sqlite' and c in FLOATS)
+    and not (d == 'postgres' and c in DUCKDB_ONLY)
 )
 
 
@@ -265,7 +276,10 @@ def test_each_rule_has_its_cases_on_every_database_that_can_hold_it() -> None:
         case, _ = cases()[case_id]
         assert case['status'] == 'acceptance' and case['slice'] == 'S1'
         assert case['input']['base'] == 'shop'
-        if case_id in FLOATS:
+        if case_id in DUCKDB_ONLY:
+            assert runner().case_databases(case) == ('duckdb',)
+            assert case['exclusion'] == EXCLUSION
+        elif case_id in FLOATS:
             assert runner().case_databases(case) == ('duckdb', 'postgres')
             assert case['exclusion'] == EXCLUSION
         else:
@@ -427,6 +441,47 @@ def test_each_case_holds_its_rule_s_input() -> None:
         finally:
             connection.close()
         assert found == tables, case_id
+    # T2.12 round 3: the NaNs 0x7f800001 and 0x7fc00001, stored apart.
+    payloads = {
+        'rule.float-nan-payload-key-tie': ('orders', 'order_id', [3, 4]),
+        'rule.float-nan-payload-category': (
+            'users',
+            'feature',
+            list(range(49, 1000)),
+        ),
+    }
+    for case_id, (table, column, at) in payloads.items():
+        case, _ = cases()[case_id]
+        connection = _built(case)
+        try:
+            array = (
+                connection.execute(f'SELECT "{column}" FROM "{table}"')
+                .to_arrow_table()
+                .column(0)
+                .combine_chunks()
+            )
+        finally:
+            connection.close()
+        assert str(array.type) == 'float', case_id
+        import numpy as np
+
+        bits = np.frombuffer(array.buffers()[1], dtype=np.uint32)[
+            array.offset : array.offset + len(array)
+        ]
+        nans = [
+            i
+            for i in range(len(bits))
+            if (bits[i] & 0x7F800000) == 0x7F800000 and bits[i] & 0x7FFFFF
+        ]
+        assert nans == at, case_id
+        assert {hex(int(bits[i])) for i in nans} == {
+            '0x7f800001',
+            '0x7fc00001',
+        }, case_id
+        finite = {
+            float(v) for i, v in enumerate(array.to_pylist()) if i not in at
+        }
+        assert len(finite) == len(bits) - len(at), case_id
     for case_id, table, pair in (
         ('rule.key-tie-fact', 'orders', ('order_id', 'orderid')),
         ('rule.key-tie-entity', 'users', ('user_id', 'userid')),
@@ -540,6 +595,10 @@ def test_no_reference_line_for_a_database_a_case_leaves_out() -> None:
     r"""Control: no python-ref line holds a float case on SQLite."""
     for case_id in FLOATS:
         assert f'{case_id}@sqlite' not in reference_lines()
+        if case_id in DUCKDB_ONLY:
+            assert f'{case_id}@postgres' not in reference_lines()
+            assert keys_of(case_id) == [case_id]
+            continue
         assert keys_of(case_id) == [case_id, f'{case_id}@postgres']
 
 

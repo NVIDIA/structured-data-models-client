@@ -364,6 +364,8 @@ T212_RULES = (
     'rule.float-nan-key-static-double',
     'rule.float-nan-key-static-float',
     'rule.float-nan-key-static-linked-double',
+    'rule.float-nan-payload-key-tie',
+    'rule.float-nan-payload-category',
 )
 
 
