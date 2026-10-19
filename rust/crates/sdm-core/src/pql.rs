@@ -122,9 +122,42 @@ pub fn validate(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<(QueryValidation, Vec<CoreWarning>), CoreError> {
-    on_adapter_stack(|| {
-        resolve_here(query, schema, profile, facts, zones).map(|v| (v.to_result(), v.warnings))
+    let (validation, warnings) = validate_warned(query, schema, profile, facts, zones);
+    validation.map(|validation| (validation, warnings))
+}
+
+/// [`validate`], with D4's warnings for the day-first literals read beside
+/// the outcome, whether the query was answered or the run ends with an
+/// error (a packed literal, a two-digit year the run's zone cannot place):
+/// the literals read before the error keep their warnings, as the
+/// reference's reader gives each as it reads it (carried row U1, T2.13).
+pub fn validate_warned(
+    query: &str,
+    schema: &QuerySchema,
+    profile: &Profile,
+    facts: &HostFacts,
+    zones: &dyn Zones,
+) -> (Result<QueryValidation, CoreError>, Vec<CoreWarning>) {
+    on_adapter_stack(|| match resolve_here(query, schema, profile, facts, zones) {
+        Ok(validation) => (Ok(validation.to_result()), validation.warnings),
+        Err(Halted { error, warnings }) => (Err(error), warnings),
     })
+}
+
+/// A validation that ended with an error, and D4's warnings for the
+/// day-first literals read before it.
+struct Halted {
+    error: CoreError,
+    warnings: Vec<CoreWarning>,
+}
+
+impl From<CoreError> for Halted {
+    fn from(error: CoreError) -> Self {
+        Halted {
+            error,
+            warnings: vec![],
+        }
+    }
 }
 
 /// `query` as the PQL library writes it back (its `to_string()`, the text a
@@ -171,7 +204,7 @@ pub fn resolve(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
-    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones))
+    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones).map_err(|h| h.error))
 }
 
 fn resolve_here(
@@ -180,7 +213,7 @@ fn resolve_here(
     profile: &Profile,
     facts: &HostFacts,
     zones: &dyn Zones,
-) -> Result<Validation, CoreError> {
+) -> Result<Validation, Halted> {
     // Resolve the current year up front; propagate a zone or clock error
     // only if a literal needs a two-digit year placed.
     let year = local_year(facts, zones);
@@ -198,16 +231,21 @@ fn resolve_here(
     });
     let parse = parser::parse_held(query, mode, reader, held);
     let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
+    // An error after a literal was read keeps the literal's warning (U1).
+    let halted = |error: CoreError| Halted {
+        error,
+        warnings: warnings.clone(),
+    };
     let parsed = match parse.outcome {
         Ok(parsed) => parsed,
         Err(parser::Unparsed::Refused(response)) => {
             return Ok(Validation::refused(diagnostics(&response), warnings));
         }
-        Err(parser::Unparsed::Packed(location)) => return Err(packed(location)),
+        Err(parser::Unparsed::Packed(location)) => return Err(halted(packed(location))),
         Err(parser::Unparsed::Unplaced) => {
-            return Err(year.err().unwrap_or_else(|| {
+            return Err(halted(year.err().unwrap_or_else(|| {
                 internal("a two-digit year went unplaced with the current year known")
-            }));
+            })));
         }
     };
     let refused = check_parsed_capabilities(parsed.target_has_time_range(), profile);
@@ -224,16 +262,17 @@ fn resolve_here(
             return Ok(Validation::refused(diagnostics(&response), warnings));
         }
     };
-    let query = validated_query(&validated)?;
+    let query = validated_query(&validated).map_err(halted)?;
     let mut found = diagnostics(&validated.validation_response);
     let refusals = check_capabilities(&features(&query, schema), profile);
     if refusals.is_empty() {
+        let steps = per_step(&validated).map_err(halted)?;
         return Ok(Validation {
             diagnostics: found,
             query: Some(query),
             text: Some(validated.query.to_string_with(false, false)),
             warnings,
-            steps: per_step(&validated)?,
+            steps,
             ranking: per_candidate(&validated),
         });
     }
@@ -1001,5 +1040,75 @@ mod tests {
         let refused = local_year(&facts(new_year, unknown), &NewYork).unwrap_err();
         assert_eq!(refused.fields["field"], Detail::text("facts.local_zone"));
         assert!(local_year(&facts(i64::MIN, None), &NewYork).is_err());
+    }
+
+    /// Carried row U1 (T2.13): a day-first literal read before the error a
+    /// query then ends with (a packed literal, a two-digit year the run's
+    /// zone cannot place) keeps its warning; one read after it is never
+    /// read, as the reference's reader stops there too.
+    #[test]
+    fn a_day_first_literal_read_before_an_error_keeps_its_warning() {
+        let schema: QuerySchema = serde_json::from_value(serde_json::json!({
+            "tables": [{"name": "t", "columns": [
+                {"name": "id", "dtype": "int", "stype": "ID"},
+                {"name": "c", "dtype": "int", "stype": "categorical"},
+                {"name": "ts", "dtype": "time", "stype": "timestamp"}],
+             "primary_key": "id", "time_column": "ts", "end_time_column": null}],
+            "links": [],
+        }))
+        .unwrap();
+        let profile = Profile::resolve(&sdm_contract::ops::ProfileSpec {
+            name: sdm_contract::ops::ProfileName::Relational,
+            model: None,
+            capabilities: Default::default(),
+        });
+        let known = facts(1_767_225_600_000_000, None);
+        let unknown = facts(
+            1_767_225_600_000_000,
+            Some(LocalZone::Iana("Mars/Olympus".into())),
+        );
+        for (query, facts, rule, warned) in [
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts < 20240101-01-01",
+                &known,
+                Some("date_literal_packed"),
+                1,
+            ),
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts > 14/01/2024 \
+                 AND t.ts < 20240101-01-01",
+                &known,
+                Some("date_literal_packed"),
+                2,
+            ),
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 20240101-01-01 AND t.ts < 13/01/2024",
+                &known,
+                Some("date_literal_packed"),
+                0,
+            ),
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts < 1/2/76",
+                &unknown,
+                None,
+                1,
+            ),
+        ] {
+            let (outcome, warnings) = validate_warned(query, &schema, &profile, facts, &NewYork);
+            let err = outcome.expect_err(query);
+            assert_eq!(err.code, ErrorCode::InvalidRequest, "{query}");
+            match rule {
+                Some(rule) => assert_eq!(err.fields["rule"], Detail::text(rule), "{query}"),
+                None => assert_eq!(err.fields["field"], Detail::text("facts.local_zone")),
+            }
+            assert_eq!(warnings.len(), warned, "{query}");
+            assert!(
+                warnings.iter().all(|w| w.code == DATE_LITERAL_DAY_FIRST),
+                "{query}"
+            );
+            // `validate` ends with the same error.
+            let plain = validate(query, &schema, &profile, facts, &NewYork).unwrap_err();
+            assert_eq!(plain, err, "{query}");
+        }
     }
 }

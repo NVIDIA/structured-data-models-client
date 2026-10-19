@@ -106,7 +106,14 @@ def validate(
         2: codec.attachment(_schema(definition)),
     }
     kept: list[dict[str, Any]] = []
-    result = run(operation, attachments, quiet=SHADOWED, kept=kept).result
+    try:
+        result = run(operation, attachments, quiet=SHADOWED, kept=kept).result
+    except StructuredDataError:
+        # A run that ends with an error after reading a day-first literal
+        # (a packed literal after it, say) meets no shadow check either:
+        # the literal's warning is shown before the error (carried row U1).
+        errors.warn_held(kept)
+        raise
     if not result['accepted']:
         # No shadow check follows a refusal: the core's warnings are the
         # only ones the caller gets.

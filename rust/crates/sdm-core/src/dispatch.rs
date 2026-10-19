@@ -71,12 +71,13 @@ pub fn start(
             Run::new(move |asker| async move {
                 let profile = Profile::resolve(&request.profile);
                 let (validation, warnings) =
-                    crate::pql::validate(&query, &schema, &profile, &facts, &*zones)?;
-                // D4's warning, on the run's warnings channel.
+                    crate::pql::validate_warned(&query, &schema, &profile, &facts, &*zones);
+                // D4's warning, on the run's warnings channel, given also
+                // when the run then ends with an error (U1).
                 for warning in warnings {
                     asker.warn(warning);
                 }
-                Ok(OperationResult::ValidateQuery(validation))
+                Ok(OperationResult::ValidateQuery(validation?))
             })
         }
         Operation::DescribeSource(request) => {
