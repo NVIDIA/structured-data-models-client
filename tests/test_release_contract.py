@@ -1648,9 +1648,20 @@ class TestInterpreterSupportIsStated:
         source = (
             PACKAGES / 'structured-data-models-client' / 'pyproject.toml'
         ).read_text()
-        assert '3.14' in source and 'native build' in source, (
-            'structured-data-models-client admits interpreters its [relational] extra cannot '
-            'install on, and its pyproject does not explain that anywhere'
+        # The engine's own bound, not a literal: this read `'3.14' in source`
+        # while the engine stopped at 3.13, so once 3.14 became supported the
+        # comment named it for a different reason and the test proved nothing.
+        # What has to be written down is where the extra now stops.
+        bound = engine['project']['requires-python']
+        edge = re.search(r'<\s*(\d+\.\d+)', bound)
+        assert edge is not None, (
+            f'the engine no longer carries an upper bound ({bound!r}), so what '
+            f'this test reads as the edge of the matrix is gone'
+        )
+        assert edge.group(1) in source and 'native build' in source, (
+            f'structured-data-models-client admits interpreters its [relational] extra cannot '
+            f'install on, and its pyproject does not say the extra stops below '
+            f'{edge.group(1)}'
         )
         install_doc = (
             REPO / 'docs' / 'get-started' / 'installation.md'

@@ -15,6 +15,19 @@ these packages. All five distributions share one version and one entry.
   from its published weights on first use, or uses one passed in. The context
   is fitted as the NIM fits it, and a request the NIM refuses is refused with
   the same `NimRequestError`. Install it with the `in-process` extra.
+- The relational engine publishes wheels for macOS (Apple silicon and Intel)
+  and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
+  x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
+  installs on a laptop rather than on Linux only. The engine ships no source
+  distribution, so those wheels remain the full set of platforms it supports:
+  `structured-data-models-client` itself is pure Python and stays broader.
+
+### Changed
+
+- Every engine wheel is built on a machine of its own, native rather than
+  emulated, and each is smoke-tested on the architecture it targets. The
+  release no longer builds aarch64 under QEMU, which also takes a privileged
+  container image out of the release path.
 
 ## 1.0.0 - 2026-10-15
 

@@ -80,12 +80,13 @@ differs on Databricks.
 Python 3.10 through 3.14. The client, the language and the connectors are pure
 Python and install anywhere.
 
-The relational engine is a native build. It publishes `manylinux_2_28` wheels
-for x86-64 and aarch64 on **CPython 3.10 through 3.13** and **no source
-distribution**, so `[relational]` resolves on a Linux with glibc 2.28 or newer
-and nowhere else: not on musl, not on an older glibc, and not on macOS or
-Windows, where pip has nothing to fall back to. `kumo-tabular` works on any
-laptop.
+The relational engine is a native build, so it ships wheels rather than a
+source distribution: `manylinux_2_28` for x86-64 and aarch64, macOS 11 or newer
+for Apple silicon and Intel, and 64-bit Windows, each on **CPython 3.10 through
+3.14**. `[relational]` resolves on all of those and nowhere else. There is **no
+source distribution**, so anywhere without a matching wheel pip has nothing to
+fall back to: musl, an older glibc, a 32-bit interpreter, or a Python newer
+than the engine has built for yet.
 
 ## Packages
 

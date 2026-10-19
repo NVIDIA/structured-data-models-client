@@ -251,9 +251,9 @@ wheels:
   parallel:
     matrix:
       - CIBW_ARCHS_LINUX: x86_64
-        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+        CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
       - CIBW_ARCHS_LINUX: aarch64
-        CIBW_BUILD: [cp310-*, cp311-*, cp312-*, cp313-*]
+        CIBW_BUILD: [cp310-*, cp311-*, cp312-*, cp313-*, cp314-*]
   script:
     - apt-get update -qq && apt-get install -y -qq docker.io
     - for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
@@ -308,7 +308,7 @@ wheels-check:
               built.add(match.groups())
       expected = {
           (f'cp3{minor}', arch)
-          for minor in (10, 11, 12, 13)
+          for minor in (10, 11, 12, 13, 14)
           for arch in ('x86_64', 'aarch64')
       }
       if built != expected:
