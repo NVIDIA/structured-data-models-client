@@ -113,6 +113,7 @@ fn predict_run_setting(
             query: AttachmentId(2),
             forecast: None,
             batches: None,
+            ranking: None,
         },
         model: model.into(),
         request_id: "sdm-0123456789ab".into(),
@@ -507,11 +508,6 @@ fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
     let base = r#"{"id":"r1","model":"m","metadata":{},"predictions":[ITEM,{"id":"3","row_index":1,"prediction":1.0}]}"#;
     for (item, wanted, field) in [
         (
-            r#"{"id":"2","row_index":0,"prediction":1.0,"scores":[0.5]}"#,
-            "response_field",
-            Some("scores"),
-        ),
-        (
             r#"{"id":"2","row_index":0,"prediction":1.0,"explanation":{}}"#,
             "response_field",
             Some("explanation"),
@@ -530,6 +526,46 @@ fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
         if let Some(field) = field {
             assert_eq!(error.fields["field"], text(field), "{item}");
         }
+    }
+    // An item's scores and rankings are laid out (T2.8), read as the
+    // bindings read them: a scores field not a list, or a ranking no dict
+    // makes, is the endpoint's fault.
+    for item in [
+        r#"{"id":"2","row_index":0,"prediction":1.0,"scores":[0.5, "0.25"]}"#,
+        r#"{"id":"2","row_index":0,"prediction":1.0,"rankings":[{"candidate":"x","score":0.5},[["k",1]],""]}"#,
+        // A key a dict takes that is not text, as the reference keys it:
+        // kept as the list of its pairs.
+        r#"{"id":"2","row_index":0,"prediction":1.0,"rankings":[[[1,"x"],[true,"y"],[null,0.5]]]}"#,
+    ] {
+        let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
+        assert!(step.is_ok(), "{item}: {step:?}");
+    }
+    for (item, field) in [
+        (
+            r#"{"id":"2","row_index":0,"prediction":1.0,"scores":"12"}"#,
+            "prediction.scores",
+        ),
+        (
+            r#"{"id":"2","row_index":0,"prediction":1.0,"scores":[true]}"#,
+            "prediction.scores",
+        ),
+        (
+            r#"{"id":"2","row_index":0,"prediction":1.0,"rankings":["ab"]}"#,
+            "prediction.rankings",
+        ),
+        (
+            r#"{"id":"2","row_index":0,"prediction":1.0,"rankings":3}"#,
+            "prediction.rankings",
+        ),
+        (
+            r#"{"id":"2","row_index":0,"prediction":1.0,"rankings":[[[[1],"x"]]]}"#,
+            "prediction.rankings",
+        ),
+    ] {
+        let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
+        let error = step.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidResponse, "{item}");
+        assert_eq!(error.fields["field"], text(field), "{item}");
     }
     // A null field is no field, as the bindings read it.
     let (_, step) = answered(
@@ -859,7 +895,9 @@ fn a_classification_s_default_outputs_and_its_answer_as_its_target_s_type() {
         .flatten()
         .collect();
     assert_eq!(keys, ["False", "True"]);
-    // A class the target's type cannot hold is refused by name.
+    // A class the target's type cannot hold is given back as written, as
+    // the reference's `as_declared` leaves it (T2.8): the column null, and
+    // the item's value as its JSON text beside it.
     let multiclass_text = payload_text().replace(
         r#""kind":"regression","target":{"column_name":"TARGET","dtype":"float32"}"#,
         r#""kind":"multiclass_classification","target":{"column_name":"TARGET","dtype":"string","classes":["a","b"]}"#,
@@ -882,10 +920,25 @@ fn a_classification_s_default_outputs_and_its_answer_as_its_target_s_type() {
         },
     )
     .unwrap();
-    assert_eq!(
-        rule(&run.next().unwrap_err()),
-        Some(&text("prediction_type"))
-    );
+    let Step::Done {
+        result: OperationResult::Predict(predicted),
+    } = run.next().unwrap()
+    else {
+        panic!("a result");
+    };
+    let Some(Attachment::Arrow(data)) = run.take_attachment(predicted.result) else {
+        panic!("the result is attached");
+    };
+    let batch = &data.batches[0];
+    assert!(batch.column_by_name("prediction_as_answered").is_some());
+    let as_answered = batch
+        .column_by_name("prediction_as_answered")
+        .unwrap()
+        .as_any()
+        .downcast_ref::<arrow_array::StringArray>()
+        .unwrap();
+    assert_eq!(as_answered.value(0), "1");
+    assert_eq!(as_answered.value(1), "\"a\"");
 }
 
 /// The adapter's checks of the context (`_preflight`), before any call: a

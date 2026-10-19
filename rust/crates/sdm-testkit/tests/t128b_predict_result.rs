@@ -210,6 +210,7 @@ fn predict_operation(version: u32, model: &str, outputs: &[String]) -> Predict {
             query: AttachmentId(2),
             forecast: None,
             batches: None,
+            ranking: None,
         },
         "model": model,
         "request_id": host::REQUEST_ID,

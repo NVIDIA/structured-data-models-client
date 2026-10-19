@@ -187,6 +187,9 @@ pub(crate) struct Inputs {
     pub description: SourceDescription,
     pub query: String,
     pub indices: Option<ArrowData>,
+    /// The rows a ranking is over (`Materialize.candidates`), as the host
+    /// gave them (T2.8).
+    pub candidates: Option<Vec<sdm_contract::ops::GivenCandidate>>,
     pub anchor_time: Option<Scalar>,
     pub seed: Option<Seed>,
     pub unseeded: bool,
@@ -359,6 +362,207 @@ struct Windowed {
     /// The window's ends, as offsets from each example's anchor.
     start: Offset,
     end: Offset,
+    /// The rows of the table aggregated, where a filter chooses them.
+    filter: Option<RowFilter>,
+}
+
+/// A filter of an aggregated table's rows, `table.* WHERE column op
+/// constant` over a column of that table, as a ranking's questions write it
+/// (T2.8): its column, its operator and its constant. Every other filter is
+/// refused by name (`target_filter`).
+#[derive(Debug, Clone)]
+struct RowFilter {
+    column: String,
+    op: labels::RelOp,
+    constant: FilterConstant,
+}
+
+/// A row filter's constant, as the query wrote it.
+#[derive(Debug, Clone)]
+enum FilterConstant {
+    Null,
+    Int(i64),
+    Float(f64),
+    Text(String),
+}
+
+/// The row filter a target's `WHERE` writes, when it is one this build
+/// reads ([`RowFilter`]); `table` is the table aggregated.
+fn row_filter(condition: &PqlNode, table: &str) -> Result<RowFilter, CoreError> {
+    let NodeKind::Condition {
+        target,
+        op,
+        value,
+        from_like: false,
+    } = &condition.kind
+    else {
+        return Err(not_yet("target_filter"));
+    };
+    let column = column_of(target)
+        .filter(|c| c.table == table && c.column != "*")
+        .ok_or_else(|| not_yet("target_filter"))?;
+    let op = match op {
+        ConditionOp::Eq => labels::RelOp::Eq,
+        ConditionOp::Ne => labels::RelOp::Ne,
+        ConditionOp::Lt => labels::RelOp::Lt,
+        ConditionOp::Le => labels::RelOp::Le,
+        ConditionOp::Gt => labels::RelOp::Gt,
+        ConditionOp::Ge => labels::RelOp::Ge,
+        _ => return Err(not_yet("target_filter")),
+    };
+    let NodeKind::Constant { literal } = &value.kind else {
+        return Err(not_yet("target_filter"));
+    };
+    let constant = match literal {
+        PqlLiteral::Null if matches!(op, labels::RelOp::Eq | labels::RelOp::Ne) => {
+            FilterConstant::Null
+        }
+        PqlLiteral::Int { value } => {
+            FilterConstant::Int(value.parse().map_err(|_| not_yet("target_filter"))?)
+        }
+        PqlLiteral::Float { text } => {
+            FilterConstant::Float(text.parse().map_err(|_| not_yet("target_filter"))?)
+        }
+        PqlLiteral::String { value } => FilterConstant::Text(value.clone()),
+        _ => return Err(not_yet("target_filter")),
+    };
+    Ok(RowFilter {
+        column: column.column.clone(),
+        op,
+        constant,
+    })
+}
+
+/// Which rows of `array`, a filter's column of the rows fetched, its filter
+/// keeps, as the reference's executor compares them (`execute_rel_op`): a
+/// float column at float32, the constant cast to it; an integer column
+/// against an integer, or at float64 against a float; text against text;
+/// `NULL` equal to a missing value (a NaN among them) and unequal to any
+/// other; a missing value otherwise kept by no comparison. Any other
+/// column type or pairing is refused by name (`target_filter`).
+fn filter_keeps(array: &ArrayRef, filter: &RowFilter) -> Result<Vec<bool>, CoreError> {
+    use std::cmp::Ordering;
+    let holds = |ordering: Option<Ordering>| -> bool {
+        let Some(ordering) = ordering else {
+            return false;
+        };
+        match filter.op {
+            labels::RelOp::Eq => ordering == Ordering::Equal,
+            labels::RelOp::Ne => ordering != Ordering::Equal,
+            labels::RelOp::Lt => ordering == Ordering::Less,
+            labels::RelOp::Le => ordering != Ordering::Greater,
+            labels::RelOp::Gt => ordering == Ordering::Greater,
+            labels::RelOp::Ge => ordering != Ordering::Less,
+        }
+    };
+    let floats = |values: Vec<Option<f64>>| -> Vec<Option<f64>> {
+        values
+            .into_iter()
+            .map(|v| v.filter(|v| !v.is_nan()))
+            .collect()
+    };
+    // Each row's value, at the type it is compared at; `None` for a
+    // missing one.
+    enum Left {
+        Int(Vec<Option<i128>>),
+        Float32(Vec<Option<f32>>),
+        Text(Vec<Option<String>>),
+    }
+    macro_rules! ints {
+        ($t:ty) => {
+            Left::Int(
+                array
+                    .as_primitive::<$t>()
+                    .iter()
+                    .map(|v| v.map(i128::from))
+                    .collect(),
+            )
+        };
+    }
+    let left = match array.data_type() {
+        DataType::Int8 => ints!(Int8Type),
+        DataType::Int16 => ints!(Int16Type),
+        DataType::Int32 => ints!(Int32Type),
+        DataType::Int64 => ints!(Int64Type),
+        DataType::UInt8 => ints!(UInt8Type),
+        DataType::UInt16 => ints!(UInt16Type),
+        DataType::UInt32 => ints!(UInt32Type),
+        DataType::UInt64 => ints!(UInt64Type),
+        DataType::Float32 => Left::Float32(
+            array
+                .as_primitive::<Float32Type>()
+                .iter()
+                .map(|v| v.filter(|v| !v.is_nan()))
+                .collect(),
+        ),
+        DataType::Float64 => Left::Float32(
+            floats(array.as_primitive::<Float64Type>().iter().collect())
+                .into_iter()
+                .map(|v| v.map(|v| v as f32))
+                .collect(),
+        ),
+        DataType::Utf8 => Left::Text(
+            array
+                .as_string::<i32>()
+                .iter()
+                .map(|v| v.map(str::to_owned))
+                .collect(),
+        ),
+        DataType::LargeUtf8 => Left::Text(
+            array
+                .as_string::<i64>()
+                .iter()
+                .map(|v| v.map(str::to_owned))
+                .collect(),
+        ),
+        _ => return Err(not_yet("target_filter")),
+    };
+    let missing: Vec<bool> = match &left {
+        Left::Int(v) => v.iter().map(Option::is_none).collect(),
+        Left::Float32(v) => v.iter().map(Option::is_none).collect(),
+        Left::Text(v) => v.iter().map(Option::is_none).collect(),
+    };
+    Ok(match (&left, &filter.constant) {
+        (_, FilterConstant::Null) => missing
+            .into_iter()
+            .map(|m| m == (filter.op == labels::RelOp::Eq))
+            .collect(),
+        (Left::Int(v), FilterConstant::Int(c)) => v
+            .iter()
+            .map(|x| holds(x.map(|x| x.cmp(&i128::from(*c)))))
+            .collect(),
+        // An integer column against a float, at float64.
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "an integer widened to compare with a float, as the executor does"
+        )]
+        (Left::Int(v), FilterConstant::Float(c)) => v
+            .iter()
+            .map(|x| holds(x.and_then(|x| (x as f64).partial_cmp(c))))
+            .collect(),
+        // A float column at float32, the constant cast to it.
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "the constant narrowed to the column's float32, as the executor does"
+        )]
+        (Left::Float32(v), FilterConstant::Int(c)) => v
+            .iter()
+            .map(|x| holds(x.and_then(|x| x.partial_cmp(&(*c as f32)))))
+            .collect(),
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "the constant narrowed to the column's float32, as the executor does"
+        )]
+        (Left::Float32(v), FilterConstant::Float(c)) => v
+            .iter()
+            .map(|x| holds(x.and_then(|x| x.partial_cmp(&(*c as f32)))))
+            .collect(),
+        (Left::Text(v), FilterConstant::Text(c)) => v
+            .iter()
+            .map(|x| holds(x.as_deref().map(|x| x.cmp(c.as_str()))))
+            .collect(),
+        _ => return Err(not_yet("target_filter")),
+    })
 }
 
 /// What a query predicts, in the shapes this build labels.
@@ -485,7 +689,18 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
                 Aggregation::Max => labels::Aggregation::Max,
                 _ => return Err(not_yet("aggregation")),
             };
-            let column = column_of(target).ok_or_else(|| not_yet("target_filter"))?;
+            // A column of the aggregated table, or its rows a filter
+            // chooses ([`RowFilter`], T2.8).
+            let (column, filter) = match &target.kind {
+                NodeKind::Filter { target, condition } => {
+                    let column = column_of(target).ok_or_else(|| not_yet("target_filter"))?;
+                    (column, Some(row_filter(condition, &column.table)?))
+                }
+                _ => (
+                    column_of(target).ok_or_else(|| not_yet("target_filter"))?,
+                    None,
+                ),
+            };
             let window = window.ok_or_else(|| not_yet("open_window"))?;
             let start = window.start.ok_or_else(|| not_yet("open_window"))?;
             Ok(Shape::Aggregated(Windowed {
@@ -494,6 +709,7 @@ fn shape(node: &PqlNode, entity_table: &str) -> Result<Shape, CoreError> {
                 column: (column.column != "*").then(|| column.column.clone()),
                 start: Offset::of(start, window.unit),
                 end: Offset::of(window.end, window.unit),
+                filter,
             }))
         }
         NodeKind::Condition {
@@ -1683,7 +1899,6 @@ fn option_not_taken(name: &str) -> CoreError {
         "num_hops" => not_yet("num_hops"),
         "num_neighbors" => not_yet("num_neighbors"),
         "return_embeddings" => not_yet("return_embeddings"),
-        "top_k" => not_yet("top_k"),
         "use_prediction_time" => not_yet("use_prediction_time"),
         _ => invalid(
             "an option named is not one of the sampling options",
@@ -1980,19 +2195,29 @@ fn notices(
 pub const MOST_PARTS: u32 = 200;
 
 /// One call's payload as gathered: its bytes, and the rows it scores.
-type Call = (Vec<u8>, u64);
+pub(crate) type Call = (Vec<u8>, u64);
 
 /// What one question's run gathered: each call's payload, in order (one
 /// for a request of no more rows than one call scores), and its query's
 /// text; or, for the test-only `labels` operation, its result.
-enum Gathered {
+pub(crate) enum Gathered {
     Request(Vec<Call>, String),
     #[cfg_attr(not(feature = "test-ops"), allow(dead_code))]
     Done(OperationResult),
 }
 
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
-    let (steps, facts) = resolved(&inputs);
+    let (steps, ranked, facts) = resolved(&inputs);
+    // A ranking, asked as one binary question per candidate (T2.8).
+    if let Some(plan) = ranked {
+        return crate::ranking::materialize(asker, inputs, plan, facts).await;
+    }
+    // Candidates on a question that ranks nothing, refused before anything
+    // is gathered, as the client's `parts_of` refuses them; a query that
+    // does not resolve is refused as itself, below.
+    if inputs.candidates.is_some() && facts.is_some() {
+        return Err(crate::ranking::candidates_on_no_ranking());
+    }
     let Some(steps) = steps else {
         return match one(&asker, inputs).await? {
             Gathered::Done(result) => Ok(result),
@@ -2020,6 +2245,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                         query,
                         forecast: None,
                         batches: (!batches.is_empty()).then_some(batches),
+                        ranking: None,
                     },
                     query: facts,
                 }))
@@ -2035,7 +2261,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // The client's refusals of a forecast before it gathers anything
     // (`parts_of`): `top_k`, which ranks, then more steps than the host's
     // limit, 200 by default (`_refuse_too_many`).
-    if inputs.options.iter().any(|name| name == "top_k") {
+    if inputs
+        .values
+        .as_ref()
+        .is_some_and(|values| values.get("top_k").is_some())
+    {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
             ErrorCode::InvalidRequest,
@@ -2128,6 +2358,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             query: first.query,
             forecast: Some(attached),
             batches: None,
+            ranking: None,
         },
         query: facts,
     }))
@@ -2136,7 +2367,9 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
 /// The batch size the call's values ask for (`rows_per_call`), read alone,
 /// as the client's `_in_parts` reads it before a part is gathered: none
 /// where the values name none.
-fn asked_rows_per_call(values: Option<&sdm_wire::json::Value>) -> Result<Option<u64>, CoreError> {
+pub(crate) fn asked_rows_per_call(
+    values: Option<&sdm_wire::json::Value>,
+) -> Result<Option<u64>, CoreError> {
     match values.and_then(|v| v.get("rows_per_call")) {
         None => Ok(None),
         Some(given) => options::rows_per_call(given),
@@ -2148,7 +2381,11 @@ fn asked_rows_per_call(values: Option<&sdm_wire::json::Value>) -> Result<Option<
 /// anything is read: `entities` gathered `times` over (a forecast's steps
 /// each gather it whole), past the host's limit, 100,000 where it names
 /// none, `UNSUPPORTED_REQUEST`, rule `most_entities`.
-fn refuse_entities(entities: u64, times: u64, most: Option<u64>) -> Result<(), CoreError> {
+pub(crate) fn refuse_entities(
+    entities: u64,
+    times: u64,
+    most: Option<u64>,
+) -> Result<(), CoreError> {
     let most = most.unwrap_or(MOST_ENTITIES);
     let total = entities.saturating_mul(times);
     if total <= most {
@@ -2168,7 +2405,7 @@ fn refuse_entities(entities: u64, times: u64, most: Option<u64>) -> Result<(), C
 }
 
 /// A request's payload and query, attached.
-fn attach_request(
+pub(crate) fn attach_request(
     asker: &Asker,
     payload: Vec<u8>,
     query: &str,
@@ -2184,10 +2421,20 @@ fn attach_request(
 /// resolves to one, none otherwise, the query then gathered as itself,
 /// which refuses it where it does not resolve as before; and the facts of
 /// the query a host reads ([`QueryFacts`], T2.18), when it resolves.
-fn resolved(inputs: &Inputs) -> (Option<crate::pql::ForecastPlan>, Option<QueryFacts>) {
+#[allow(
+    clippy::type_complexity,
+    reason = "three plain parts, named where they are taken"
+)]
+fn resolved(
+    inputs: &Inputs,
+) -> (
+    Option<crate::pql::ForecastPlan>,
+    Option<crate::pql::RankingPlan>,
+    Option<QueryFacts>,
+) {
     let mut description = inputs.description.clone();
     if consistent(&mut description).is_err() {
-        return (None, None);
+        return (None, None, None);
     }
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,
@@ -2204,14 +2451,14 @@ fn resolved(inputs: &Inputs) -> (Option<crate::pql::ForecastPlan>, Option<QueryF
     ) {
         Ok(validation) => {
             let facts = validation.facts(&schema);
-            (validation.steps, facts)
+            (validation.steps, validation.ranking, facts)
         }
-        Err(_) => (None, None),
+        Err(_) => (None, None, None),
     }
 }
 
 /// One question gathered: the body of `materialize` before T1.36 fix 21.
-async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
+pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
     // The memo the run leaves the host: the one handed back, or a new one
     // (decision E52), left as it is by a run refused before it reads.
     let mut memo = Memo {
@@ -2273,6 +2520,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
         num_context_samples,
         prediction_statistic,
         inference_config,
+        top_k,
         rows_per_call,
         ..
     } = asked_values;
@@ -2764,8 +3012,11 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
         .with_field("rows_per_call", count(per_call))
         .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
     }
-    // The inference options, read for the task's config class, as the
-    // engine reads them before it lays out any request.
+    // How many candidates the call asked be kept (`_candidates_to_rank`,
+    // T2.8), which the engine writes into the task; then the inference
+    // options, read for the task's config class, as the engine reads them
+    // before it lays out any request.
+    let top_k = top_k.as_ref().map(options::top_k).transpose()?;
     let options = options::options(asked.task, inference_config.as_ref())?;
     // A static target's columns, kept out of what the request reads and
     // sends (`get_exclude_cols_dict`); each must be one of its table's
@@ -2924,6 +3175,7 @@ async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreError> {
             options: options.clone(),
             statistic: statistic.clone(),
             rows_per_call: largest,
+            top_k,
             float_text: crate::pql::float_text,
         })?;
         answering += built.answering;
@@ -3085,6 +3337,11 @@ impl Labelling<'_> {
         if let Some(column) = &windowed.column {
             label_columns.insert(column.clone());
         }
+        // The filter's column, which the reference reads with the query's
+        // other columns (`_get_query_columns_dict`).
+        if let Some(filter) = &windowed.filter {
+            label_columns.insert(filter.column.clone());
+        }
         let seeds = sample::seeds(
             example_keys,
             vec![(SEED_END, ends.clone()), (SEED_START, starts.clone())],
@@ -3112,16 +3369,27 @@ impl Labelling<'_> {
                 .await?,
             )?,
         )?;
-        let values = match &windowed.column {
+        let mut values = match &windowed.column {
             Some(column) => label_values(named(&rows, column)?)?,
             None => labels::Values::Ones(rows.num_rows()),
         };
+        let mut batch = batches(&rows, examples)?;
+        let mut times = times_ns(named(&rows, &time_column)?, &time_column)?;
+        // The rows the target's filter keeps (`execute_filter`), the rest
+        // aggregated by no example.
+        if let Some(filter) = &windowed.filter {
+            let keep = filter_keeps(named(&rows, &filter.column)?, filter)?;
+            values = values.retain(&keep);
+            let kept = |at: &usize| keep[*at];
+            batch = (0..batch.len()).filter(kept).map(|at| batch[at]).collect();
+            times = (0..times.len()).filter(kept).map(|at| times[at]).collect();
+        }
         labels::aggregate(
             windowed.aggregation,
             examples,
-            &batches(&rows, examples)?,
+            &batch,
             &values,
-            &times_ns(named(&rows, &time_column)?, &time_column)?,
+            &times,
             labels::Bounds {
                 starts: Some(&starts),
                 ends: &ends,

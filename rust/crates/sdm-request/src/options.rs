@@ -46,6 +46,9 @@ pub struct Asked {
     pub prediction_statistic: Option<String>,
     pub inference_config: Option<Value>,
     pub seed: AskedSeed,
+    /// How many candidates a ranking keeps (`top_k`), as given: read by
+    /// [`top_k`] where the client reads it (T2.8).
+    pub top_k: Option<Value>,
     /// The most rows one model call scores, as the caller lowered it
     /// (`rows_per_call`, `main`'s multi-call `predict`): a whole number of
     /// at least one, `u64::MAX` standing for any larger one, which lowers
@@ -130,6 +133,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         prediction_statistic: None,
         inference_config: None,
         seed: AskedSeed::Absent,
+        top_k: None,
         rows_per_call: None,
     };
     let Some(given) = given else {
@@ -165,10 +169,33 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
                 let sign = if negative { "-" } else { "" };
                 asked.seed = AskedSeed::Given(format!("{sign}0x{}", hexadecimal(&digits)));
             }
+            ("top_k", v) => asked.top_k = Some(v.clone()),
             _ => return Err(mistyped(name, "not_an_option")),
         }
     }
     Ok(asked)
+}
+
+/// The most candidates a ranking keeps (the language's `MAX_TOP_K`).
+pub const MAX_TOP_K: u32 = 20;
+
+/// How many candidates to keep, as the client's `_candidates_to_rank` reads
+/// the call's `top_k`: a whole number (`numbers.Integral`, a boolean not
+/// one) from 1 to [`MAX_TOP_K`], else `INVALID_REQUEST` naming `top_k`, why
+/// (`not_a_whole_number`, `out_of_range`) and the limit.
+pub fn top_k(given: &Value) -> Result<u32, CoreError> {
+    let (negative, digits) = integer("top_k", given)?;
+    match digits.parse::<u32>() {
+        Ok(k) if !negative && (1..=MAX_TOP_K).contains(&k) => Ok(k),
+        _ => Err(CoreError::new(
+            ErrorKind::InvalidRequest,
+            ErrorCode::InvalidRequest,
+            "top_k is not a number of candidates this model ranks",
+        )
+        .with_field("field", Detail::text("top_k"))
+        .with_field("reason", Detail::text("out_of_range"))
+        .with_field("limit", Detail::Scalar(Scalar::UInt32(MAX_TOP_K)))),
+    }
 }
 
 /// The batch size the caller chose (`rows_per_call_asked_for`): none for a

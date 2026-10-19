@@ -102,6 +102,11 @@ pub struct Task<T = Target> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
+    /// How many candidates the call asked be kept (`top_k`), which the
+    /// engine writes into the task where the caller gave it (T2.8).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
+    pub top_k: Option<u32>,
 }
 
 /// The label column of the instance table: a regression's.
@@ -361,6 +366,11 @@ pub struct RegressionTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
+    /// How many candidates the call asked be kept (`top_k`), which the
+    /// engine writes into the task where the caller gave it (T2.8).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
+    pub top_k: Option<u32>,
 }
 
 /// A binary task's label column: its classes and positive class.
@@ -393,6 +403,11 @@ pub struct BinaryTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
+    /// How many candidates the call asked be kept (`top_k`), which the
+    /// engine writes into the task where the caller gave it (T2.8).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
+    pub top_k: Option<u32>,
 }
 
 /// A multiclass task, for the schema only.
@@ -406,6 +421,11 @@ pub struct MulticlassTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "String")]
     pub anchor_time_column: Option<String>,
+    /// How many candidates the call asked be kept (`top_k`), which the
+    /// engine writes into the task where the caller gave it (T2.8).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "u32")]
+    pub top_k: Option<u32>,
 }
 
 /// What is predicted, of which entity: a task of each kind, its kind's

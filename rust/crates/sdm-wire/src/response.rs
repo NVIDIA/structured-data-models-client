@@ -18,9 +18,14 @@
 //! number, or text a float reads, not a boolean (`not_a_number`) and
 //! finite (`not_finite`), kept in the order written.
 //!
+//! From T2.8 an item's `scores` is read as the bindings' `_float_tuple`
+//! reads it (an array, each member read as a probability is), and its
+//! `rankings` as their `_mapping_tuple` reads it (each member a mapping,
+//! [`mappings`]).
+//!
 //! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it, and its other fields (`scores`,
-//! `rankings`, `embeddings`, `quantiles`, `explanation`, `metadata`) are
+//! bindings take it, and its other fields (`embeddings`, `quantiles`,
+//! `explanation`, `metadata`) are
 //! not read or type-checked: when one is there and not null, it is named in
 //! [`PredictionItem::carried`], for the caller to refuse by name as a field
 //! the result does not carry yet (`UNSUPPORTED_REQUEST`, register P1B-4),
@@ -46,14 +51,7 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
-pub const UNREAD_ITEM_FIELDS: [&str; 6] = [
-    "scores",
-    "rankings",
-    "embeddings",
-    "quantiles",
-    "explanation",
-    "metadata",
-];
+pub const UNREAD_ITEM_FIELDS: [&str; 4] = ["embeddings", "quantiles", "explanation", "metadata"];
 
 /// One answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -69,6 +67,12 @@ pub struct PredictionItem {
     /// Each class's probability, in the order written; absent and `null`
     /// alike are `None`.
     pub probabilities: Option<Vec<(String, f64)>>,
+    /// The item's scores, in the order written; absent and `null` alike are
+    /// `None` (T2.8).
+    pub scores: Option<Vec<f64>>,
+    /// The item's rankings, each a mapping as a JSON object, in the order
+    /// written; absent and `null` alike are `None` (T2.8).
+    pub rankings: Option<Vec<Value>>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
 }
@@ -150,6 +154,20 @@ impl PredictionItem {
             ),
             Some(_) => return Err(refused("prediction.probabilities", "not_an_object")),
         };
+        let scores = match value.get("scores") {
+            None | Some(Value::Null) => None,
+            Some(Value::Array(members)) => Some(
+                members
+                    .iter()
+                    .map(|v| number(v, "prediction.scores"))
+                    .collect::<Result<_, Refused>>()?,
+            ),
+            Some(_) => return Err(refused("prediction.scores", "not_a_sequence")),
+        };
+        let rankings = match value.get("rankings") {
+            None | Some(Value::Null) => None,
+            Some(given) => Some(mappings(given)?),
+        };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
             .filter(|name| !matches!(value.get(name), None | Some(Value::Null)))
@@ -160,6 +178,8 @@ impl PredictionItem {
             forecast_step,
             prediction,
             probabilities,
+            scores,
+            rankings,
             carried,
         })
     }
@@ -199,15 +219,144 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 /// A probability as the bindings' `_finite` reads one: a number, or text
 /// Python's `float` reads ([`numeric_text`]), never a boolean, and finite.
 fn probability(value: &Value) -> Result<f64, Refused> {
-    const FIELD: &str = "prediction.probabilities";
+    number(value, "prediction.probabilities")
+}
+
+/// A rankings field as the bindings' `_mapping_tuple` reads it, `tuple(
+/// dict(item) for item in value)`: each member a mapping as Python's `dict`
+/// makes one, of an object as it is, of a list of pairs (each a list of two
+/// whose first member a dict may key by, text, a number, a boolean or null,
+/// or text of two characters, a character to a character), and of empty
+/// text none; text iterates its characters and an object its names, each
+/// made a mapping as a member is. A key given twice keeps its first place
+/// and spelling and takes the last value, keys equal as Python's are (`1`,
+/// `1.0` and `true` one key, a NaN none but itself). A mapping keyed by text
+/// alone is a JSON object; one with another key is the list of its pairs,
+/// `[[key, value], ...]`, as JSON can hold no other key. Anything else is
+/// refused (`not_a_mapping`), as `dict` refuses it.
+pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
+    const FIELD: &str = "prediction.rankings";
+    let not = || refused(FIELD, "not_a_mapping");
+    // Two characters, as `dict` reads a pair from text.
+    let pair_of = |text: &str| -> Option<(Value, Value)> {
+        let mut chars = text.chars();
+        let (Some(a), Some(b), None) = (chars.next(), chars.next(), chars.next()) else {
+            return None;
+        };
+        Some((Value::Text(a.to_string()), Value::Text(b.to_string())))
+    };
+    let mapping = |member: &Value| -> Result<Value, Refused> {
+        match member {
+            Value::Object(_) => Ok(member.clone()),
+            Value::Text(text) if text.is_empty() => Ok(Value::Object(vec![])),
+            Value::Array(pairs) => {
+                let mut built: Vec<(Value, Value)> = Vec::new();
+                for pair in pairs {
+                    let (key, value) = match pair {
+                        Value::Array(two) => match two.as_slice() {
+                            [Value::Array(_) | Value::Object(_), _] => return Err(not()),
+                            [key, value] => (key.clone(), value.clone()),
+                            _ => return Err(not()),
+                        },
+                        Value::Text(text) => pair_of(text).ok_or_else(not)?,
+                        _ => return Err(not()),
+                    };
+                    let named = key_of(&key);
+                    match built
+                        .iter_mut()
+                        .find(|(k, _)| named.is_some() && key_of(k) == named)
+                    {
+                        Some(kept) => kept.1 = value,
+                        None => built.push((key, value)),
+                    }
+                }
+                if built.iter().all(|(k, _)| matches!(k, Value::Text(_))) {
+                    Ok(Value::Object(
+                        built
+                            .into_iter()
+                            .filter_map(|(k, v)| match k {
+                                Value::Text(name) => Some((name, v)),
+                                _ => None,
+                            })
+                            .collect(),
+                    ))
+                } else {
+                    Ok(Value::Array(
+                        built
+                            .into_iter()
+                            .map(|(k, v)| Value::Array(vec![k, v]))
+                            .collect(),
+                    ))
+                }
+            }
+            _ => Err(not()),
+        }
+    };
+    match value {
+        Value::Array(members) => members.iter().map(mapping).collect(),
+        Value::Text(text) => text
+            .chars()
+            .map(|c| mapping(&Value::Text(c.to_string())))
+            .collect(),
+        Value::Object(members) => members
+            .iter()
+            .map(|(name, _)| mapping(&Value::Text(name.clone())))
+            .collect(),
+        _ => Err(not()),
+    }
+}
+
+/// A dict key as Python's equality holds it: text by its text, null as
+/// itself, a boolean or a number by its exact value (an integer's digits, a
+/// whole double's digits, another double by its bits); none for a NaN, which
+/// equals no other key.
+fn key_of(key: &Value) -> Option<String> {
+    match key {
+        Value::Text(text) => Some(format!("s{text}")),
+        Value::Null => Some("z".to_owned()),
+        Value::Bool(b) => Some(format!("n{}", u8::from(*b))),
+        Value::Number(token) if is_integer_token(token) => {
+            let digits = token.trim_start_matches('-').trim_start_matches('0');
+            let sign = if token.starts_with('-') && !digits.is_empty() {
+                "-"
+            } else {
+                ""
+            };
+            Some(format!(
+                "n{sign}{}",
+                if digits.is_empty() { "0" } else { digits }
+            ))
+        }
+        Value::Number(token) => {
+            let float: f64 = token.parse().ok()?;
+            if float.is_nan() {
+                None
+            } else if float.is_finite() && float.fract() == 0.0 {
+                Some(if float == 0.0 {
+                    "n0".to_owned()
+                } else {
+                    format!("n{float:.0}")
+                })
+            } else {
+                Some(format!("f{:016x}", float.to_bits()))
+            }
+        }
+        _ => None,
+    }
+}
+
+/// A number as the bindings' `_finite` reads one, for `field`: a number,
+/// or text Python's `float` reads ([`numeric_text`]), never a boolean, and
+/// finite.
+fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
     let read = match value {
         Value::Number(token) => token.parse::<f64>().ok(),
         Value::Text(text) => numeric_text(text),
         _ => None,
     };
     match read {
-        None => Err(refused(FIELD, "not_a_number")),
-        Some(p) if !p.is_finite() => Err(refused(FIELD, "not_finite")),
+        None => Err(refused(field, "not_a_number")),
+        Some(p) if !p.is_finite() => Err(refused(field, "not_finite")),
         Some(p) => Ok(p),
     }
 }

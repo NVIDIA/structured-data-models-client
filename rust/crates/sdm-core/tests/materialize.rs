@@ -206,6 +206,7 @@ fn materialize_start(
         most_parts: None,
         most_entities: None,
         most_calls: None,
+        candidates: None,
         sampler_state: None,
     });
     let indices = RecordBatch::try_new(
@@ -555,8 +556,11 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
              FOR EACH users.user_id",
             "logical_target",
         ),
+        // A row filter of one comparison is read (T2.8, a ranking's
+        // questions); one of several is not yet.
         (
-            "PREDICT COUNT(orders.* WHERE orders.price > 10, 0, 30, days) FOR EACH users.user_id",
+            "PREDICT COUNT(orders.* WHERE orders.price > 10 AND orders.price < 20, 0, 30, days) \
+             FOR EACH users.user_id",
             "target_filter",
         ),
         (
@@ -1016,7 +1020,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     ] {
         let err = valued(
             &format!(r#"{{"num_context_samples": {asked}}}"#),
-            &["top_k"],
+            &["return_embeddings"],
         )
         .unwrap_err();
         assert_eq!(err.code, code, "{asked}");
@@ -1054,9 +1058,9 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     assert_eq!(
         refused(&|m| {
             m.unseeded = true;
-            m.options = vec!["top_k".into()];
+            m.options = vec!["return_embeddings".into()];
         }),
-        "top_k"
+        "return_embeddings"
     );
     assert_eq!(
         refused(&|m| {

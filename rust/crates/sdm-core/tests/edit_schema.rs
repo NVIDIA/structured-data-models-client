@@ -240,6 +240,7 @@ fn a_schema_changed_past_its_description_is_refused_by_name() {
             most_parts: None,
             most_entities: None,
             most_calls: None,
+            candidates: None,
             sampler_state: None,
         }),
         Attachments::from([

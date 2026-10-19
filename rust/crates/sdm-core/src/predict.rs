@@ -50,6 +50,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
         &["column", "predicted", "question", "answer"],
     ),
     (sdm_request::predict::OUTPUTS_ABSENT, &[]),
+    (crate::ranking::CANDIDATES_UNSCORED, &[]),
 ];
 
 /// A forecast's later step: its number, payload, query and request id.
@@ -83,6 +84,10 @@ pub(crate) struct Inputs {
     /// forecast of one step, and `None` for any other request (T1.36 fix
     /// 21).
     pub forecast: Option<Vec<LaterStep>>,
+    /// A ranking's questions, each its candidate's position, payload, query
+    /// and the request id its call carries, the state's own first, and how
+    /// many candidates a row keeps (T2.8); `None` for any other request.
+    pub ranking: Option<(Vec<crate::ranking::Question>, Option<u32>)>,
     /// The later calls of a request asked in several, in order, each
     /// scoring the rows after the last (`RequestState::batches`); `None`
     /// for a request of one call.
@@ -91,7 +96,7 @@ pub(crate) struct Inputs {
 
 /// The JSON a request state's payload holds, or a refusal naming where in
 /// it and what kind of fault, never the text.
-fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
+pub(crate) fn payload(bytes: &[u8]) -> Result<Value, CoreError> {
     json::read(bytes).map_err(|e| {
         let count = |n: usize| Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)));
         CoreError::new(
@@ -119,6 +124,9 @@ fn warn(asker: &Asker, notice: Notice) {
 }
 
 pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationResult, CoreError> {
+    if let Some((questions, top_k)) = inputs.ranking.take() {
+        return crate::ranking::predict(asker, inputs, questions, top_k).await;
+    }
     let Some(later) = inputs.forecast.take() else {
         // The request's calls: the state's payload, then each later call's
         // (`main`'s multi-call `predict`), each with the id drawn for it.
@@ -149,6 +157,7 @@ pub(crate) async fn run(asker: Asker, mut inputs: Inputs) -> Result<OperationRes
         let asked = Inputs {
             query,
             forecast: None,
+            ranking: None,
             batches: None,
             ..inputs.clone()
         };
@@ -281,6 +290,7 @@ fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<Operation
         request_id: merged.request_id,
         metadata,
         outputs,
+        unscored_candidates: vec![],
     }))
 }
 
@@ -292,7 +302,7 @@ fn finish(asker: &Asker, merged: Part, outputs: Vec<String>) -> Result<Operation
 /// call's rows numbered on from where the previous call's ended
 /// (`_numbered_across_calls`), the answers merged as one; a call that fails
 /// ends the request, carrying the answers received before it.
-async fn one(
+pub(crate) async fn one(
     asker: &Asker,
     inputs: &Inputs,
     calls: Vec<LaterCall>,

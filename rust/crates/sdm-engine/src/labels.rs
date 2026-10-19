@@ -55,6 +55,33 @@ pub enum Values {
 }
 
 impl Values {
+    /// The values of the rows `keep` holds, in order: the rows a target's
+    /// filter keeps (`execute_filter`, T2.8).
+    pub fn retain(&self, keep: &[bool]) -> Values {
+        fn kept<T: Clone>(values: &[T], keep: &[bool]) -> Vec<T> {
+            values
+                .iter()
+                .zip(keep)
+                .filter(|(_, k)| **k)
+                .map(|(v, _)| v.clone())
+                .collect()
+        }
+        match self {
+            Values::Float(v) => Values::Float(kept(v, keep)),
+            Values::Int(v) => Values::Int(kept(v, keep)),
+            Values::Decimal {
+                values,
+                precision,
+                scale,
+            } => Values::Decimal {
+                values: kept(values, keep),
+                precision: *precision,
+                scale: *scale,
+            },
+            Values::Ones(_) => Values::Ones(keep.iter().filter(|k| **k).count()),
+        }
+    }
+
     fn len(&self) -> usize {
         match self {
             Values::Float(v) => v.len(),

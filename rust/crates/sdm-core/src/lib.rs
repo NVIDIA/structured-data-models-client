@@ -19,6 +19,7 @@ pub mod materialize;
 pub mod pql;
 mod predict;
 pub mod profiles;
+mod ranking;
 pub mod run;
 mod subgraph;
 #[cfg(feature = "test-ops")]

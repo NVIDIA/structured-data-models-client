@@ -158,6 +158,9 @@ pub struct Sampled {
     pub options: Options,
     /// The regression's statistic the caller chose.
     pub statistic: Option<String>,
+    /// How many candidates the call asked be kept (`top_k`), written into
+    /// the task as the engine writes it (T2.8).
+    pub top_k: Option<u32>,
     /// The most rows any call of the request this payload is one call of
     /// scores (`_the_largest_batch`, `main`'s multi-call `predict`): the
     /// size a refusal of a payload past the endpoint's limit names as the
@@ -1012,6 +1015,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 target: $target,
                 entity_table_names: vec![sampled.entity_table.clone()],
                 anchor_time_column: anchor_column.clone(),
+                top_k: sampled.top_k,
             }
         };
     }

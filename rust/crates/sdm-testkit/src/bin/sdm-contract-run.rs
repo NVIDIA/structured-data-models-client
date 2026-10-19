@@ -173,7 +173,21 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
                 }
                 let mut keyed = each.clone();
                 keyed.case.id = format!("{}@postgres", each.case.id);
-                (host::run_replayed(&each.case, recording)?, keyed)
+                match host::run_replayed(&each.case, recording) {
+                    Ok(observed) => (observed, keyed),
+                    // A diagnostic case whose core asks past what
+                    // python-core recorded is left unobserved, which the
+                    // comparison reports and does not gate; an acceptance
+                    // case's fails the run (T2.8 fix 3).
+                    Err(failed)
+                        if each.case.status == case::Status::Diagnostic
+                            && failed.downcast_ref::<replay::PastTheRecording>().is_some() =>
+                    {
+                        eprintln!("rust-host: {failed:#}: a diagnostic case, left unobserved");
+                        continue;
+                    }
+                    Err(failed) => return Err(failed),
+                }
             }
         };
         let each = &keyed;

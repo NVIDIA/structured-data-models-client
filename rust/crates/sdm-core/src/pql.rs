@@ -70,6 +70,9 @@ pub struct Validation {
     /// never the steps themselves, which a caller writes within its own
     /// bound ([`ForecastPlan::step`], T1.36 fix 23).
     pub steps: Option<ForecastPlan>,
+    /// A ranking's plan, when it has no errors: what each candidate's
+    /// question is written from ([`per_candidate`], T2.8).
+    pub ranking: Option<RankingPlan>,
 }
 
 impl Validation {
@@ -80,6 +83,7 @@ impl Validation {
             text: None,
             warnings,
             steps: None,
+            ranking: None,
         }
     }
 
@@ -230,6 +234,7 @@ fn resolve_here(
             text: Some(validated.query.to_string_with(false, false)),
             warnings,
             steps: per_step(&validated)?,
+            ranking: per_candidate(&validated),
         });
     }
     let later = found.split_off(found.iter().take_while(|d| is_error(d)).count());
@@ -311,6 +316,64 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
         unit: window.unit.value(),
         entity: format!("{} {}", query.for_each, ast::to_string(&query.entity_ast)),
     }))
+}
+
+/// A ranking as the client's `_per_candidate` asks it (T2.8): what every
+/// candidate's binary question is written from, read off the validated
+/// query; nothing is refused here, the core refusing in the client's order
+/// what the client refuses as it writes the questions
+/// (`sdm_request::ranking`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RankingPlan {
+    /// The query's own `TOP k`, its digits as written.
+    pub top_k: Option<String>,
+    /// The final aggregation the ranking is over; none where the target
+    /// ends in none, which the client refuses.
+    pub ranked: Option<sdm_request::ranking::Ranked>,
+}
+
+/// A ranking's plan ([`RankingPlan`]); none for a query that is not a
+/// ranking.
+fn per_candidate(validated: &parser::ValidatedQuery) -> Option<RankingPlan> {
+    let query = &validated.query;
+    if query.problem_type != Some(t::ProblemType::Rank) {
+        return None;
+    }
+    let top_k = query.top_k.as_ref().map(ToString::to_string);
+    let ranked = validated
+        .get_final_target_aggregation()
+        .and_then(|aggregation| {
+            let Kind::Aggregation { target, .. } = &aggregation.borrow().kind else {
+                return None;
+            };
+            let text = ast::to_string(target);
+            // The table and the column ranked: the column node's own, held
+            // apart (KO2-36); the text split at its first dot where the target
+            // is no lone column, as the client splits it.
+            let (table, column) = match &target.borrow().kind {
+                Kind::Column { name, .. } => (name.table_name.clone(), name.col_name.clone()),
+                _ => match text.split_once('.') {
+                    Some((table, column)) => (table.to_owned(), column.to_owned()),
+                    None => (text.clone(), String::new()),
+                },
+            };
+            let window = ast::date_offset_range(&aggregation).map(|window| {
+                let window = window.borrow();
+                sdm_request::ranking::Window {
+                    start: window.start,
+                    end: window.end,
+                    unit: window.unit.value().to_owned(),
+                }
+            });
+            Some(sdm_request::ranking::Ranked {
+                target: text,
+                table,
+                column,
+                window,
+                entity: format!("{} {}", query.for_each, ast::to_string(&query.entity_ast)),
+            })
+        });
+    Some(RankingPlan { top_k, ranked })
 }
 
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {
@@ -873,6 +936,13 @@ fn ranks_foreign_key(target: &PqlNode, schema: &QuerySchema) -> bool {
         return false;
     }
     schema.links.iter().flatten().any(|c| c == column)
+}
+
+/// A name as the query language spells it, in backticks where a bare name
+/// cannot (T2.8: a ranking's questions name the ranked table so), from
+/// here, the one module that names the parser.
+pub(crate) fn quote_name(name: &str) -> String {
+    parser::names::quote_name(name)
 }
 
 /// The text a float class is spelled in, as the reference spells it: the

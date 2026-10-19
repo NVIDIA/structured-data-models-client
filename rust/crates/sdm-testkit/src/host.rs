@@ -32,9 +32,10 @@ use duckdb::arrow::datatypes::{Field, Schema};
 use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, KeySet, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Dtype, EditSchema, ForecastStep, Materialize, Operation, OperationResult,
-    Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestBatch, RequestState,
-    SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
+    DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, Materialize, Operation,
+    OperationResult, Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Ranking,
+    RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
+    ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
@@ -501,10 +502,10 @@ pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
     }
     let given = &case.input.materialize;
     if case.until != Until::FromSource && core.materialize.is_none() {
+        // A ranking's candidates and `top_k` are read from the case's
+        // input, as on DuckDB (T2.8).
         if given.indices_as.is_some()
             || given.inference_config.is_some()
-            || given.candidates.is_some()
-            || given.top_k.is_some()
             || given.rows_per_call.is_some()
         {
             return Err(not_derived("materialize's options"));
@@ -1150,6 +1151,38 @@ fn edit_schema(
     }
 }
 
+/// A ranking's candidates as the case names them, each the contract scalar
+/// the Python host writes of the same value, as a given value (T2.8): an integer an `i64`, a
+/// `u64` past it, and past both a decimal of scale 0; text `utf8`.
+fn candidates_of(given: &[Index]) -> Result<Vec<GivenCandidate>> {
+    given
+        .iter()
+        .map(|index| -> Result<Scalar> {
+            match index {
+                Index::Text(text) => Ok(Scalar::Utf8(text.clone())),
+                Index::Integer(digits) => {
+                    if let Ok(value) = digits.parse::<i64>() {
+                        return Ok(Scalar::Int64(value));
+                    }
+                    if let Ok(value) = digits.parse::<u64>() {
+                        return Ok(Scalar::UInt64(value));
+                    }
+                    let value: i128 = digits
+                        .parse()
+                        .map_err(|_| anyhow!("a candidate past 38 digits, which no case writes"))?;
+                    let precision = u8::try_from(digits.trim_start_matches('-').len())?;
+                    Ok(Scalar::Decimal128 {
+                        precision,
+                        scale: 0,
+                        value,
+                    })
+                }
+            }
+        })
+        .map(|scalar| scalar.map(GivenCandidate::Value))
+        .collect()
+}
+
 /// One Arrow column of contract scalars, all of one type, nulls among
 /// them; a column of nulls alone is Arrow's null type. This host hands the
 /// core the entities as the case types them, each scalar's type its own
@@ -1308,6 +1341,18 @@ pub struct HeldState {
     /// A request asked in several calls (`RequestState.batches`, contract
     /// v26): each later call's payload and the rows it scores, in order.
     pub batches: Option<Vec<HeldBatch>>,
+    /// A ranking's state (T2.8), as the core answered it.
+    pub ranking: Option<HeldRanking>,
+}
+
+/// A ranking's state as this host holds it: how many candidates a row
+/// keeps, the first candidate as the result names it, and each later
+/// question's candidate, by its position and as the result names it, and
+/// its payload's and query's bytes.
+pub struct HeldRanking {
+    pub top_k: Option<u32>,
+    pub value: String,
+    pub parts: Vec<(u32, String, Vec<u8>, Vec<u8>)>,
 }
 
 /// A later call of a request asked in several, as this host holds it: its
@@ -1378,12 +1423,30 @@ fn materialize(
                 }
                 batches = Some(later);
             }
+            let mut ranking = None;
+            if let Some(ranked) = &state.ranking {
+                let mut parts = Vec::new();
+                for part in &ranked.parts {
+                    parts.push((
+                        part.candidate,
+                        part.value.clone(),
+                        bytes(part.payload)?,
+                        bytes(part.query)?,
+                    ));
+                }
+                ranking = Some(HeldRanking {
+                    top_k: ranked.top_k,
+                    value: ranked.value.clone(),
+                    parts,
+                });
+            }
             let held = HeldState {
                 version: state.version,
                 payload: bytes(state.payload)?,
                 query: bytes(state.query)?,
                 forecast,
                 batches,
+                ranking,
             };
             let recorded = json!({
                 "version": held.version,
@@ -1489,6 +1552,22 @@ fn start_materialize(
         values_bytes.pop();
         values_bytes.extend_from_slice(format!(r#","rows_per_call":{sent}}}"#).as_bytes());
     }
+    // A ranking's `top_k` as the case wrote it (T2.8), whatever integer it
+    // is, as the Python host hands the caller's value over: the core holds
+    // it to what the reference takes. Spliced in as text, so an integer
+    // past 64 bits is not read through a double.
+    if let Some(top_k) = &case.input.materialize.top_k {
+        values_bytes.pop();
+        values_bytes.extend_from_slice(format!(r#","top_k":{}}}"#, top_k.0).as_bytes());
+    }
+    // A ranking's candidates, as the Python host hands them over (T2.8).
+    let candidates = case
+        .input
+        .materialize
+        .candidates
+        .as_ref()
+        .map(|given| candidates_of(given))
+        .transpose()?;
     observed.operations.push("materialize".into());
     observed.edits.push(json!({
         "op": "materialize",
@@ -1512,6 +1591,7 @@ fn start_materialize(
             held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
+            candidates: candidates.as_ref().map(|_| AttachmentId(7)),
             anchor_time,
             seed,
             unseeded: false,
@@ -1543,6 +1623,12 @@ fn start_materialize(
     ]);
     if let Some(Some((_, memo))) = sampler.as_ref().map(|held| held.as_ref()) {
         attachments.insert(AttachmentId(4), Attachment::Bytes(memo.clone()));
+    }
+    if let Some(candidates) = &candidates {
+        attachments.insert(
+            AttachmentId(7),
+            Attachment::Bytes(serde_json::to_vec(candidates)?),
+        );
     }
     let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
@@ -1723,7 +1809,8 @@ pub const REQUEST_ID: &str = "sdm-000000000000";
 /// and text as `{"utf8": text}`; from T1.28b, which lays out a
 /// classification's answers, a boolean as `{"bool": value}` and a class's
 /// probabilities as `{"map": [[class, its bits], ...]}`, in order; from
-/// T2.8, which lays out a ranking's `scores` and `rankings` (contract v26),
+/// T2.8, which lays out a ranking's `scores`, `rankings` and `candidates`
+/// (contract v27),
 /// a list as `{"list": [cell, ...]}`, each member a cell as above.
 pub fn result_rows(data: &ArrowData) -> Result<Value> {
     use duckdb::arrow::array::{
@@ -1874,6 +1961,23 @@ fn predict(
                         })
                         .collect()
                 }),
+                // Each later question after the other attachments (none
+                // where there is a ranking), with this host's one constant
+                // id, as each step's (T2.8).
+                ranking: state.ranking.as_ref().map(|held| Ranking {
+                    top_k: held.top_k,
+                    value: held.value.clone(),
+                    parts: (0u32..)
+                        .zip(&held.parts)
+                        .map(|(at, (candidate, value, ..))| RankingPart {
+                            candidate: *candidate,
+                            value: value.clone(),
+                            payload: AttachmentId(3 + 2 * at),
+                            query: AttachmentId(4 + 2 * at),
+                            request_id: Some(REQUEST_ID.into()),
+                        })
+                        .collect(),
+                }),
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
@@ -1904,6 +2008,12 @@ fn predict(
     }
     for (at, (payload, _)) in (0u32..).zip(state.batches.unwrap_or_default()) {
         attachments.insert(AttachmentId(3 + at), Attachment::Bytes(payload));
+    }
+    for (at, (_, _, payload, query)) in
+        (0u32..).zip(state.ranking.map(|held| held.parts).unwrap_or_default())
+    {
+        attachments.insert(AttachmentId(3 + 2 * at), Attachment::Bytes(payload));
+        attachments.insert(AttachmentId(4 + 2 * at), Attachment::Bytes(query));
     }
     let handle = match HostRun::start(root, &message, attachments) {
         Ok(handle) => handle,
@@ -1951,13 +2061,13 @@ fn predict(
         }
         bodies.push(sent);
         // The test's script where one stands in for the rule on this thread
-        // (`endpoint::answered_by`), its bytes as they travel; else the rule.
+        // (`endpoint::answered_by`), its bytes as they travel; else the
+        // scripted endpoint, failing the case's call, a classification's
+        // probabilities given where the case asks the endpoint for them
+        // (T2.8), by the call's number.
         let (status, answered) = match endpoint::scripted(&body) {
             Some(given) => given,
             None => {
-                // The scripted endpoint, failing the case's call, and a
-                // classification's probabilities given where the case asks
-                // the endpoint for them (T2.8), by the call's number.
                 let call = scripted.calls();
                 let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
                 let (status, answered) = if case.input.probabilities == Some(true)

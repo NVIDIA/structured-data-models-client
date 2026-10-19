@@ -43,7 +43,7 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use arrow_array::builder::{Float64Builder, MapBuilder, MapFieldNames, StringBuilder};
+use arrow_array::builder::{Float64Builder, ListBuilder, MapBuilder, MapFieldNames, StringBuilder};
 use arrow_array::{
     Array, ArrayRef, BooleanArray, Float64Array, Int64Array, RecordBatch, StringArray,
 };
@@ -735,12 +735,14 @@ pub fn body(
     }
     let chosen = match payload.get("output") {
         None | Some(Value::Null) => None,
-        Some(output @ Value::Object(_)) => match output.get("prediction_statistic") {
-            None | Some(Value::Null) => None,
-            Some(Value::Text(text)) if text.is_empty() => None,
-            Some(Value::Text(text)) => Some(text.clone()),
-            Some(_) => return Err(not_yet("prediction_statistic")),
-        },
+        // As the adapter's `_output_for` reads it, `chosen or 'median'`:
+        // a statistic the payload holds is sent as it is, whatever its
+        // type, where Python reads it as true (T2.8: from T1.28b refused
+        // by name when not text, `prediction_statistic`).
+        Some(output @ Value::Object(_)) => output
+            .get("prediction_statistic")
+            .filter(|chosen| is_chosen(chosen))
+            .cloned(),
         Some(_) => return Err(bad_payload("output")),
     };
     if kind == "regression" {
@@ -750,7 +752,7 @@ pub fn body(
                 ("fields".to_owned(), fields),
                 (
                     "prediction_statistic".to_owned(),
-                    Value::Text(chosen.unwrap_or_else(|| DEFAULT_STATISTIC.to_owned())),
+                    chosen.unwrap_or_else(|| Value::text(DEFAULT_STATISTIC)),
                 ),
             ]),
         );
@@ -813,6 +815,20 @@ pub fn body(
     Ok(envelope)
 }
 
+/// Whether a statistic the payload holds is one `_output_for` takes as
+/// chosen (`chosen or 'median'`): not null, `false`, a zero, empty text, an
+/// empty list or an empty object.
+fn is_chosen(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(b) => *b,
+        Value::Number(token) => !token.parse::<f64>().is_ok_and(|n| n == 0.0),
+        Value::Text(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(members) => !members.is_empty(),
+    }
+}
+
 /// The bytes of the call `body` writes, as the host sends them, unchanged:
 /// refused past the endpoint's limit (`PAYLOAD_BYTES`), counted on these
 /// bytes, the envelope included, which are the bytes sent (register PD-2,
@@ -865,6 +881,10 @@ pub enum Answer {
     /// reference's `as_declared` leaves as it is: no value of the target's
     /// type, the item's own the number.
     NonFinite(f64),
+    /// A class's prediction that does not read as the target's type, which
+    /// `as_declared` leaves as it is (T2.8): the item's own value, as
+    /// written.
+    Written(Value),
 }
 
 /// The type a part's predictions are given back as: a regression's
@@ -894,6 +914,10 @@ pub struct Row {
     /// Each class's probability, keyed by the class as the target column
     /// spells it, in the order the answer wrote them.
     pub probabilities: Option<Vec<(String, f64)>>,
+    /// The item's scores and rankings, each a mapping as a JSON object, in
+    /// the order written (T2.8).
+    pub scores: Option<Vec<f64>>,
+    pub rankings: Option<Vec<Value>>,
 }
 
 /// The answer to one call, or the parts of one request put together.
@@ -1028,25 +1052,29 @@ fn answer_of(prediction: Option<&Value>, answers: AnswerType) -> Result<Answer, 
         },
         // A float target's class is read back as a double, a non-finite one
         // too, which the target's type holds.
-        AnswerType::FloatClass => as_float(value)
-            .map(Answer::Float)
-            .ok_or_else(|| not_yet("prediction_type")),
+        AnswerType::FloatClass => Ok(as_float(value).map_or_else(|| written(value), Answer::Float)),
         // A class written as a non-finite number is passed through as the
         // reference passes it (owner decision of 2026-10-12): no target's
         // type holds it, so `as_declared` leaves it as it is.
         _ if non_finite(value).is_some() => {
             Ok(Answer::NonFinite(non_finite(value).unwrap_or(f64::NAN)))
         }
-        AnswerType::Bool => as_bool(value)
-            .map(Answer::Bool)
-            .ok_or_else(|| not_yet("prediction_type")),
-        AnswerType::Int => as_int(value)
-            .map(Answer::Int)
-            .ok_or_else(|| not_yet("prediction_type")),
-        AnswerType::Text => match value {
-            Value::Text(text) => Ok(Answer::Text(text.clone())),
-            _ => Err(not_yet("prediction_type")),
-        },
+        AnswerType::Bool => Ok(as_bool(value).map_or_else(|| written(value), Answer::Bool)),
+        AnswerType::Int => Ok(as_int(value).map_or_else(|| written(value), Answer::Int)),
+        AnswerType::Text => Ok(match value {
+            Value::Text(text) => Answer::Text(text.clone()),
+            other => written(other),
+        }),
+    }
+}
+
+/// A class's prediction as written, where it does not read as the target's
+/// type (`as_declared` leaving it as it is, T2.8): a null, which an item's
+/// reader takes as none, none.
+fn written(value: &Value) -> Answer {
+    match value {
+        Value::Null => Answer::None,
+        other => Answer::Written(other.clone()),
     }
 }
 
@@ -1122,7 +1150,14 @@ pub fn layout(
             let dtype = key_dtype(payload, names[reference]);
             let text_ids = dtype.as_deref() == Some("string");
             (
-                named(response, &names, rows, reference, dtype.as_deref())?,
+                named(
+                    response,
+                    &names,
+                    rows,
+                    reference,
+                    dtype.as_deref(),
+                    float_text,
+                )?,
                 text_ids,
             )
         }
@@ -1144,6 +1179,8 @@ pub fn layout(
                 .probabilities
                 .as_ref()
                 .map(|given| spelled(given, answers, float_text)),
+            scores: item.scores.clone(),
+            rankings: item.rankings.clone(),
         });
     }
     Ok(Part {
@@ -1164,6 +1201,7 @@ fn named(
     rows: &[Value],
     reference: usize,
     dtype: Option<&str>,
+    float_text: fn(f64) -> String,
 ) -> Result<Vec<(i64, Entity, Option<i64>)>, CoreError> {
     let instance = names.iter().position(|n| *n == INSTANCE_ID);
     let cell = |row: &Value, at: usize| -> Result<Value, CoreError> {
@@ -1179,8 +1217,8 @@ fn named(
     let instances = match instance {
         Some(at) => Some(
             rows.iter()
-                .map(|row| instance_text(&cell(row, at)?))
-                .collect::<Result<Vec<_>, _>>()?,
+                .map(|row| Ok(instance_text(&cell(row, at)?, float_text)))
+                .collect::<Result<Vec<_>, CoreError>>()?,
         ),
         None => None,
     };
@@ -1203,7 +1241,7 @@ fn named(
             let Some(id) = &item.id else {
                 return Err(bad_response("prediction.id", "missing"));
             };
-            if *id != instances[index] {
+            if instances[index].as_deref() != Some(id.as_str()) {
                 return Err(bad_response("prediction.id", "not_the_row_s"));
             }
         }
@@ -1342,7 +1380,15 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
                 .rows
                 .iter()
                 .all(|r| r.probabilities.as_ref().is_none_or(Vec::is_empty)),
-            "explanation" | "quantiles" | "scores" | "rankings" | "embeddings" => true,
+            "scores" => part
+                .rows
+                .iter()
+                .all(|r| r.scores.as_ref().is_none_or(Vec::is_empty)),
+            "rankings" => part
+                .rows
+                .iter()
+                .all(|r| r.rankings.as_ref().is_none_or(Vec::is_empty)),
+            "explanation" | "quantiles" | "embeddings" => true,
             _ => false,
         })
         .cloned()
@@ -1385,44 +1431,12 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
     let row_index: ArrayRef = Arc::new(Int64Array::from_iter_values(
         rows.iter().map(|r| r.row_index),
     ));
-    let integers = rows
-        .iter()
-        .all(|r| matches!(r.id, Entity::Integer(_) | Entity::None));
-    let texts = rows
-        .iter()
-        .all(|r| matches!(r.id, Entity::Text(_) | Entity::None));
-    let (id_type, ids): (DataType, ArrayRef) = if integers && !(texts && part.text_ids) {
-        (
-            DataType::Int64,
-            Arc::new(Int64Array::from_iter(rows.iter().map(|r| match &r.id {
-                Entity::Integer(n) => Some(*n),
-                _ => None,
-            }))),
-        )
-    } else {
-        (
-            DataType::Utf8,
-            Arc::new(StringArray::from_iter(rows.iter().map(|r| match &r.id {
-                Entity::Integer(n) => Some(n.to_string()),
-                Entity::Text(text) => Some(text.clone()),
-                other => id_as_written(other),
-            }))),
-        )
-    };
-    let mut fields = vec![
-        Field::new("row_index", DataType::Int64, false),
-        Field::new("id", id_type, true),
-    ];
-    let mut columns = vec![row_index, ids];
-    // Where the ids are neither all integers nor all text (a null aside),
-    // or one is of another type, each id as the JSON text of the
-    // reference's item value, null where it had none.
-    if !integers && !texts {
-        fields.push(Field::new("id_as_written", DataType::Utf8, true));
-        columns.push(Arc::new(StringArray::from_iter(
-            rows.iter().map(|r| id_as_written(&r.id)),
-        )));
-    }
+    let ids: Vec<&Entity> = rows.iter().map(|r| &r.id).collect();
+    let (id_fields, id_columns) = id_columns(&ids, part.text_ids);
+    let mut fields = vec![Field::new("row_index", DataType::Int64, false)];
+    fields.extend(id_fields);
+    let mut columns = vec![row_index];
+    columns.extend(id_columns);
     if rows.iter().any(|r| r.forecast_step.is_some()) {
         fields.push(Field::new("forecast_step", DataType::Int64, true));
         columns.push(Arc::new(Int64Array::from_iter(
@@ -1430,76 +1444,92 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         )));
     }
     if rows.iter().any(|r| r.prediction != Answer::None) {
-        let (data_type, column): (DataType, ArrayRef) = match part.answers {
-            // A regression's column as pandas infers it from the answers:
-            // int64 where every answer is an integer, else float64, an
-            // integer as the double it reads as; a missing one is null.
-            AnswerType::Float if regression_integers(&rows) => (
-                DataType::Int64,
-                Arc::new(Int64Array::from_iter(rows.iter().map(
-                    |r| match r.prediction {
-                        Answer::Int(n) => Some(n),
-                        _ => None,
-                    },
-                ))),
-            ),
-            AnswerType::Float => (
-                DataType::Float64,
-                Arc::new(Float64Array::from_iter(rows.iter().map(
-                    |r| match r.prediction {
-                        Answer::Float(v) => Some(v),
-                        #[allow(
-                            clippy::cast_precision_loss,
-                            reason = "as the reference's frame reads an integer among floats"
-                        )]
-                        Answer::Int(n) => Some(n as f64),
-                        _ => None,
-                    },
-                ))),
-            ),
-            // A float target's classes as doubles.
-            AnswerType::FloatClass => (
-                DataType::Float64,
-                Arc::new(Float64Array::from_iter(rows.iter().map(
-                    |r| match r.prediction {
-                        Answer::Float(v) => Some(v),
-                        _ => None,
-                    },
-                ))),
-            ),
-            AnswerType::Bool => (
-                DataType::Boolean,
-                Arc::new(BooleanArray::from_iter(rows.iter().map(
-                    |r| match r.prediction {
-                        Answer::Bool(b) => Some(b),
-                        _ => None,
-                    },
-                ))),
-            ),
-            AnswerType::Int => (
-                DataType::Int64,
-                Arc::new(Int64Array::from_iter(rows.iter().map(
-                    |r| match r.prediction {
-                        Answer::Int(n) => Some(n),
-                        _ => None,
-                    },
-                ))),
-            ),
-            AnswerType::Text => (
-                DataType::Utf8,
-                Arc::new(StringArray::from_iter(rows.iter().map(
-                    |r| match &r.prediction {
-                        Answer::Text(t) => Some(t.clone()),
-                        _ => None,
-                    },
-                ))),
-            ),
+        // Classes given back as written, not of the target's type, all of
+        // one kind with the rest (T2.8): the column as pandas infers it
+        // from the values, as the reference's frame holds them.
+        let as_written = as_written_column(&rows);
+        let (data_type, column): (DataType, ArrayRef) = match (&as_written, part.answers) {
+            (Some((data_type, column)), _) => (data_type.clone(), Arc::clone(column)),
+            (None, answers) => match answers {
+                // A regression's column as pandas infers it from the answers:
+                // int64 where every answer is an integer, else float64, an
+                // integer as the double it reads as; a missing one is null.
+                AnswerType::Float if regression_integers(&rows) => (
+                    DataType::Int64,
+                    Arc::new(Int64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Int(n) => Some(n),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Float => (
+                    DataType::Float64,
+                    Arc::new(Float64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Float(v) => Some(v),
+                            #[allow(
+                                clippy::cast_precision_loss,
+                                reason = "as the reference's frame reads an integer among floats"
+                            )]
+                            Answer::Int(n) => Some(n as f64),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                // A float target's classes as doubles.
+                AnswerType::FloatClass => (
+                    DataType::Float64,
+                    Arc::new(Float64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Float(v) => Some(v),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Bool => (
+                    DataType::Boolean,
+                    Arc::new(BooleanArray::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Bool(b) => Some(b),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Int => (
+                    DataType::Int64,
+                    Arc::new(Int64Array::from_iter(rows.iter().map(
+                        |r| match r.prediction {
+                            Answer::Int(n) => Some(n),
+                            _ => None,
+                        },
+                    ))),
+                ),
+                AnswerType::Text => (
+                    DataType::Utf8,
+                    Arc::new(StringArray::from_iter(rows.iter().map(
+                        |r| match &r.prediction {
+                            Answer::Text(t) => Some(t.clone()),
+                            _ => None,
+                        },
+                    ))),
+                ),
+            },
+        };
+        let integer = |answer: &Answer| match answer {
+            Answer::Int(_) => true,
+            Answer::Written(Value::Number(token)) => is_integer_token(token),
+            _ => false,
         };
         let widened = (data_type == DataType::Float64
-            && rows.iter().any(|r| matches!(r.prediction, Answer::Int(_))))
+            && rows.iter().any(|r| integer(&r.prediction)))
             || rows
                 .iter()
-                .any(|r| matches!(r.prediction, Answer::NonFinite(_)));
+                .any(|r| matches!(r.prediction, Answer::NonFinite(_)))
+            || (as_written.is_none()
+                && rows
+                    .iter()
+                    .any(|r| matches!(r.prediction, Answer::Written(_))));
         fields.push(Field::new("prediction", data_type, true));
         columns.push(column);
         // Where the column does not hold each answer as the reference's
@@ -1542,11 +1572,194 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
         ));
         columns.push(Arc::new(column));
     }
+    // An item's scores and rankings (T2.8), each where an answer carries
+    // them: a list of doubles, and a list of each mapping's JSON text.
+    if rows.iter().any(|r| r.scores.is_some()) {
+        let mut builder = ListBuilder::new(Float64Builder::new());
+        for row in &rows {
+            match &row.scores {
+                Some(scores) => {
+                    builder.values().append_slice(scores);
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new("scores", column.data_type().clone(), true));
+        columns.push(Arc::new(column));
+    }
+    if rows.iter().any(|r| r.rankings.is_some()) {
+        let mut builder = ListBuilder::new(StringBuilder::new());
+        for row in &rows {
+            match &row.rankings {
+                Some(rankings) => {
+                    for mapping in rankings {
+                        builder
+                            .values()
+                            .append_value(String::from_utf8_lossy(&mapping.to_bytes()));
+                    }
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new("rankings", column.data_type().clone(), true));
+        columns.push(Arc::new(column));
+    }
     fields.push(Field::new("answer_index", DataType::Int64, false));
     columns.push(Arc::new(Int64Array::from_iter_values(
         rows.iter().map(|r| r.answer_index),
     )));
     RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| internal_layout())
+}
+
+/// The result's `id` column, and `id_as_written` where it is needed, of
+/// `ids` in the result's order: int64 where every id is an integer, utf8
+/// where every one is text, `text_ids` (the key's type) deciding where none
+/// is either; a missing one null; where they are mixed, or one is of
+/// another type, utf8 with `id_as_written`, each id as the JSON text of the
+/// reference's item value, or null.
+pub(crate) fn id_columns(ids: &[&Entity], text_ids: bool) -> (Vec<Field>, Vec<ArrayRef>) {
+    let integers = ids
+        .iter()
+        .all(|r| matches!(**r, Entity::Integer(_) | Entity::None));
+    let texts = ids
+        .iter()
+        .all(|r| matches!(**r, Entity::Text(_) | Entity::None));
+    let (id_type, column): (DataType, ArrayRef) = if integers && !(texts && text_ids) {
+        (
+            DataType::Int64,
+            Arc::new(Int64Array::from_iter(ids.iter().map(|r| match &**r {
+                Entity::Integer(n) => Some(*n),
+                _ => None,
+            }))),
+        )
+    } else {
+        (
+            DataType::Utf8,
+            Arc::new(StringArray::from_iter(ids.iter().map(|r| match &**r {
+                Entity::Integer(n) => Some(n.to_string()),
+                Entity::Text(text) => Some(text.clone()),
+                other => id_as_written(other),
+            }))),
+        )
+    };
+    let mut fields = vec![Field::new("id", id_type, true)];
+    let mut columns = vec![column];
+    // Where the ids are neither all integers nor all text (a null aside),
+    // or one is of another type, each id as the JSON text of the
+    // reference's item value, null where it had none.
+    if !integers && !texts {
+        fields.push(Field::new("id_as_written", DataType::Utf8, true));
+        columns.push(Arc::new(StringArray::from_iter(
+            ids.iter().map(|r| id_as_written(r)),
+        )));
+    }
+    (fields, columns)
+}
+
+/// The prediction column where an answer was given back as written, not
+/// of the target's type (T2.8), and every answer is of one kind with it, as
+/// pandas infers the reference's frame's column from the items' values: a
+/// boolean column, an int64 column of integers, a float64 column of
+/// numbers (an integer as its double), or a text column; a missing one
+/// null. None where no answer was given back so, or the answers are of
+/// several kinds, the column then the target's type's, with each answer's
+/// JSON text beside it.
+fn as_written_column(rows: &[&Row]) -> Option<(DataType, ArrayRef)> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Kind {
+        Bool,
+        Int,
+        Float,
+        Text,
+    }
+    if !rows
+        .iter()
+        .any(|r| matches!(r.prediction, Answer::Written(_)))
+    {
+        return None;
+    }
+    let kind_of = |answer: &Answer| -> Option<Option<Kind>> {
+        Some(match answer {
+            Answer::None => None,
+            Answer::Bool(_) | Answer::Written(Value::Bool(_)) => Some(Kind::Bool),
+            Answer::Int(_) => Some(Kind::Int),
+            Answer::Written(Value::Number(token)) if is_integer_token(token) => {
+                token.parse::<i64>().ok()?;
+                Some(Kind::Int)
+            }
+            Answer::Float(_) | Answer::NonFinite(_) | Answer::Written(Value::Number(_)) => {
+                Some(Kind::Float)
+            }
+            Answer::Text(_) | Answer::Written(Value::Text(_)) => Some(Kind::Text),
+            Answer::Written(_) => return None,
+        })
+    };
+    let mut kinds = BTreeSet::new();
+    for row in rows {
+        if let Some(kind) = kind_of(&row.prediction)? {
+            kinds.insert(kind as u8);
+        }
+    }
+    let kind = match kinds.into_iter().collect::<Vec<_>>().as_slice() {
+        [one] => *one,
+        [a, b] if *a == Kind::Int as u8 && *b == Kind::Float as u8 => Kind::Float as u8,
+        _ => return None,
+    };
+    let float = |answer: &Answer| -> Option<f64> {
+        match answer {
+            Answer::Float(v) | Answer::NonFinite(v) => Some(*v),
+            #[allow(
+                clippy::cast_precision_loss,
+                reason = "an integer widened as the frame widens it"
+            )]
+            Answer::Int(n) => Some(*n as f64),
+            Answer::Written(Value::Number(token)) => token.parse().ok(),
+            _ => None,
+        }
+    };
+    Some(if kind == Kind::Bool as u8 {
+        (
+            DataType::Boolean,
+            Arc::new(BooleanArray::from_iter(rows.iter().map(
+                |r| match &r.prediction {
+                    Answer::Bool(b) | Answer::Written(Value::Bool(b)) => Some(*b),
+                    _ => None,
+                },
+            ))),
+        )
+    } else if kind == Kind::Int as u8 {
+        (
+            DataType::Int64,
+            Arc::new(Int64Array::from_iter(rows.iter().map(
+                |r| match &r.prediction {
+                    Answer::Int(n) => Some(*n),
+                    Answer::Written(Value::Number(token)) => token.parse().ok(),
+                    _ => None,
+                },
+            ))),
+        )
+    } else if kind == Kind::Float as u8 {
+        (
+            DataType::Float64,
+            Arc::new(Float64Array::from_iter(
+                rows.iter().map(|r| float(&r.prediction)),
+            )),
+        )
+    } else {
+        (
+            DataType::Utf8,
+            Arc::new(StringArray::from_iter(rows.iter().map(
+                |r| match &r.prediction {
+                    Answer::Text(t) | Answer::Written(Value::Text(t)) => Some(t.clone()),
+                    _ => None,
+                },
+            ))),
+        )
+    })
 }
 
 /// An answer's prediction as the JSON text of the reference's item value,
@@ -1561,6 +1774,7 @@ fn as_answered(answer: &Answer) -> Option<String> {
         Answer::Text(text) => {
             Some(String::from_utf8_lossy(&Value::text(text).to_bytes()).into_owned())
         }
+        Answer::Written(value) => Some(String::from_utf8_lossy(&value.to_bytes()).into_owned()),
     }
 }
 
@@ -1692,14 +1906,28 @@ fn integer(digits: &str) -> Entity {
     )
 }
 
-/// A row's instance id as an answer names it: an integer's digits, or the
-/// text.
-fn instance_text(value: &Value) -> Result<String, CoreError> {
-    match value {
-        Value::Number(token) if is_integer_token(token) => Ok(token.clone()),
-        Value::Text(text) => Ok(text.clone()),
-        _ => Err(not_yet("instance_id_type")),
-    }
+/// A row's instance id as the reference compares it with the id an answer
+/// names (`str(instances[index])`, T2.8): an integer's digits (`-0` as
+/// `0`), the text, a float as the parser's `float_text` writes it, a
+/// boolean as `True` or `False` and a null as `None`; none for a list or an
+/// object, which no id an answer names matches.
+fn instance_text(value: &Value, float_text: fn(f64) -> String) -> Option<String> {
+    Some(match value {
+        Value::Text(text) => text.clone(),
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::Number(token) if is_integer_token(token) => {
+            let digits = token.strip_prefix('-').unwrap_or(token);
+            if digits.bytes().all(|b| b == b'0') {
+                "0".to_owned()
+            } else {
+                token.clone()
+            }
+        }
+        Value::Number(token) => float_text(token.parse::<f64>().unwrap_or(f64::NAN)),
+        Value::Array(_) | Value::Object(_) => return None,
+    })
 }
 
 #[cfg(test)]
@@ -1766,7 +1994,7 @@ mod tests {
         assert_eq!(as_float(&number("3")), Some(3.0));
         assert_eq!(as_float(&number("1e400")), Some(f64::INFINITY));
         // Text that is no number, a boolean, and an integer past a double's
-        // range are not a double: the answer is refused (`prediction_type`).
+        // range are not a double.
         assert_eq!(as_float(&text("three")), None);
         assert_eq!(as_float(&Value::Bool(true)), None);
         assert_eq!(as_float(&number(&"9".repeat(400))), None);
@@ -1774,7 +2002,11 @@ mod tests {
             answer_of(Some(&text("3.0")), AnswerType::FloatClass),
             Ok(Answer::Float(3.0))
         );
-        assert!(answer_of(Some(&text("three")), AnswerType::FloatClass).is_err());
+        // One that does not read is given back as written (T2.8).
+        assert_eq!(
+            answer_of(Some(&text("three")), AnswerType::FloatClass),
+            Ok(Answer::Written(text("three")))
+        );
     }
 
     #[test]

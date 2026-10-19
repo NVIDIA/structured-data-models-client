@@ -17,7 +17,12 @@
 //! the recording's end, fails the run by name (a runner failure, never a
 //! provider error the core could take for the source's), so a change to
 //! what the core asks or how the dialect renders it shows as a recording
-//! to make again, never as stale rows answering another question.
+//! to make again, never as stale rows answering another question. A fetch
+//! past the recording's end is its own error, [`PastTheRecording`], which
+//! the runner takes for a diagnostic case as no observation of it (T2.8
+//! fix 3): python-core records only the fetches it made, and on a case the
+//! Python host fails before the core reads (`s0.boundary.depth-999`, whose
+//! query Python's parser cannot read), the core asks more.
 //!
 //! Each recorded fetch names the text of every statement the Postgres
 //! driver ran for it, in order, as python-core's driver capture recorded
@@ -152,6 +157,28 @@ impl Recording {
     }
 }
 
+/// A fetch the core asked past the end of the case's recording: its
+/// position, and how many were recorded. The runner fails the run on it,
+/// but for a diagnostic case, which it leaves unobserved.
+#[derive(Debug)]
+pub struct PastTheRecording {
+    pub case: String,
+    pub position: usize,
+    pub recorded: usize,
+}
+
+impl std::fmt::Display for PastTheRecording {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: the core asked fetch {}, past the {} recorded",
+            self.case, self.position, self.recorded
+        )
+    }
+}
+
+impl std::error::Error for PastTheRecording {}
+
 /// One case's recorded fetches, answered in order.
 pub struct Replay<'a> {
     case: String,
@@ -173,11 +200,12 @@ impl Replay<'_> {
             answer,
         }) = self.fetches.get(position)
         else {
-            bail!(
-                "{}: the core asked fetch {position}, past the {} recorded",
-                self.case,
-                self.fetches.len()
-            );
+            return Err(PastTheRecording {
+                case: self.case.clone(),
+                position,
+                recorded: self.fetches.len(),
+            }
+            .into());
         };
         if serde_json::to_value(&step.request)? != *request
             || serde_json::to_value(&step.plan)? != *plan

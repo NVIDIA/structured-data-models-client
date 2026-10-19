@@ -39,10 +39,12 @@ from predictive_query import RELATIONAL, TABULAR
 
 from sdm_client.decompose import (
     FORECAST,
+    RANKING,
     Decomposition,
     about_the_part,
     parts_of,
     refuse_a_part_that_would_take_several_calls,
+    said_as_parts_are,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
@@ -228,8 +230,11 @@ class PredictiveQuery:
             ),
         )
 
-        # A forecast over a DuckDB, SQLite or Postgres source on the core route is split into
-        # its steps by the core (T1.36 fix 21).
+        # On the core route a question asked in parts is the core's to split
+        # (lesson 17): a forecast in its steps (T1.36 fix 21) and a ranking
+        # in its candidates (T2.8), each refusal of either the core's, said
+        # here as this client says it; as is a query only the core resolves
+        # (KO2-36).
         on_the_core = relational and _routing.on_the_core(
             self.schema.source, _routing.MATERIALIZE
         )
@@ -237,14 +242,12 @@ class PredictiveQuery:
         # whether it is asked as several questions is a property of the query
         # and the profile answers what the query is allowed to be.
         asked = self._resolve(RELATIONAL if relational else TABULAR)
-        if on_the_core and _alone(asked):
-            # A query only the core resolves (KO2-36): the call's own checks
-            # first, as for any relational query, then gathered as the core
-            # resolves it, a forecast in the steps the core asks.
+        if on_the_core:
+            # The call's own checks first, as for any relational query.
             if task is not None:
                 _refuse_the_task(task, 'a relational query')
             assert indices is not None
-            return self._on_the_core_alone(
+            return self._on_the_core(
                 asked,
                 indices=indices,
                 num_context_samples=num_context_samples,
@@ -257,7 +260,6 @@ class PredictiveQuery:
             list(candidates) if candidates is not None else None,
             options,
             self.schema,
-            on_the_core=on_the_core,
         )
         if task is not None and (relational or rewritten is not None):
             _refuse_the_task(
@@ -265,15 +267,6 @@ class PredictiveQuery:
                 'a decomposed question'
                 if rewritten is not None
                 else 'a relational query',
-            )
-
-        if rewritten is not None and rewritten.kind == FORECAST and on_the_core:
-            return self._in_steps_on_the_core(
-                asked,
-                rewritten,
-                indices=indices,
-                num_context_samples=num_context_samples,
-                options=options,
             )
 
         if rewritten is not None:
@@ -492,109 +485,114 @@ class PredictiveQuery:
         whole._asked = self.text
         return whole
 
-    def _in_steps_on_the_core(
+    def _on_the_core(
         self,
-        asked: ValidatedPredictiveQuery,
-        rewritten: Decomposition,
-        *,
-        indices: Sequence[Any] | None,
-        num_context_samples: int | None,
-        options: dict[str, Any],
-    ) -> Request:
-        r"""A forecast gathered on the core, which asks each step as the
-        regression :meth:`_in_parts` would (T1.36 fix 21), kept together as
-        :meth:`_in_parts` keeps the parts it gathers: a refusal said of the
-        step it happened in, which the core names (``forecast_step``), or of
-        the first where this client refuses the call's options before the
-        core runs.
-        """
-        steps = int(getattr(asked, 'num_forecasts', 1) or 1)
-        named = Decomposition(
-            FORECAST, tuple((None, n + 1) for n in range(steps))
-        )
-        assert indices is not None
-        try:
-            whole = self._relational_materializer.materialize(
-                query=asked,
-                indices=indices,
-                num_context_samples=num_context_samples,
-                options=options,
-            )
-        except MissingExtraError:
-            raise
-        except StructuredDataError as error:
-            details = getattr(error, 'details', None)
-            step = (
-                details.pop('forecast_step', 1)
-                if isinstance(details, dict)
-                else 1
-            )
-            raise about_the_part(error, named, step) from error
-        return self._kept_as_steps(whole, rewritten, indices)
-
-    def _on_the_core_alone(
-        self,
-        asked: Unresolved,
+        asked: ValidatedPredictiveQuery | Unresolved,
         *,
         indices: Sequence[Any],
         num_context_samples: int | None,
         candidates: Sequence[Any] | None,
         options: dict[str, Any],
     ) -> Request:
-        r"""A query only the core resolves (KO2-36), gathered as the core
-        resolves it: a forecast kept in the steps the core asked, and the
-        core's refusals said as this client says them of any query (a
-        forecast's ``top_k`` or too many steps, the decomposition's), or,
-        for a query the core does not resolve, with the old validator's
-        diagnostics."""
-        if candidates is not None:
-            # This client asks a ranking one candidate at a time, writing
-            # each question from the old validator's tree, which such a
-            # query has none of.
-            raise StructuredDataError(
-                f'{self.text!r} names a column whose name holds a dot, a '
-                f'backtick or a line break, and candidates are asked one at '
-                f'a time, in questions this client does not yet write for '
-                f'such a query; ask it without candidates',
-                code='INVALID_REQUEST',
-                details={'field': 'candidates'},
-            )
+        r"""A query gathered on the core, which asks a forecast as one
+        regression per step (T1.36 fix 21) and a ranking as one binary
+        question per candidate (T2.8), kept together as :meth:`_in_parts`
+        keeps the parts it gathers. The core's refusals are said as this
+        client says them of any query (:func:`decompose.said_as_parts_are`):
+        of the step or the candidate they happened in, which the core names,
+        and, for a query only the core resolves (KO2-36) that the core does
+        not resolve either, with the old validator's diagnostics."""
+        given = None if candidates is None else list(candidates)
         try:
             whole = self._relational_materializer.materialize(
                 query=asked,
                 indices=indices,
                 num_context_samples=num_context_samples,
                 options=options,
+                candidates=given,
             )
         except MissingExtraError:
             raise
         except StructuredDataError as error:
             details = getattr(error, 'details', None) or {}
-            rule = details.get('rule')
-            if rule == 'forecast_top_k':
-                raise StructuredDataError(
-                    'top_k is how many candidates a ranking keeps, and a '
-                    'forecast ranks nothing; it gives back one value per step',
-                    code='INVALID_REQUEST',
-                ) from error
-            if rule == 'too_many_parts' and isinstance(
-                details.get('steps'), int
-            ):
-                from sdm_client.decompose import _refuse_too_many
-
-                _refuse_too_many(details['steps'], 'forecast steps')
             if (
-                error.code == 'INVALID_REQUEST'
-                and rule is None
+                _alone(asked)
+                and error.code == 'INVALID_REQUEST'
+                and details.get('rule') is None
                 and details.get('field') == 'query'
             ):
                 # The core does not resolve it either: the old validator's
                 # diagnostics say why, a mistyped column's among them.
                 raise asked.refusal from error
-            raise
-        if whole._core_state.get('forecast') is None:
+            said = said_as_parts_are(
+                error,
+                self.text,
+                given,
+                steps=getattr(asked, 'num_forecasts', None),
+                options=options,
+            )
+            if said is error:
+                # The core's own words: raised as the core raised them, with
+                # no cause chained.
+                raise
+            raise said from error
+        state = whole._core_state
+        if state.get('ranking') is not None:
+            assert given is not None
+            return self._kept_as_parts(whole, given, indices)
+        if state.get('forecast') is None:
             return whole
         return self._kept_as_steps(whole, Decomposition(FORECAST, ()), indices)
+
+    def _kept_as_parts(
+        self, whole: Request, given: list[Any], indices: Sequence[Any]
+    ) -> Request:
+        r"""A ranking the core gathered as one question per candidate, kept
+        together as :meth:`_in_parts` keeps the parts it gathers: one
+        request per candidate, with its question's payload and query, each
+        about the candidate as the caller gave it."""
+        import copy
+
+        state = whole._core_state
+        ranking = state['ranking']
+        gathered = []
+        for position, named, payload, query in [
+            (0, ranking['value'], whole.payloads[0], state['query']),
+            *ranking['parts'],
+        ]:
+            part = Request.materialized(
+                payloads=(payload,),
+                windowed=whole._windowed,
+                schema=self.schema.snapshot(),
+                query=query,
+                indices=list(indices),
+                entity_table=whole.entity_table,
+                requested_inference=whole.requested_inference,
+            )
+            part._core_state = {'version': state['version']}
+            gathered.append((part, query, position, named))
+        carrier = copy.copy(gathered[0][0])
+        carrier._parts = tuple(part for part, *_ in gathered)
+        carrier._decomposition = Decomposition(
+            RANKING,
+            tuple(
+                (query, given[position]) for _, query, position, _ in gathered
+            ),
+            ranking.get('top_k'),
+        )
+        # What predict on the core reads of the ranking: how many candidates
+        # a row keeps, and each question's candidate by its position among
+        # those given and by its name in the result.
+        carrier._core_state = {
+            'version': state['version'],
+            'ranking': {
+                'top_k': ranking.get('top_k'),
+                'positions': [position for _, _, position, _ in gathered],
+                'values': [named for *_, named in gathered],
+            },
+        }
+        carrier._asked = self.text
+        return carrier
 
     def _kept_as_steps(
         self, whole: Request, rewritten: Decomposition, indices: Sequence[Any]

@@ -150,6 +150,7 @@ fn batched(calls: &[&[i64]]) -> (RequestState, Attachments) {
         query: AttachmentId(2),
         forecast: None,
         batches: (!batches.is_empty()).then_some(batches),
+        ranking: None,
     };
     (state, attachments)
 }
@@ -393,6 +394,7 @@ fn a_forecast_failing_at_a_step_carries_the_steps_answered_before_it() {
         query: AttachmentId(2),
         forecast: Some(steps),
         batches: None,
+        ranking: None,
     };
     let mut run = predict(state, attachments).unwrap();
     let (end, bodies) = drive(&mut run, Some(2), refused());

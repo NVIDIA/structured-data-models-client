@@ -34,6 +34,7 @@ import contextlib
 import datetime
 import string
 import warnings
+from collections.abc import Callable, Mapping
 from typing import Any, NoReturn
 
 from sdm_client._rust import codec
@@ -195,6 +196,14 @@ WORDED: dict[tuple[str, ...], str] = {
         'times the steps rather than the steps that were counted. Ask about '
         'fewer entities at a time'
     ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'batched_part_ranking'): (
+        '{entities:,} entities are more than the {rows_per_call:,} one call '
+        'scores, and this question is asked as {parts:,} of them, one per '
+        'candidate. A part is not batched, and a candidate is reported '
+        'unscored for the whole ranking, so one cold batch would drop it '
+        'from every row rather than from its own. Ask about fewer entities '
+        'at a time'
+    ),
 }
 
 
@@ -221,6 +230,8 @@ def _worded(code: str, details: dict[str, Any]) -> str | None:
     said = details.get('rule', details.get('remedy'))
     if said == 'most_entities' and details.get('gathered_times', 1) != 1:
         said = 'most_entities_parts'
+    if said == 'batched_part' and details.get('kind') == 'ranking':
+        said = 'batched_part_ranking'
     return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
 
 
@@ -473,6 +484,17 @@ SAID: dict[str, dict[str | None, str]] = {
     # The client's notices of what a request leaves out, which the core
     # gives from T1.28a, in the client's words (SDMWarning, as the client
     # shows them).
+    # A ranking's candidates left out, unscored (T2.8): `predict` words it
+    # naming each candidate as the caller gave it; these words, by the
+    # candidates' positions among those given, are for a call that has no
+    # candidates to name.
+    'CANDIDATES_UNSCORED': {
+        None: (
+            'the candidates at positions {candidates!c} among those given are '
+            'left out of this ranking, unscored: the context sampled for each '
+            'holds one answer only.'
+        )
+    },
     'CONTEXT_CAPPED': {
         None: (
             '{cap:,} context examples were gathered, which is all this route '
@@ -847,11 +869,15 @@ def warn_from_core(
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     held: list[dict[str, Any]] | None = None,
+    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
     may show itself, kept in ``held`` when it is given (:func:`warn_held`).
-    Each code given is added to ``given``, shown or not."""
+    Each code given is added to ``given``, shown or not. A warning of a code
+    ``words`` names is said by its function, from its decoded fields, in
+    place of :data:`SAID`'s template (none of them a code :data:`GROUPED`
+    holds)."""
     message = codec.read(control, attachments)
     # Warnings of a code GROUPED holds, one after another with the same
     # values of its fields, are shown as one.
@@ -885,6 +911,14 @@ def warn_from_core(
                 _Words().format(opening, **first)
                 + between.join(said(warning) for warning in together)
                 + closing
+            )
+        elif words is not None and code in words:
+            [warning] = together
+            text = words[code](
+                {
+                    name: _detail(value)
+                    for name, value in warning.get('fields', {}).items()
+                }
             )
         else:
             [warning] = together

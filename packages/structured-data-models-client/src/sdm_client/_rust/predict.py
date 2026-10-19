@@ -201,6 +201,14 @@ def _as_answered(row: dict[str, Any]) -> Any:
     return row.get('prediction')
 
 
+def _mapping(text: str) -> dict[Any, Any]:
+    r"""An item's rankings member as the reference's item holds it, from
+    the JSON text the core gives: an object, or, where a key is not text,
+    the list of its pairs."""
+    read = json.loads(text)
+    return dict(read)
+
+
 def _id(row: dict[str, Any]) -> Any:
     r"""A row's id as the reference's item holds it: where the core's ids
     are not all of one type, or one is of another than an integer or text
@@ -255,10 +263,10 @@ def predict(
         raise RouteError(
             'predict on the core needs a request materialize built on the core'
         )
-    # A forecast the core gathered is held as one request per step (T1.36
-    # fix 21), which the core predicts in one run, step by step; a request
-    # of more rows than one call scores, as each call's payload (T2.8c),
-    # which the core predicts in one run, call by call.
+    # A forecast or a ranking the core gathered is held as one request per
+    # part (T1.36 fix 21, T2.8), which the core predicts in one run, part
+    # by part; a request of more rows than one call scores, as each call's
+    # payload (T2.8c), which the core predicts in one run, call by call.
     steps = request.parts if request.parts is not None else (request,)
     batched = state.get('batches')
     held = []
@@ -270,6 +278,23 @@ def predict(
             )
         held.append((payloads[0], step.query))
     [(payload, query), *later] = held
+    ranking = state.get('ranking')
+    # A ranking's candidates, by their position among those given, as the
+    # caller gave them: the core names each by its position.
+    given: dict[int, Any] = (
+        {}
+        if ranking is None or request._decomposition is None
+        else dict(
+            zip(
+                ranking['positions'],
+                (about for _, about in request._decomposition.parts),
+                strict=True,
+            )
+        )
+    )
+    # The candidates the core left out, unscored, which it names before any
+    # call is made: the calls are the others', in order.
+    cold: list[int] = []
     # A model handle is the host's object; its id, or the id given, is the
     # core's to check.
     model_id = model if isinstance(model, str) else spec_for(model).model_id
@@ -278,8 +303,9 @@ def predict(
 
     def model_call(body: bytes) -> bytes:
         nonlocal calls
-        # A forecast's steps are called in order, one call each, so the
-        # call is the step a refusal of the endpoint is said of.
+        # A forecast's steps, and a ranking's questions but those left out,
+        # are called in order, one call each, so the call is the part a
+        # refusal of the endpoint is said of.
         calls += 1
         # What failed is noted inside the handlers and raised after them, so
         # the transport's exception, whose text the endpoint wrote, is not
@@ -325,17 +351,29 @@ def predict(
             return b'[' * _ENCODED_DEPTH + b']' * _ENCODED_DEPTH
         if transport_failed:
             raise TransportFailed
+        raised: StructuredDataError | None = failure
         if refused is not None:
             # Built outside the handler, so nothing failing in the copy is
             # chained to the transport's exception. The core is told the
             # endpoint's status, so it ends the run carrying the answers of
             # the calls before this one (T2.8c), which this raises on.
             raised = _refusal(refused)
-            raised._forecast_step = calls  # type: ignore[attr-defined]
-            raise Refused(raised, refused.status_code)
-        if failure is not None:
-            failure._forecast_step = calls  # type: ignore[attr-defined]
-            raise Refused(failure)
+        if raised is not None:
+            # The call a refusal is said of: a forecast's step, or a
+            # ranking's candidate, with how many were answered before it.
+            if ranking is None:
+                raised._forecast_step = calls  # type: ignore[attr-defined]
+            else:
+                asked = [at for at in ranking['positions'] if at not in cold]
+                raised._ranking_candidate = asked[calls - 1]  # type: ignore[attr-defined]
+                if calls > 1:
+                    raised.details = {
+                        **(raised.details or {}),
+                        'parts_answered': calls - 1,
+                    }
+            raise Refused(
+                raised, None if refused is None else refused.status_code
+            )
         if unexpected is not None:
             raise Refused(unexpected)
         return _encoded(answer)
@@ -373,7 +411,37 @@ def predict(
             operation['state']['batches'].append(
                 {'payload': at, 'rows': rows, 'request_id': _request_id()}
             )
-    if request.parts is not None:
+    if request.parts is not None and ranking is not None:
+        operation['state']['ranking'] = {
+            'value': ranking['values'][0],
+            'parts': [],
+        }
+        if ranking.get('top_k') is not None:
+            operation['state']['ranking']['top_k'] = ranking['top_k']
+        for number, ((more, asked), position, named) in enumerate(
+            zip(
+                later,
+                ranking['positions'][1:],
+                ranking['values'][1:],
+                strict=True,
+            ),
+            start=2,
+        ):
+            at = 2 * number - 1
+            attachments[at] = _payload(more)
+            attachments[at + 1] = codec.attachment(asked)
+            # Each question's call its own id, drawn as the adapter draws
+            # one for every call, in order.
+            operation['state']['ranking']['parts'].append(
+                {
+                    'candidate': position,
+                    'value': named,
+                    'payload': at,
+                    'query': at + 1,
+                    'request_id': _request_id(),
+                }
+            )
+    elif request.parts is not None:
         operation['state']['forecast'] = []
         for number, (more, asked) in enumerate(later, start=2):
             at = 2 * number - 1
@@ -389,14 +457,34 @@ def predict(
                     'request_id': _request_id(),
                 }
             )
+
+    def unscored(fields: dict[str, Any]) -> str:
+        # The core's notice of the candidates it left out, by position, said
+        # naming each as the caller gave it, as the client says it.
+        cold.extend(fields['candidates'])
+        return _unscored([given[at] for at in fields['candidates']])
+
     try:
-        finished = run(operation, attachments, model=model_call)
+        finished = run(
+            operation,
+            attachments,
+            model=model_call,
+            words={'CANDIDATES_UNSCORED': unscored},
+        )
     except Exception as error:
         # Whatever the call raised, the answers before it are put on it.
         _carry_the_answers(error, request.parts is not None)
         raise
     answered = finished.result
     metadata = json.loads(finished.take(answered['metadata']))
+    if ranking is not None:
+        # The core's rows are ordered by row_index; a ranking's items keep
+        # the order the answers named them in.
+        rows = sorted(
+            _rows(finished.take(answered['result'])),
+            key=lambda row: row['answer_index'],
+        )
+        return _ranked(answered, rows, metadata, given)
     return _result(
         _rows(finished.take(answered['result'])),
         model=answered['model'],
@@ -436,6 +524,15 @@ def _result(
                 probabilities=None
                 if row.get('probabilities') is None
                 else dict(row['probabilities']),
+                # An item's scores and rankings (T2.8), each mapping given
+                # as the JSON text of the reference's item value: an object,
+                # or the list of its pairs where a key is not text.
+                scores=None
+                if row.get('scores') is None
+                else tuple(row['scores']),
+                rankings=None
+                if row.get('rankings') is None
+                else tuple(_mapping(text) for text in row['rankings']),
             )
             for row in rows
         ],
@@ -445,6 +542,79 @@ def _result(
     # A forecast's answer names its step, rows or none (`_by_step`).
     result._names_its_step = by_step
     return result
+
+
+def _ranked(
+    answered: dict[str, Any],
+    rows: list[dict[str, Any]],
+    metadata: dict[str, Any],
+    given: dict[int, Any],
+) -> PredictionResult:
+    r"""A ranking's result as the client gives it (``_ranked``): each row's
+    candidates, best first, as the caller gave them (``given``, by the
+    position the result names each by), under ``prediction`` and, with each
+    one's score, under ``rankings``, each where the outputs name it; the
+    candidates left out, unscored, as given (by their positions among those
+    given)."""
+    from sdm_api.generated.tfm_api import PredictionItem
+
+    from sdm_client.result import PredictionResult
+
+    wanted = tuple(answered['outputs'])
+    items = []
+    for row in rows:
+        chosen = [given[at] for at in row['candidates']]
+        items.append(
+            PredictionItem(
+                row_index=row['row_index'],
+                id=_id(row),
+                prediction=chosen if 'prediction' in wanted else None,
+                rankings=(
+                    tuple(
+                        {'candidate': candidate, 'score': score}
+                        for candidate, score in zip(
+                            chosen, row['scores'], strict=True
+                        )
+                    )
+                    if 'rankings' in wanted
+                    else None
+                ),
+            )
+        )
+    return PredictionResult(
+        model=answered['model'],
+        request_id=answered['request_id'],
+        items=items,
+        metadata=metadata,
+        outputs=wanted,
+        unscored_candidates=[
+            given[at] for at in answered.get('unscored_candidates', ())
+        ],
+    )
+
+
+def _unscored(cold: list[Any]) -> str:
+    r"""The words of the notice of a ranking's candidates left out,
+    unscored, naming each as the caller gave it, as the client's
+    ``_candidates_no_context_teaches`` says them."""
+    from sdm_client.client import _SCORE_THE_UNSCORED
+
+    many = len(cold) > 1
+    named = ', '.join(repr(candidate) for candidate in cold[:-1])
+    which = (
+        f'candidates {named} and {cold[-1]!r} are'
+        if many
+        else f'candidate {cold[0]!r} is'
+    )
+    them = 'them' if many else 'it'
+    return (
+        f'{which} left out of this ranking, unscored: the context sampled '
+        f'for {"each" if many else "it"} holds one answer only, nearly '
+        f'always because no entity in it linked to the candidate in the '
+        f'window, and a classification needs two to learn from. No call was '
+        f'sent for {them}, so each row ranks only the rest, and the '
+        f"result's unscored_candidates names {them}. {_SCORE_THE_UNSCORED}"
+    )
 
 
 def _carry_the_answers(error: Exception, by_step: bool) -> None:

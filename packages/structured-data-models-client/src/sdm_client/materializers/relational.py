@@ -265,8 +265,14 @@ class RelationalMaterializer:
         indices: Sequence[Any],
         num_context_samples: int | None,
         options: dict[str, Any],
+        candidates: Sequence[Any] | None = None,
     ) -> Request:
-        r"""Gather the selected entities and return their encoded request."""
+        r"""Gather the selected entities and return their encoded request.
+
+        ``candidates``, a ranking's, are the core's to ask after (T2.8), on
+        the core route only; the old route asks a ranking in parts before it
+        comes here.
+        """
         unknown = sorted(set(options) - self._MATERIALIZE_OPTIONS)
         if unknown:
             raise StructuredDataError(
@@ -290,7 +296,7 @@ class RelationalMaterializer:
             from sdm_client._rust import materialize as on_the_core
 
             payloads, core_state = on_the_core.gather(
-                self, query, indices, num_context_samples, options
+                self, query, indices, num_context_samples, options, candidates
             )
             windowed, entity_table = on_the_core.asked(query, core_state)
         else:

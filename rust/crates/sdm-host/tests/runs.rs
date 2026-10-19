@@ -632,6 +632,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 query,
                 forecast: None,
                 batches: None,
+                ranking: None,
             },
             query: None,
         }))
@@ -714,6 +715,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
             most_parts: None,
             most_entities: None,
             most_calls: None,
+            candidates: None,
             sampler_state: None,
         }),
         vec![],

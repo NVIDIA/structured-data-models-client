@@ -24,6 +24,8 @@ fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
         id: Entity::Integer(id),
         prediction,
         probabilities: None,
+        scores: None,
+        rankings: None,
     }
 }
 
