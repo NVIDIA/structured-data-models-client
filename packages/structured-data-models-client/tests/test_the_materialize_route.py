@@ -217,6 +217,31 @@ def test_lag_timesteps_builds_the_request_the_old_route_builds(
     )
 
 
+@pytest.mark.parametrize(
+    ('value', 'reason'),
+    [
+        (-1, 'negative'),
+        (1.5, 'not_a_whole_number'),
+        (2.0, 'not_a_whole_number'),
+        (True, 'not_a_whole_number'),
+        ('2', 'not_a_number'),
+    ],
+)
+def test_a_refused_lag_is_said_plainly_under_the_reference_s_code(
+    monkeypatch: pytest.MonkeyPatch, value: Any, reason: str
+) -> None:
+    # T2.9: the reference's engine refuses these with Python's own errors
+    # (a TypeError, a ValueError), INVALID_REQUEST; the core's refusal has
+    # the code, and this client says what lag_timesteps takes.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(lag_timesteps=value)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['field'] == 'lag_timesteps'
+    assert refused.value.details['reason'] == reason
+    assert 'a whole number of zero or more' in str(refused.value)
+
+
 def test_a_nan_lag_is_refused_on_the_core_route_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

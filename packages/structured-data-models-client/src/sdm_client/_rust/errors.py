@@ -144,6 +144,19 @@ _TOO_LARGE = (
     'bytes; reduce the number of tables in the graph, their columns, the '
     'neighbourhood sampled or the context gathered (num_context_samples)'
 )
+#: ``lag_timesteps`` refused (T2.9): the reference's engine says these with
+#: Python's own errors (a TypeError's ``'<' not supported between ...`` or
+#: ``unsupported operand type(s) for *``, an OverflowError), which this
+#: client says plainly, the code the reference's.
+_LAG = (
+    'lag_timesteps is how many past steps of the target are added as '
+    'features, a whole number of zero or more; this one is refused '
+    '({reason})'
+)
+_LAG_RANGE = (
+    'lag_timesteps reaches further back than a time can be held (before '
+    '1677); ask for fewer steps'
+)
 _SIZE = (
     'Context size exceeds the 30MB limit. This call is {bytes:,} bytes, and '
     'the endpoint takes at most {limit:,}. '
@@ -269,6 +282,8 @@ WORDED: dict[tuple[str, ...], str] = {
         'from every row rather than from its own. Ask about fewer entities '
         'at a time'
     ),
+    ('INVALID_REQUEST', 'lag_timesteps'): _LAG,
+    ('VALUE_OUT_OF_RANGE', 'lag_timesteps'): _LAG_RANGE,
 }
 
 
