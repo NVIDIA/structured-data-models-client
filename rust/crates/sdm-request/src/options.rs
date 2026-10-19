@@ -407,8 +407,8 @@ pub struct Options {
     pub hop_shuffle: bool,
     /// A classification's.
     pub class_shuffle: bool,
-    /// A regression's.
-    pub target_transforms: Vec<String>,
+    /// A regression's; a null one is none.
+    pub target_transforms: Vec<Option<String>>,
     /// A regression's.
     pub output_type: String,
 }
@@ -421,7 +421,7 @@ impl Default for Options {
             category_shuffle: false,
             hop_shuffle: false,
             class_shuffle: false,
-            target_transforms: vec!["quantile".to_owned()],
+            target_transforms: vec![Some("quantile".to_owned())],
             output_type: "median".to_owned(),
         }
     }
@@ -436,14 +436,58 @@ fn option_refused(key: &str, reason: &'static str) -> CoreError {
     invalid("inference_config", reason).with_field("key", Detail::text(key))
 }
 
-/// A value the engine's validation coerces from text, which this core does
-/// not read (pydantic's lax text coercions): refused by name.
-fn coerced_from_text(key: &str) -> CoreError {
-    sdm_engine::not_yet("inference_config_text").with_field("key", Detail::text(key))
+/// A boolean option given as text, read as the engine's validation
+/// (pydantic's lax mode) reads it: `0`, `off`, `f`, `false`, `n` and `no`
+/// are false, `1`, `on`, `t`, `true`, `y` and `yes` true, in any case of
+/// letters; any other text is refused, one with white space around it too.
+fn boolean_text(text: &str) -> Option<bool> {
+    const FALSE: [&str; 6] = ["0", "off", "f", "false", "n", "no"];
+    const TRUE: [&str; 6] = ["1", "on", "t", "true", "y", "yes"];
+    if FALSE.iter().any(|w| w.eq_ignore_ascii_case(text)) {
+        Some(false)
+    } else if TRUE.iter().any(|w| w.eq_ignore_ascii_case(text)) {
+        Some(true)
+    } else {
+        None
+    }
 }
 
-/// A boolean option: a JSON boolean, or a number equal to 0 or 1, as the
-/// engine's validation takes one.
+/// A whole number given as text, read as the engine's validation
+/// (pydantic's lax mode) reads it: white space around it dropped (Unicode's,
+/// as `str::trim` drops it), then an optional sign and ASCII digits, which
+/// may be followed by a point and one or more zeros; `None` for any other
+/// text, and `Err` with the sign for a value past `i128`, which no option
+/// takes.
+fn whole_text(text: &str) -> Option<Result<i128, bool>> {
+    let text = text.trim();
+    let (whole, fraction) = match text.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (text, None),
+    };
+    if fraction.is_some_and(|f| f.is_empty() || f.bytes().any(|b| b != b'0')) {
+        return None;
+    }
+    let (negative, digits) = match whole.as_bytes().first() {
+        Some(b'-') => (true, &whole[1..]),
+        Some(b'+') => (false, &whole[1..]),
+        _ => (false, whole),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let digits = digits.trim_start_matches('0');
+    if digits.is_empty() {
+        return Some(Ok(0));
+    }
+    Some(match digits.parse::<i128>() {
+        Ok(n) if negative => Ok(-n),
+        Ok(n) => Ok(n),
+        Err(_) => Err(negative),
+    })
+}
+
+/// A boolean option: a JSON boolean, a number equal to 0 or 1, or text
+/// [`boolean_text`] reads, as the engine's validation takes one.
 fn boolean(key: &str, value: &Value) -> Result<bool, CoreError> {
     match value {
         Value::Bool(b) => Ok(*b),
@@ -457,21 +501,25 @@ fn boolean(key: &str, value: &Value) -> Result<bool, CoreError> {
                 Err(option_refused(key, "not_a_boolean"))
             }
         }
-        Value::Text(_) => Err(coerced_from_text(key)),
+        Value::Text(text) => boolean_text(text).ok_or_else(|| option_refused(key, "not_a_boolean")),
         _ => Err(option_refused(key, "not_a_boolean")),
     }
 }
 
 /// `num_estimators`: a whole number from 1 to 4, given as an integer, a
-/// float with no fraction or a boolean (as 0 or 1), as the engine's
-/// validation takes it.
+/// float with no fraction, a boolean (as 0 or 1) or text [`whole_text`]
+/// reads, as the engine's validation takes it.
 fn estimators(key: &str, value: &Value) -> Result<u64, CoreError> {
     let n = match value {
         Value::Bool(b) => i128::from(*b),
         Value::Number(token) => {
             whole(token).ok_or_else(|| option_refused(key, "not_a_whole_number"))?
         }
-        Value::Text(_) => return Err(coerced_from_text(key)),
+        Value::Text(text) => match whole_text(text) {
+            Some(Ok(n)) => n,
+            Some(Err(_)) => return Err(option_refused(key, "out_of_range")),
+            None => return Err(option_refused(key, "not_a_whole_number")),
+        },
         _ => return Err(option_refused(key, "not_a_whole_number")),
     };
     if !(1..=4).contains(&n) {
@@ -509,11 +557,10 @@ pub fn options(kind: Kind, given: Option<&Value>) -> Result<Options, CoreError> 
                     .iter()
                     .map(|item| match item {
                         // A null transform, which the engine's type takes
-                        // and sends as null, is refused by name: the
-                        // payload's transforms are names (register P1B-3).
-                        Value::Null => Err(sdm_engine::not_yet("target_transform_null")),
+                        // (`TargetTransform | None`) and writes as null.
+                        Value::Null => Ok(None),
                         Value::Text(name) if TRANSFORMS.contains(&name.as_str()) => {
-                            Ok(name.clone())
+                            Ok(Some(name.clone()))
                         }
                         _ => Err(option_refused(key, "not_a_transform")),
                     })
@@ -633,7 +680,7 @@ mod tests {
         assert!(o.column_shuffle);
         assert_eq!(
             o.target_transforms,
-            vec!["power".to_owned(), "clip".to_owned()]
+            vec![Some("power".to_owned()), Some("clip".to_owned())]
         );
         assert_eq!(o.output_type, "quantiles");
         assert_eq!(
@@ -664,14 +711,66 @@ mod tests {
             assert_eq!(e.code, ErrorCode::InvalidRequest, "{text}");
             assert_eq!(rule(&e), None, "{text}");
         }
-        for text in [
-            r#"{"column_shuffle": "yes"}"#,
-            r#"{"num_estimators": "4"}"#,
-            r#"{"target_transforms": [null]}"#,
+        // A null transform is taken, and written as null (T2.13).
+        let o = options(
+            Kind::Regression,
+            Some(&read(r#"{"target_transforms": ["quantile", null]}"#)),
+        )
+        .unwrap();
+        assert_eq!(o.target_transforms, vec![Some("quantile".to_owned()), None]);
+    }
+
+    /// Text read as pydantic 2.13's lax mode reads it into the engine's
+    /// config classes, each answer probed on the reference (T2.13).
+    #[test]
+    fn an_option_given_as_text_is_read_as_the_engine_reads_it() {
+        let shuffle = |text: &str| {
+            let given = Value::Object(vec![("column_shuffle".into(), Value::Text(text.into()))]);
+            options(Kind::Regression, Some(&given)).map(|o| o.column_shuffle)
+        };
+        for (text, wanted) in [
+            ("true", true), ("True", true), ("TRUE", true), ("tRuE", true), ("yes", true),
+            ("YES", true), ("YeS", true), ("on", true), ("ON", true), ("oN", true), ("t", true),
+            ("T", true), ("y", true), ("Y", true), ("1", true), ("false", false),
+            ("False", false), ("no", false), ("off", false), ("oFf", false), ("f", false),
+            ("F", false), ("n", false), ("N", false), ("0", false),
         ] {
-            let e = options(Kind::Regression, Some(&read(text))).unwrap_err();
-            assert_eq!(e.code, ErrorCode::UnsupportedRequest, "{text}");
-            assert!(rule(&e).is_some(), "{text}");
+            assert_eq!(shuffle(text).unwrap(), wanted, "{text:?}");
+        }
+        for text in [
+            " true", "true ", " 1", "1 ", "1.0", "0.0", "2", "01", "00", "+1", "-0", "",
+            " ", "truee", "true\0", "\u{ff54}rue", "\u{131}", "N\u{43e}",
+        ] {
+            let e = shuffle(text).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidRequest, "{text:?}");
+            assert_eq!(rule(&e), None, "{text:?}");
+        }
+        let estimators = |text: &str| {
+            let given = Value::Object(vec![("num_estimators".into(), Value::Text(text.into()))]);
+            options(Kind::Binary, Some(&given)).map(|o| o.num_estimators)
+        };
+        let leading = format!("{}1", "0".repeat(5_000));
+        for (text, wanted) in [
+            ("1", 1), (" 1", 1), ("1 ", 1), ("1.0", 1), ("2", 2), ("01", 1), ("+1", 1),
+            ("3", 3), ("+3", 3), (" 3 ", 3), ("3.0", 3), ("03", 3), ("4", 4), ("\t2\n", 2),
+            ("2.00", 2), ("00001", 1), ("3.0000", 3), ("3.0 ", 3), ("\u{a0}3", 3),
+            ("3\u{a0}", 3), ("\u{3000}3", 3), ("\u{2028}3", 3), ("\u{b}3", 3), ("\u{c}3", 3),
+            ("\u{85}3", 3), ("3\r", 3), ("0003.000", 3), ("+03.0", 3), ("4.00", 4),
+            ("3.0\n", 3), ("\n3.0", 3), (leading.as_str(), 1),
+        ] {
+            assert_eq!(estimators(text).unwrap(), wanted, "{text:?}");
+        }
+        let past = format!("1{}", "0".repeat(40));
+        for text in [
+            "0", "0.0", "00", "-0", "+0", "1_0", "1e0", "", " ", "\u{ff11}", "\u{663}", "-3",
+            "3.5", "0x3", "3_", "_3", "0b1", "5", "1_000", "1.", ".5e1", "5e-1", "2e0", "inf",
+            "nan", "4.0000000000000001", "3.9999999999999999", ".0", "3.", "3.0.0", "- 3",
+            "+-3", "3 .0", "\u{1c}3", "2.0e0", "4.", "-1.0", "1.00000000000000000000000000000001",
+            "1000000000000000000000000000000", "Infinity", "\u{663}.0", "true", past.as_str(),
+        ] {
+            let e = estimators(text).unwrap_err();
+            assert_eq!(e.code, ErrorCode::InvalidRequest, "{text:?}");
+            assert_eq!(rule(&e), None, "{text:?}");
         }
     }
 

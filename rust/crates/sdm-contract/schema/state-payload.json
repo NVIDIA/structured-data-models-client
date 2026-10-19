@@ -617,9 +617,13 @@
                   "type": "boolean"
                 },
                 "target_transforms": {
+                  "description": "Each a transform's name, or null, which the engine's type takes and\nwrites as null (T2.13).",
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "output_type": {

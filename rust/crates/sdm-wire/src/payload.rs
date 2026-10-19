@@ -286,7 +286,9 @@ pub struct InferenceConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "bool")]
     pub class_shuffle: Option<bool>,
-    pub target_transforms: Vec<String>,
+    /// Each a transform's name, or null, which the engine's type takes and
+    /// writes as null (T2.13).
+    pub target_transforms: Vec<Option<String>>,
     pub output_type: String,
 }
 
