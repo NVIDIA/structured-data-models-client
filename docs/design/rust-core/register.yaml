@@ -6539,35 +6539,107 @@ entries:
     VALUE_OUT_OF_RANGE); no contract case asks such a lag.
 
 - id: P2B-19
-  title: A NaN lag_timesteps is refused on the core route, where the reference adds no lag
+  title: A NaN or infinite lag_timesteps is refused on the core route by name, where the reference adds no lag for a NaN and refuses an infinity after labelling
   kind: change
   old_behavior: >-
-    The reference compares lag_timesteps with zero (lag < 0, then lag > 0);
-    a float NaN is neither, so it adds no lagged column and answers.
+    The reference compares lag_timesteps with zero (lag < 0, then lag > 0)
+    once the context is labelled: a float NaN is neither, so it adds no
+    lagged column and answers; +inf is refused INVALID_REQUEST when the
+    window is multiplied by it (a TypeError, "unsupported operand type(s)
+    for *: 'float' and 'DateOffset'"), and -inf as negative.
   new_behavior: >-
     On the core route the call's option values travel to the core as JSON
-    (Materialize.values, contract v27), which holds no NaN, so the Python
-    host refuses the call INVALID_REQUEST as the client's transport refuses
-    a value JSON cannot hold (codec.attachment), before anything is read.
-    The core itself reads a NaN token as no lag (AskedLag::of), so the fix,
-    should the owner want parity, is the host writing a non-finite option
-    value as a token the core reads (NaN, 1e400), as predict's answers
-    travel; that changes every option's non-finite value, so it is not made
-    here.
+    (Materialize.values, contract v27), which holds no NaN and no infinity,
+    so the Python host refuses each INVALID_REQUEST before anything is
+    read, naming the option (details field lag_timesteps, "lag_timesteps
+    carries a value that cannot be sent as JSON (a NaN, an infinity, or a
+    type JSON has no form for)"; codec.attachment names the first option
+    value it cannot write). The infinities keep the reference's code; the
+    NaN is refused where the reference answers.
   affected_inputs: >-
-    PredictiveQuery.materialize on the core route with
-    lag_timesteps=float('nan').
+    PredictiveQuery.materialize on the core route with lag_timesteps a
+    float NaN or infinity, or a Decimal NaN or infinity (which the
+    reference fails INTERNAL_ERROR on).
   cases: []
   refs: ['packages/structured-data-models-client/src/sdm_client/_rust/codec.py#attachment', 'packages/structured-data-models-client/tests/test_the_materialize_route.py#test_a_nan_lag_is_refused_on_the_core_route_only']
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
   notes: >-
-    Approver: owner (a refusal of an input the reference accepts; under
-    KO2-70 the orchestrator decides). Recommended: approve as a permanent
-    difference, a NaN step count being no meaningful request, or fix as
-    described. Diagnostic test: test_a_nan_lag_is_refused_on_the_core_route_only.
-    Measured at T2.9.
+    Approved as a permanent difference by the orchestrator under the
+    owner's standing delegation (KO2-70) on 2026-10-19: a NaN or an
+    infinity is no number of steps, so a caller who passes one has made a
+    mistake the reference hides (a NaN adds no lag) or reports in Python's
+    own words; the core route names the option before anything is read.
+    Diagnostic test: test_a_nan_lag_is_refused_on_the_core_route_only (NaN,
+    +inf and -inf). Measured at T2.9; the infinities noted by round 1's
+    Claude review (P3-1).
+
+# --- lane F entries (P2F-1..19) ---
+
+- id: P2F-1
+  title: An average's, a minimum's or a maximum's lagged target is on its own row, where the reference moves it to the first rows
+  kind: change
+  old_behavior: >-
+    With lag_timesteps, the reference's engine labels each step's target
+    through execute_join, which drops the examples whose window holds no
+    value, and lines the remaining values up by position in its frame of
+    the steps (pd.DataFrame, then pd.concat with the examples). For an
+    average, a minimum or a maximum, or a comparison of one, each value
+    lands on the first rows rather than its own, and the last rows, often
+    the entities predicted for, get none (user 0's predicted row at
+    2023-08-01 gets no lag where its window holds 112.0).
+  new_behavior: >-
+    The core puts each step's value on the row it belongs to, and none on
+    a row whose window holds no value (sdm-core's lag::Lag::columns, by the
+    labels' mask). A sum's and a count's lags, which every example has,
+    and their comparisons, are the reference's.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route of a temporal query whose
+    target is AVG, MIN or MAX over a window, or a comparison of one, with
+    lag_timesteps of 1 or more.
+  cases: [forecast.lag-average-empty-windows]
+  refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/rfm.py#KumoRelational.add_lagged_target', 'packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/query/pandas_executor.py#PQueryPandasExecutor.execute_join']
+  more_exact:
+  - case: forecast.lag-average-empty-windows
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: forecast.lag-average-empty-windows@sqlite
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: forecast.lag-average-empty-windows@postgres
+    runners: [python-core]
+    fields:
+    - 'public.payloads/*/2/context/instance_table/rows/*/4'
+    - 'public.payloads/*/2/context/instance_table/rows/*/5'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/3'
+    - 'public.payloads/*/2/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
+  notes: >-
+    Decided by the orchestrator under the owner's standing delegation
+    (KO2-70) on 2026-10-19: the old client tells the model the wrong row's
+    past for these targets, so a user's prediction is conditioned on
+    another entity's history; the core gives each row its own. Held by
+    sdm-core's lag tests (a_maximum_s_values_keep_their_rows_across_gaps,
+    an_average_s_value_is_on_its_own_example) and the route test
+    test_an_average_s_lag_is_each_row_s_own_window; measured by T2.9's
+    40-source differential (every payload difference is such a column),
+    and the test author's case forecast.lag-average-empty-windows (each
+    row's lag computed by hand, on all three databases and both hosts).
+    Fixed in T2.9 fix 1.
 
 # --- lane D entries (P2D-1..19) ---
 
