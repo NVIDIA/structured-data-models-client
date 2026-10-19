@@ -195,6 +195,46 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
 
 
 @pytest.mark.parametrize(
+    'query',
+    [
+        QUERY,
+        BINARY,
+        'PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id',
+        'PREDICT users.age FOR EACH users.user_id',
+    ],
+)
+def test_lag_timesteps_builds_the_request_the_old_route_builds(
+    monkeypatch: pytest.MonkeyPatch, query: str
+) -> None:
+    # T2.9: the target's past as features, __kumo_arl0__ and __kumo_arl1__
+    # after the label in both halves, the same request the old route
+    # builds; a static target takes the option and adds nothing.
+    payload = _both_routes(monkeypatch, query=query, lag_timesteps=2)
+    columns = payload['context']['instance_table']['columns']
+    lagged = [c for c in columns if c.startswith('__kumo_arl')]
+    assert lagged == ([] if 'users.age' in query else ['__kumo_arl0__', '__kumo_arl1__'])
+
+
+def test_a_nan_lag_is_refused_on_the_core_route_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Register P2B-19 (proposed, diagnostic): the reference compares a NaN
+    # with zero both ways, finds neither, and adds no lag; the core route
+    # cannot send a NaN as the JSON the call's values travel in, and is
+    # refused as the client's transport refuses such a value.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(lag_timesteps=float('nan'))
+    assert refused.value.code == 'INVALID_REQUEST'
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if not _old_route_needs_the_engine():
+        columns = _materialize(lag_timesteps=float('nan'))._payloads[0][
+            'context'
+        ]['instance_table']['columns']
+        assert not [c for c in columns if c.startswith('__kumo_arl')]
+
+
+@pytest.mark.parametrize(
     ('options', 'rule'),
     [
         ({'num_neighbors': [8, 8]}, 'num_neighbors'),

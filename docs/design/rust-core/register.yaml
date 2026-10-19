@@ -6504,6 +6504,71 @@ entries:
     decision E52 keeps the spelling across a materializer's runs, so a
     second materialize reads none, as the reference; the ID is kept.
 
+- id: P2B-18
+  title: A lag reaching outside what a time holds is refused VALUE_OUT_OF_RANGE naming lag_timesteps, where the reference fails INTERNAL_ERROR
+  kind: change
+  old_behavior: >-
+    The reference's engine multiplies the target's window by
+    lag_timesteps and moves each anchor back by it (anchor_time -
+    lag_timesteps * offset); a lag that leaves pandas' nanosecond range
+    (10,000 thirty-day windows) or that the offset cannot be multiplied by
+    (2**63 and more) raises OverflowError, which the client refuses
+    INTERNAL_ERROR ("the relational engine failed while building this
+    request"), after the context is labelled.
+  new_behavior: >-
+    The core refuses the same lags at the same point, before the lag's
+    read, VALUE_OUT_OF_RANGE naming lag_timesteps, as it refuses every
+    time outside what nanoseconds since the epoch hold (sdm_engine's
+    out_of_range; a value past u64 in sdm-request's AskedLag::refusal, a
+    step count or time past range in sdm-core's lag module). The same
+    statements run before it.
+  affected_inputs: >-
+    PredictiveQuery.materialize of a temporal query on the core route with a
+    lag_timesteps whose windows reach outside 1677 to 2262, or of 2**63 or
+    more.
+  cases: []
+  refs: ['packages/structured-data-models-relational-engine/src/sdm_relational_engine/rfm/base/sampler.py#Sampler.sample_lagged_target', P1B-3]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer (both refuse the input; the core names the field and
+    a code that says what is wrong, where the reference reports its own
+    failure). Measured at T2.9 by its differential (lag_timesteps 10,000 and
+    2**64 on the shop base, reference INTERNAL_ERROR, core
+    VALUE_OUT_OF_RANGE); no contract case asks such a lag.
+
+- id: P2B-19
+  title: A NaN lag_timesteps is refused on the core route, where the reference adds no lag
+  kind: change
+  old_behavior: >-
+    The reference compares lag_timesteps with zero (lag < 0, then lag > 0);
+    a float NaN is neither, so it adds no lagged column and answers.
+  new_behavior: >-
+    On the core route the call's option values travel to the core as JSON
+    (Materialize.values, contract v27), which holds no NaN, so the Python
+    host refuses the call INVALID_REQUEST as the client's transport refuses
+    a value JSON cannot hold (codec.attachment), before anything is read.
+    The core itself reads a NaN token as no lag (AskedLag::of), so the fix,
+    should the owner want parity, is the host writing a non-finite option
+    value as a token the core reads (NaN, 1e400), as predict's answers
+    travel; that changes every option's non-finite value, so it is not made
+    here.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route with
+    lag_timesteps=float('nan').
+  cases: []
+  refs: ['packages/structured-data-models-client/src/sdm_client/_rust/codec.py#attachment', 'packages/structured-data-models-client/tests/test_the_materialize_route.py#test_a_nan_lag_is_refused_on_the_core_route_only']
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: owner (a refusal of an input the reference accepts; under
+    KO2-70 the orchestrator decides). Recommended: approve as a permanent
+    difference, a NaN step count being no meaningful request, or fix as
+    described. Diagnostic test: test_a_nan_lag_is_refused_on_the_core_route_only.
+    Measured at T2.9.
+
 # --- lane D entries (P2D-1..19) ---
 
 - id: P2D-1
