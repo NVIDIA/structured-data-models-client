@@ -9,7 +9,7 @@
 //! sdm-contract-run --providers
 //! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --database sqlite --out FILE CASE_OR_DIRECTORY...
-//! sdm-contract-run --database memory --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --database memory [--layer default] --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --kit DATABASE [--fault truncate|silent_capability] --out REPORT
 //! ```
 //!
@@ -29,7 +29,10 @@
 //! DuckDB base copied into the minimal non-SQL test provider
 //! ([`sdm_testkit::memory`]), through the second data layer swapped in at
 //! the composition root ([`sdm_testkit::layer`]), each observation keyed
-//! `<case>@memory`; a case that reads no data is not run there.
+//! `<case>@memory`; a case that reads no data is not run there. With
+//! `--layer default` the same provider runs through
+//! `sdm_host::default_root()`'s layer (`sdm-data`'s) instead, keyed the
+//! same, so the two runs differ in their data layer alone.
 //!
 //! `--replay` runs each case that runs on Postgres there, its fetches
 //! answered from a recording of a Postgres server's answers
@@ -86,6 +89,20 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         _ => (None, arguments),
     };
     let sqlite = database == Some("sqlite");
+    // The data layer a `--database memory` run composes: the second one
+    // (T2.7), or, with `--layer default`, the default root's.
+    let (root, arguments) = match arguments {
+        [flag, layer, rest @ ..] if flag == "--layer" && layer == "default" => {
+            if database != Some("memory") {
+                bail!("--layer default: only with --database memory");
+            }
+            (sdm_host::default_root(), rest)
+        }
+        [flag, layer, ..] if flag == "--layer" => {
+            bail!("--layer {layer}: the one layer to name is `default`")
+        }
+        _ => (sdm_testkit::layer::root(), arguments),
+    };
     let (recording, arguments) = match arguments {
         [flag, path, rest @ ..] if flag == "--replay" => (
             Some(replay::Recording::load(std::path::Path::new(path))?),
@@ -99,7 +116,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
         _ => bail!(
-            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite|memory | --replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
+            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --database memory [--layer default] | --replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
         ),
     };
     let mut partial = out.clone().into_os_string();
@@ -147,7 +164,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
                 }
                 let mut keyed = each.clone();
                 keyed.case.id = format!("{}@memory", each.case.id);
-                (host::run_memory(&each.case, &bases)?, keyed)
+                (host::run_memory(&each.case, &bases, &root)?, keyed)
             }
             None => (host::run(&each.case, &bases)?, each.clone()),
             Some(recording) => {

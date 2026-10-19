@@ -30,8 +30,8 @@ Both are dev-only, in `sdm-testkit`; nothing shipped reaches them (`l0_deps.py`:
 
 - **The provider passes the kit, including two schema tables over one source**: `t27_non_sql_provider.rs`'s `the_kit_passes_on_the_non_sql_provider` passes (every kit case, `key-counts.one-source-twice` among them), and `a_seeded_fault_fails_the_kit_on_the_non_sql_provider` passes (truncation and a silenced capability each fail the cases `expected.json` names).
   Beyond the kit, `memory_provider.rs`'s `two_schema_tables_over_one_source_predict_as_two_sources`: `shape.same-table-twice.buyers` with both schema tables reading `customers` (and `buyers` dropped) predicts exactly as over the two equal tables.
-- **The same prediction runs on the swapped layer**: not met as the acceptance test words it; `the_same_prediction_runs_on_the_swapped_layer` stays pending (below).
-  What holds (`memory_provider.rs`'s `a_prediction_is_duckdbs_but_for_its_drawn_examples`, on `base.binary` and `shape.same-table-twice.buyers`): every fetch planned as the typed request, no statement run; the description equal to DuckDB's; the prediction's result equal to DuckDB's; the materialized request and the model call body equal to DuckDB's but for `context`, the in-context examples.
+- **The same prediction runs on the swapped layer**: `the_same_prediction_runs_on_the_swapped_layer` passes, as the test author rewrote it (round 1, below): the provider on the swapped layer gives, whole, what it gives on the default layer (`--database memory --layer default`), and DuckDB's but for the drawn example rows.
+  What also holds (`memory_provider.rs`'s `a_prediction_is_duckdbs_but_for_its_drawn_examples`, on `base.binary` and `shape.same-table-twice.buyers`): every fetch planned as the typed request, no statement run; the description equal to DuckDB's; the prediction's result equal to DuckDB's; the materialized request and the model call body equal to DuckDB's but for `context`, the in-context examples.
 - **A guard shows no domain crate changed for it**: `no_domain_crate_changed_for_t2_7` passes on this branch (no `T2.7` commit touches a crate `l0_deps.py` classes as domain); `git diff --stat d339e88c..HEAD` touches `sdm-testkit`, `sdm-host`, `rust/Cargo.lock`, the kit file and docs only.
 
 ### Probes
@@ -46,10 +46,16 @@ Both are dev-only, in `sdm-testkit`; nothing shipped reaches them (`l0_deps.py`:
 - `pytest contract/tests -n 4 --dist loadfile` on that build: 4,543 pass; the 132 failures are this machine's environment, not the change: 118 refuse to run outside the recorded `ref-pandas3` cell (this venv's pyarrow is 26.0.0, the cell's 25.0.1), and the gate-mode tests' check 1 is reported as observed in no cell for the same reason.
   `tests/test_release_contract.py`'s two snapshot tests fail in the shared venv, whose packages are editable installs of another checkout; no Python file changes here.
 
+### Round 1 (the swapped prediction's test)
+
+The test author rewrote `the_same_prediction_runs_on_the_swapped_layer` (`T2.7 tests:`, cherry-picked unedited): the swapped run against the same provider on the default layer, whole, and against DuckDB but for the example rows.
+For it, `sdm-contract-run --database memory --layer default` runs the same provider through `sdm_host::default_root()` (`host::run_memory` takes the root), keyed `<case>@memory` as the swapped run is; the pending list is empty.
+The T2.7 tests, the Rust kit tests (both hosts' `t25_provider_kit`, DuckDB and SQLite) and the gate's rust-host leg pass at the new head.
+
 ### Deviations and questions
 
-- **The swapped prediction's acceptance test cannot pass as written** (`the_same_prediction_runs_on_the_swapped_layer`, pending): it asks the swapped run's `core.materialized` and `core.predicted` to equal DuckDB's whole, including the in-context examples, which are a seeded sample each provider draws its own way (DuckDB's reservoir, SQLite's RS-2 stream, Postgres's `setseed`, the fallback's RS-1).
+- **The swapped prediction's acceptance test, as first written, could not pass** (resolved in round 1): it asked the swapped run's `core.materialized` and `core.predicted` to equal DuckDB's whole, including the in-context examples, which are a seeded sample each provider draws its own way (DuckDB's reservoir, SQLite's RS-2 stream, Postgres's `setseed`, the fallback's RS-1).
   Matching DuckDB's would mean reimplementing DuckDB's reservoir sampler in the test provider.
-  Proposed to the test author: compare everything but `context` (as `memory_provider.rs` does), or compare the swapped run to the same provider on the default root, which is equal whole.
+  The test author took both proposals: everything but the example rows against DuckDB, and the whole run against the same provider on the default root.
 - **Found in the core, not changed here (a domain crate)**: `sdm-core/src/materialize.rs`'s `sampling_capabilities` refuses a provider that does not declare `time_bounds`, `sample_entities`, `neighbors` or `lookup` before it reads anything, even when the provider declares the in-memory fallback's limits, so a provider relying on the fallback cannot `materialize` (design choice 1 says such a request takes the fallback).
   This provider declares `time_bounds` and `sample_entities` itself instead; the core's check is for the orchestrator to route to its own package.

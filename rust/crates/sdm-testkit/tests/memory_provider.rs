@@ -22,7 +22,7 @@ use sdm_contract::data::{DataLayer, Dialect, ProviderChoice};
 use sdm_testkit::bases;
 use sdm_testkit::case::{self, Case};
 use sdm_testkit::host::{self, Answer, Observed};
-use sdm_testkit::layer::HostLayer;
+use sdm_testkit::layer::{self, HostLayer};
 use serde_json::{Value, json};
 
 fn repository() -> PathBuf {
@@ -63,7 +63,7 @@ fn a_prediction_is_duckdbs_but_for_its_drawn_examples() {
     for id in ["base.binary", "shape.same-table-twice.buyers"] {
         let given = case(id);
         let on_duckdb = host::run(&given, &bases).unwrap();
-        let swapped = host::run_memory(&given, &bases).unwrap();
+        let swapped = host::run_memory(&given, &bases, &layer::root()).unwrap();
         assert!(swapped.driver.is_none(), "{id}: the swapped run ran SQL");
         assert!(
             swapped
@@ -96,7 +96,7 @@ fn two_schema_tables_over_one_source_predict_as_two_sources() {
     // the same provider gives over the two tables.
     let bases = bases();
     let given = case("shape.same-table-twice.buyers");
-    let two_sources = host::run_memory(&given, &bases).unwrap();
+    let two_sources = host::run_memory(&given, &bases, &layer::root()).unwrap();
     let mut one_source = given.clone();
     one_source
         .input
@@ -113,7 +113,7 @@ fn two_schema_tables_over_one_source_predict_as_two_sources() {
             table["source"] = json!({"source": ["customers"]});
         }
     }
-    let swapped = host::run_memory(&one_source, &bases).unwrap();
+    let swapped = host::run_memory(&one_source, &bases, &layer::root()).unwrap();
     let read: Vec<&Value> = swapped
         .fetches
         .iter()

@@ -610,7 +610,8 @@ enum Source<'a> {
     Duck(&'a duckdb::Connection),
     Sqlite(&'a Sqlite),
     Replay(&'a Replay<'a>),
-    Memory(&'a Memory),
+    /// The non-SQL provider, through the composition root given.
+    Memory(&'a Memory, &'a CompositionRoot),
 }
 
 impl Source<'_> {
@@ -627,18 +628,18 @@ impl Source<'_> {
                 dialect: Dialect::new(Database::Postgres.name()),
             },
             // The non-SQL provider, a host provider, as it declares itself.
-            Source::Memory(_) => ProviderChoice::Host {
+            Source::Memory(..) => ProviderChoice::Host {
                 capabilities: Memory::capabilities(),
             },
         }
     }
 
-    /// The composition root a run over this source starts with: the
-    /// second data layer, for host providers alone, for the non-SQL
-    /// provider ([`crate::layer`], T2.7); `sdm-data`'s for every other.
+    /// The composition root a run over this source starts with: the one
+    /// the non-SQL provider's run was given (T2.7); `sdm-data`'s for every
+    /// other.
     fn root(self) -> CompositionRoot {
         match self {
-            Source::Memory(_) => crate::layer::root(),
+            Source::Memory(_, root) => root.clone(),
             _ => default_root(),
         }
     }
@@ -734,12 +735,13 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
 }
 
 /// Runs `case` as [`run`] runs it on DuckDB, over its DuckDB base copied
-/// into the minimal non-SQL test provider ([`crate::memory`], T2.7), and
-/// through the second data layer swapped in at the composition root
-/// ([`crate::layer`]): every operation the case names, its fetches
-/// answered from in-memory Arrow tables, never by a statement. Its run
-/// records no driver: nothing runs SQL.
-pub fn run_memory(case: &Case, bases: &Bases) -> Result<Observed> {
+/// into the minimal non-SQL test provider ([`crate::memory`], T2.7), every
+/// run started with `root`: the second data layer's
+/// ([`crate::layer::root`]) to run it swapped, or `default_root()`, over
+/// `sdm-data`, to run the same provider on the default layer. Every
+/// operation the case names, its fetches answered from in-memory Arrow
+/// tables, never by a statement; its run records no driver.
+pub fn run_memory(case: &Case, bases: &Bases, root: &CompositionRoot) -> Result<Observed> {
     let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
         bail!("{}: reads no data (names no describe_source)", case.id);
     };
@@ -756,7 +758,7 @@ pub fn run_memory(case: &Case, bases: &Bases) -> Result<Observed> {
     describe_on(
         case,
         spec,
-        Source::Memory(&memory),
+        Source::Memory(&memory, root),
         &mut DriverLog::default(),
         &edits,
     )
@@ -876,7 +878,7 @@ fn drive(
                             log_replayed(log, &replayed);
                             replayed.answer
                         }
-                        Source::Memory(memory) => {
+                        Source::Memory(memory, _) => {
                             let mut sets = BTreeMap::new();
                             for (id, fetched) in &keys {
                                 sets.insert(
