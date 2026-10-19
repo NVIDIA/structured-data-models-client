@@ -333,9 +333,6 @@ T28C_MULTICALL = (
 #: metadata (input.explanation and input.item_metadata), and U1's
 #: day-first warning kept on a refused query.
 T213_OPTIONS = (
-    'assuming.binary',
-    'assuming.no-examples',
-    'assuming.regression',
     'assuming.static',
     'config-text.accepted',
     'config-text.class-shuffle',
@@ -352,12 +349,7 @@ T213_OPTIONS = (
     'explain.not-answered',
     'explain.query',
     'explain.two-entities',
-    'filter.entity-aggregation',
-    'filter.entity-column',
-    'filter.entity-text',
     'filter.event-column',
-    'filter.matches-none',
-    'filter.ranking',
     'ids.absent',
     'ids.in-list-other-indices',
     'ids.one',

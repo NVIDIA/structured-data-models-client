@@ -5,10 +5,12 @@
 //! T2.13's exits on `rust-host` (the package's test author's), beside
 //! `contract/tests/test_t213_options.py`, which holds `python-core` to the
 //! same ones and the cases to what they name: the query and option long
-//! tail, "`entity_filter`" (a ranking's too), "`entity_ids`",
-//! "`assuming`", "`evaluate`", "`explain`", "`target_transform_null`",
-//! "`inference_config_text`", "`response_field` for explanations and item
-//! metadata" and U1, "cases per rule", both hosts.
+//! tail, "`entity_filter`" (a fact table's column, which the validator
+//! refuses; the filters the core answers, and ASSUMING's, are T2.13b's),
+//! "`entity_ids`", "`assuming`", "`evaluate`", "`explain`",
+//! "`target_transform_null`", "`inference_config_text`", "`response_field`
+//! for explanations and item metadata" and U1, "cases per rule", both
+//! hosts.
 //!
 //! - `rust_host_answers_each_case_as_the_reference_does_on_duckdb` and
 //!   `_on_sqlite`: this host runs each T2.13 case in process (`host::run`,
