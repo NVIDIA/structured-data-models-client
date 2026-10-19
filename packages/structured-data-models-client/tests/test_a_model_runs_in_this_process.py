@@ -326,6 +326,34 @@ def test_a_refusal_inside_a_session_is_filed_as_the_sessions(relational):
             )
 
 
+def test_each_session_call_takes_only_its_own_fields(relational):
+    """A session is created without inference options and scored without
+    the task it already holds; a NIM refuses either one sent."""
+    payload = _relational_payload()
+    created = {
+        name: payload[name] for name in ('model', 'task', 'schema', 'context')
+    }
+    scored = {'predict': payload['predict'], 'output': payload['output']}
+    with SDMClient.in_process(relational) as client:
+        transport = client._transport
+        session = transport.create_session(created)['session_id']
+        for call, extra in (
+            (
+                lambda: transport.create_session({**created, 'inference': {}}),
+                'inference',
+            ),
+            (
+                lambda: transport.session_predict(
+                    session, {**scored, 'task': payload['task']}
+                ),
+                'task',
+            ),
+        ):
+            error = refused(call)
+            assert (error.code, error.status_code) == ('VALIDATION_FAILED', 422)
+            assert f'{extra}: Extra inputs are not permitted' in error.message
+
+
 def test_a_task_the_model_was_not_loaded_for_is_refused(sdm):
     regressor = sdm.models.KumoTabular(
         task='regression', size='small', pretrained=False, device='cpu'
@@ -443,14 +471,62 @@ def _without(table: dict, column: str) -> None:
             lambda p: p['predict']['related_tables'].pop('orders'),
             ('INVALID_SCHEMA', 422, "reference table(s) ['orders']"),
         ),
+        (
+            'relational',
+            lambda p: p['task'].update(entity_table_names=['orders']),
+            (
+                'TASK_SCHEMA_MISMATCH',
+                422,
+                "entity table 'orders' but the instance table links to 'users'",
+            ),
+        ),
+        (
+            'relational',
+            lambda p: p['task'].update(top_k=3),
+            ('UNSUPPORTED_FEATURE', 422, "task options: ['top_k']"),
+        ),
+        (
+            'relational',
+            lambda p: p['task'].update(anchor_time_column='nowhere'),
+            ('TASK_SCHEMA_MISMATCH', 422, "anchor time column 'nowhere'"),
+        ),
+        (
+            'relational',
+            lambda p: p['task']['target'].update(dtype='timestamp[us]'),
+            (
+                'TASK_SCHEMA_MISMATCH',
+                422,
+                "'regression' targets declared as 'timestamp[us]'",
+            ),
+        ),
+        (
+            'tabular',
+            lambda p: p.update(
+                schema={
+                    **p['schema'],
+                    'related_tables': {
+                        't': {'columns': {'a': {'dtype': 'int64'}}}
+                    },
+                },
+                inference={'bogus': True},
+            ),
+            ('UNSUPPORTED_FEATURE', 422, 'related tables are not'),
+        ),
+        (
+            'tabular',
+            lambda p: p.update(bogus=True),
+            ('VALIDATION_FAILED', 422, 'bogus: Extra inputs are not'),
+        ),
+        ('tabular', lambda p: p.update(schema_=p.pop('schema')), None),
     ],
 )
 def test_a_request_is_read_in_the_order_the_nim_reads_it(
     relational, tabular, model, change, answer
 ):
     """Each table supplies exactly its declared columns, a split carries
-    every table the relationships name, and a field the request does not ask
-    for is not judged."""
+    every table the relationships name, the task names the entity its rows
+    link to, nothing carries a key the contract does not name, and a field
+    the request does not ask for is not judged."""
     payload = (
         _relational_payload()
         if model == 'relational'

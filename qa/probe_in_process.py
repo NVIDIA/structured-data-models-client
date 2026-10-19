@@ -39,8 +39,14 @@ def agree(entry, hosted, local) -> None:
     worst = 0.0
     for column in a.columns:
         if a[column].dtype.kind == 'f':
-            gap = np.abs(a[column].to_numpy() - b[column].to_numpy())
-            worst = max(worst, float(np.nanmax(gap)) if len(gap) else 0.0)
+            x = a[column].to_numpy(dtype=float)
+            y = b[column].to_numpy(dtype=float)
+            if not np.array_equal(np.isnan(x), np.isnan(y)):
+                fail(entry, f'{column} is missing on one side only')
+                return
+            differ = (x != y) & ~np.isnan(x)
+            if differ.any():
+                worst = max(worst, float(np.abs(x - y)[differ].max()))
         elif a[column].astype(str).tolist() != b[column].astype(str).tolist():
             fail(entry, f'{column} differs')
             return

@@ -35,7 +35,12 @@ from sdm_client.in_process.answers import (
     row_ids,
 )
 from sdm_client.in_process.columns import Context
-from sdm_client.in_process.contract import check_columns, check_contract
+from sdm_client.in_process.contract import (
+    SESSION,
+    SESSION_PREDICTION,
+    check_columns,
+    check_contract,
+)
 from sdm_client.in_process.inference import read_inference
 from sdm_client.in_process.refusal import in_session, refusal
 from sdm_client.in_process.relational import Relational
@@ -122,7 +127,7 @@ class InProcessTransport:
         ]
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
-        payload = _received(payload)
+        payload = _schema_by_name(_received(payload))
         with self._answering():
             check_contract(payload)
             payload['inference'] = read_inference(payload.get('inference'))
@@ -131,7 +136,6 @@ class InProcessTransport:
             task = payload['task']
             fields = _fields(served, task['kind'], payload.get('output'))
             _check_trained_for(served, model, task['kind'])
-            served.check_inference(payload['inference'], task)
             context = served.context(payload)
             query = served.query(context, payload, payload['schema'])
             output = _run(_fit(model, context), query)
@@ -147,9 +151,9 @@ class InProcessTransport:
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Fit the context once, to be scored against until released."""
-        payload = _received(payload)
+        payload = _schema_by_name(_received(payload))
         with self._answering():
-            check_contract(payload)
+            check_contract(payload, SESSION)
             with in_session('SESSION_CREATE_VALIDATION_FAILED'):
                 check_columns(payload, payload['schema'], ('context',))
             served, model = self._serving(payload.get('model'))
@@ -173,7 +177,7 @@ class InProcessTransport:
     ) -> dict[str, Any]:
         payload = _received(payload)
         with self._answering():
-            check_contract(payload)
+            check_contract(payload, SESSION_PREDICTION)
             inference = read_inference(payload.get('inference'))
             session = self._sessions.get(session_id)
             if session is None:
@@ -334,6 +338,17 @@ def _received(payload: dict[str, Any]) -> dict[str, Any]:
             f'{error}',
             code='INVALID_REQUEST',
         ) from error
+
+
+def _schema_by_name(payload: dict[str, Any]) -> dict[str, Any]:
+    r"""The payload with a schema sent as ``schema_`` read as its schema.
+
+    A NIM's request model takes the field by that name too, when ``schema``
+    itself is absent.
+    """
+    if 'schema' not in payload and 'schema_' in payload:
+        payload['schema'] = payload.pop('schema_')
+    return payload
 
 
 def _outputs(served: Tabular | Relational, kind: str) -> tuple[str, ...]:

@@ -30,6 +30,18 @@ _CLASSIFIED = ('prediction', 'probabilities')
 _INFERENCE_OPTIONS = frozenset(
     {'run_mode', 'use_prediction_time', 'inference_config'}
 )
+_NAMED_TASK_OPTIONS = (
+    'entity_table_names',
+    'anchor_time_column',
+    'top_k',
+    'step_size',
+    'num_forecasts',
+)
+_TASK_OPTIONS = frozenset({'entity_table_names', 'anchor_time_column'})
+_CLASSIFICATIONS = frozenset(
+    {'classification', 'binary_classification', 'multiclass_classification'}
+)
+_NUMERIC_TARGETS = frozenset({'bool', 'int32', 'int64', 'float32', 'float64'})
 
 
 class Relational:
@@ -60,6 +72,18 @@ class Relational:
 
         schema = payload['schema']
         task = payload['task']
+        if not schema.get('related_tables'):
+            raise refusal(
+                'INVALID_SCHEMA',
+                'kumo-relational requires at least one related table',
+            )
+        target_table = task['target'].get('table_name') or INSTANCE_TABLE
+        if target_table != INSTANCE_TABLE:
+            raise refusal(
+                'UNSUPPORTED_FEATURE',
+                'Kumo Relational requires the target on instance_table',
+            )
+        self.check_inference(payload.get('inference') or {}, task)
         edges, links = _graph(schema.get('relationships') or ())
         if len(links) != 1:
             raise refusal(
@@ -67,10 +91,12 @@ class Relational:
                 f'a relational request needs exactly one relationship from '
                 f'the instance table into a related table, got {len(links)}',
             )
-        joins = _joins(edges, links)
-        split = payload['context']
         spec = schema['instance_table']
+        _check_task(task, spec, links[0].table)
+        split = payload['context']
         table = split['instance_table']
+        _check_readable(task, spec, table)
+        joins = _joins(edges, links)
         if not table['rows']:
             raise refusal(
                 'VALIDATION_FAILED',
@@ -177,6 +203,98 @@ class Relational:
                 relationships=context.relationships,
                 task_links=context.task_links,
             ),
+        )
+
+
+def _check_task(
+    task: Mapping[str, Any], spec: Mapping[str, Any], linked: str
+) -> None:
+    r"""Refuse a task the model would not score as it states, as the NIM does.
+
+    The entity named must be the table the scored rows link to, and the
+    anchor a timestamp the instance table declares.
+    """
+    options = {
+        name: task[name]
+        for name in _NAMED_TASK_OPTIONS
+        if task.get(name) is not None
+    }
+    options.update(
+        {
+            name: value
+            for name, value in task.items()
+            if name not in {'kind', 'target', *_NAMED_TASK_OPTIONS}
+        }
+    )
+    unsupported = sorted(set(options) - _TASK_OPTIONS)
+    if unsupported:
+        raise refusal(
+            'UNSUPPORTED_FEATURE',
+            f'Kumo Relational does not act on these task options: '
+            f'{unsupported}',
+        )
+    requested = list(options.get('entity_table_names') or ())
+    if len(requested) != 1:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'the task must name exactly one entity table, got {requested}',
+        )
+    if requested[0] == INSTANCE_TABLE:
+        raise refusal(
+            'UNSUPPORTED_FEATURE',
+            'scoring instance_table as the entity requires a synthetic '
+            'entity table, which this binding does not build yet',
+        )
+    if requested[0] != linked:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'task names entity table {requested[0]!r} but the instance '
+            f'table links to {linked!r}',
+        )
+    anchor = options.get('anchor_time_column')
+    if anchor is None:
+        return
+    column = spec['columns'].get(anchor)
+    if column is None:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'task names anchor time column {anchor!r}, which the instance '
+            f'table does not declare',
+        )
+    if anchor in key_columns(spec) or stype_of(anchor, column) != 'datetime':
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'anchor time column {anchor!r} is not a timestamp',
+        )
+
+
+def _check_readable(
+    task: Mapping[str, Any], spec: Mapping[str, Any], table: Mapping[str, Any]
+) -> None:
+    r"""Refuse an instance column or a target the model cannot read.
+
+    Asked before the rows are, as the NIM asks it.
+    """
+    target = task['target']
+    keys = key_columns(spec)
+    supplied = set(table['columns'])
+    for name, column in spec['columns'].items():
+        if name in supplied and name not in keys | {target['column_name']}:
+            stype_of(name, column)
+    dtype = target.get('dtype')
+    if dtype == 'stringlist':
+        raise refusal(
+            'UNSUPPORTED_DTYPE',
+            'Kumo Relational does not consume list-valued targets',
+        )
+    readable = _NUMERIC_TARGETS
+    if task['kind'] in _CLASSIFICATIONS:
+        readable = readable | {'string'}
+    if dtype not in readable:
+        raise refusal(
+            'TASK_SCHEMA_MISMATCH',
+            f'Kumo Relational cannot represent {task["kind"]!r} targets '
+            f'declared as {dtype!r}',
         )
 
 

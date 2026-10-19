@@ -57,9 +57,10 @@ class Tabular:
                     'UNSUPPORTED_FEATURE',
                     f'{what} are not supported by model {self.model_id!r}.',
                 )
+        task = payload['task']
+        self.check_inference(payload.get('inference') or {}, task)
         spec = schema['instance_table']
         table = payload['context']['instance_table']
-        task = payload['task']
         target = task['target']['column_name']
         keys = key_columns(spec)
         stypes = {

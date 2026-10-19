@@ -6,8 +6,9 @@ r"""The request contract's own rules, checked as a NIM checks them.
 
 Before anything reads a request, a NIM validates it against the contract:
 every name and label it carries is at most 1,024 characters, a table names
-each column once, and each table supplies exactly the columns its schema
-declares. A request outside those is refused, with the field named.
+each column once, no object carries a key its contract does not name, and
+each table supplies exactly the columns its schema declares. A request
+outside those is refused, with the field named.
 """
 
 from __future__ import annotations
@@ -22,10 +23,33 @@ _TEXT = 1024
 _TOO_LONG = f'String should have at most {_TEXT} characters'
 
 
-def check_contract(payload: Mapping[str, Any]) -> None:
-    r"""Refuse a request the contract cannot carry."""
+PREDICTION = (
+    'model',
+    'task',
+    'schema',
+    'context',
+    'predict',
+    'output',
+    'inference',
+    'metadata',
+)
+SESSION = ('model', 'task', 'schema', 'context', 'metadata')
+SESSION_PREDICTION = ('predict', 'output', 'inference', 'metadata')
+
+_EXTRA = 'Extra inputs are not permitted'
+
+
+def check_contract(
+    payload: Mapping[str, Any], fields: tuple[str, ...] = PREDICTION
+) -> None:
+    r"""Refuse a request the contract cannot carry.
+
+    ``fields`` are the ones the endpoint takes. Problems are listed in the
+    order a NIM lists them: field by field, each object's unknown keys last.
+    """
     problems = [
-        {'name': name, 'reason': reason} for name, reason in _problems(payload)
+        {'name': name, 'reason': reason}
+        for name, reason in _problems(payload, fields)
     ]
     if problems:
         raise refusal(
@@ -34,46 +58,98 @@ def check_contract(payload: Mapping[str, Any]) -> None:
         )
 
 
-def _problems(payload: Mapping[str, Any]) -> Iterator[tuple[str, str]]:
-    task = payload.get('task') or {}
-    target = task.get('target') or {}
-    yield from _texts('task', task, ('kind', 'anchor_time_column'))
-    yield from _texts(
-        'task.target',
-        target,
-        ('column_name', 'table_name', 'dtype', 'positive_class'),
-    )
-    yield from _listed('task.target.classes', target.get('classes'))
+def _problems(
+    payload: Mapping[str, Any], fields: tuple[str, ...]
+) -> Iterator[tuple[str, str]]:
+    readers = {
+        'task': _task,
+        'schema': _schema,
+        'context': _split,
+        'predict': _split,
+        'metadata': _metadata,
+    }
+    for field in fields:
+        value = payload.get(field)
+        if field in readers and isinstance(value, Mapping):
+            yield from readers[field](field, value)
+    yield from _extra('', payload, fields)
+
+
+def _task(where: str, task: Mapping[str, Any]) -> Iterator[tuple[str, str]]:
+    yield from _texts(where, task, ('kind',))
+    target = task.get('target')
+    if isinstance(target, Mapping):
+        yield from _texts(
+            f'{where}.target', target, ('column_name', 'table_name', 'dtype')
+        )
+        yield from _listed(f'{where}.target.classes', target.get('classes'))
+        yield from _texts(f'{where}.target', target, ('positive_class',))
     yield from _listed(
-        'task.entity_table_names', task.get('entity_table_names')
+        f'{where}.entity_table_names', task.get('entity_table_names')
     )
-    schema = payload.get('schema') or {}
+    yield from _texts(where, task, ('anchor_time_column',))
+
+
+def _schema(where: str, schema: Mapping[str, Any]) -> Iterator[tuple[str, str]]:
     yield from _table_schema(
-        'schema.instance_table', schema.get('instance_table')
+        f'{where}.instance_table', schema.get('instance_table')
     )
-    for name, table in (schema.get('related_tables') or {}).items():
-        yield from _table_schema(f'schema.related_tables.{name}', table)
+    for name, table in _entries(schema.get('related_tables')):
+        yield from _table_schema(f'{where}.related_tables.{name}', table)
     for index, relationship in enumerate(schema.get('relationships') or ()):
-        where = f'schema.relationships[{index}]'
-        yield from _texts(where, relationship, ('source_table', 'target_table'))
+        if not isinstance(relationship, Mapping):
+            continue
+        at = f'{where}.relationships[{index}]'
+        yield from _texts(at, relationship, ('source_table',))
         yield from _listed(
-            f'{where}.source_columns', relationship.get('source_columns')
+            f'{at}.source_columns', relationship.get('source_columns')
         )
+        yield from _texts(at, relationship, ('target_table',))
         yield from _listed(
-            f'{where}.target_columns', relationship.get('target_columns')
+            f'{at}.target_columns', relationship.get('target_columns')
         )
-    for split in ('context', 'predict'):
-        tables = payload.get(split) or {}
-        yield from _columns(
-            f'{split}.instance_table', tables.get('instance_table')
+        yield from _extra(
+            at,
+            relationship,
+            (
+                'source_table',
+                'source_columns',
+                'target_table',
+                'target_columns',
+            ),
         )
-        for name, table in (tables.get('related_tables') or {}).items():
-            yield from _columns(f'{split}.related_tables.{name}', table)
-    yield from _texts(
-        'metadata',
-        payload.get('metadata') or {},
-        ('request_id', 'trace_id', 'source_query'),
+    yield from _extra(
+        where, schema, ('instance_table', 'related_tables', 'relationships')
     )
+
+
+def _split(where: str, split: Mapping[str, Any]) -> Iterator[tuple[str, str]]:
+    yield from _columns(f'{where}.instance_table', split.get('instance_table'))
+    for name, table in _entries(split.get('related_tables')):
+        yield from _columns(f'{where}.related_tables.{name}', table)
+    yield from _extra(
+        where, split, ('instance_table', 'related_tables', 'metadata')
+    )
+
+
+def _metadata(
+    where: str, metadata: Mapping[str, Any]
+) -> Iterator[tuple[str, str]]:
+    yield from _texts(
+        where, metadata, ('request_id', 'trace_id', 'source_query')
+    )
+
+
+def _extra(
+    where: str, values: Mapping[str, Any], fields: tuple[str, ...]
+) -> Iterator[tuple[str, str]]:
+    for name in values:
+        if name not in fields:
+            yield (f'{where}.{name}' if where else str(name)), _EXTRA
+
+
+def _entries(values: Any) -> Iterator[tuple[str, Any]]:
+    yield from (values.items() if isinstance(values, Mapping) else ())
 
 
 def _texts(
@@ -94,11 +170,12 @@ def _listed(where: str, values: Any) -> Iterator[tuple[str, str]]:
 def _table_schema(where: str, table: Any) -> Iterator[tuple[str, str]]:
     if not isinstance(table, Mapping):
         return
-    for name, column in (table.get('columns') or {}).items():
+    for name, column in _entries(table.get('columns')):
         if isinstance(column, Mapping):
             yield from _texts(
                 f'{where}.columns.{name}', column, ('dtype', 'stype')
             )
+    yield from _extra(where, table, ('columns', 'primary_key'))
 
 
 def _columns(where: str, table: Any) -> Iterator[tuple[str, str]]:
@@ -114,6 +191,8 @@ def _columns(where: str, table: Any) -> Iterator[tuple[str, str]]:
                 f"duplicate column name '{column}'",
             )
         seen.add(column)
+    if table.get('format') == 'arrays':
+        yield from _extra(where, table, ('format', 'columns', 'rows'))
 
 
 def check_columns(
