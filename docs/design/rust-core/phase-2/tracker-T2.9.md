@@ -1,7 +1,7 @@
 # Phase 2 tracker: T2.9
 
 The design branch owns `tracker.md`; this file holds T2.9's section until it folds in.
-Lane b, on the phase head after T2.1j's landing (c8075715): this package's `T2.9:` commits, the test author's (`T2.9 tests:`, cherry-picked from `t29-tests`), then the baselines, goldens and pending list.
+Lane b, rebased onto the phase head after T2.1m's landing (3cb8fd7f, the test author's case-format change as its own package): this package's `T2.9:` commits, the test author's (`T2.9 tests:`, cherry-picked from `t29-tests`), then the baselines, goldens and pending list.
 
 ## T2.9
 
@@ -31,6 +31,7 @@ T2.9 is forecasting's options on top of the split already in the core (E153): `n
 - **The cases**: all 26 on python-core (DuckDB, SQLite, local Postgres 17), rust-host (DuckDB, SQLite) and python-old (DuckDB) against python-ref's lines: `compare.py` finds no difference (diagnostics only: SQL text and bindings).
 - **The test author's tests**: all 15 of `test_t29_forecasting.py` (three databases) and all 8 of `t29_forecasting.rs` pass; the pending list is empty.
 - **Quantiles with no prediction** (T2.1m's reviewer's note: the scripted endpoint always answers a prediction beside quantiles, the real model may not). Read in the reference: `PredictionItem.prediction` is `None`, `to_pandas()` makes no `prediction` column, and `_report_absent` warns of a `prediction` the caller named. The core lays such an answer out with no `prediction` column and gives `OUTPUTS_ABSENT` naming `prediction`; the Python host hands `None`. Held by `test_quantiles_with_no_prediction_are_the_old_route_s_on_the_core` (both `outputs`, core against the old route in one process: frame, items, `absent`, the warning's class and sentence) and `sdm-core`'s `a_regression_s_quantiles_are_laid_out_as_answered`. The endpoint needs no new mode for T2.9's exits; a case of it would need one.
+- **Before handoff**: `gate.sh --base 3cb8fd7f --run rust-host` and `--run python-core` (DuckDB, a test-ops wheel built from this head in a scratch venv) both pass; the cheap prepush tier; `cargo test --workspace --no-fail-fast` (138 targets, none failing); `pytest contract/tests -n 4 --dist loadfile` with a local Postgres: 4,622 passed, and of 132 failures 118 were the scratch venv's pyarrow 26 against the reference cell's 25.0.1 (they pass with 25.0.1) and 14 (`test_gate_modes.py`, `test_gate_evidence_paths.py`, `test_t20_locked_set.py`, check 1 "observed in no one cell") fail on c8075715 alike on this machine; the client's route tests; mypy on the changed host files.
 - **Units**: `AskedLag` by value and query kind; the payload's lag columns and dtypes against the locked payload schema; the lag's windows, alignment, months and limits (`lag.rs`); quantiles laid out and malformed ones refused (`sdm-core/tests/predict.rs`); the host route's lag request equal to the old route's for a regression, a binary task, an average and a static target.
 
 ### Deviations and questions
