@@ -723,7 +723,14 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
         edits.push(made);
     }
     let key = format!("{}@{}", case.id, Database::Postgres.name());
+    // A diagnostic case's fetch past the recording is answered as the
+    // provider's error, so the case is observed (T2.8 fix 4).
     let replay = recording.replay(&key)?;
+    let replay = if case.status == crate::case::Status::Diagnostic {
+        replay.past_the_end()
+    } else {
+        replay
+    };
     let mut log = DriverLog::default();
     let mut observed = describe_on(case, spec, Source::Replay(&replay), &mut log, &edits)?;
     if !replay.finished() {

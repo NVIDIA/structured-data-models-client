@@ -116,6 +116,10 @@ Round 2 (Claude): one P2 and one P3.
   It now gives the counts (`calls_answered`, `parts_answered`) whether or not answers were carried, beside the exception's own details; Codex's six probes (DuckDB, SQLite, Postgres, with and without an unscored candidate first) match the reference.
   A unit test in `test_the_rust_host.py` holds it; the test author writes the acceptance regression.
 
+- `s0.boundary.depth-999@postgres` (the orchestrator's option 2): fix 3 left the diagnostic case unobserved, which the staging rule (`run_python.py legs`) fails in cross-host (postgres).
+  The replay now answers a diagnostic case's fetch past its recording as the provider's error (vendor code `past the recording`, a note printed), so the core refuses it `PROVIDER_ERROR` and the case is observed; the comparison reports the diagnostic difference, and an acceptance case past its recording still fails the run.
+  Run as CI runs it, the Postgres cross-host leg passes `legs` and the comparison.
+
 ### Rebase onto T2.12 (347ffa31)
 
 T2.12 landed first and opened contract v27; the lane was rebased onto it and this package's contract fields added to that working entry (the schema and the lock's v27 line regenerated, `contract_lock.py`: 2 merged and unchanged, 1 working).
