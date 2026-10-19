@@ -40,6 +40,12 @@ Both are dev-only, in `sdm-testkit`; nothing shipped reaches them (`l0_deps.py`:
 - DuckDB against the provider on the swapped layer, `base.binary` and `shape.same-table-twice.buyers`, the observed run diffed field by field: the description, the request's task, schema, prediction rows and options, and the predicted result are equal; only `context`'s rows differ, and the `MISSING_INDICES` warning, which DuckDB's index advice gives and a provider with no index does not.
   The context differs because DuckDB's `USING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)` returns even a table it keeps whole in a shuffled order (DuckDB 1.5.6: users 0 to 7 come back 6, 3, 4, 2, 7, 0, 1, 5), and the core's examples follow the sample's order.
 
+- Before handoff, at the final commit: `cargo test --workspace --no-fail-fast` (139 test targets) passes, the SQLite-loading targets with `SDM_PYTHON` naming an interpreter that holds the contract loader's dependencies; `cargo clippy -p sdm-testkit -p sdm-host --all-targets -D warnings` and `cargo fmt --check` clean; `register.py validate`, `ratchet.py check --checkpoint d339e88c` (eleven protected paths for the landing to name), `l0_deps.py` and `lane.py check` pass.
+- `gate.sh --base d339e88c --run rust-host` and `--run python-core` (DuckDB) both pass, judged by d339e88c's harness, with a test-ops wheel built from this branch.
+- `test_t25_provider_kit.py` on DuckDB and SQLite passes (15, the new kit case included); not run on Postgres here (no server).
+- `pytest contract/tests -n 4 --dist loadfile` on that build: 4,543 pass; the 132 failures are this machine's environment, not the change: 118 refuse to run outside the recorded `ref-pandas3` cell (this venv's pyarrow is 26.0.0, the cell's 25.0.1), and the gate-mode tests' check 1 is reported as observed in no cell for the same reason.
+  `tests/test_release_contract.py`'s two snapshot tests fail in the shared venv, whose packages are editable installs of another checkout; no Python file changes here.
+
 ### Deviations and questions
 
 - **The swapped prediction's acceptance test cannot pass as written** (`the_same_prediction_runs_on_the_swapped_layer`, pending): it asks the swapped run's `core.materialized` and `core.predicted` to equal DuckDB's whole, including the in-context examples, which are a seeded sample each provider draws its own way (DuckDB's reservoir, SQLite's RS-2 stream, Postgres's `setseed`, the fallback's RS-1).
