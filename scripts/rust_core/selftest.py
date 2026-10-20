@@ -1655,7 +1655,78 @@ def freeze_cases(results: list[Result]) -> None:
                 }
             )
         ),
-        'f49999 is not a frozen bridge file',
+        # A file outside FROZEN is ignored (T2.14a1); the frozen files it
+        # leaves out are refused.
+        f'no entry for the frozen file {materialize}',
+    )
+
+    # T2.14a1: this copy judges only what it freezes, so a later copy may
+    # freeze more and still be judged by its checkpoint's copy; everything
+    # it freezes is judged as before.
+    fake = {'fingerprint': 'ab' * 32}
+    outside = str(client / 'not_frozen.py')
+    uncovered = 'SDMClient.not_covered'
+    case(
+        'control: a baseline file outside FROZEN is ignored',
+        lambda r: baseline(
+            r, lambda d: d['files'].update({outside: {'f': dict(fake)}})
+        ),
+        None,
+    )
+    case(
+        'control: an uncovered name of a covered-by-name file is ignored',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['client']].update(
+                {uncovered: dict(fake)}
+            ),
+        ),
+        None,
+    )
+    case(
+        'control: a declaration of an entry this copy does not freeze',
+        lambda r: None,
+        None,
+        declare={
+            f'{key_of["client"]}::{uncovered}': refactor,
+            f'{outside}::f': refactor,
+        },
+    )
+    case(
+        'a frozen file missing from the baseline, beside an outside one',
+        lambda r: baseline(
+            r,
+            lambda d: (
+                d['files'].pop(key_of['schema']),
+                d['files'].update({outside: {'f': dict(fake)}}),
+            ),
+        ),
+        f'no entry for the frozen file {schema}',
+    )
+    case(
+        'a function deleted from a WHOLE file',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']].update({'gone': dict(fake)}),
+        ),
+        f'{schema}::gone: in the baseline but not covered code',
+    )
+    case(
+        'a stray declaration inside a frozen file',
+        lambda r: None,
+        f'{schema}::not_a_function: declared in',
+        declare={f'{schema}::not_a_function': refactor},
+    )
+    case(
+        'a covered entry is still compared exactly',
+        lambda r: baseline(
+            r,
+            lambda d: (
+                d['files'][key_of['client']]['SDMClient._prepare'].update(fake),
+                d['files'].update({outside: {'f': dict(fake)}}),
+            ),
+        ),
+        'SDMClient._prepare: differs from the baseline',
     )
     case(
         'a format 2 entry without its counts',
