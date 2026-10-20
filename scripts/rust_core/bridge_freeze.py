@@ -111,7 +111,7 @@ base. A base that predates the baseline has nothing to compare, and the
 declarations must then be empty. A baseline entry for a file outside
 ``FROZEN`` is ignored, not refused: only the frozen files are compared, so
 nothing frozen loosens, and a later landing can widen the freeze while the
-gate judges it with its checkpoint's copy (T2.14a1). On the same
+gate judges it with its checkpoint's copy (T2.1v). On the same
 principle this copy judges only what it freezes: a baseline entry for a
 name of a frozen file it does not cover, and a declaration of an entry it
 does not measure, are ignored; every entry it freezes is judged as before.
@@ -489,7 +489,7 @@ def _covered(rel: Path, measured: Measured) -> list[str]:
 
 def _freezes(rel: Path, name: str, strict: bool = False) -> bool:
     """Whether this copy freezes ``name`` of ``rel``: what it judges. A later
-    copy may freeze more (T2.14a1): the gate judges a candidate with its
+    copy may freeze more (T2.1v): the gate judges a candidate with its
     checkpoint's copy, which ignores the entries and declarations of what it
     does not freeze and judges everything it does freeze as before. A
     ``strict`` run, a copy judging its own tree, judges every entry."""

@@ -15,8 +15,8 @@ It is a judging-path package and lands alone, before T2.14b relies on it.
 - The docstring's list of frozen files names the four new files.
 - `bridge_freeze.json` rewritten with `--write`: 69 entries added, none changed or gone.
 - `bridge_changes.json` declares each of the 69 new entries `refactor` ("newly covered by the freeze (FR P3-2), unchanged; no rule added"), as the freeze requires of an entry new against the base.
-- A strict mode (the T2.14a1 review's P3-1 and P3-2): a copy judging its own tree, where the tree's `bridge_freeze.py` is the running file byte for byte (`own_tree`, as `prepush.sh` and CI's `rust-lint` run it), keeps every refusal T2.14a1 relaxed: a baseline entry for a file or name it does not freeze, and a stale declaration of an entry it does not freeze.
-  Only a copy judging another tree's lists, the gate's checkpoint copy, uses T2.14a1's tolerances.
+- A strict mode (the T2.1v review's P3-1 and P3-2): a copy judging its own tree, where the tree's `bridge_freeze.py` is the running file byte for byte (`own_tree`, as `prepush.sh` and CI's `rust-lint` run it), keeps every refusal T2.1v relaxed: a baseline entry for a file or name it does not freeze, and a stale declaration of an entry it does not freeze.
+  Only a copy judging another tree's lists, the gate's checkpoint copy, uses T2.1v's tolerances.
 - No product code changed.
 
 ### Phase 2's ledger (before)
@@ -37,5 +37,5 @@ Paths are under `packages/structured-data-models-client/src/sdm_client/`; a defi
 
 ### Deviations
 
-- Landed in two parts: T2.14a1 first (the checkpoint's copy judges only what it freezes), since the gate's checkpoint copy of the freeze refused a baseline naming files outside its own `FROZEN`, so no candidate could widen the freeze; T2.14a then, rebased onto T2.14a1's landing.
+- Landed in two parts: T2.1v first (the checkpoint's copy judges only what it freezes; first landed as "T2.14a1", an ID outside the package-ID pattern, rolled back and landed again as T2.1v), since the gate's checkpoint copy of the freeze refused a baseline naming files outside its own `FROZEN`, so no candidate could widen the freeze; T2.14a then, rebased onto T2.1v's landing.
 Packages landing after T2.14a (T2.11, T2.13b) declare their changes to the newly frozen files in their next fix round, as the brief says.
