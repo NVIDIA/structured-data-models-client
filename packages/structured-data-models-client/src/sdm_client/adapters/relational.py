@@ -49,6 +49,7 @@ from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import as_declared
 from sdm_client.wire.answers import as_declared_target
+from sdm_client.wire.inference import typed_inference
 
 # What to ask for when the caller named nothing, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -147,7 +148,7 @@ class RelationalAdapter:
             if inference is None:
                 envelope.pop('inference', None)
             else:
-                envelope['inference'] = inference
+                envelope['inference'] = typed_inference(inference)
             yield envelope
 
     def _inference(

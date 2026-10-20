@@ -207,6 +207,31 @@ def test_a_key_wider_than_a_double_comes_back_exactly(client_for):
     )
 
 
+@pytest.mark.parametrize(
+    ('inference', 'code'),
+    [
+        ({'use_prediction_time': 'no'}, None),
+        ({'use_prediction_time': None}, 'INVALID_REQUEST'),
+        ({'run_mode': 7}, 'INVALID_REQUEST'),
+        ({'inference_config': None}, 'INVALID_REQUEST'),
+    ],
+)
+def test_an_inference_option_is_read_as_the_type_it_is(
+    client_for, inference, code
+):
+    """A boolean spelled ``'no'`` asks for nothing, and a value that cannot
+    be read as its type is refused before it is sent."""
+    request = asked('churn', 'classification', inference=inference)
+    with client_for('kumo-tabular') as client:
+        if code is None:
+            assert len(client.predict(request, model=KumoTabular()).items) == 15
+            return
+        with pytest.raises(StructuredDataError) as refused:
+            client.predict(request, model=KumoTabular())
+
+    assert refused.value.code == code
+
+
 def test_a_question_longer_than_its_logged_copy_is_answered(client_for):
     query = f'{COUNT} WHERE ' + ' OR '.join(
         f'users.age > {i}' for i in range(60)

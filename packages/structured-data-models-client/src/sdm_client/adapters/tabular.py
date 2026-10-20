@@ -50,6 +50,7 @@ from sdm_client.wire import (
     widen_tfm_dtype,
 )
 from sdm_client.wire.answers import as_declared_target
+from sdm_client.wire.inference import typed_inference
 
 # Output fields to ask for when the caller named none, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -289,7 +290,9 @@ class TabularAdapter:
             'metadata': {'request_id': _request_id()},
         }
         if request.inference:
-            envelope['inference'] = json_ready(request.inference)
+            envelope['inference'] = json_ready(
+                typed_inference(request.inference)
+            )
         return envelope
 
     @staticmethod
