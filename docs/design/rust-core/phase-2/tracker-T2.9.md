@@ -84,3 +84,9 @@ The held round, after the rebase onto e1fac9ee (multi-call predict, T2.1k and T2
 - **P2F-1's rust-host item for `lag.condition-per-call`**: the four lag cells under `core.predicted.calls/*/`, on all three databases, `null_on_one_side` (T2.1r).
 - **Embeddings** are now the one item field still refused by name; `an_answer_the_result_does_not_carry_yet_is_refused_by_name` holds it.
 
+
+### Fix 4 (round 3)
+
+- **A condition's lag typed before the context is narrowed** (Codex's P2): `Lag::columns` chooses `bool` or the all-null `float64` over every example the lags were read for, the gathered context before narrowing and every entity predicted for, as the reference types the complete labelled lag before it narrows; the type holds through narrowing and each call's slice. Unit test `a_condition_s_lag_is_typed_before_the_context_is_narrowed`. Codex's reproduction (`AVG(orders.price, 0, 28, days) > 50`, one context sample, `lag_timesteps=2`) now sends `bool` for both lag columns at every `rows_per_call`, as the reference does; the cells left differ only as fix 1 (P2F-1) has them, each value on its own row.
+- **Claude's P3s**: the duplicated comment line removed; the generic message of a malformed `quantiles` answer kept, as for `probabilities`: the core's refusals name the field and why, never a value (H17).
+- **The test author's quantiles test** (`bd089dc2`, cherry-picked unedited) reads each row's quantiles from the mapping's JSON object text.
