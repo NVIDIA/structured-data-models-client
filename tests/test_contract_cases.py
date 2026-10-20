@@ -516,6 +516,8 @@ T211_SAMPLING = (
     'sample.anchor-entity',
     'sample.anchor-entity.context-entity',
     'sample.anchor-entity.context-time',
+    'sample.anchor-entity.null-time',
+    'sample.anchor-entity.null-time.prediction-time',
     'sample.anchor-entity.no-time-column',
     'sample.anchor-entity.regression',
     'sample.anchor-entity.temporal',

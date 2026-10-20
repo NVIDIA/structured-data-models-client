@@ -216,7 +216,17 @@
   "py:sample.parent-table.relbench-avito@postgres",
   "rust:sample.parent-table.relbench-avito",
   "rust:sample.parent-table.relbench-avito@sqlite",
-  "rust:sample.num-neighbors.minus-one@sqlite"
+  "rust:sample.num-neighbors.minus-one@sqlite",
+  "py:sample.anchor-entity.null-time",
+  "py:sample.anchor-entity.null-time@sqlite",
+  "py:sample.anchor-entity.null-time@postgres",
+  "rust:sample.anchor-entity.null-time",
+  "rust:sample.anchor-entity.null-time@sqlite",
+  "py:sample.anchor-entity.null-time.prediction-time",
+  "py:sample.anchor-entity.null-time.prediction-time@sqlite",
+  "py:sample.anchor-entity.null-time.prediction-time@postgres",
+  "rust:sample.anchor-entity.null-time.prediction-time",
+  "rust:sample.anchor-entity.null-time.prediction-time@sqlite"
  ],
  "authored": [
   "py:sample.anchor-entity",
@@ -468,6 +478,16 @@
   "py:sample.parent-table.relbench-avito@sqlite",
   "py:sample.parent-table.relbench-avito@postgres",
   "rust:sample.parent-table.relbench-avito",
-  "rust:sample.parent-table.relbench-avito@sqlite"
+  "rust:sample.parent-table.relbench-avito@sqlite",
+  "py:sample.anchor-entity.null-time",
+  "py:sample.anchor-entity.null-time@sqlite",
+  "py:sample.anchor-entity.null-time@postgres",
+  "rust:sample.anchor-entity.null-time",
+  "rust:sample.anchor-entity.null-time@sqlite",
+  "py:sample.anchor-entity.null-time.prediction-time",
+  "py:sample.anchor-entity.null-time.prediction-time@sqlite",
+  "py:sample.anchor-entity.null-time.prediction-time@postgres",
+  "rust:sample.anchor-entity.null-time.prediction-time",
+  "rust:sample.anchor-entity.null-time.prediction-time@sqlite"
  ]
 }

@@ -405,6 +405,28 @@ def test_the_reference_s_requests_show_each_option_s_effect(
         assert [row[at] for row in table['rows']] == [
             users[row[ref]['number']] for row in table['rows']
         ], case_id
+    # An entity anchor where user 0 has no signup time: its anchor is sent
+    # null and none of its orders pulled; user 1 is anchored at its signup.
+    for case_id in (
+        'sample.anchor-entity.null-time',
+        'sample.anchor-entity.null-time.prediction-time',
+    ):
+        predict = sent(case_id)['predict']
+        table = predict['instance_table']
+        at = table['columns'].index('__kumo_anchor_time')
+        ref = table['columns'].index('__kumo_entity_ref_0')
+        anchors = {row[ref]['number']: row[at] for row in table['rows']}
+        assert anchors['0'] is None and anchors['1'] is not None, case_id
+        instance = {
+            row[ref]['number']: row[0]['number'] for row in table['rows']
+        }
+        pulled = {
+            row['instance_id']['number'] for row in _rows(predict, 'orders')
+        }
+        assert instance['0'] not in pulled and instance['1'] in pulled, case_id
+    assert sent('sample.anchor-entity.null-time.prediction-time')['inference'][
+        'use_prediction_time'
+    ]
     predict = sent('sample.parent-table.decimal-keys')['predict']
     owners = {
         _number(row['__node_id']): row['tier']

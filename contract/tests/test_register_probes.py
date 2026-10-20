@@ -259,6 +259,8 @@ ENTITY_ANCHORED = frozenset(
         'sample.anchor-entity',
         'sample.anchor-entity.regression',
         'sample.anchor-entity.context-entity',
+        'sample.anchor-entity.null-time',
+        'sample.anchor-entity.null-time.prediction-time',
     }
 )
 
