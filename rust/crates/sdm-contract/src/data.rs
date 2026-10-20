@@ -41,9 +41,10 @@ pub const BIG_INTEGER_MARKED: &str = "true";
 /// provider sets on a column of numbers it hands over as their exact
 /// decimal text because their declaration fixes no Arrow decimal (a
 /// Postgres `numeric` without a precision): the core reads such a column
-/// as its reference reads one, by its role, a key (the one column of a
-/// declared primary, unique or foreign key) as that text and any other as
-/// a double, and holds every later fetch of it to the type described.
+/// by its role in the schema, a key (the one column of a declared primary,
+/// unique or foreign key, or a key or link of the schema as it stands) as
+/// that text and any other as a double (`DescribedColumn::exact_number`),
+/// and holds every later fetch of it to the type described.
 pub const EXACT_NUMBER_MARKER: &str = "sdm:exact_number";
 pub const EXACT_NUMBER_MARKED: &str = "true";
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the

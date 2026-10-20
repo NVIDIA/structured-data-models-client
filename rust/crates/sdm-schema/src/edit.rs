@@ -35,8 +35,8 @@ use sdm_contract::ops::{
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 
 use crate::assemble::{
-    can_identify, checked, empty_key, invalid, key_not_names, mark_keys, name_each_other,
-    no_column, once, time_column_not_a_name, two_ways,
+    Link, can_identify, checked, empty_key, invalid, key_not_names, mark_keys, name_each_other,
+    no_column, once, read_exact_numbers, time_column_not_a_name, two_ways,
 };
 
 /// The meanings a caller may assign a column, by the text it gives
@@ -422,13 +422,24 @@ fn leave_out(
 
 /// `schema.relationships = links`, or the list edited
 /// (`Schema.__setattr__`, `_Links`): each link one the schema can join
-/// (`_check_relationships`), the links each once in their order, the
+/// (`_check_relationships`), a column of exact numbers read as the links
+/// read it ([`read_exact_numbers`]), the links each once in their order, the
 /// warnings of two tables naming each other and of one table reaching
 /// another through several columns, and the schema's marks derived again.
 fn relationships(
     description: &mut SourceDescription,
     links: &[Given<Vec<ColumnRef>>],
 ) -> Result<Vec<CoreWarning>, CoreError> {
+    // Each column of exact numbers read as the links given read it, before
+    // they are checked (T2.21); a refusal leaves the schema as it was.
+    let readable: Vec<Link> = links
+        .iter()
+        .filter_map(|link| match link {
+            Given::Value(link) => Some(link.clone()),
+            Given::Unreadable => None,
+        })
+        .collect();
+    read_exact_numbers(&mut description.tables, &readable);
     let mut given = Vec::with_capacity(links.len());
     for link in links {
         let Given::Value(link) = link else {

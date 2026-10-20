@@ -21,9 +21,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sdm_contract::ops::{
-    self, ColumnRef, DescribedColumn, DescribedTable, Dtype, SourceDescription, Stype,
+    self, ColumnRef, DescribedColumn, DescribedTable, Dtype, ExactNumber, SourceDescription, Stype,
 };
-use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
+use sdm_contract::{ColumnType, CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 
 use crate::infer::{InferredTable, PassedOver, Taken, TimeChoice};
 
@@ -245,6 +245,7 @@ pub fn assemble(
                     nullable: c.nullable,
                     unique: c.unique,
                     declared_type: None,
+                    exact_number: c.exact_number,
                 })
                 .collect(),
             primary_key: table.primary_key,
@@ -255,7 +256,9 @@ pub fn assemble(
         .collect();
 
     let links = if let Some(given) = given.relationships {
-        // The caller's, each held to the columns and the join as given.
+        // The caller's, each held to the columns and the join as given,
+        // each column of exact numbers read as the links given read it.
+        read_exact_numbers(&mut described, given);
         for link in given {
             checked(&described, link)?;
         }
@@ -646,13 +649,88 @@ pub(crate) fn once(links: Vec<Link>) -> Vec<Link> {
         .collect()
 }
 
+/// Each column of numbers handed over as their exact text
+/// ([`DescribedColumn::exact_number`]) in the type its role in `tables`
+/// keyed as they stand and joined by `links` gives it, both ends of a link
+/// decided together (learnings lesson 19, T2.21): its text (`string`,
+/// received as `utf8`) where its catalog declares it a key, as the
+/// reference reads it, or where the schema keys it (a primary key's
+/// column) or joins on it and every column it joins to is read as text
+/// too; a double (`float64`) otherwise, as a feature is read. So a key the
+/// caller names or edits is as exact as one the catalog declares, a column
+/// joined to a number of another type is read as the reference reads it,
+/// and a key no longer keyed or joined is a double again.
+pub fn read_exact_numbers(tables: &mut [DescribedTable], links: &[Link]) {
+    let exact =
+        |tables: &[DescribedTable], at: &ColumnRef| column(tables, at).and_then(|c| c.exact_number);
+    // The columns read as text, to start: every exact column the catalog
+    // declares a key, and every other the schema keys or joins on.
+    let mut text: BTreeSet<(String, String)> = BTreeSet::new();
+    for table in tables.iter() {
+        for c in &table.columns {
+            let keyed = table.primary_key.contains(&c.name)
+                || links
+                    .iter()
+                    .flatten()
+                    .any(|end| end.table == table.name && end.column == c.name);
+            match c.exact_number {
+                Some(ExactNumber::DeclaredKey) => {}
+                Some(ExactNumber::Other) if keyed => {}
+                _ => continue,
+            }
+            text.insert((table.name.clone(), c.name.clone()));
+        }
+    }
+    // Then, until nothing changes, a link with an end not read as text
+    // takes its other end out of the text too, unless the catalog declares
+    // that end a key.
+    loop {
+        let mut changed = false;
+        for link in links {
+            let [foreign, referenced] = link.as_slice() else {
+                continue;
+            };
+            let held = |at: &ColumnRef| text.contains(&(at.table.clone(), at.column.clone()));
+            if held(foreign) && held(referenced) {
+                continue;
+            }
+            for end in [foreign, referenced] {
+                if exact(tables, end) == Some(ExactNumber::Other)
+                    && text.remove(&(end.table.clone(), end.column.clone()))
+                {
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    for table in tables.iter_mut() {
+        for c in &mut table.columns {
+            if c.exact_number.is_none() {
+                continue;
+            }
+            if text.contains(&(table.name.clone(), c.name.clone())) {
+                c.dtype = Dtype::String;
+                c.received = ColumnType::Utf8;
+            } else {
+                c.dtype = Dtype::Float64;
+                c.received = ColumnType::Float64;
+            }
+        }
+    }
+}
+
 /// Marks the columns the schema joins on, each table's primary key and
 /// each link's foreign key, as identifiers, keeping what each meant, and
 /// gives a column the schema no longer joins on back the meaning it had
 /// (`Schema._mark_key_columns`); a column given back `timestamp` becomes
 /// its table's time column when the table has none and it is not the key
-/// (`Column._adopt_as_time_column`).
+/// (`Column._adopt_as_time_column`); first, each column of exact numbers
+/// in the type its role gives it ([`read_exact_numbers`]).
 pub fn mark_keys(description: &mut SourceDescription) {
+    read_exact_numbers(&mut description.tables, &description.links);
     let mut joined: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for table in &description.tables {
         joined.insert(

@@ -183,6 +183,7 @@ fn description_of(size: usize) -> Vec<u8> {
                 nullable: true,
                 unique: false,
                 declared_type: None,
+                exact_number: None,
             }],
             primary_key: vec![],
             time_column: None,

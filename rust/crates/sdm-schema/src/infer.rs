@@ -18,9 +18,9 @@
 use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
-use arrow_schema::{DataType, Schema};
-use sdm_contract::data::Relation;
-use sdm_contract::ops::{Dtype, Stype};
+use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
+use sdm_contract::ops::{Dtype, ExactNumber, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
 
 use crate::names;
@@ -78,6 +78,38 @@ pub struct InferredColumn {
     /// Whether the catalog declares a primary or unique key of this one
     /// column.
     pub unique: bool,
+    /// For a column of numbers handed over as their exact text, whether
+    /// the catalog declares it a key ([`exact_number`]); `None` otherwise.
+    pub exact_number: Option<ExactNumber>,
+}
+
+/// What `field`, of a table whose catalog declares `constraints`, is as a
+/// column of numbers the host provider handed over as their exact text
+/// (marked [`EXACT_NUMBER_MARKER`], whatever type it was read in since): a
+/// key its catalog declares, the one column of a primary, unique or
+/// foreign key, as the reference's Postgres table reads a column's role
+/// (`relational_keys`), or any other; `None` for an unmarked column.
+pub fn exact_number(field: &Field, constraints: &[CatalogKey]) -> Option<ExactNumber> {
+    if field
+        .metadata()
+        .get(EXACT_NUMBER_MARKER)
+        .map(String::as_str)
+        != Some(EXACT_NUMBER_MARKED)
+    {
+        return None;
+    }
+    let declared = constraints.iter().any(|key| {
+        matches!(
+            key.kind,
+            KeyKind::Primary | KeyKind::Unique | KeyKind::Foreign
+        ) && key.columns.len() == 1
+            && key.columns[0] == *field.name()
+    });
+    Some(if declared {
+        ExactNumber::DeclaredKey
+    } else {
+        ExactNumber::Other
+    })
 }
 
 /// Why inference passed a timestamp over for the time column, as the
@@ -522,6 +554,7 @@ pub fn preview(
             // (SQLite's, not its rowid alias): its catalog says.
             nullable: !declared.not_null && (!is_primary || declared.key_nullable),
             unique: declared_unique.contains(&declared.name),
+            exact_number: exact_number(field, constraints),
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {

@@ -108,11 +108,13 @@ def _store(
 ) -> None:
     r"""The core's answer, on the objects of ``schema``: each table's key,
     time column and repeated keys, its columns left out, each column's
+    data type (a column of exact numbers is read by its role, T2.21),
     meaning and what it meant before the schema joined on it, the column
     whose meaning the caller chose; and the answer, as the description the
     core last answered. A value the object holds that the answer agrees
     with is kept as the caller gave it."""
     from sdm_client._rust import codec
+    from sdm_client.materializers.sources import wire_dtype
     from sdm_client.schema import _as_key_tuple
 
     # The tables and columns this schema marks are its own, as the
@@ -137,6 +139,9 @@ def _store(
             del table.columns[gone]
         for column_name, column in table.columns.items():
             said = columns[column_name]
+            dtype = wire_dtype(said['dtype'])
+            if dtype is not None and column.dtype != dtype:
+                object.__setattr__(column, 'dtype', dtype)
             # A meaning the column holds already, as its meaning or as what
             # it meant before the schema joined on it, is kept as the
             # object it is, as the reference's marks move it between the

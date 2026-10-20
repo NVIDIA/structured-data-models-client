@@ -25,6 +25,7 @@ fn column(name: &str, unique: bool) -> InferredColumn {
         received: ColumnType::Int64,
         nullable: true,
         unique,
+        exact_number: None,
     }
 }
 

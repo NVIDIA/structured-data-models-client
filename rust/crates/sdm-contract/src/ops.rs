@@ -476,6 +476,28 @@ pub struct DescribedColumn {
     /// 3, and absent from the JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
+    /// Set for a column of numbers the host provider handed over as their
+    /// exact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):
+    /// whether its catalog declares it a key. The schema reads such a column
+    /// by its role in the schema as it stands (T2.21): as its text
+    /// (`received` `utf8`, `dtype` `string`) where the catalog declares it a
+    /// key, or where the schema keys it or joins it and every column it
+    /// joins to is such a column too; as a double (`float64`) otherwise.
+    /// `None` for every other column, and absent from the JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_number: Option<ExactNumber>,
+}
+
+/// A column of numbers handed over as their exact text
+/// ([`DescribedColumn::exact_number`]), by what its catalog declares of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ExactNumber {
+    /// The catalog declares it a key, the one column of a primary, unique
+    /// or foreign key: always read as its text, as the reference reads it.
+    DeclaredKey,
+    /// Any other: its text while the schema keys or joins on it, as above.
+    Other,
 }
 
 // --- edit_schema ------------------------------------------------------------------

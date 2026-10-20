@@ -746,6 +746,17 @@
             "string",
             "null"
           ]
+        },
+        "exact_number": {
+          "description": "Set for a column of numbers the host provider handed over as their\nexact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):\nwhether its catalog declares it a key. The schema reads such a column\nby its role in the schema as it stands (T2.21): as its text\n(`received` `utf8`, `dtype` `string`) where the catalog declares it a\nkey, or where the schema keys it or joins it and every column it\njoins to is such a column too; as a double (`float64`) otherwise.\n`None` for every other column, and absent from the JSON.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExactNumber"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
@@ -1201,6 +1212,21 @@
         "uint16",
         "uint32",
         "uint64"
+      ]
+    },
+    "ExactNumber": {
+      "description": "A column of numbers handed over as their exact text\n([`DescribedColumn::exact_number`]), by what its catalog declares of it.",
+      "oneOf": [
+        {
+          "description": "The catalog declares it a key, the one column of a primary, unique\nor foreign key: always read as its text, as the reference reads it.",
+          "type": "string",
+          "const": "declared_key"
+        },
+        {
+          "description": "Any other: its text while the schema keys or joins on it, as above.",
+          "type": "string",
+          "const": "other"
+        }
       ]
     },
     "Scalar": {
