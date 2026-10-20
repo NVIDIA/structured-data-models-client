@@ -2728,6 +2728,7 @@ def _cell_pair(
     old: dict[str, Any] | None,
     stop: str | None = None,
     on_duckdb: bool = True,
+    earlier: bool = False,
 ) -> None:
     r"""H1's comparison in a cell other than the reference's: ``python-core``
     and ``python-old`` observed in the same cell, and their host fields
@@ -2736,7 +2737,11 @@ def _cell_pair(
     there is a failure: the cell's comparison needs both. ``stop``, where
     python-old stopped as the reference did and an approved move took
     python-core past it (E114): held only that far, as :func:`_host_fields`
-    holds a runner past the reference's stop.
+    holds a runner past the reference's stop. ``earlier``, where an
+    owner-approved row moved python-core's refusal to an earlier call
+    (:func:`statements_earlier`, T2.1r) and ``stop`` is that call: the
+    warnings are reported, not gated, as against the reference, since
+    python-old stands in for the reference's later calls.
 
     Off DuckDB python-old does not run (its SQLite sampling lacks the
     reference's seeding, main's f0f324ce; T2.1a fix 4), so there
@@ -2768,9 +2773,12 @@ def _cell_pair(
     if named:
         old = without_left_out_warning(old, named, core)
         core = without_core_only(core, named)
+    since = len(report.failures)
     _host_fields(
         report, case, 'python-core', core, old, 'python-old', stop=stop
     )
+    if earlier:
+        report.demote(since, keep=tuple(r for r in RULES if r != 'warnings'))
 
 
 def compare(
@@ -2900,6 +2908,7 @@ def compare(
         before = len(report.failures)
         ref = reference.get(case['id'])
         stops: dict[str, str | None] = {}
+        earliers: dict[str, str | None] = {}
         if reference_file is not None and ref is None:
             report.fail(f'{case["id"]}: no reference observation')
         if ref is not None:
@@ -2948,6 +2957,7 @@ def compare(
                 ref,
             )
             stops[who] = earlier or stop
+            earliers[who] = earlier
             if wanted is not None:
                 _effective(
                     report, case, who, observation['outcome'], wanted, ref
@@ -3043,7 +3053,16 @@ def compare(
             and all(old['outcome'][f] == ref['outcome'][f] for f in OUTCOME)
             else None
         )
-        _cell_pair(report, case, python, old, pair_stop, on_duckdb)
+        _cell_pair(
+            report,
+            case,
+            python,
+            old,
+            pair_stop,
+            on_duckdb,
+            earlier=pair_stop is not None
+            and pair_stop == earliers.get('python-core'),
+        )
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(
