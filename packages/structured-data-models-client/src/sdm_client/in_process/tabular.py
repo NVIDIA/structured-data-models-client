@@ -14,7 +14,7 @@ from sdm_client.errors import StructuredDataError
 from sdm_client.in_process.columns import (
     Context,
     Shape,
-    check_supplied,
+    check_columns,
     key_columns,
     labelled,
     stype_of,
@@ -50,7 +50,7 @@ class Tabular:
         self.check_inference(payload.get('inference') or {}, task)
         spec = payload['schema']['instance_table']
         table = payload['context']['instance_table']
-        check_supplied(table, spec, 'the context')
+        check_columns(table, spec, 'the context')
         target = task['target']['column_name']
         keys = key_columns(spec)
         stypes = {
@@ -73,6 +73,7 @@ class Tabular:
             x=instance.tensor(table, 'the context'),
             y=y,
             instance=instance,
+            target=target,
             encoded=encoded,
             labels=labels,
         )
@@ -110,18 +111,14 @@ class Tabular:
         payload: Mapping[str, Any],
         schema: Mapping[str, Any],
     ) -> tuple[Any, Any]:
-        r"""The rows to score, read as the context was, each carrying the
-        key its answer is given back under."""
+        r"""The rows to score, read as the context was."""
         table = payload['predict']['instance_table']
-        absent = sorted(
-            key_columns(schema['instance_table']) - set(table['columns'])
+        check_columns(
+            table,
+            schema['instance_table'],
+            'the rows to score',
+            frozenset({context.target}),
         )
-        if absent:
-            raise StructuredDataError(
-                f'the rows to score leave out key column(s) {absent}, which '
-                f'name the row each answer is about',
-                code='INVALID_SCHEMA',
-            )
         return context.instance.tensor(table, 'predict instance table'), None
 
     @staticmethod

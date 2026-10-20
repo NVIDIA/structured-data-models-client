@@ -67,19 +67,33 @@ def key_columns(schema: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(key or ())
 
 
-def check_supplied(
-    table: Mapping[str, Any], schema: Mapping[str, Any], where: str
+def check_columns(
+    table: Mapping[str, Any],
+    schema: Mapping[str, Any],
+    where: str,
+    unasked: frozenset[str] = frozenset(),
 ) -> None:
-    r"""Refuse a context table that leaves out a column its schema declares.
+    r"""Refuse a table that does not carry exactly the columns its schema
+    declares, each once.
 
-    The model is fitted on the columns the context carries, so one left out
-    would be answered without, though the request says it is there.
+    The model reads a table by its schema, so a column left out would be
+    answered without and one not declared would be read as nothing. The rows
+    to score may leave out ``unasked``, the target they ask about.
     """
-    missing = sorted(set(schema.get('columns') or {}) - set(table['columns']))
-    if missing:
+    named = list(table['columns'])
+    repeated = sorted({name for name in named if named.count(name) > 1})
+    if repeated:
         raise StructuredDataError(
-            f'{where} leaves out column(s) {missing}, which its schema '
-            f'declares',
+            f'{where} names column(s) {repeated} more than once',
+            code='VALIDATION_FAILED',
+        )
+    declared = set(schema.get('columns') or {})
+    missing = sorted(declared - set(named) - unasked)
+    undeclared = sorted(set(named) - declared)
+    if missing or undeclared:
+        raise StructuredDataError(
+            f'{where} does not carry the columns its schema declares: it '
+            f'leaves out {missing} and carries {undeclared} undeclared',
             code='INVALID_SCHEMA',
         )
 
@@ -142,6 +156,7 @@ class Context:
     x: Any
     y: Any
     instance: Shape
+    target: str = ''
     encoded: tuple[Any, ...] = ()
     labels: tuple[Any, ...] = ()
     related: Any = None

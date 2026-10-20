@@ -206,16 +206,19 @@ def test_a_ranking_and_a_forecast_are_asked_as_the_questions_it_serves(
 
 
 def test_a_session_keeps_the_question_it_pinned(relational):
-    """A request changed after it was pinned leaves the session's own copy
-    alone, as a NIM's is: the session still scores as the regression it
-    pinned."""
+    """A request changed after it was pinned leaves the session alone, as a
+    NIM's is: the model still scores the regression it pinned, and each
+    answer is still read under the key's own type."""
     request = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
     with SDMClient.in_process(relational) as client:
         with client.fit(request, model=KumoRelational()) as fitted:
-            request.payloads[0]['task']['kind'] = 'classification'
-            answer = fitted.predict(request).to_pandas()
+            pinned = request.payloads[0]
+            pinned['task']['kind'] = 'classification'
+            users = pinned['schema']['related_tables']['users']['columns']
+            users['user_id']['dtype'] = 'bool'
+            answer = fitted.predict(request)
 
-    assert answer['id'].tolist() == [0, 1]
+    assert [repr(item.id) for item in answer.items] == ['0', '1']
 
 
 def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(

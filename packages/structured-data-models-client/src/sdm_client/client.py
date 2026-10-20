@@ -16,6 +16,7 @@ the endpoint and credential of the client that started it.
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import warnings
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -695,7 +696,13 @@ class SDMClient:
             adapter,
             session_id,
             fields,
-            {key: value for key, value in payload.items() if key != 'context'},
+            copy.deepcopy(
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key != 'context'
+                }
+            ),
             named_outputs=outputs,
             pinned_keys=keys_in(
                 payload, 'context', with_anchor=request.target_moves_with_time

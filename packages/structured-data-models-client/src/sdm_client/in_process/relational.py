@@ -22,7 +22,7 @@ from sdm_client.errors import StructuredDataError
 from sdm_client.in_process.columns import (
     Context,
     Shape,
-    check_supplied,
+    check_columns,
     key_columns,
     labelled,
     stype_of,
@@ -106,7 +106,7 @@ class Relational:
         _check_target(task)
         split = payload['context']
         table = split['instance_table']
-        check_supplied(table, spec, 'the context')
+        check_columns(table, spec, 'the context')
         joins = _joins(edges, links)
         shapes = _shapes(split, schema, joins, edges, links)
         instance = Shape.of(
@@ -130,6 +130,7 @@ class Relational:
             x=instance.tensor(table, 'the context'),
             y=y,
             instance=instance,
+            target=task['target']['column_name'],
             encoded=encoded,
             labels=labels,
             related=RelatedTables(
@@ -190,6 +191,12 @@ class Relational:
         from sdm import RelatedTables
 
         split = payload['predict']
+        check_columns(
+            split['instance_table'],
+            schema['instance_table'],
+            'the rows to score',
+            frozenset({context.target}),
+        )
         edges, links = list(context.relationships), list(context.task_links)
         _shapes(
             split, schema, _joins(edges, links), edges, links, context.tables
@@ -364,6 +371,11 @@ def _shapes(
                     f'the context does not',
                     code='INVALID_SCHEMA',
                 )
+            check_columns(
+                table,
+                schema['related_tables'][name],
+                f'related table {name!r} of the rows to score',
+            )
             shapes[name] = compiled[name]
             continue
         table_schema = schema['related_tables'].get(name)
@@ -373,7 +385,7 @@ def _shapes(
                 f'not declare it',
                 code='INVALID_SCHEMA',
             )
-        check_supplied(table, table_schema, f'context table {name!r}')
+        check_columns(table, table_schema, f'context table {name!r}')
         keys = joins.get(name, frozenset()) | key_columns(table_schema)
         shapes[name] = Shape.of(
             table_schema, _related_stypes(table_schema, table, keys), keys

@@ -421,6 +421,12 @@ def hand_built(change) -> Request:
 GHOST = {'format': 'arrays', 'columns': ['k'], 'rows': []}
 
 
+def _with(table: dict, column: str, value: object) -> None:
+    table['columns'].append(column)
+    for row in table['rows']:
+        row.append(value)
+
+
 def _without(table: dict, column: str) -> None:
     position = table['columns'].index(column)
     del table['columns'][position]
@@ -469,6 +475,19 @@ def _without(table: dict, column: str) -> None:
                 for half in ('context', 'predict')
             ],
             'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: [
+                _with(p[half]['related_tables']['users'], 'ghost', 1.0)
+                for half in ('context', 'predict')
+            ],
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: _with(
+                p['context']['related_tables']['users'], 'age', 1.0
+            ),
+            'VALIDATION_FAILED',
         ),
     ],
 )
