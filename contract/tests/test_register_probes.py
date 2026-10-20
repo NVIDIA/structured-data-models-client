@@ -32,8 +32,10 @@ results the register's notes record. Each claim and what holds it:
   ``entity``, for T2.11's ``anchor_entity`` cases), so whether the
   corpus reaches the sort is a matter of which anchors its cases name:
   running every case of the Phase 1b inventory and of ``contract/cases``
-  on the default route calls ``sample_target`` only with timestamps; the
-  control shows the spy sees ``'entity'`` when a public call passes it.
+  on the default route calls ``sample_target`` with timestamps, but for
+  T2.11's ``anchor_entity`` cases, whose users have distinct signup times,
+  so the sort meets no tie; the control shows the spy sees ``'entity'``
+  when a public call passes it.
 """
 
 from __future__ import annotations
@@ -251,6 +253,16 @@ def test_ord1_the_case_format_admits_the_entity_anchor() -> None:
         assert run_python._invalid(validate, named) is not None, key
 
 
+#: T2.11's cases that pass the entity anchor and reach sample_target.
+ENTITY_ANCHORED = frozenset(
+    {
+        'sample.anchor-entity',
+        'sample.anchor-entity.regression',
+        'sample.anchor-entity.context-entity',
+    }
+)
+
+
 def test_ord1_no_case_reaches_the_tie_sort(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -280,7 +292,33 @@ def test_ord1_no_case_reaches_the_tie_sort(
     # predict for the shop base's users, which have no time column, so
     # neither has an entity time column for the sort to read either.
     assert any(kind == 'static' for _, kind, _, _ in calls)
+    # From T2.11 the anchor_entity cases name the entity anchor on purpose,
+    # and reach the sort; each gives its users distinct signup times, so
+    # the sort meets no tie and ORD-1's instability cannot show.
+    entity = {
+        case_id
+        for case_id, _, train, test in calls
+        if 'entity' in (train, test)
+    }
+    assert entity == ENTITY_ANCHORED
+    by_id = {case['id']: case for case in cases}
+    for case_id in entity:
+        connection = duckdb.connect()
+        try:
+            for statement in [
+                *bases[by_id[case_id]['input']['base']],
+                *by_id[case_id]['input'].get('setup', []),
+            ]:
+                connection.execute(statement)
+            times, distinct = connection.execute(
+                'SELECT count(signup), count(DISTINCT signup) FROM users'
+            ).fetchone()
+        finally:
+            connection.close()
+        assert times == distinct > 0, case_id
     for case_id, _, train, test in calls:
+        if case_id in entity:
+            continue
         assert isinstance(train, pd.Timestamp), case_id
         assert isinstance(test, pd.Timestamp), case_id
 

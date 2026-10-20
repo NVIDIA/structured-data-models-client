@@ -4,12 +4,12 @@
   "status": "acceptance",
   "slice": "S1",
   "paths": [
-    "schema.from-source/tables/duckdb",
+    "schema.from-source/all-tables/duckdb",
     "query.materialize/indices-regression/duckdb",
     "client.predict/regression/duckdb"
   ],
   "routes": [
-    "schema.from-source/tables/duckdb",
+    "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb",
     "query.materialize/indices-binary/duckdb",
     "query.materialize/indices-multiclass/duckdb",
@@ -42,13 +42,6 @@
       "CREATE TABLE SearchStream AS SELECT (i % 60)::BIGINT AS SearchID, ((i * i) % 8)::BIGINT AS AdID, ((i * 7) % 5 = 0)::INTEGER AS IsClick, TIMESTAMP '2015-05-01' + to_hours((i * 4)::INTEGER) AS SearchDate FROM range(120) t(i)"
     ],
     "from_source": {
-      "tables": {
-        "AdsInfo": "AdsInfo",
-        "Category": "Category",
-        "Location": "Location",
-        "SearchInfo": "SearchInfo",
-        "SearchStream": "SearchStream"
-      },
       "primary_keys": {
         "AdsInfo": "AdID",
         "Category": "CategoryID",
@@ -104,48 +97,7 @@
         "dialect": "duckdb"
       },
       "source": {
-        "tables": [
-          {
-            "name": "AdsInfo",
-            "source": {
-              "source": [
-                "AdsInfo"
-              ]
-            }
-          },
-          {
-            "name": "Category",
-            "source": {
-              "source": [
-                "Category"
-              ]
-            }
-          },
-          {
-            "name": "Location",
-            "source": {
-              "source": [
-                "Location"
-              ]
-            }
-          },
-          {
-            "name": "SearchInfo",
-            "source": {
-              "source": [
-                "SearchInfo"
-              ]
-            }
-          },
-          {
-            "name": "SearchStream",
-            "source": {
-              "source": [
-                "SearchStream"
-              ]
-            }
-          }
-        ],
+        "tables": [],
         "primary_keys": {
           "AdsInfo": {
             "value": [

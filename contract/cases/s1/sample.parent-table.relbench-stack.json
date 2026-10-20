@@ -4,12 +4,12 @@
   "status": "acceptance",
   "slice": "S1",
   "paths": [
-    "schema.from-source/tables/duckdb",
+    "schema.from-source/all-tables/duckdb",
     "query.materialize/indices-regression/duckdb",
     "client.predict/regression/duckdb"
   ],
   "routes": [
-    "schema.from-source/tables/duckdb",
+    "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb",
     "query.materialize/indices-binary/duckdb",
     "query.materialize/indices-multiclass/duckdb",
@@ -39,11 +39,6 @@
       "CREATE TABLE votes AS SELECT i::BIGINT AS Id, ((i * i) % 20)::BIGINT AS PostId, (i % 6)::BIGINT AS UserId, (1 + i % 3)::INTEGER AS VoteTypeId, TIMESTAMP '2020-01-05' + to_days((i * 3)::INTEGER) AS CreationDate FROM range(120) t(i)"
     ],
     "from_source": {
-      "tables": {
-        "posts": "posts",
-        "users": "users",
-        "votes": "votes"
-      },
       "primary_keys": {
         "posts": "Id",
         "users": "Id",
@@ -99,32 +94,7 @@
         "dialect": "duckdb"
       },
       "source": {
-        "tables": [
-          {
-            "name": "posts",
-            "source": {
-              "source": [
-                "posts"
-              ]
-            }
-          },
-          {
-            "name": "users",
-            "source": {
-              "source": [
-                "users"
-              ]
-            }
-          },
-          {
-            "name": "votes",
-            "source": {
-              "source": [
-                "votes"
-              ]
-            }
-          }
-        ],
+        "tables": [],
         "primary_keys": {
           "posts": {
             "value": [
