@@ -35,7 +35,7 @@
       "owner": "T1.32a",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-request/src/payload.rs:347",
+      "where": "rust/crates/sdm-request/src/payload.rs:353",
       "holds": "a value is outside the range int64 holds",
       "why": "The reference's own refusal of uint64 keys past int64's maximum in stage, class and code, on both runners, but not in its message or details: the core says only that the request is not one it accepts, with the column in its details, where the reference names the column, row and value and gives the remedy (send the column as strings) with no details. T1.32a keeps the core's details (no value, H17), the remedy being the host's to word",
       "observed": {
