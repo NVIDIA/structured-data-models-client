@@ -1922,6 +1922,7 @@ jobs:
           # upgraded by the line; one at or above it is kept.
           pandas_after=$(python -c 'import importlib.metadata as m; print(m.version("pandas"))')
           echo "pandas: the runtime's $pandas_before, after the install $pandas_after"
+          python -c 'import importlib.metadata as m; print("after the install:", ", ".join(f"{n} {m.version(n)}" for n in ("numpy", "pandas", "pyarrow", "PyYAML")))'
           if [ "$(printf '%s\n' 2.2.2 "$pandas_after" | sort -V | head -n 1)" != 2.2.2 ]; then
             echo "the install left pandas $pandas_after, below the client's floor 2.2.2" >&2
             exit 1
