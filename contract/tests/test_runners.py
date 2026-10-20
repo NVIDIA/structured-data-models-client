@@ -159,8 +159,16 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
     # differences the comparator reports and gates none; each outcome held
     # to its effective expectation, as the gate holds it (T1.18), so an
     # approved outcome change passes here too.
-    compared = _compare(CASES, core, old, expect=expectations(tmp_path))
+    expect = expectations(tmp_path)
+    compared = _compare(CASES, core, old, expect=expect)
     assert compared.returncode == 0, compared.stdout
+    # An owner-approved row moving the refusal to an earlier call, naming
+    # it under statements_differ (T2.1r; P2E-19's LIST_DISTINCT link
+    # prediction, KO2-75): python-core's call ends there, with the row's
+    # outcome, as the comparator reads the register and the expectations.
+    judge = _module(COMPARE, 't210_compare')
+    differ = judge.statements_differ(judge.REGISTER)
+    effective = judge.expectations(Path(expect[1])) if expect else {}
     assert 'DIFFERS' not in compared.stdout
     operations = {
         'S0': ['validate_query'],
@@ -199,6 +207,19 @@ def test_the_s0_cases_agree_with_the_reference_on_both_python_runners(
             if case['expect']['stage'] != 'from_source':
                 stages = ['materialize', 'predict']
                 wanted += stages[: stages.index(case['until']) + 1]
+        calls = differ.get((case['id'], 'python-core'), ())
+        moved = effective.get(case['id'], {}).get('python-core')
+        if (
+            moved is not None
+            and moved.get('result') == 'refusal'
+            and len(calls) == 1
+            and moved.get('stage') == calls[0]
+            and calls[0] in wanted
+            and calls[0] != wanted[-1]
+        ):
+            wanted = wanted[: wanted.index(calls[0]) + 1]
+            seen = observation['outcome']
+            assert {f: seen[f] for f in moved} == moved, case['id']
         assert observation['identity']['operations'] == wanted, case['id']
         assert observation['identity']['native'] is not None
     for observation in _observations(old):
