@@ -1360,10 +1360,12 @@ jobs:
       # cell: the key vectors hold a run's host fields (the frame, the
       # warning classes) to its own cell's recording, and every core field,
       # statement and joined row to the reference cell's. The provider's own
-      # test needs the test-ops build, and runs in native-test-ops.
+      # test needs the test-ops build, and runs in native-test-ops. T2.21's
+      # exact-key vectors too: an unconstrained numeric keyed or linked by
+      # the caller, held to python-ref's catalog control on the service.
       - &contract-postgres-vectors
-        name: T2.3's Postgres regression and key vectors on the service
-        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py -q
+        name: T2.3's Postgres regression and key vectors, and T2.21's exact-key vectors, on the service
+        run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py -q
       - *contract-kit-wheel
       - *contract-kit-python
       - *contract-kit
