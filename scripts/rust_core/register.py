@@ -35,7 +35,10 @@ It holds the file, as ``--root``'s tree has it, to:
   the old outcome's refusal there, its code the same (KO2-68), or on a
   move of the old outcome's refusal to the new outcome's at an earlier
   call, its own code, that call named (T2.1r), which only the owner
-  approves;
+  approves: the old outcome's call stated, or the committed reference's
+  on a line with no baseline yet (``old: none``), and a row whose new
+  outcome names no call (rust-host's) only beside its entry's
+  python-core row for the line naming the same call;
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;
   and no entry accepting ``INTERNAL_ERROR``, the code a contained panic
@@ -318,9 +321,9 @@ def _statements_differ_form(
     call refused: ``same``, on a move between the old outcome's refusal
     there and a success either way (T2.1e), or on a row keeping that
     refusal, its code the same (KO2-68); ``earlier``, on a move of the old
-    outcome's refusal to the new outcome's at an earlier call, with its
-    own code (T2.1r), the reference's later calls never made; None
-    otherwise."""
+    outcome's refusal at a call it names to the new outcome's at the
+    earlier call it names, with its own code (T2.1r), the reference's
+    later calls never made; None otherwise."""
     if old is None or new is None or not isinstance(calls, list):
         return None
     if len(calls) != 1:
@@ -348,17 +351,33 @@ def _statements_differ_form(
     if (
         old['result'] == new['result'] == 'refusal'
         and call in STAGES[:-1]
-        and new['stage'] in (None, call)
-        and (
-            old['stage'] is None
-            or (
-                old['stage'] in STAGES
-                and STAGES.index(old['stage']) > STAGES.index(call)
-            )
-        )
+        and new['stage'] == call
+        and old['stage'] in STAGES
+        and STAGES.index(old['stage']) > STAGES.index(call)
     ):
         return 'earlier'
     return None
+
+
+def _earlier_call(
+    outcome: dict[str, Any], refused: dict[str, str] | None
+) -> str | None:
+    r"""The earlier call a ``case_outcomes`` row moves its old refusal to
+    and names under ``statements_differ`` (T2.1r), its old outcome's call
+    stated, or, on a line with no baseline yet (``old: none``), the
+    committed reference's; None for any other row."""
+    old, new = (
+        parse_outcome(str(outcome.get('old'))),
+        parse_outcome(str(outcome.get('new'))),
+    )
+    stage = (refused or {}).get(str(outcome.get('case')))
+    if outcome.get('old') == 'none' and stage is not None:
+        old = {'result': 'refusal', 'code': None, 'stage': stage}
+    calls = outcome.get('statements_differ')
+    if _statements_differ_form(old, new, calls) != 'earlier':
+        return None
+    assert isinstance(calls, list)
+    return str(calls[0])
 
 
 def _outcome_problems(
@@ -380,13 +399,27 @@ def _outcome_problems(
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
     calls = outcome.get('statements_differ')
     form = _statements_differ_form(old, new, calls)
-    stage = (refused or {}).get(outcome['case'])
-    if form is None and outcome['old'] == 'none' and stage is not None:
-        # A line with no baseline yet moves the reference's own refusal,
-        # at the call it stopped at, to an earlier one (T2.1r).
-        theirs = {'result': 'refusal', 'code': None, 'stage': stage}
-        if _statements_differ_form(theirs, new, calls) == 'earlier':
-            form = 'earlier'
+    if form is None and _earlier_call(outcome, refused) is not None:
+        form = 'earlier'
+    if (
+        form is None
+        and new is not None
+        and new['result'] == 'refusal'
+        and new['stage'] is None
+        and isinstance(calls, list)
+        and len(calls) == 1
+        and any(
+            isinstance(other, dict)
+            and other.get('case') == outcome['case']
+            and other.get('runner') == 'python-core'
+            and _earlier_call(other, refused) == calls[0]
+            for other in entry.get('case_outcomes') or []
+        )
+    ):
+        # A runner whose outcome names no call (rust-host) moves the
+        # refusal earlier only beside its entry's python-core row for the
+        # line, which names the call it is refused at (T2.1r).
+        form = 'earlier'
     if calls is not None and form is None:
         # The call whose statements differ is the one refused: the
         # reference's, on a move from that refusal to an answer, or the
