@@ -71,7 +71,12 @@ DATABASES = ('duckdb', 'sqlite', 'postgres')
 #: reference's notice quotes it (none where the validator refuses the
 #: query first).
 FILTERED = {
+    'filter.entity-column': 'users.age > 22',
+    'filter.entity-text': "users.country = 'DE'",
+    'filter.entity-aggregation': 'COUNT(orders.*, -60, 0, days) > 0',
+    'filter.matches-none': 'users.age > 100',
     'filter.event-column': None,
+    'filter.ranking': 'users.age > 22',
 }
 #: The named-entity cases, by id: the entities the query names.
 NAMED_ENTITIES = {
@@ -80,7 +85,12 @@ NAMED_ENTITIES = {
     'ids.absent': '= 99',
     'ids.wrong-type': "= 'a'",
 }
-ASSUMING = ('assuming.static',)
+ASSUMING = (
+    'assuming.regression',
+    'assuming.binary',
+    'assuming.no-examples',
+    'assuming.static',
+)
 EVALUATE = ('evaluate.regression', 'evaluate.binary')
 #: The explanation cases, by id: whether the query says EXPLAIN, the
 #: outputs predict asks for, and whether the endpoint explains.
@@ -153,8 +163,13 @@ CALLS = {
     **{
         case_id: [2]
         for case_id in (
+            'filter.entity-column',
+            'filter.entity-text',
+            'filter.entity-aggregation',
             'ids.in-list-other-indices',
             'ids.absent',
+            'assuming.regression',
+            'assuming.binary',
             *EVALUATE,
             'explain.query',
             'metadata.items',
@@ -163,6 +178,7 @@ CALLS = {
             'config-text.class-shuffle',
         )
     },
+    'filter.ranking': [2, 2, 2],
     'ids.one': [1],
     'explain.answered': [1],
     'explain.explanation-only': [1],
@@ -189,8 +205,10 @@ WARNED = {
 #: these options reach names what the reference's names, never only "the
 #: request is not one the core accepts".
 NAMED = {
+    'filter.matches-none': ['users.age > 100'],
     'filter.event-column': ['orders.price'],
     'ids.wrong-type': ['users.user_id'],
+    'assuming.no-examples': ['context examples'],
     'assuming.static': ['users.age > 22'],
     'explain.two-entities': ['explanation'],
     'transforms.null': ['target_transforms'],
@@ -297,13 +315,17 @@ def _case(case_id: str) -> dict[str, Any]:
 @pytest.mark.parametrize('case_id', list(FILTERED))
 def test_each_entity_filter_case_filters_the_entity(case_id: str) -> None:
     r"""Exit "``entity_filter``": the query's entity carries a WHERE
-    filter (a fact table's column, which the validator refuses; the
-    filters the core answers are T2.13b's)."""
+    filter (a column of the entity table, a text, an aggregation, one no
+    entity passes, a fact table's column, and a ranking's)."""
     case = _case(case_id)
     pql = case['input']['pql']
     entity = pql[pql.index(' FOR EACH users.user_id WHERE ') :]
     condition = FILTERED[case_id]
     assert condition is None or entity.endswith(f'WHERE {condition}')
+    if case_id == 'filter.ranking':
+        assert ' RANK TOP 2 ' in pql
+        assert case['input']['materialize']['candidates'] == [0, 1, 2]
+        assert case['input']['probabilities'] is True
 
 
 @pytest.mark.parametrize('case_id', list(NAMED_ENTITIES))
@@ -525,7 +547,15 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
     sent = [_plain(p) for p in payloads(line)]
     for payload in sent:
         query = payload['metadata']['source_query']
-        if case_id != 'explain.forecast':
+        if case_id == 'filter.ranking':
+            # One binary question per candidate, each keeping the filter.
+            assert query.endswith(
+                ' FOR EACH users.user_id WHERE users.age > 22'
+            )
+            assert query.startswith(
+                'PREDICT COUNT(buys.* WHERE buys.item_id = '
+            )
+        elif case_id != 'explain.forecast':
             # A forecast is asked a step at a time, each its own query.
             assert query == case['input']['pql']
     if case_id in NAMED_ENTITIES and vector['result']:
