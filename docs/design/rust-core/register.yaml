@@ -7405,20 +7405,23 @@ entries:
     or edited vector answered as python-ref answers the declared control.
 
 - id: P2G-3
-  title: On Postgres a catalog-declared numeric(p,s) key is sent in its exact declared type, where the reference sends its text
+  title: On Postgres a catalog-declared numeric(p,s) key is described and sent in its exact declared type, where the reference uses its text
   kind: change
   old_behavior: >-
     The reference reads a Postgres numeric or decimal column that a declared
     primary, unique or foreign key names as text, whatever its precision,
     and any other numeric(p,s) by its scale (int64 at scale 0, a double
-    otherwise); so a declared numeric(38,0) key past 2**53 is sent as its
-    text, exact, its columns' dtype string.
+    otherwise); so a declared numeric(38,0) key past 2**53 is its text,
+    exact: its key columns' dtype is string in the public schema, in the
+    request sent, and in the prediction result's id column.
   new_behavior: >-
     The core reads a numeric(p,s) by its declared type whatever its role
     (P2C-3's reading, under KO2-35), so a declared numeric(38,0) key holding
-    ids that fit int64 is sent as int64, exact, its columns' dtype int64. The
-    id is exact on both: the request differs from the reference's in the
-    three key columns' dtype only.
+    ids that fit int64 is int64, exact. The id is exact on both; the dtype
+    differs wherever the key shows: the two key columns in the public schema
+    (Schema.from_source's users.user_id and orders.user_id), the three key
+    columns of the request sent, and the prediction result's id column
+    (with the result's digest, which hashes that column's type).
   affected_inputs: >-
     PredictiveQuery.materialize and SDMClient.predict on the core route over
     a Postgres source with a numeric(p,s) primary or foreign key the catalog
@@ -7432,6 +7435,10 @@ entries:
     - 'public.payloads/*/2/schema/instance_table/columns/__kumo_entity_ref_0/dtype'
     - 'public.payloads/*/2/schema/related_tables/users/columns/user_id/dtype'
     - 'public.payloads/*/2/schema/related_tables/orders/columns/user_id/dtype'
+    - 'public.schema/tables/0/columns/1/dtype'
+    - 'public.schema/tables/1/columns/0/dtype'
+    - 'public.result/columns/1/dtype'
+    - 'public.result/digest'
   - case: key.past-2-53.catalog@postgres
     runners: [rust-host]
     fields:
