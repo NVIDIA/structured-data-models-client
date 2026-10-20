@@ -7118,9 +7118,12 @@ entries:
     route and warns as the reference does).
   cases: [s0.boundary.escapes@sqlite, s0.boundary.escapes@postgres]
   refs: [T2.10, P2B-16, P2C-7]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-83}
+  fewer_deprecations:
+  - {case: s0.boundary.escapes@sqlite, runners: [python-core, rust-host]}
+  - {case: s0.boundary.escapes@postgres, runners: [python-core, rust-host]}
   notes: >-
     Proposed by T2.10's implementer at the orchestrator's decision
     (register it rather than repeat a deprecation warning), for the
@@ -7131,6 +7134,8 @@ entries:
     reference line holds five and CI's python-core observation two (round
     1's review). Seen once P2B-16 and P2C-7
     were retired, the core no longer refusing the case's condition.
+    Approved by the owner on 2026-10-20 as KO2-83 (relayed by the
+    orchestrator; T2.1s's fewer_deprecations rule reads the two lines).
   case_outcomes:
   - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'success at materialize', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
   - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
@@ -7289,14 +7294,18 @@ entries:
     until Phase 4 (as KO2-22 keeps model and text_time_rules), or bring
     temporal link prediction into Phase 2.
     Approved by the owner on 2026-10-19 as KO2-75 (relayed by the
-    orchestrator; T2.1p).
+    orchestrator; T2.1p). Each row names materialize under
+    statements_differ (T2.1r's opt-in for a refusal moved to an earlier
+    call): the core refuses there, before the reference's later refusal
+    at predict, so the reference's statements past materialize are no
+    expectation of its own.
   case_outcomes:
-  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
-  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal - at predict (NimRequestError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
+  - {case: target.aggregation.list-distinct@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal UNSUPPORTED_REQUEST', statements_differ: [materialize], summary: 'T2.10: LIST_DISTINCT link prediction refused by name until Phase 4 (KO2-75)'}
 
 # --- lane G entries (P2G-1..19) ---
 
