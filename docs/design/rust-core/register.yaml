@@ -7360,6 +7360,50 @@ entries:
   - {case: multicall.fail-call-2@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on Postgres, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
   - {case: multicall.forecast.fail-call-1@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal -', new: 'refusal INVALID_RESPONSE', summary: 'on Postgres, python-ref''s line moved to the core''s INVALID_RESPONSE, as on DuckDB'}
 
+- id: P2G-2
+  title: On Postgres an exact id past 2**53 that the caller keys or links is answered, where the reference refuses it
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres numeric declared without a precision as
+    its text only where a constraint the catalog declares (primary, unique
+    or foreign key) names the column, and as a double otherwise. A key the
+    caller names (Schema.from_source's primary_keys or an edit), a link the
+    caller gives, or a link set by an edit, on such a column is then a
+    double: ids past 2**53 merge, and the reference refuses the entity at
+    materialize (INVALID_REQUEST); a link from such a column to a declared
+    key is refused as joining a double to a text.
+  new_behavior: >-
+    The core reads such a column by its role in the schema as it stands
+    (T2.21, lesson 19): its exact text where the catalog declares it a key,
+    or where the schema keys it or joins it and every column it joins to is
+    read as text too, both ends of a link decided together; a double
+    otherwise, a feature included. So a key or link the caller gives or
+    edits is answered as the same tables with the key and link declared
+    are, the id kept exact and the column described as string. A link to an
+    integer column keeps the reference's reading, and links inferred by
+    name are judged by the reference's types, so no link is added.
+  affected_inputs: >-
+    Schema.from_source, schema edits, PredictiveQuery.materialize and
+    SDMClient.predict on the core route over a Postgres source whose
+    numeric column declared without a precision the caller keys or links,
+    with ids a double cannot tell apart.
+  cases: []
+  refs:
+  - KO2-35
+  - 'contract/exact-key-vectors.json#pk.given refusal INVALID_REQUEST -> success'
+  - 'contract/exact-key-vectors.json#fk.given refusal INVALID_REQUEST -> success'
+  - 'contract/exact-key-vectors.json#fk.edited refusal INVALID_REQUEST -> success'
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-78}
+  notes: >-
+    Approved by the owner on 2026-10-20 as KO2-78 ("regarding the id
+    staying exact and the user getting their answer - sure, let's do what
+    you recommend"), relayed by the orchestrator: a lifted refusal, the id
+    kept exact under KO2-35. Measured by T2.21's test author on Postgres 17
+    (contract/exact-key-vectors.json, recorded from python-ref): each given
+    or edited vector answered as python-ref answers the declared control.
+
 
 # --- lane C entries (P2C-1..19) ---
 
