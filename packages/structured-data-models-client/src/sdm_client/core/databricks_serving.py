@@ -198,6 +198,27 @@ class DatabricksServingTransport:
         )
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._decoded(self._answered(payload))
+
+    def predict_body(self, body: bytes) -> bytes:
+        r"""Sends a prediction call the core wrote (UTF-8 JSON), wrapped in
+        this endpoint's envelope, and gives back the served model's answer
+        as the text it wrote, encoded as UTF-8, for the core to read: a
+        failure the answer reports by its status is raised as :meth:`predict`
+        raises it, as is an answer that is not a JSON object; one nested
+        past this interpreter's reader is handed over as written, for the
+        core to refuse as too deep (register P1B-22)."""
+        text = self._answered(json.loads(body))
+        try:
+            self._decoded(text)
+        except StructuredDataError as failed:
+            if not failed._response_too_deep:
+                raise
+        return text.encode('utf-8')
+
+    def _answered(self, payload: dict[str, Any]) -> str:
+        r"""The served model's answer to ``payload``, as the text it
+        wrote."""
         self._require_open()
         _check_encodable(payload)
         try:
@@ -228,7 +249,7 @@ class DatabricksServingTransport:
         # carries no rows.
         except OSError as error:
             raise self._error_from(error) from None
-        return self._decoded(_response_body(reply, self._endpoint))
+        return _response_body(reply, self._endpoint)
 
     def _decoded(self, body: str) -> dict[str, Any]:
         try:

@@ -198,7 +198,115 @@ _HOLDS = (
     'it is {{anchor!t}}, and {{tables!j}} {holds} data from {{min_time!t}} '
     'to {{max_time!t}}'
 )
+#: A relationship as the reference shows one (``Relationship.__repr__``).
+_LINK = '{source_table}.{source_column} -> {target_table}.{target_column}'
+#: The fields a schema's refusal names, by operation: ``describe_source``'s
+#: keys and time columns, and each edit's (T2.14b).
+_SCHEMA_FIELDS = (
+    'primary_keys',
+    'time_columns',
+    'primary_key',
+    'time_column',
+    'stype',
+    'column',
+    'relationships',
+)
+#: The schema's refusals (G15, KO2-32), by the core's rule, in the
+#: reference's words (``main``'s ``schema.py``: ``_require_table``,
+#: ``_check_column``, ``_check_key``, ``_check_time_column``,
+#: ``_check_stype``, ``_check_supports_dtype``, ``__delitem__``,
+#: ``_checked_links`` and ``_require_joinable``): the table, the column, the
+#: value given (``given``, as the host spelled one no contract type holds)
+#: and what the table or schema has.
+_SCHEMA_SAID = {
+    'no_table': 'no table {table!r} in this schema; it has {tables!r}',
+    'key_not_names': (
+        'a primary key names a column or a sequence of them, got {given}'
+    ),
+    'time_column_not_a_name': (
+        'table {table!r} has no column {given}; it has {columns!r}'
+    ),
+    'column_not_a_name': (
+        'table {table!r} has no column {given}; it has {columns!r}'
+    ),
+    'empty_key': 'table {table!r} was given an empty primary key',
+    'no_column': (
+        'table {table!r} has no column {column!r}; it has {columns!r}'
+    ),
+    'key_cannot_identify': (
+        'column {column!r} holds {dtype!r}, which cannot identify a row, so '
+        'it cannot be a primary key'
+    ),
+    'key_is_time_column': (
+        'column {column!r} is already the time column of table {table!r}, '
+        'so it cannot also be its primary key'
+    ),
+    'time_is_key': (
+        'column {column!r} is already the primary key of table {table!r}, '
+        'so it cannot also be its time column'
+    ),
+    'meaning_not_carried': (
+        'column {column!r} holds {dtype!r}, which cannot mean {stype!r}'
+    ),
+    'not_a_semantic_type': (
+        '{given_text!r} is not a semantic type; use one of {stypes!r}'
+    ),
+    'not_a_semantic_type_spelled': (
+        '{given} is not a semantic type; use one of {stypes!r}'
+    ),
+    **{
+        f'left_out_{rule}': (
+            "{table}.{column} is the table's "
+            + role
+            + '; set that to something else, or None, before leaving the '
+            'column out'
+        )
+        for rule, role in (
+            ('key', 'primary key'),
+            ('time_column', 'time column'),
+        )
+    },
+    **{
+        rule: (
+            _LINK
+            + ' does not join to a primary key: table {target_table!r} has '
+            + has
+            + '. A relationship points at the key that identifies a row, so '
+            'set that key first if it is not the one inference found'
+        )
+        for rule, has in (
+            ('not_the_key', '{key[0]!r}'),
+            ('no_key', 'no primary key'),
+        )
+    },
+    'composite_key': (
+        _LINK + ' points at {target_table!r}, whose primary key is {key!r}. '
+        'An edge joins one column to one key, so a table with a composite '
+        'key cannot be the target of a relationship'
+    ),
+    'types': (
+        _LINK + ' joins {source_dtype!r} to {target_dtype!r}, which cannot '
+        'match. Give both columns the same kind of value'
+    ),
+    'not_a_relationship': (
+        'a relationship must be a Relationship, got {given}. Build one with '
+        'Relationship(source_table, source_column, target_table, '
+        'target_column)'
+    ),
+}
 WORDED: dict[tuple[str, ...], str] = {
+    **{
+        ('INVALID_REQUEST', field, rule): said
+        for field in _SCHEMA_FIELDS
+        for rule, said in _SCHEMA_SAID.items()
+    },
+    # A request whose kept state is of a version this client's core does
+    # not read (H23, T2.14b).
+    ('INVALID_REQUEST', 'state.version'): (
+        "the request's state is of version {version}, and this client reads "
+        'version {reads}: materialize the request again with this client '
+        'to predict it'
+    ),
     ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
     ('INVALID_REQUEST', 'payload', 'smaller_calls'): _ASK_IN_SMALLER_CALLS,
     ('INVALID_REQUEST', 'payload', 'no_smaller_call'): _NO_CALL_IS_SMALLER,

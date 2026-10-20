@@ -62,7 +62,6 @@ Nothing here imports the relational engine.
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -126,56 +125,6 @@ def _payload(payload: dict[str, Any]) -> bytes:
         'this request carries a value that cannot be sent as JSON',
         code='INVALID_REQUEST',
     )
-
-
-#: How deep :func:`_encoded` writes an answer: past the core's reader's
-#: depth (``sdm_wire::json::MAX_DEPTH``, 128), so the core, not Python's
-#: recursion, refuses one nested deeper, as ``too_deep``.
-_ENCODED_DEPTH = 129
-
-
-def _encoded(value: Any) -> bytes:
-    r"""An answer the transport decoded, as JSON text for the core: what
-    ``json.dumps`` writes, but each non-finite float Python's reader made of
-    the endpoint's text (an overflowing ``1e400``, or the ``NaN`` and
-    ``Infinity`` JSON does not hold), wherever it is, as a token the core
-    reads as the same number, what it means being the core's: an infinity as
-    ``1e400`` or ``-1e400``, a NaN as ``NaN``. It writes without recursion,
-    and an answer nested past the core's depth is cut at one level past it,
-    which the core refuses as too deep."""
-    out: list[str] = []
-    # Each entry: text to write, or an item to write at a depth.
-    stack: list[tuple[str | None, Any, int]] = [(None, value, 0)]
-    while stack:
-        text, item, depth = stack.pop()
-        if text is not None:
-            out.append(text)
-            continue
-        if isinstance(item, float) and not math.isfinite(item):
-            out.append(
-                'NaN' if item != item else ('1e400' if item > 0 else '-1e400')
-            )
-        elif isinstance(item, (dict, list, tuple)):
-            if depth >= _ENCODED_DEPTH:
-                # Deep enough for the core to refuse; what is inside is
-                # never read.
-                out.append('[]')
-                continue
-            members = (
-                [(json.dumps(str(k)) + ': ', v) for k, v in item.items()]
-                if isinstance(item, dict)
-                else [('', v) for v in item]
-            )
-            close = '}' if isinstance(item, dict) else ']'
-            out.append('{' if isinstance(item, dict) else '[')
-            stack.append((close, None, depth))
-            for index in range(len(members) - 1, -1, -1):
-                prefix, member = members[index]
-                stack.append((None, member, depth + 1))
-                stack.append(((', ' if index else '') + prefix, None, depth))
-        else:
-            out.append(json.dumps(item))
-    return ''.join(out).encode()
 
 
 def _copied(value: Any) -> Any:
@@ -322,47 +271,31 @@ def predict(
             )
         )
     )
-    # The candidates the core left out, unscored, which it names before any
-    # call is made: the calls are the others', in order.
-    cold: list[int] = []
     # A model handle is the host's object; its id, or the id given, is the
     # core's to check.
     model_id = model if isinstance(model, str) else spec_for(model).model_id
 
-    calls = 0
-
     def model_call(body: bytes) -> bytes:
-        nonlocal calls
-        # A forecast's steps, and a ranking's questions but those left out,
-        # are called in order, one call each, so the call is the part a
-        # refusal of the endpoint is said of.
-        calls += 1
         # What failed is noted inside the handlers and raised after them, so
         # the transport's exception, whose text the endpoint wrote, is not
-        # even the context of what is raised.
+        # even the context of what is raised. The part a refusal is said of,
+        # a forecast's step or a ranking's candidate, and how many were
+        # answered before it, are the core's, which it names on its end of
+        # the run (``run``'s ``_carried``).
         failure: StructuredDataError | None = None
         unexpected: Exception | None = None
         transport_failed = False
-        too_deep = False
         refused: NimRequestError | None = None
         try:
             # The core's call, its bytes as written (register PD-2, T1.28a),
-            # through the adapter that explains the endpoint's refusals.
-            answer = client._send_body(_adapter(client, model_id), body)
+            # through the adapter that explains the endpoint's refusals; the
+            # answer, the bytes the endpoint sent, is the core's to read
+            # (T2.14b).
+            return client._send_body(_adapter(client, model_id), body)
         except NimRequestError as refusal:
             refused = refusal
         except StructuredDataError as failed:
-            # The flag is set only where the transport's json.loads raised
-            # RecursionError; one raised under a lowered recursion limit is
-            # read as too deep too, which is acceptable.
-            if failed.code == 'TRANSPORT_ERROR' and failed._response_too_deep:
-                # An answer nested deeper than Python's reader takes on this
-                # interpreter (before 3.12, past about 1,000 levels): the
-                # core is told so with an answer cut one level past its own
-                # depth, which it refuses as too deep, as on every
-                # interpreter (register P1B-22).
-                too_deep = True
-            elif failed.code == 'TRANSPORT_ERROR':
+            if failed.code == 'TRANSPORT_ERROR':
                 transport_failed = True
             else:
                 failure = StructuredDataError(
@@ -377,8 +310,6 @@ def predict(
             # reference's client does (T2.8c fix 1). An interrupt is no
             # Exception, and cancels the run as before.
             unexpected = other
-        if too_deep:
-            return b'[' * _ENCODED_DEPTH + b']' * _ENCODED_DEPTH
         if transport_failed:
             raise TransportFailed
         raised: StructuredDataError | None = failure
@@ -389,24 +320,11 @@ def predict(
             # the calls before this one (T2.8c), which this raises on.
             raised = _refusal(refused)
         if raised is not None:
-            # The call a refusal is said of: a forecast's step, or a
-            # ranking's candidate, with how many were answered before it.
-            if ranking is None:
-                raised._forecast_step = calls  # type: ignore[attr-defined]
-            else:
-                asked = [at for at in ranking['positions'] if at not in cold]
-                raised._ranking_candidate = asked[calls - 1]  # type: ignore[attr-defined]
-                if calls > 1:
-                    raised.details = {
-                        **(raised.details or {}),
-                        'parts_answered': calls - 1,
-                    }
             raise Refused(
                 raised, None if refused is None else refused.status_code
             )
-        if unexpected is not None:
-            raise Refused(unexpected)
-        return _encoded(answer)
+        assert unexpected is not None
+        raise Refused(unexpected)
 
     operation: dict[str, Any] = {
         'op': 'predict',
@@ -492,7 +410,6 @@ def predict(
     def unscored(fields: dict[str, Any]) -> str:
         # The core's notice of the candidates it left out, by position, said
         # naming each as the caller gave it, as the client says it.
-        cold.extend(fields['candidates'])
         return _unscored([given[at] for at in fields['candidates']])
 
     try:

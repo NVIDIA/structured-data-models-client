@@ -117,6 +117,10 @@ pub fn start(
                 .with_field(
                     "version",
                     Detail::Scalar(Scalar::UInt32(request.state.version)),
+                )
+                .with_field(
+                    "reads",
+                    Detail::Scalar(Scalar::UInt32(REQUEST_STATE_VERSION)),
                 ));
             }
             let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)

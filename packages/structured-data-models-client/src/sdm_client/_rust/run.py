@@ -278,6 +278,7 @@ def _steps(
                 # The call's own failure, as the caller sees it, carrying
                 # what the core carried on its end of the run.
                 _carried(error, refused.raised)
+                _of_the_part(error, refused.raised)
                 raise refused.raised
             raise error from None
         _warn(handle, quiet, given, kept, words)
@@ -419,6 +420,11 @@ def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
 
 #: The core's fields that say what a failed request had answered (T2.8c).
 _ANSWERED_FIELDS = ('calls_answered', 'parts_answered')
+#: The core's fields that say which part of a question asked in parts a
+#: failed call was (a forecast's step, a ranking's candidate by its position
+#: among those given, and how many questions the ranking is asked as),
+#: which the client says the refusal of (T2.14b).
+_PART_FIELDS = ('forecast_step', 'ranking_candidate', 'ranking_parts')
 
 
 def _carried(error: StructuredDataError, raised: Exception) -> None:
@@ -441,6 +447,22 @@ def _carried(error: StructuredDataError, raised: Exception) -> None:
     raised.details = details  # type: ignore[attr-defined]
     if answered is not None:
         raised._answered = answered  # type: ignore[attr-defined]
+
+
+def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
+    r"""Puts on ``raised``, a refusal the client raises, which part of a
+    question asked in parts the core said ``error`` happened in
+    (:data:`_PART_FIELDS`), which the client says it of (T2.14b)."""
+    if not isinstance(raised, StructuredDataError):
+        return
+    named = {
+        name: error.details[name]
+        for name in _PART_FIELDS
+        if name in (error.details or {})
+    }
+    if named:
+        held = raised.details
+        raised.details = {**(held if isinstance(held, dict) else {}), **named}
 
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:

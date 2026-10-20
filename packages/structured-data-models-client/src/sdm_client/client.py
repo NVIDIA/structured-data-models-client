@@ -637,19 +637,24 @@ class SDMClient:
                 raise
             raise explained from error
 
-    def _send_body(self, adapter: Any, body: bytes) -> dict[str, Any]:
+    def _send_body(self, adapter: Any, body: bytes) -> bytes:
         r"""Post one call already written (the core's, on its route), its
         bytes unchanged where the transport sends bytes as they are, as the
         HTTP transport does, so the bytes the core's size limit counted are
-        the bytes sent (register PD-2, T1.28a); a transport that writes its
-        own body (a Databricks serving endpoint's envelope) is handed the
-        call decoded. A refusal the adapter explains as :meth:`_send`
-        does."""
+        the bytes sent (register PD-2, T1.28a), and give back the answer as
+        the bytes the endpoint sent, which the core reads (T2.14b); a
+        transport that writes its own body (a Databricks serving endpoint's
+        envelope) is handed the call decoded and gives back the answer's
+        text. A transport with no ``predict_body`` answers decoded, which is
+        written back as JSON text. A refusal the adapter explains as
+        :meth:`_send` does."""
         send = getattr(self._transport, 'predict_body', None)
         try:
             if send is not None:
-                return send(body)
-            return self._transport.predict(json.loads(body))
+                return bytes(send(body))
+            return json.dumps(
+                self._transport.predict(json.loads(body))
+            ).encode()
         except StructuredDataError as error:
             explained = adapter.explain_error(error, json.loads(body))
             if explained is error:
@@ -864,9 +869,9 @@ def _said_of_the_part(
 ) -> StructuredDataError:
     r"""A refusal of a question the core predicted in parts, said of the
     part it happened in, as :meth:`SDMClient._answer_in_parts` says each
-    part's: a forecast's step (``forecast_step``, or the call the endpoint
-    refused), or a ranking's candidate (``ranking_candidate``, or the call
-    the endpoint refused), named as the caller gave it; a ranking's
+    part's: a forecast's step (the core's ``forecast_step``), or a
+    ranking's candidate (the core's ``ranking_candidate``), named as the
+    caller gave it; a ranking's
     refusal naming candidates by their position among those given names
     them as given."""
     rewritten = request._decomposition
@@ -875,9 +880,7 @@ def _said_of_the_part(
     if not isinstance(details, dict):
         details = {}
     if rewritten.kind != RANKING:
-        step = getattr(error, '_forecast_step', None)
-        if step is None:
-            step = details.pop('forecast_step', None)
+        step = details.pop('forecast_step', None)
         return about_the_part(error, rewritten, step or 1)
     state: dict[str, Any] = getattr(request, '_core_state', None) or {}
     positions = state['ranking']['positions']
@@ -892,9 +895,7 @@ def _said_of_the_part(
         details['candidate'] = by_position.get(
             details['candidate'], details['candidate']
         )
-    position = getattr(error, '_ranking_candidate', None)
-    if position is None:
-        position = details.pop('ranking_candidate', None)
+    position = details.pop('ranking_candidate', None)
     details.pop('ranking_parts', None)
     if position is not None:
         return about_the_part(error, rewritten, by_position[position])

@@ -39,11 +39,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from sdm_client._rust.codec import UNREADABLE
 from sdm_client._rust.codec import given as _given
 from sdm_client._rust.codec import given_key as _key
 from sdm_client._rust.codec import given_name_or_none as _name_or_none
 from sdm_client._rust.codec import given_text as _text
+from sdm_client._rust.codec import spelled as _spelled
 
 
 def _schema_holding(table: Any) -> tuple[Any, str] | None:
@@ -62,7 +62,7 @@ def _link(link: Any) -> Any:
     from sdm_client.schema import Relationship
 
     if not isinstance(link, Relationship):
-        return UNREADABLE
+        return _spelled(link)
     names = (
         link.source_table,
         link.source_column,
@@ -70,7 +70,7 @@ def _link(link: Any) -> Any:
         link.target_column,
     )
     if not all(isinstance(name, str) for name in names):
-        return UNREADABLE
+        return _spelled(link)
     return _given(
         [
             {'table': str.__str__(names[0]), 'column': str.__str__(names[1])},

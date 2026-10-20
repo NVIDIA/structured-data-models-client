@@ -243,37 +243,33 @@ def _indices(indices: Sequence[Any]) -> Any:
 
 def _candidates(candidates: Sequence[Any]) -> list[Any]:
     r"""A ranking's candidates as the contract's given candidates (T2.8),
-    each kept apart from the others as the reference's ``dict.fromkeys``
-    keeps them and read as its ``_as_literal`` reads one. One Python cannot
-    hash, which ``dict.fromkeys`` fails on, is ``unreadable``, the
-    contract's word for a value of the host's no contract type holds
-    (decision E101), which the core refuses by name; one equal to a value
-    given before it is ``repeat``, which ``dict.fromkeys`` leaves out. Each
-    other is read as the Python value it holds (a NumPy value's ``.item()``):
-    a missing one (``None``, a NaN, ``pd.NA``, ``pd.NaT``) null; a boolean;
-    an integer as an ``i64``, or past it as its digits; a finite decimal as
-    its digits in fixed point, exactly (``format(value, 'f')``); a float as
-    the double it is; text as itself; and any other value, a date, a
-    timestamp or an infinite decimal among them, as the text the reference
-    writes into its question (``str``), spelled, which the core holds equal
-    to no other candidate. What each means as a candidate is the core's."""
+    each as the caller gave it, a repeat among them: which candidates
+    repeat, as the reference's ``dict.fromkeys`` keeps the first of each by
+    Python's equality, is the core's (``sdm-request``'s ranking, T2.14b).
+    One Python cannot hash, which ``dict.fromkeys`` fails on, is
+    ``unreadable``, the contract's word for a value of the host's no
+    contract type holds (decision E101), which the core refuses by name.
+    Each other is read as the Python value it holds (a NumPy value's
+    ``.item()``): a missing one (``None``, a NaN, ``pd.NA``, ``pd.NaT``)
+    null; a boolean; an integer as an ``i64``, or past it as its digits; a
+    finite decimal as its digits in fixed point, exactly
+    (``format(value, 'f')``); a float as the double it is; text as itself;
+    and any other value, a date, a timestamp or an infinite decimal among
+    them, as the text the reference writes into its question (``str``),
+    spelled, which the core holds equal to no other candidate. What each
+    means as a candidate is the core's."""
     import contextlib
     from decimal import Decimal
 
     from sdm_client.wire.dtypes import _is_missing
 
     written: list[Any] = []
-    seen: dict[Any, None] = {}
     for value in candidates:
         try:
-            repeat = value in seen
+            hash(value)
         except TypeError:
             written.append(codec.UNREADABLE)
             continue
-        if repeat:
-            written.append('repeat')
-            continue
-        seen[value] = None
         if hasattr(value, 'item'):
             with contextlib.suppress(AttributeError, ValueError):
                 value = value.item()
@@ -499,25 +495,17 @@ class Unresolved:
         return self.text
 
 
-def asked(query: Any, state: dict[str, Any]) -> tuple[bool, str]:
-    r"""Whether the target of ``query`` moves with time, and its entity
-    table: as the core resolved them (``state``'s ``facts``, taken out of
-    it) for a query only the core resolves (:class:`Unresolved`), else as
-    the old validator resolved them."""
+def asked(state: dict[str, Any]) -> tuple[bool, str]:
+    r"""Whether the target of the query moves with time, and its entity
+    table, as the core resolved them (``state``'s ``facts``, the core's
+    ``Materialized.query``, taken out of it), for every query (T2.14b)."""
     facts = state.pop('facts', None)
-    if isinstance(query, Unresolved):
-        if facts is None:
-            raise StructuredDataError(
-                'the core gathered a query and said nothing of it',
-                code='INTERNAL_ERROR',
-            )
-        return bool(facts['windowed']), str(facts['entity_table'])
-    from predictive_query.validator.utils import table_name
-
-    return (
-        getattr(query.target_ast, 'date_offset_range', None) is not None,
-        table_name(query.entity_column),
-    )
+    if facts is None:
+        raise StructuredDataError(
+            'the core gathered a query and said nothing of it',
+            code='INTERNAL_ERROR',
+        )
+    return bool(facts['windowed']), str(facts['entity_table'])
 
 
 def _provider(source: Any) -> tuple[dict[str, Any], Any]:

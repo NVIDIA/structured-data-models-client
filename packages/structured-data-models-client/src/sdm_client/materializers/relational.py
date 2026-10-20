@@ -298,7 +298,7 @@ class RelationalMaterializer:
             payloads, core_state = on_the_core.gather(
                 self, query, indices, num_context_samples, options, candidates
             )
-            windowed, entity_table = on_the_core.asked(query, core_state)
+            windowed, entity_table = on_the_core.asked(core_state)
         else:
             windowed = (
                 getattr(query.target_ast, 'date_offset_range', None) is not None

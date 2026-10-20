@@ -35,8 +35,9 @@ use sdm_contract::ops::{
 use sdm_contract::{CoreError, CoreWarning, Detail, ErrorCode, ErrorKind, Scalar};
 
 use crate::assemble::{
-    Link, can_identify, checked, empty_key, invalid, key_not_names, mark_keys, name_each_other,
-    no_column, once, read_exact_numbers, time_column_not_a_name, two_ways,
+    Link, can_identify, checked, empty_key, invalid, key_cannot_identify, key_is_time_column,
+    key_not_names, mark_keys, meaning_not_carried, name_each_other, no_column, no_table, once,
+    read_exact_numbers, sorted_names, time_column_not_a_name, time_is_key, two_ways,
 };
 
 /// The meanings a caller may assign a column, by the text it gives
@@ -191,9 +192,17 @@ fn table_at(description: &SourceDescription, name: &str, field: &str) -> Result<
         .iter()
         .position(|t| t.name == name)
         .ok_or_else(|| {
-            invalid("a table named is not the schema's", field)
-                .with_field("table", Detail::text(name))
+            no_table(
+                name,
+                field,
+                description.tables.iter().map(|t| t.name.as_str()),
+            )
         })
+}
+
+/// The names of `table`'s columns, in its order.
+fn columns_of(table: &DescribedTable) -> Vec<&str> {
+    table.columns.iter().map(|c| c.name.as_str()).collect()
 }
 
 /// The column of `table` named `name`, or the reference's refusal of a
@@ -203,7 +212,7 @@ fn column_at(table: &DescribedTable, name: &str, field: &str) -> Result<usize, C
         .columns
         .iter()
         .position(|c| c.name == name)
-        .ok_or_else(|| no_column(&table.name, name, field))
+        .ok_or_else(|| no_column(&table.name, name, field, &columns_of(table)))
 }
 
 fn named(refused: CoreError, table: &str, column: &str) -> CoreError {
@@ -226,7 +235,9 @@ fn primary_key(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "primary_key")?;
     let names = match key {
-        Given::Unreadable => return Err(key_not_names(table, "primary_key")),
+        Given::Unreadable | Given::Spelled(_) => {
+            return Err(key_not_names(table, "primary_key", key.spelled()));
+        }
         Given::Value(None) => {
             let shape = &mut description.tables[at];
             shape.duplicate_keys = Some(Scalar::UInt64(0));
@@ -243,24 +254,15 @@ fn primary_key(
     for name in names {
         let column = &shape.columns[column_at(shape, name, "primary_key")?];
         if !can_identify(column.dtype) {
-            return Err(named(
-                invalid(
-                    "a column named as a primary key cannot identify a row",
-                    "primary_key",
-                ),
+            return Err(key_cannot_identify(
                 table,
                 name,
+                column.dtype,
+                "primary_key",
             ));
         }
         if shape.time_column.as_deref() == Some(name.as_str()) {
-            return Err(named(
-                invalid(
-                    "a column named as a primary key is its table's time column",
-                    "primary_key",
-                ),
-                table,
-                name,
-            ));
+            return Err(key_is_time_column(table, name, "primary_key"));
         }
     }
     let shape = &mut description.tables[at];
@@ -285,7 +287,14 @@ fn time_column(
 ) -> Result<Option<ColumnRef>, CoreError> {
     let at = table_at(description, table, "time_column")?;
     let name = match column {
-        Given::Unreadable => return Err(time_column_not_a_name(table, "time_column")),
+        Given::Unreadable | Given::Spelled(_) => {
+            return Err(time_column_not_a_name(
+                table,
+                "time_column",
+                column.spelled(),
+                &columns_of(&description.tables[at]),
+            ));
+        }
         Given::Value(None) => {
             description.tables[at].time_column = None;
             return Ok(None);
@@ -295,14 +304,7 @@ fn time_column(
     let shape = &description.tables[at];
     column_at(shape, name, "time_column")?;
     if shape.primary_key.contains(name) {
-        return Err(named(
-            invalid(
-                "a column named as a time column is its table's primary key",
-                "time_column",
-            ),
-            table,
-            name,
-        ));
+        return Err(time_is_key(table, name, "time_column"));
     }
     assign(
         description,
@@ -331,19 +333,33 @@ fn stype_of(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "stype")?;
     column_at(&description.tables[at], column, "stype")?;
-    let meaning = match stype {
-        Given::Value(text) => SEMANTIC_TYPES
+    let meaning = stype.value().and_then(|text| {
+        SEMANTIC_TYPES
             .iter()
             .find(|(name, _)| name == text)
-            .map(|(_, stype)| *stype),
-        Given::Unreadable => None,
-    };
+            .map(|(_, stype)| *stype)
+    });
     let Some(meaning) = meaning else {
-        return Err(named(
+        // Not a semantic type (`_check_stype`): the text given, or the
+        // host's text of another value, and the types a caller may name.
+        let refused = named(
             invalid("a column's meaning given is not a semantic type", "stype"),
             table,
             column,
-        ));
+        )
+        .with_field(
+            "stypes",
+            sorted_names(SEMANTIC_TYPES.iter().map(|(n, _)| *n)),
+        );
+        return Err(match stype {
+            Given::Value(text) => refused
+                .with_field("rule", Detail::text("not_a_semantic_type"))
+                .with_field("given_text", Detail::text(text)),
+            Given::Spelled(text) => refused
+                .with_field("rule", Detail::text("not_a_semantic_type_spelled"))
+                .with_field("given", Detail::text(text)),
+            Given::Unreadable => refused,
+        });
     };
     assign(description, at, column, meaning, supports, "stype")
 }
@@ -366,10 +382,16 @@ fn assign(
     let shape = &mut description.tables[at];
     let index = column_at(shape, column, field)?;
     if !supports(meaning, shape.columns[index].dtype) {
-        return Err(named(
-            invalid("a column's meaning is not one its values can carry", field),
-            &shape.name.clone(),
+        let said = SEMANTIC_TYPES
+            .iter()
+            .find(|(_, stype)| *stype == meaning)
+            .map_or("unsupported", |(name, _)| *name);
+        return Err(meaning_not_carried(
+            &shape.name,
             column,
+            shape.columns[index].dtype,
+            said,
+            field,
         ));
     }
     shape.columns[index].stype = meaning;
@@ -397,8 +419,13 @@ fn leave_out(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "column")?;
     let Given::Value(name) = column else {
-        return Err(invalid("a column named is not its table's", "column")
-            .with_field("table", Detail::text(table)));
+        return Err(time_column_not_a_name(
+            table,
+            "column",
+            column.spelled(),
+            &columns_of(&description.tables[at]),
+        )
+        .with_field("rule", Detail::text("column_not_a_name")));
     };
     let shape = &mut description.tables[at];
     let index = column_at(shape, name, "column")?;
@@ -407,14 +434,16 @@ fn leave_out(
             invalid("a column left out is its table's primary key", "column"),
             table,
             name,
-        ));
+        )
+        .with_field("rule", Detail::text("left_out_key")));
     }
     if shape.time_column.as_deref() == Some(name.as_str()) {
         return Err(named(
             invalid("a column left out is its table's time column", "column"),
             table,
             name,
-        ));
+        )
+        .with_field("rule", Detail::text("left_out_time_column")));
     }
     shape.columns.remove(index);
     Ok(())
@@ -434,19 +463,21 @@ fn relationships(
     // they are checked (T2.21); a refusal leaves the schema as it was.
     let readable: Vec<Link> = links
         .iter()
-        .filter_map(|link| match link {
-            Given::Value(link) => Some(link.clone()),
-            Given::Unreadable => None,
-        })
+        .filter_map(|link| link.value().cloned())
         .collect();
     read_exact_numbers(&mut description.tables, &readable);
     let mut given = Vec::with_capacity(links.len());
     for link in links {
         let Given::Value(link) = link else {
-            return Err(invalid(
+            let refused = invalid(
                 "a relationship given is not a relationship",
                 "relationships",
-            ));
+            )
+            .with_field("rule", Detail::text("not_a_relationship"));
+            return Err(match link.spelled() {
+                Some(text) => refused.with_field("given", Detail::text(text)),
+                None => refused,
+            });
         };
         checked(&description.tables, link)?;
         given.push(link.clone());

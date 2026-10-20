@@ -327,17 +327,73 @@ pub fn assemble(
 /// (`_require_joinable`), each refused as `INVALID_REQUEST` naming the
 /// link.
 pub(crate) fn checked(tables: &[DescribedTable], link: &[ColumnRef]) -> Result<(), CoreError> {
-    let message = match joins(tables, link) {
+    let field = "relationships";
+    let refused = match joins(tables, link) {
         Ok(()) => return Ok(()),
-        Err(Unjoinable::Missing) => {
-            "a relationship given names a table or column the schema does not hold"
-        }
+        // The first end the schema does not hold, in the reference's order
+        // (`_require_column` of the source, then of the target), named as
+        // `_require_column` names it.
+        Err(Unjoinable::Missing) => link
+            .iter()
+            .find_map(|end| {
+                let Some(table) = tables.iter().find(|t| t.name == end.table) else {
+                    return Some(no_table(
+                        &end.table,
+                        field,
+                        tables.iter().map(|t| t.name.as_str()),
+                    ));
+                };
+                (!table.columns.iter().any(|c| c.name == end.column)).then(|| {
+                    let columns: Vec<&str> =
+                        table.columns.iter().map(|c| c.name.as_str()).collect();
+                    no_column(&end.table, &end.column, field, &columns)
+                })
+            })
+            .unwrap_or_else(|| {
+                invalid(
+                    "a relationship given names a table or column the schema does not hold",
+                    field,
+                )
+            }),
+        // What the target's key is (`_require_joinable`): several columns,
+        // or one or none other than the column named.
         Err(Unjoinable::NotTheKey) => {
-            "a relationship given does not join to its table's primary key of one column"
+            let key: &[String] = link
+                .get(1)
+                .and_then(|end| tables.iter().find(|t| t.name == end.table))
+                .map_or(&[], |t| t.primary_key.as_slice());
+            invalid(
+                "a relationship given does not join to its table's primary key of one column",
+                field,
+            )
+            .with_field(
+                "rule",
+                Detail::text(match key.len() {
+                    0 => "no_key",
+                    1 => "not_the_key",
+                    _ => "composite_key",
+                }),
+            )
+            .with_field(
+                "key",
+                Detail::List(key.iter().cloned().map(Scalar::Utf8).collect()),
+            )
         }
-        Err(Unjoinable::Types) => "a relationship given joins two kinds of value that cannot match",
+        Err(Unjoinable::Types) => {
+            let dtype = |at: Option<&ColumnRef>| {
+                at.and_then(|at| column(tables, at))
+                    .map_or("unsupported", |c| c.dtype.wire_name())
+            };
+            invalid(
+                "a relationship given joins two kinds of value that cannot match",
+                field,
+            )
+            .with_field("rule", Detail::text("types"))
+            .with_field("source_dtype", Detail::text(dtype(link.first())))
+            .with_field("target_dtype", Detail::text(dtype(link.get(1))))
+        }
     };
-    Err(named_link(invalid(message, "relationships"), link))
+    Err(named_link(refused, link))
 }
 
 /// `refused` naming `link` by its four names, when it has both ends.
@@ -376,22 +432,27 @@ pub fn apply_keys_and_times(
 ) -> Result<(), CoreError> {
     let find =
         |tables: &mut [InferredTable], name: &str, field: &str| -> Result<usize, CoreError> {
-            tables.iter().position(|t| t.name == name).ok_or_else(|| {
-                invalid("a table named is not the schema's", field)
-                    .with_field("table", Detail::text(name))
-            })
+            tables
+                .iter()
+                .position(|t| t.name == name)
+                .ok_or_else(|| no_table(name, field, tables.iter().map(|t| t.name.as_str())))
         };
+    let columns_of = |table: &InferredTable| -> Vec<String> {
+        table.columns.iter().map(|c| c.name.clone()).collect()
+    };
     for (name, key) in primary_keys {
         let at = find(tables, name, "primary_keys")?;
         let key = match key {
-            ops::Given::Unreadable => return Err(key_not_names(name, "primary_keys")),
+            ops::Given::Unreadable | ops::Given::Spelled(_) => {
+                return Err(key_not_names(name, "primary_keys", key.spelled()));
+            }
             ops::Given::Value(None) => return Err(empty_key(name, "primary_keys")),
             ops::Given::Value(Some(key)) => key,
         };
         let table = &mut tables[at];
         for column in key {
             if table.column(column).is_none() {
-                return Err(no_column(name, column, "primary_keys"));
+                return Err(no_column(name, column, "primary_keys", &columns_of(table)));
             }
         }
         // A column named twice is refused by name (P1B-73, the owner's;
@@ -415,20 +476,15 @@ pub fn apply_keys_and_times(
         for column in key {
             let keyed = table.column(column).expect("the column was found");
             if !can_identify(keyed.dtype) {
-                return Err(invalid(
-                    "a column named as a primary key cannot identify a row",
+                return Err(key_cannot_identify(
+                    name,
+                    column,
+                    keyed.dtype,
                     "primary_keys",
-                )
-                .with_field("table", Detail::text(name))
-                .with_field("column", Detail::text(column)));
+                ));
             }
             if time.as_deref() == Some(column.as_str()) {
-                return Err(invalid(
-                    "a column named as a primary key is its table's time column",
-                    "primary_keys",
-                )
-                .with_field("table", Detail::text(name))
-                .with_field("column", Detail::text(column)));
+                return Err(key_is_time_column(name, column, "primary_keys"));
             }
         }
         for keyed in table.columns.iter_mut().filter(|c| key.contains(&c.name)) {
@@ -457,9 +513,15 @@ pub fn apply_keys_and_times(
     for (name, column) in time_columns {
         let at = find(tables, name, "time_columns")?;
         let table = &mut tables[at];
+        let given = column;
         let column = match column {
-            ops::Given::Unreadable => {
-                return Err(time_column_not_a_name(name, "time_columns"));
+            ops::Given::Unreadable | ops::Given::Spelled(_) => {
+                return Err(time_column_not_a_name(
+                    name,
+                    "time_columns",
+                    given.spelled(),
+                    &columns_of(table),
+                ));
             }
             ops::Given::Value(None) => {
                 table.time_column = None;
@@ -468,15 +530,10 @@ pub fn apply_keys_and_times(
             ops::Given::Value(Some(column)) => column,
         };
         if table.column(column).is_none() {
-            return Err(no_column(name, column, "time_columns"));
+            return Err(no_column(name, column, "time_columns", &columns_of(table)));
         }
         if table.primary_key.contains(column) {
-            return Err(invalid(
-                "a column named as a time column is its table's primary key",
-                "time_columns",
-            )
-            .with_field("table", Detail::text(name))
-            .with_field("column", Detail::text(column)));
+            return Err(time_is_key(name, column, "time_columns"));
         }
         let timed = table
             .columns
@@ -484,12 +541,13 @@ pub fn apply_keys_and_times(
             .find(|c| &c.name == column)
             .expect("the column was found");
         if !matches!(timed.dtype, Dtype::Date | Dtype::Time | Dtype::String) {
-            return Err(invalid(
-                "a column named as a time column cannot hold a time",
+            return Err(meaning_not_carried(
+                name,
+                column,
+                timed.dtype,
+                "timestamp",
                 "time_columns",
-            )
-            .with_field("table", Detail::text(name))
-            .with_field("column", Detail::text(column)));
+            ));
         }
         timed.stype = Stype::Timestamp;
         table.time_column = Some(column.clone());
@@ -497,21 +555,66 @@ pub fn apply_keys_and_times(
     Ok(())
 }
 
+/// The names given, in Python's sorted order (by code point, as Rust
+/// orders text), as a refusal lists what a schema or table has.
+pub(crate) fn sorted_names<S: AsRef<str>>(names: impl IntoIterator<Item = S>) -> Detail {
+    let mut names: Vec<String> = names.into_iter().map(|n| n.as_ref().to_owned()).collect();
+    names.sort();
+    Detail::List(names.into_iter().map(Scalar::Utf8).collect())
+}
+
+/// `refused`, naming the host's text of the value given (`given`), where
+/// the host gave one.
+fn with_given(refused: CoreError, spelled: Option<&str>) -> CoreError {
+    match spelled {
+        Some(text) => refused.with_field("given", Detail::text(text)),
+        None => refused,
+    }
+}
+
+/// A table the schema does not hold (`_require_table`, `schema[name]`),
+/// naming the tables it has (`no_table`).
+pub(crate) fn no_table<'a>(
+    name: &str,
+    field: &str,
+    tables: impl IntoIterator<Item = &'a str>,
+) -> CoreError {
+    invalid("a table named is not the schema's", field)
+        .with_field("table", Detail::text(name))
+        .with_field("rule", Detail::text("no_table"))
+        .with_field("tables", sorted_names(tables))
+}
+
 /// A key the host could not write as a column or a sequence of them
 /// (`unreadable`), refused alike by `describe_source` and `edit_schema`,
-/// `field` each operation's own (decision E101).
-pub(crate) fn key_not_names(table: &str, field: &str) -> CoreError {
-    invalid("a primary key names a column or a sequence of them", field)
-        .with_field("table", Detail::text(table))
-        .with_field("rule", Detail::text("key_not_names"))
+/// `field` each operation's own (decision E101), naming the value as the
+/// host spelled it, where it did.
+pub(crate) fn key_not_names(table: &str, field: &str, spelled: Option<&str>) -> CoreError {
+    with_given(
+        invalid("a primary key names a column or a sequence of them", field)
+            .with_field("table", Detail::text(table))
+            .with_field("rule", Detail::text("key_not_names")),
+        spelled,
+    )
 }
 
 /// A time column the host could not write as a name (`unreadable`),
-/// refused alike by `describe_source` and `edit_schema` (decision E101).
-pub(crate) fn time_column_not_a_name(table: &str, field: &str) -> CoreError {
-    invalid("a column named is not its table's", field)
-        .with_field("table", Detail::text(table))
-        .with_field("rule", Detail::text("time_column_not_a_name"))
+/// refused alike by `describe_source` and `edit_schema` (decision E101) as
+/// a column the table does not have, naming the value as the host spelled
+/// it, where it did, and the table's columns.
+pub(crate) fn time_column_not_a_name<S: AsRef<str>>(
+    table: &str,
+    field: &str,
+    spelled: Option<&str>,
+    columns: &[S],
+) -> CoreError {
+    with_given(
+        invalid("a column named is not its table's", field)
+            .with_field("table", Detail::text(table))
+            .with_field("rule", Detail::text("time_column_not_a_name"))
+            .with_field("columns", sorted_names(columns)),
+        spelled,
+    )
 }
 
 /// A key naming no column, refused alike by `describe_source` (an empty
@@ -519,12 +622,80 @@ pub(crate) fn time_column_not_a_name(table: &str, field: &str) -> CoreError {
 pub(crate) fn empty_key(table: &str, field: &str) -> CoreError {
     invalid("a table was given an empty primary key", field)
         .with_field("table", Detail::text(table))
+        .with_field("rule", Detail::text("empty_key"))
 }
 
-pub(crate) fn no_column(table: &str, column: &str, field: &str) -> CoreError {
+/// A column the table does not have (`_check_column`), naming the table's
+/// columns.
+pub(crate) fn no_column<S: AsRef<str>>(
+    table: &str,
+    column: &str,
+    field: &str,
+    columns: &[S],
+) -> CoreError {
     invalid("a column named is not its table's", field)
         .with_field("table", Detail::text(table))
         .with_field("column", Detail::text(column))
+        .with_field("rule", Detail::text("no_column"))
+        .with_field("columns", sorted_names(columns))
+}
+
+/// A column named as a key whose values cannot identify a row
+/// (`_check_key`), naming its data type on the wire.
+pub(crate) fn key_cannot_identify(
+    table: &str,
+    column: &str,
+    dtype: Dtype,
+    field: &str,
+) -> CoreError {
+    invalid(
+        "a column named as a primary key cannot identify a row",
+        field,
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field("rule", Detail::text("key_cannot_identify"))
+    .with_field("dtype", Detail::text(dtype.wire_name()))
+}
+
+/// A column named as a key that is its table's time column (`_check_key`).
+pub(crate) fn key_is_time_column(table: &str, column: &str, field: &str) -> CoreError {
+    invalid(
+        "a column named as a primary key is its table's time column",
+        field,
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field("rule", Detail::text("key_is_time_column"))
+}
+
+/// A column named as a time column that is part of its table's key
+/// (`_check_time_column`).
+pub(crate) fn time_is_key(table: &str, column: &str, field: &str) -> CoreError {
+    invalid(
+        "a column named as a time column is its table's primary key",
+        field,
+    )
+    .with_field("table", Detail::text(table))
+    .with_field("column", Detail::text(column))
+    .with_field("rule", Detail::text("time_is_key"))
+}
+
+/// A meaning a column's values cannot carry (`_check_supports_dtype`),
+/// naming the column's data type on the wire and the meaning.
+pub(crate) fn meaning_not_carried(
+    table: &str,
+    column: &str,
+    dtype: Dtype,
+    meaning: &str,
+    field: &str,
+) -> CoreError {
+    invalid("a column's meaning is not one its values can carry", field)
+        .with_field("table", Detail::text(table))
+        .with_field("column", Detail::text(column))
+        .with_field("rule", Detail::text("meaning_not_carried"))
+        .with_field("dtype", Detail::text(dtype.wire_name()))
+        .with_field("stype", Detail::text(meaning))
 }
 
 /// Links each column to another table's primary key of the same name
