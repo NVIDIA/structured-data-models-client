@@ -412,6 +412,16 @@ T212_RULES = (
     'rule.float-nan-payload-category',
 )
 
+#: T2.21's S1 cases for an exact numeric key past 2**53 made the key by the
+#: caller (given, its link given, its link edited) and by the catalog (the
+#: control), none in the inventory, each carrying its call through predict.
+T221_EXACT_KEYS = (
+    'key.past-2-53.given-key',
+    'key.past-2-53.given-link',
+    'key.past-2-53.edited-link',
+    'key.past-2-53.catalog',
+)
+
 
 #: T2.8's S1 ranking cases (the design's T2.8a and T2.8b rows), none in the
 #: inventory: a ranking over named candidates through predict, its refusals
@@ -517,7 +527,8 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # multi-call cases, each an acceptance case, and T2.13 its option
     # cases. T2.12 adds the schema rules' cases, T2.8 the ranking cases and
     # T2.9 the forecasting cases, each carrying its call as far as the
-    # reference goes, and T2.10 its target cases, each an acceptance case.
+    # reference goes, and T2.10 its target cases, each an acceptance case;
+    # T2.21 its exact-key cases, each carrying its call through predict.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -531,6 +542,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T213_OPTIONS,
         *T29_FORECASTING,
         *T210_TARGETS,
+        *T221_EXACT_KEYS,
     }
     for case_id in (*T28C_MULTICALL, *T213_OPTIONS, *T210_TARGETS):
         assert committed[case_id]['status'] == 'acceptance', case_id
@@ -541,6 +553,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T212_RULES,
         *T28_RANKING,
         *T29_FORECASTING,
+        *T221_EXACT_KEYS,
     ):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id

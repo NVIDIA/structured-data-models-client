@@ -1,0 +1,103 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.past-2-53.catalog",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "decimal128/primary-key",
+    "decimal128/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE TABLE shop_users AS SELECT * FROM users",
+      "CREATE TABLE shop_orders AS SELECT * FROM orders",
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE users (user_id DECIMAL(38, 0) PRIMARY KEY, age INTEGER, country VARCHAR)",
+      "INSERT INTO users SELECT user_id + 9007199254740992, age, country FROM shop_users",
+      "CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id DECIMAL(38, 0) REFERENCES users (user_id), price DOUBLE, ts TIMESTAMP)",
+      "INSERT INTO orders SELECT order_id, user_id + 9007199254740992, price, ts FROM shop_orders",
+      "DROP TABLE shop_orders",
+      "DROP TABLE shop_users"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        9007199254740993,
+        9007199254740994
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "9007199254740993"
+        },
+        {
+          "t": "i64",
+          "v": "9007199254740994"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: answered through predict, each user_id read as int64 on DuckDB and as text on SQLite (the loader stores a DECIMAL as its canonical text); on Postgres, a numeric(38,0), as text, the catalog declaring the key and the link"
+  },
+  "why": "The control: the same key past 2**53 declared by the catalog (PRIMARY KEY, and REFERENCES from orders.user_id), nothing given",
+  "source": "T2.21: exact numeric keys follow the effective keys (the mid-phase design check; learnings lesson 19, design choice 5, KO2-35)"
+}

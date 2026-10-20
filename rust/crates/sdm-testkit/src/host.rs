@@ -750,6 +750,17 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
 /// operation the case names, its fetches answered from in-memory Arrow
 /// tables, never by a statement; its run records no driver.
 pub fn run_memory(case: &Case, bases: &Bases, root: &CompositionRoot) -> Result<Observed> {
+    // The base built once on DuckDB and copied out, the connection then
+    // closed: the run reads the copy alone.
+    let memory = Memory::from_duckdb(&database(case, bases)?)?;
+    run_memory_over(case, &memory, root)
+}
+
+/// Runs `case` as [`run_memory`] does, over `memory` as given in place of
+/// the case's base: a source a test built or changed (T2.21: a column
+/// handed over as a host provider hands it, such as Postgres's exact
+/// numbers as their marked text).
+pub fn run_memory_over(case: &Case, memory: &Memory, root: &CompositionRoot) -> Result<Observed> {
     let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
         bail!("{}: reads no data (names no describe_source)", case.id);
     };
@@ -760,13 +771,10 @@ pub fn run_memory(case: &Case, bases: &Bases, root: &CompositionRoot) -> Result<
         };
         edits.push(made);
     }
-    // The base built once on DuckDB and copied out, the connection then
-    // closed: the run reads the copy alone.
-    let memory = Memory::from_duckdb(&database(case, bases)?)?;
     describe_on(
         case,
         spec,
-        Source::Memory(&memory, root),
+        Source::Memory(memory, root),
         &mut DriverLog::default(),
         &edits,
     )
