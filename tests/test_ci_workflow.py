@@ -2062,7 +2062,18 @@ def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
     assert set(job['needs']) == {'build', 'engine-wheels'}
     for entry in job['strategy']['matrix']['include']:
         pins = dict(p.split('==') for p in entry['preinstalled'].split())
-        assert set(pins) == {'numpy', 'pandas', 'pyarrow', 'PyYAML'}, entry
+        # 16.4's own pandas 1.5.3 has no wheel and no build on Python 3.12:
+        # left out rather than stood in for, so the line installs one.
+        wanted = {'numpy', 'pyarrow', 'PyYAML'}
+        if entry['runtime'] != 'dbr16.4':
+            wanted.add('pandas')
+        assert set(pins) == wanted, entry
+    # The floor the step holds pandas to is the client's own (KO2-37).
+    project = (
+        ROOT / 'packages/structured-data-models-client/pyproject.toml'
+    ).read_text()
+    assert '"pandas>=2.2.2"' in project
+    assert 'printf \'%s\\n\' 2.2.2 "$pandas_after"' in run
 
 
 #: A pip and a python for the install step, run as CI runs it: python
@@ -2070,12 +2081,14 @@ def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
 #: runs the check of the installed wheels' records as passing unless
 #: FAULT is swapped (the line replaced a candidate wheel); pip records
 #: each call and, by FAULT, moves NumPy on install (an install that moves
-#: the runtime's NumPy), fails the install (a resolution failure) or
-#: fails pip check.
+#: the runtime's NumPy), fails the install (a resolution failure), leaves
+#: pandas below the client's floor or fails pip check; otherwise the
+#: install brings pandas 2.3.3, as it did on 14.3 and 15.4.
 FAKE_PYTHON = """#!/usr/bin/env bash
 case "$*" in
   *version_info*) echo cp312 ;;
   *numpy*) cat "$STATE/numpy" ;;
+  *'"pandas"'*) [ -f "$STATE/pandas" ] && cat "$STATE/pandas" ;;
   -\\ *)
     cat > /dev/null
     echo "python $*" >> "$STATE/calls"
@@ -2091,6 +2104,7 @@ case "$1" in
     [ "$2" = --quiet ] && [ "$3" = --no-deps ] && exit 0
     [ "$FAULT" = resolution ] && { echo 'ResolutionImpossible' >&2; exit 1; }
     [ "$FAULT" = moves ] && echo 2.1.3 > "$STATE/numpy"
+    [ "$FAULT" = pandas-low ] || echo 2.3.3 > "$STATE/pandas"
     exit 0 ;;
   check) [ "$FAULT" = check ] && { echo 'x has requirement y' >&2; exit 1; }; exit 0 ;;
   *) exit 0 ;;
@@ -2099,11 +2113,13 @@ esac
 
 
 def _run_install(
-    tmp_path: Path, fault: str
+    tmp_path: Path, fault: str, pandas: str | None = '1.5.3'
 ) -> tuple[subprocess.CompletedProcess[str], list[str], str]:
     state = tmp_path / 'state'
     state.mkdir()
     (state / 'numpy').write_text('1.23.5\n')
+    if pandas:
+        (state / 'pandas').write_text(f'{pandas}\n')
     runtime = tmp_path / 'runtime'
     (runtime / 'bin').mkdir(parents=True)
     for name, text in (('python', FAKE_PYTHON), ('pip', FAKE_PIP)):
@@ -2168,6 +2184,15 @@ def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
         f'python - {candidate}',
         'pip freeze --all',
     ]
+    assert "pandas: the runtime's 1.5.3, after the install 2.3.3" in done.stdout
+
+
+def test_ci7_a_runtime_without_pandas_gets_one_at_the_floor(
+    tmp_path: Path,
+) -> None:
+    done, _ = _run_install(tmp_path, 'none', pandas=None)
+    assert done.returncode == 0, done.stderr
+    assert "pandas: the runtime's none, after the install 2.3.3" in done.stdout
 
 
 @pytest.mark.parametrize(
@@ -2179,6 +2204,7 @@ def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
         ('resolution', 'ResolutionImpossible'),
         ('check', 'has requirement'),
         ('swapped', 'no longer the candidate wheel'),
+        ('pandas-low', "left pandas 1.5.3, below the client's floor 2.2.2"),
     ],
 )
 def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(

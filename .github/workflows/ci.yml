@@ -1836,12 +1836,15 @@ jobs:
   # LTS runtime and the serverless environment that ships its set (14.3 and
   # serverless 1, 15.4 and 2, 16.4 and 3, 17.3 and 4, then serverless 5 and
   # 6). Each preinstalls the runtime's Python (its minor version), NumPy,
-  # pandas, pyarrow and PyYAML, as its release notes list them, then runs
-  # the install line docs/get-started/installation.md gives, verbatim but
-  # for the notebook's %, with keep_numpy made as the guide makes it; the
+  # pandas, pyarrow and PyYAML, as its release notes list them (pandas left
+  # out where PyPI cannot install the runtime's own), then runs the install
+  # line docs/get-started/installation.md gives, verbatim but for the
+  # notebook's %, with keep_numpy made as the guide makes it. The
   # candidate's wheels stand in for the published ones of the same version,
   # installed first without their dependencies, so the line itself is
-  # unchanged and must leave them in place. The install must leave the runtime's NumPy as it was, and pip check must pass; then
+  # unchanged and must leave them in place. The install must leave the
+  # runtime's NumPy as it was, bring pandas to the client's floor
+  # (upgrading one below it, as on 14.3 and 15.4) and pass pip check; then
   # the binding's and the client's tests run in that environment. Offline:
   # no Databricks workspace, and only x86_64 (the live job matrix, both
   # architectures, re-runs on the epic before it merges, KO2-38).
@@ -1860,13 +1863,13 @@ jobs:
           - runtime: dbr15.4
             python: '3.11'
             preinstalled: numpy==1.23.5 pandas==1.5.3 pyarrow==14.0.1 PyYAML==6.0
-          # 16.4 ships pandas 1.5.3, which Databricks built for Python 3.12
-          # and which publishes no wheel for it, nor builds from source
-          # there: 2.1.4, the newest pandas below the client's floor with a
-          # Python 3.12 wheel, stands in, so the install upgrades it alike.
+          # 16.4 ships pandas 1.5.3, which Databricks built for Python 3.12:
+          # PyPI has no wheel of it for 3.12, and its source does not build
+          # there, so this cell starts with no pandas and the install line
+          # must bring one at the floor, rather than a stand-in version.
           - runtime: dbr16.4
             python: '3.12'
-            preinstalled: numpy==1.26.4 pandas==2.1.4 pyarrow==15.0.2 PyYAML==6.0.1
+            preinstalled: numpy==1.26.4 pyarrow==15.0.2 PyYAML==6.0.1
           - runtime: dbr17.3
             python: '3.12'
             preinstalled: numpy==2.1.3 pandas==2.2.3 pyarrow==19.0.1 PyYAML==6.0.2
@@ -1901,6 +1904,7 @@ jobs:
         run: |
           . /tmp/runtime/bin/activate
           keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          pandas_before=$(python -c 'import importlib.metadata as m; print(m.version("pandas"))' 2>/dev/null || echo none)
           # The candidate's wheels stand in for the published ones of the
           # same version: installed first, without their dependencies, so
           # the line finds them satisfied and resolves everything else.
@@ -1914,6 +1918,14 @@ jobs:
             exit 1
           fi
           pip check
+          # A runtime's pandas below the client's floor (2.2.2, KO2-37) is
+          # upgraded by the line; one at or above it is kept.
+          pandas_after=$(python -c 'import importlib.metadata as m; print(m.version("pandas"))')
+          echo "pandas: the runtime's $pandas_before, after the install $pandas_after"
+          if [ "$(printf '%s\n' 2.2.2 "$pandas_after" | sort -V | head -n 1)" != 2.2.2 ]; then
+            echo "the install left pandas $pandas_after, below the client's floor 2.2.2" >&2
+            exit 1
+          fi
           # Still the candidate's wheels, as pip recorded their install.
           python - $candidate <<'EOF'
           import importlib.metadata, json, pathlib, sys
