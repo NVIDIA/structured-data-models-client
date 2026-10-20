@@ -817,8 +817,6 @@ else:
     print(f'the {len(also)} locked cases are acceptance cases')
 EOF
 }
-# Phase 2's steps (T2.0f) whose tools other packages land: each fails the
-# locked run by name until its package wires it here.
 # The main step (locked check 7): the fetched origin/main, never a local
 # main, is an ancestor of the candidate and of the reference commit the
 # candidate's contract/reference-env.txt names, so the phase branch and

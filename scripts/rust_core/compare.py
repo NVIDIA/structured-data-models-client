@@ -124,9 +124,12 @@ a row of this harness's (the checkpoint's) decisions the owner approved
 (as ``more_exact`` reads one), may list under ``fewer_deprecations`` a
 line's key (the bare case ID on DuckDB, ``<case>@sqlite`` or
 ``<case>@postgres``) and the core runners. For that line and runner, the
-``warnings`` rule lets the runner record fewer ``DeprecationWarning``s than
-the reference (or python-old), never more; every other class must match
-exactly, in count and relative order. The observations record each
+``warnings`` rule takes the runner's warnings as the reference's (or
+python-old's) with only repeats of a ``DeprecationWarning`` left out: the
+reference's list with some ``DeprecationWarning``s deleted and nothing
+else changed, each deleted one preceded in the reference's list by
+another, so the first is always kept and no class is added, dropped or
+moved. The observations record each
 warning's class only, so the rule works on classes; the entry carries, in
 text, the evidence that the repeats share one message and source line.
 Past the reference's stop nothing changes, and a line or runner no such
@@ -1533,23 +1536,27 @@ def _runtime_only(
 
 
 def _fewer_deprecations(mine: Any, theirs: Any) -> bool:
-    r"""Whether ``mine`` holds no more ``DeprecationWarning``s than
-    ``theirs`` and every other class exactly as ``theirs`` does, in count
-    and relative order (KO2-83); anything but two lists of class names
-    says no."""
+    r"""Whether ``mine`` is ``theirs`` with only repeats of a
+    ``DeprecationWarning`` left out (KO2-83): ``theirs`` with some
+    ``DeprecationWarning``s deleted and nothing else changed, each deleted
+    one preceded in ``theirs`` by another ``DeprecationWarning``. So the
+    first is always kept, no other class is dropped, added or moved, a
+    ``DeprecationWarning`` never moves past another class, and ``mine``
+    never holds more of them than ``theirs``. Anything but two lists of
+    class names says no."""
     if not (
         isinstance(mine, list)
         and isinstance(theirs, list)
         and all(isinstance(x, str) for x in mine + theirs)
     ):
         return False
-
-    def others(shown: list[str]) -> list[str]:
-        return [x for x in shown if x != REPEATED_WARNING]
-
-    return mine.count(REPEATED_WARNING) <= theirs.count(
-        REPEATED_WARNING
-    ) and others(mine) == others(theirs)
+    at = 0
+    for i, each in enumerate(theirs):
+        if at < len(mine) and each == mine[at]:
+            at += 1
+        elif not (each == REPEATED_WARNING and REPEATED_WARNING in theirs[:i]):
+            return False
+    return at == len(mine)
 
 
 def _runtime(warning: tuple[str, str | None]) -> bool:

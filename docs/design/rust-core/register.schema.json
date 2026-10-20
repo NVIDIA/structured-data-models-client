@@ -94,7 +94,7 @@
           }
         },
         "fewer_deprecations": {
-          "description": "Fewer DeprecationWarnings than the reference (T2.1s, KO2-83): per line, the core runners whose warnings compare.py lets hold fewer DeprecationWarnings than the reference's, never more, every other class matching in count and relative order; the entry's text carries the evidence that the repeats share one message and source line. Read only from an entry approved by the owner whose decision_ref names a row of the checkpoint's decisions approved by the owner.",
+          "description": "Fewer repeats of a DeprecationWarning than the reference (T2.1s, under the owner's KO2-83): per line, the core runners whose warnings compare.py takes as the reference's with only repeats of a DeprecationWarning left out: the reference's list with some DeprecationWarnings deleted and nothing else changed, each deleted one preceded in the reference's list by another, so the first is always kept and no class is added, dropped or moved. The observations record classes only; the entry's text carries the evidence that the repeats share one message and source line. Read only from an entry approved by the owner whose decision_ref names a row of the checkpoint's decisions approved by the owner.",
           "type": "array",
           "minItems": 1,
           "items": {
