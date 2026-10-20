@@ -2327,6 +2327,86 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\", t.\"channel\"\nFROM temp.\"__sdm_seeds_b39714a059063271__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"order_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"order_id\"",
         ],
     ),
+    // T2.10: the ranking cases' fetches as rust-host makes them on SQLite
+    // (its seeds differ from python-core's, so its statements are pinned too).
+    (
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_46de4df10797471e__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["item_id"],"columns":["item_id","kind"],"seeds":{"attachment":15,"columns":[{"name":"key","type":{"type":"utf8"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"item_id\", t.\"kind\"\nFROM temp.\"__sdm_seeds_0199e6d2ac9099b3__\" s\nJOIN \"items\" t\n  ON t.rowid = (\n    SELECT rowid\n    FROM \"items\"\n    WHERE \"item_id\" == s.\"key\"\n    LIMIT 1\n)",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["buys"]},"key":["user_id"],"columns":["i.d","ts"],"seeds":{"attachment":1,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"end","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}},{"name":"start","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":{"seed_column":"start","inclusive":false},"upper":{"seed_column":"end","inclusive":true}},"per_seed":null,"order":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"ts\"\nFROM temp.\"__sdm_seeds_6dc888f9297ede35__\" s\nJOIN \"buys\" t\n  ON t.\"user_id\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["buys"]},"key":["user_id"],"columns":["buy_id","user_id","i.d","ts"],"seeds":{"attachment":4,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"time","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":null,"upper":{"seed_column":"time","inclusive":true}},"per_seed":32,"order":[{"column":"ts","as_timestamp":true,"descending":true,"nulls_last":false},{"column":"buy_id","as_timestamp":false,"descending":false,"nulls_last":false}]}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"buy_id\", t.\"user_id\", t.\"i.d\", t.\"ts\"\nFROM temp.\"__sdm_seeds_80950e7ef56a2cf7__\" s\nJOIN \"buys\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"buys\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"buy_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"buy_id\"",
+        ],
+    ),
+    (
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":5,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true,"metadata":{"sdm:key_unique":"true"}},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_ccac90451b77b75a__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["buys"]},"key":["user_id"],"columns":["i.d","ts"],"seeds":{"attachment":6,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"end","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}},{"name":"start","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":{"seed_column":"start","inclusive":false},"upper":{"seed_column":"end","inclusive":true}},"per_seed":null,"order":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"ts\"\nFROM temp.\"__sdm_seeds_543838dfb90896e4__\" s\nJOIN \"buys\" t\n  ON t.\"user_id\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["orders"]},"key":["user_id"],"columns":["order_id","user_id","price","ts"],"seeds":{"attachment":8,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"time","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":null,"upper":{"seed_column":"time","inclusive":true}},"per_seed":32,"order":[{"column":"ts","as_timestamp":true,"descending":true,"nulls_last":false},{"column":"order_id","as_timestamp":false,"descending":false,"nulls_last":false}]}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM temp.\"__sdm_seeds_826bd5cfe904ea33__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"order_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"order_id\"",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["buys"]},"key":["user_id"],"columns":["buy_id","user_id","i.d","ts"],"seeds":{"attachment":9,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"time","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":null,"upper":{"seed_column":"time","inclusive":true}},"per_seed":32,"order":[{"column":"ts","as_timestamp":true,"descending":true,"nulls_last":false},{"column":"buy_id","as_timestamp":false,"descending":false,"nulls_last":false}]}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"buy_id\", t.\"user_id\", t.\"i.d\", t.\"ts\"\nFROM temp.\"__sdm_seeds_3829d84179fbd882__\" s\nJOIN \"buys\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"buys\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"buy_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"buy_id\"",
+        ],
+    ),
+    (
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":10,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true,"metadata":{"sdm:key_unique":"true"}},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_556e082174527488__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["buys"]},"key":["user_id"],"columns":["i.d","ts"],"seeds":{"attachment":11,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"end","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}},{"name":"start","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":{"seed_column":"start","inclusive":false},"upper":{"seed_column":"end","inclusive":true}},"per_seed":null,"order":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"ts\"\nFROM temp.\"__sdm_seeds_14c8133af051b2ca__\" s\nJOIN \"buys\" t\n  ON t.\"user_id\" = s.\"key\"\n AND t.\"ts\" <= substr(s.\"end\", 1, 10) || ' ' || substr(s.\"end\", 12, 8)\n AND t.\"ts\" > substr(s.\"start\", 1, 10) || ' ' || substr(s.\"start\", 12, 8)",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["orders"]},"key":["user_id"],"columns":["order_id","user_id","price","ts"],"seeds":{"attachment":13,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"time","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":null,"upper":{"seed_column":"time","inclusive":true}},"per_seed":32,"order":[{"column":"ts","as_timestamp":true,"descending":true,"nulls_last":false},{"column":"order_id","as_timestamp":false,"descending":false,"nulls_last":false}]}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM temp.\"__sdm_seeds_3bd58d5ecf166a93__\" s\nJOIN \"orders\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"orders\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"order_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"order_id\"",
+        ],
+    ),
+    (
+        r##"{"request":"neighbors","table":{"source":["buys"]},"key":["user_id"],"columns":["buy_id","user_id","i.d","ts"],"seeds":{"attachment":14,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true},{"name":"batch","type":{"type":"int64"},"nullable":false},{"name":"time","type":{"type":"timestamp","unit":"ns","zone":null},"nullable":false,"metadata":{"sdm:stored_time":"2023-01-01 00:00:00"}}]},"window":{"column":"ts","lower":null,"upper":{"seed_column":"time","inclusive":true}},"per_seed":32,"order":[{"column":"ts","as_timestamp":true,"descending":true,"nulls_last":false},{"column":"buy_id","as_timestamp":false,"descending":false,"nulls_last":false}]}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"buy_id\", t.\"user_id\", t.\"i.d\", t.\"ts\"\nFROM temp.\"__sdm_seeds_aa970f757a5434e0__\" s\nJOIN \"buys\" t\nON t.rowid IN (\n  SELECT rowid\n  FROM \"buys\"\n  WHERE \"user_id\" = s.\"key\"\n  AND \"ts\" <= substr(s.\"time\", 1, 10) || ' ' || substr(s.\"time\", 12, 8)\n  ORDER BY \"ts\" DESC, \"buy_id\"\n  LIMIT 32\n)\nORDER BY \"__kumo_batch__\", t.\"ts\" DESC, t.\"buy_id\"",
+        ],
+    ),
+    (
+        r##"{"request":"lookup","table":{"source":["items"]},"key":["i.d"],"columns":["i.d","kind"],"seeds":{"attachment":15,"columns":[{"name":"key","type":{"type":"int64"},"nullable":true,"metadata":{"sdm:key_unique":"true"}},{"name":"batch","type":{"type":"int64"},"nullable":false,"metadata":{"sdm:count_unread":"true"}}]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"i.d\", t.\"kind\"\nFROM temp.\"__sdm_seeds_603ac94a26e3a211__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"",
+        ],
+    ),
 ];
 
 #[test]
