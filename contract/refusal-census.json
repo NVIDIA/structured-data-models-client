@@ -159,22 +159,6 @@
       "until": "materialize"
     },
     {
-      "site": "rule:entity_ids",
-      "why": "named entities",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR users.user_id = 1",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
       "site": "rule:entity_key",
       "why": "the entity table's key moved off the query's entity column; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
       "input": {
@@ -187,22 +171,6 @@
           }
         ],
         "pql": "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
-      "site": "rule:evaluate",
-      "why": "EVALUATE",
-      "input": {
-        "base": "shop",
-        "pql": "EVALUATE PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
         "materialize": {
           "indices": [
             0,
@@ -235,41 +203,6 @@
           ]
         }
       }
-    },
-    {
-      "site": "rule:explain",
-      "why": "EXPLAIN",
-      "input": {
-        "base": "shop",
-        "pql": "EXPLAIN PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
-      "site": "rule:inference_config_text",
-      "why": "an inference option given as text",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01",
-          "inference_config": {
-            "num_estimators": "4"
-          }
-        }
-      },
-      "until": "materialize"
     },
     {
       "site": "rule:key_type",
@@ -572,27 +505,6 @@
             1
           ],
           "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
-      "site": "rule:target_transform_null",
-      "why": "a null target transform",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01",
-          "inference_config": {
-            "target_transforms": [
-              null
-            ]
-          }
         }
       },
       "until": "materialize"

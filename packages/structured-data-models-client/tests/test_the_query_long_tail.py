@@ -29,13 +29,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-import duckdb
 import pandas as pd
 import pytest
-from predictive_query import RELATIONAL
-from sdm_connectors import DuckDBSource
 
-from sdm_client import (
+# The old route these tests compare against runs the relational engine,
+# which the jobs without it do not install.
+pytest.importorskip('sdm_relational_engine.relationallib')
+duckdb = pytest.importorskip('duckdb')
+
+from predictive_query import RELATIONAL  # noqa: E402
+from sdm_connectors import DuckDBSource  # noqa: E402
+
+from sdm_client import (  # noqa: E402
     KumoRelational,
     PredictiveQuery,
     Request,
