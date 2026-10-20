@@ -120,3 +120,10 @@ The owner chose exact comparison for a float with a fraction in an `IN` list of 
   - SQLite (python-core and rust-host, legs ok): the same two, and `s0.boundary.escapes@sqlite`'s warnings (P2E-15; T2.1s).
   - Postgres (python-core and rust-host replay, legs ok): the same as SQLite.
 - `rank.odd-column`'s two remaining differences are the comparator's reading of a core-only column, not the answer: the core's ranking calls carry `buys`'s `i.d` column, which the core-only-columns rule takes out of the request received but not out of `core.predicted.calls` (it reads a single call's body), so python-core's call and the request it sent differ by that column; and `from_source`'s key check (`SELECT k, COUNT(*), COUNT(DISTINCT key) ... UNION ALL ...`, statement 17) counts the `i.d` keys the reference leaves out, a result holding no column named `i.d`, so the rule's marking does not reach it. Both want a judging change.
+
+## The key check numbers keys as the reference does (2026-10-20)
+
+- The second `rank.odd-column` difference was the core's, not the comparator's: the reference leaves `items` out of its key check, since its key `i.d` holds a character its query language cannot say, and numbers the keys after it one lower, while the core gave `items` its place, so `orders` and `users` took `k` 2 and 3 on DuckDB (1 and 2 on SQLite) where the reference gives 1 and 2 (0 and 1).
+- `count_keys` (`sdm-core/src/describe.rs`) now labels the keys through `key_labels`: a table whose key holds a column the reference leaves out (`` ` ``, line breaks, `.`, the reference's `_INVALID_NAME_CHARS`; no shared check for such names existed, so one small helper, `unsayable`, sits beside it) takes no place, and its key, still checked, takes a label past every one the reference gives. Unit test: `a_key_the_reference_leaves_out_takes_no_place_among_the_labels`.
+- Checked: rust-host over all 183 cases on DuckDB against the previous run, only `rank.odd-column`'s fetches change (now `k` 1 and 2); on SQLite it now labels 0 and 1, as the reference. sdm-core tests and clippy clean.
+- The per-call core-only-columns judging stays with T2.1s.

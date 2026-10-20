@@ -665,6 +665,57 @@ fn declared_links(
     links
 }
 
+/// The characters of a column name the reference's `Schema.from_source`
+/// leaves the column out for (`_INVALID_NAME_CHARS`): its query language
+/// cannot say such a name. The core keeps the column (KO2-36).
+const UNSAYABLE: [char; 4] = ['`', '\n', '\r', '.'];
+
+/// Whether the reference leaves the column `name` out ([`UNSAYABLE`]).
+fn unsayable(name: &str) -> bool {
+    name.contains(UNSAYABLE)
+}
+
+/// What [`key_labels`] reads of a table's key: whether it has one, whether
+/// the key-count request asks it (a key the source does not enforce), and
+/// whether a column of it is one the reference leaves out.
+#[derive(Debug, Clone, Copy)]
+struct KeyShape {
+    keyed: bool,
+    asked: bool,
+    unsayable: bool,
+}
+
+/// The keys the key-count request asks, each with the label its row
+/// carries, in label order: as the reference labels them, each by its
+/// table's place among the tables with a key it reads (those the source
+/// enforces included, T2.12). A table whose key holds a column the
+/// reference leaves out has no key there: it takes no place, so the keys
+/// after it are numbered as the reference numbers them, and its own key,
+/// still counted, takes a label past every one the reference gives (T2.10).
+fn key_labels(tables: &[KeyShape]) -> Vec<(usize, u64)> {
+    let numbered = tables.iter().filter(|t| t.keyed && !t.unsayable).count() as u64;
+    let mut place = 0_u64;
+    let mut past = numbered;
+    let mut out = Vec::new();
+    for (i, table) in tables.iter().enumerate() {
+        if !table.keyed {
+            continue;
+        }
+        let label = if table.unsayable {
+            past += 1;
+            past - 1
+        } else {
+            place += 1;
+            place - 1
+        };
+        if table.asked {
+            out.push((i, label));
+        }
+    }
+    out.sort_by_key(|&(_, label)| label);
+    out
+}
+
 /// Counts every key the source does not enforce in one request, then, for
 /// each that repeats a value, reads one such value (`repeated_key`), in
 /// table order, as the reference's `count_keys` does, and holds the keys to
@@ -679,31 +730,29 @@ async fn count_keys(
     stated: &std::collections::BTreeSet<String>,
     infer_links: bool,
 ) -> Result<keys::Held, CoreError> {
-    let positions: Vec<usize> = (0..tables.len())
-        .filter(|&i| {
-            !tables[i].primary_key.is_empty() && !tables[i].enforces(&tables[i].primary_key)
+    let shapes: Vec<KeyShape> = tables
+        .iter()
+        .map(|t| KeyShape {
+            keyed: !t.primary_key.is_empty(),
+            asked: !t.primary_key.is_empty() && !t.enforces(&t.primary_key),
+            unsayable: t.primary_key.iter().any(|c| unsayable(c)),
         })
         .collect();
-    if positions.is_empty() {
+    let labelled = key_labels(&shapes);
+    if labelled.is_empty() {
         return keys::hold(tables, &[], stated, infer_links);
     }
+    let positions: Vec<usize> = labelled.iter().map(|&(i, _)| i).collect();
     // Each key labelled by its table's place among the tables with a key,
-    // those the source enforces included, as the reference labels it; the
-    // label given only where it is not the key's position among those
-    // asked.
-    let asked: Vec<TableKey> = positions
+    // as the reference labels it ([`key_labels`]); the label given only
+    // where it is not the key's position among those asked.
+    let asked: Vec<TableKey> = labelled
         .iter()
         .enumerate()
-        .map(|(at, &i)| {
-            let label = tables[..i]
-                .iter()
-                .filter(|t| !t.primary_key.is_empty())
-                .count() as u64;
-            TableKey {
-                table: tables[i].source.clone(),
-                columns: tables[i].primary_key.clone(),
-                label: (label != at as u64).then_some(label),
-            }
+        .map(|(at, &(i, label))| TableKey {
+            table: tables[i].source.clone(),
+            columns: tables[i].primary_key.clone(),
+            label: (label != at as u64).then_some(label),
         })
         .collect();
     let answered = ask(
@@ -950,6 +999,38 @@ impl Future for Together {
 
 #[cfg(test)]
 mod tests {
+    use super::{KeyShape, key_labels, unsayable};
+
+    /// A key holding a column the reference leaves out (`items."i.d"`)
+    /// takes no place: the keys after it are numbered as the reference
+    /// numbers them, and it is counted under a label past theirs (T2.10).
+    #[test]
+    fn a_key_the_reference_leaves_out_takes_no_place_among_the_labels() {
+        let shape = |keyed, asked, unsayable| KeyShape {
+            keyed,
+            asked,
+            unsayable,
+        };
+        assert!(unsayable("i.d") && unsayable("a`b") && unsayable("a\nb"));
+        assert!(!unsayable("item_id"));
+        // buys (enforced), items ("i.d", not enforced), orders, users.
+        let tables = [
+            shape(true, false, false),
+            shape(true, true, true),
+            shape(true, true, false),
+            shape(true, true, false),
+        ];
+        assert_eq!(key_labels(&tables), [(2, 1), (3, 2), (1, 3)]);
+        // Without such a key, each table's place among the keyed, as before.
+        let plain = [
+            shape(true, false, false),
+            shape(false, false, false),
+            shape(true, true, false),
+            shape(true, true, false),
+        ];
+        assert_eq!(key_labels(&plain), [(2, 1), (3, 2)]);
+    }
+
     use std::sync::Arc;
 
     use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray};
