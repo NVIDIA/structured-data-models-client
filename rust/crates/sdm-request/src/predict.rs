@@ -2181,11 +2181,12 @@ mod tests {
     /// item ranks candidates under `rankings`, a list of objects, which the
     /// reference's bindings read (`_mapping_tuple`) and its result keeps as
     /// a list in one row (`PredictionResult.to_pandas`, `row['rankings']`).
-    /// The core asks no link prediction until Phase 4 (register P2E-19):
-    /// laid out against a link prediction's payload the answer is refused
-    /// by name (`problem_type`), never read as another task's; and against
-    /// a payload of a task it asks, its `rankings` are refused by name
-    /// (`response_field`), never dropped (T2.10).
+    /// The core asks no link prediction until Phase 4 (register P2E-19,
+    /// KO2-75): laid out against a link prediction's payload the answer is
+    /// refused by name (`problem_type`), never read as another task's;
+    /// against a payload of a task it asks, its `rankings` are kept, each
+    /// item's mappings in the order written, as the reference keeps them
+    /// (T2.8 reads the field; T2.10).
     #[test]
     fn a_link_prediction_s_answer_is_refused_by_name_never_read_as_another_task_s() {
         let read = |text: &str| sdm_wire::json::read(text.as_bytes()).unwrap();
@@ -2199,10 +2200,12 @@ mod tests {
         );
         let response = PredictionResponse::read(&answer).unwrap();
         assert_eq!(response.predictions.len(), 2);
-        for item in &response.predictions {
-            assert_eq!(item.carried, ["rankings"]);
-            assert_eq!(item.prediction, None);
-        }
+        let written: Vec<usize> = response
+            .predictions
+            .iter()
+            .map(|item| item.rankings.as_ref().map_or(0, Vec::len))
+            .collect();
+        assert_eq!(written, [2, 1]);
         let payload = |kind: &str| {
             read(&format!(
                 r#"{{"task": {{"kind": "{kind}", "target": {{"dtype": "float64"}}}},
@@ -2214,9 +2217,10 @@ mod tests {
         let linked = layout(&payload("temporal_link_prediction"), &response, spell).unwrap_err();
         assert_eq!(linked.code, ErrorCode::UnsupportedRequest);
         assert_eq!(linked.fields["rule"], Detail::text("problem_type"));
-        let asked = layout(&payload("regression"), &response, spell).unwrap_err();
-        assert_eq!(asked.code, ErrorCode::UnsupportedRequest);
-        assert_eq!(asked.fields["rule"], Detail::text("response_field"));
-        assert_eq!(asked.fields["field"], Detail::text("rankings"));
+        let asked = layout(&payload("regression"), &response, spell).unwrap();
+        assert_eq!(asked.rows.len(), 2);
+        assert_eq!(asked.rows[0].rankings, response.predictions[0].rankings);
+        assert_eq!(asked.rows[1].rankings, response.predictions[1].rankings);
+        assert_eq!(asked.rows[0].prediction, Answer::None);
     }
 }

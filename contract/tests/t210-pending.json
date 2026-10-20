@@ -7,21 +7,16 @@
   "py:target.aggregation.list-distinct@sqlite",
   "py:rank.odd-column@postgres",
   "py:target.aggregation.list-distinct@postgres",
-  "rust:rank.decimal-key",
   "rust:rank.odd-column",
   "rust:target.aggregation.list-distinct",
-  "rust:rank.decimal-key@sqlite",
   "rust:rank.odd-column@sqlite",
   "rust:target.aggregation.list-distinct@sqlite",
   "py-labels:aggregation.list-distinct@duckdb",
   "py-labels:aggregation.list-distinct.users@duckdb",
-  "py-labels:rank.odd-column@duckdb",
   "py-labels:aggregation.list-distinct@sqlite",
   "py-labels:aggregation.list-distinct.users@sqlite",
-  "py-labels:rank.odd-column@sqlite",
   "py-labels:aggregation.list-distinct@postgres",
-  "py-labels:aggregation.list-distinct.users@postgres",
-  "py-labels:rank.odd-column@postgres"
+  "py-labels:aggregation.list-distinct.users@postgres"
  ],
  "authored": [
   "py:rank.decimal-key",
