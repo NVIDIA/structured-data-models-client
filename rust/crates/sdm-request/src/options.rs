@@ -452,46 +452,99 @@ fn boolean_text(text: &str) -> Option<bool> {
     }
 }
 
-/// A whole number given as text, read as the engine's validation
-/// (pydantic's lax mode) reads it: white space around it dropped (Unicode's,
-/// as `str::trim` drops it), then an optional sign and ASCII digits, a
-/// single underscore allowed between two digits (`0_3`, none leading,
-/// trailing, doubled or after the sign), which may be followed by a point
-/// and one or more zeros, with no underscore among them (`0_1.0` is 1,
-/// `3.0_0` no number); `None` for any other text, and `Err` with the sign
-/// for a value past `i128`, which no option takes. Each answer was probed
-/// on the reference's pydantic 2.13.5 (T2.13 fix 2).
+/// A whole number given as text, read as the engine's validation reads it:
+/// pydantic-core 2.46.5's `str_as_int` (`src/input/shared.rs`), the one
+/// path its lax `int` takes from text, ported step for step (T2.13 fix 4).
+/// The text is first read as a JSON integer as it is; failing that, it is
+/// cleaned ([`clean_int_text`]) and read so again. `None` for text it
+/// refuses, and `Err` with the sign for a value past `i128`, which no
+/// option takes.
 fn whole_text(text: &str) -> Option<Result<i128, bool>> {
-    let text = text.trim();
-    let (whole, fraction) = match text.split_once('.') {
-        Some((whole, fraction)) => (whole, Some(fraction)),
-        None => (text, None),
+    json_int(text).or_else(|| json_int(&clean_int_text(text)?))
+}
+
+/// A JSON integer (jiter's `NumberInt`): an optional `-`, then `0` or a
+/// digit from 1 to 9 and more digits; `Err` with the sign past `i128`.
+fn json_int(text: &str) -> Option<Result<i128, bool>> {
+    let (negative, digits) = match text.strip_prefix('-') {
+        Some(digits) => (true, digits),
+        None => (false, text),
     };
-    if fraction.is_some_and(|f| f.is_empty() || f.bytes().any(|b| b != b'0')) {
+    let well_formed = !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'));
+    if !well_formed {
         return None;
-    }
-    let (negative, digits) = match whole.as_bytes().first() {
-        Some(b'-') => (true, &whole[1..]),
-        Some(b'+') => (false, &whole[1..]),
-        _ => (false, whole),
-    };
-    // Digits, each underscore between two of them.
-    let grouped = digits
-        .split('_')
-        .all(|group| !group.is_empty() && group.bytes().all(|b| b.is_ascii_digit()));
-    if digits.is_empty() || !grouped {
-        return None;
-    }
-    let digits: String = digits.chars().filter(|c| *c != '_').collect();
-    let digits = digits.trim_start_matches('0');
-    if digits.is_empty() {
-        return Some(Ok(0));
     }
     Some(match digits.parse::<i128>() {
         Ok(n) if negative => Ok(-n),
         Ok(n) => Ok(n),
         Err(_) => Err(negative),
     })
+}
+
+/// pydantic-core's `clean_int_str`: white space around the text dropped
+/// (`str::trim`, as there), a `+` dropped where no `-` follows it, a `-`
+/// set aside where no sign follows it, the leading zeros dropped with any
+/// underscores among them ([`strip_leading_zeros`]: `0__3` is `3`), a point
+/// followed only by zeros dropped with them, then the underscores, each
+/// between two characters and none doubled (`strip_underscores`); `None`
+/// where nothing was dropped, or the leading zeros are malformed.
+fn clean_int_text(text: &str) -> Option<String> {
+    let len_before = text.len();
+    let mut s = text.trim();
+    if let Some(suffix) = s.strip_prefix('+') {
+        if suffix.starts_with('-') {
+            return None;
+        }
+        s = suffix;
+    }
+    let mut negative = false;
+    if let Some(suffix) = s.strip_prefix('-') {
+        if suffix.starts_with('-') || suffix.starts_with('+') {
+            return None;
+        }
+        negative = true;
+        s = suffix;
+    }
+    s = strip_leading_zeros(s)?;
+    if let Some(i) = s.find('.') {
+        let decimal = &s[i + 1..];
+        if !decimal.is_empty() && decimal.chars().all(|c| c == '0') {
+            s = &s[..i];
+        }
+    }
+    let sign = if negative { "-" } else { "" };
+    if !(s.starts_with('_') || s.ends_with('_') || !s.contains('_') || s.contains("__")) {
+        return Some(format!("{sign}{}", s.replace('_', "")));
+    }
+    if len_before == s.len() {
+        return None;
+    }
+    Some(format!("{sign}{s}"))
+}
+
+/// pydantic-core's `strip_leading_zeros`: text starting with a zero loses
+/// its zeros and the underscores among them, up to the first other digit
+/// or `-`, or keeps the last zero before a point; text of zeros and
+/// underscores alone keeps its last character; text starting with a digit
+/// from 1 to 9 or `-` is kept; anything else is refused.
+fn strip_leading_zeros(s: &str) -> Option<&str> {
+    let mut chars = s.char_indices();
+    match chars.next() {
+        Some((_, '0')) => (),
+        Some((_, c)) if c.is_ascii_digit() || c == '-' => return Some(s),
+        _ => return None,
+    }
+    for (i, c) in chars {
+        match c {
+            '0' | '_' => (),
+            '1'..='9' | '-' => return Some(&s[i..]),
+            '.' => return Some(&s[i - 1..]),
+            _ => return None,
+        }
+    }
+    Some(&s[s.len() - 1..])
 }
 
 /// A boolean option: a JSON boolean, a number equal to 0 or 1, or text
@@ -753,6 +806,16 @@ mod tests {
             "3_0.0",
             "1_0.0",
             "9_223_372_036_854_775_808",
+            // pydantic-core's quirks, each a number out of range: a `-` after
+            // the leading zeros is the number's sign (`0-3` is -3), and
+            // zeros alone keep one (`0__0` is 0).
+            "0-3",
+            "0_-3",
+            "-0__3",
+            "0__0",
+            "0__5",
+            "-0_0",
+            "0_0.00",
         ] {
             assert_eq!(refused(text), Detail::text("out_of_range"), "{text:?}");
         }
@@ -772,6 +835,19 @@ mod tests {
             "_",
             "__",
             "3_\u{663}",
+            "1__0",
+            "0__1__0",
+            "0__",
+            "__0",
+            "0_0_",
+            "0_.0",
+            "0._0",
+            "_0_3",
+            "0_",
+            "00_",
+            "3__",
+            "+_0_3",
+            "0 _3",
         ] {
             assert_eq!(
                 refused(text),
@@ -889,6 +965,18 @@ mod tests {
             ("00_3", 3),
             ("0_3.00", 3),
             ("+0_0_0_3", 3),
+            // Underscores among the leading zeros, doubled too, which
+            // pydantic-core's `strip_leading_zeros` drops with them (T2.13
+            // fix 4).
+            ("0__3", 3),
+            ("00__3", 3),
+            ("0___3", 3),
+            ("+0__3", 3),
+            ("0__1.0", 1),
+            ("0__0__3", 3),
+            ("0__2.00", 2),
+            ("0__4", 4),
+            ("00_1", 1),
         ] {
             assert_eq!(estimators(text).unwrap(), wanted, "{text:?}");
         }
