@@ -127,3 +127,12 @@ The owner chose exact comparison for a float with a fraction in an `IN` list of 
 - `count_keys` (`sdm-core/src/describe.rs`) now labels the keys through `key_labels`: a table whose key holds a column the reference leaves out (`` ` ``, line breaks, `.`, the reference's `_INVALID_NAME_CHARS`; no shared check for such names existed, so one small helper, `unsayable`, sits beside it) takes no place, and its key, still checked, takes a label past every one the reference gives. Unit test: `a_key_the_reference_leaves_out_takes_no_place_among_the_labels`.
 - Checked: rust-host over all 183 cases on DuckDB against the previous run, only `rank.odd-column`'s fetches change (now `k` 1 and 2); on SQLite it now labels 0 and 1, as the reference. sdm-core tests and clippy clean.
 - The per-call core-only-columns judging stays with T2.1s.
+
+## Rebased onto ec64b077, T2.1r and T2.1s landed (2026-10-20, round 2)
+
+- Rebased lane f (with the key-check numbering fix) onto ec64b077; conflicts were unions only (the S1 case lists in `tests/test_contract_cases.py`, the reference lines of the filter role's column-name cases beside T2.13's, the empty-null map's line).
+- P2E-19: each row names `statements_differ: [materialize]` (T2.1r's opt-in for a refusal moved to an earlier call).
+- P2E-15: approved by the owner as KO2-83, `fewer_deprecations` listing `s0.boundary.escapes@sqlite` and `@postgres` for python-core and rust-host; the evidence text kept.
+- `rank.odd-column` passes on every leg: T2.1s's per-call core-only-columns rule takes `buys.i.d` out of each call's body, and the key check now numbers its keys as the reference does.
+- t22's check that every statement rust-host runs on SQLite is a golden named 13 fetches of the two ranking cases (rust-host's seeds differ from python-core's); they are now SQLite goldens.
+- Checks at this head: both DuckDB gate legs against ec64b077 (through `bin/heavy`) passed; SQLite and Postgres legs (python-core and rust-host, the Postgres one by replay) ok, compare no differences on either; `cargo test --workspace --all-features` 944 passed; fmt and clippy clean; `test_t210_targets.py` 292 passed, `t210_targets.rs` 3 passed; register, refusal census and lane checks ok. Only LIST_DISTINCT's keys stay in `t210-pending.json` (P2E-19's refusal differs from the reference by approval).
