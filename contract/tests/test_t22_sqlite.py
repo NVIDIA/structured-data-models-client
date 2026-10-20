@@ -240,6 +240,7 @@ def test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does() -> (
         reference = reference_lines()
         cases = _s1()
         assert len(cases) >= 52
+        differ = COMPARE.statements_differ(COMPARE.REGISTER)
         problems = []
         for case in cases:
             key = f'{case["id"]}@{DATABASE}'
@@ -251,9 +252,20 @@ def test_python_core_runs_every_s1_case_on_sqlite_as_the_reference_does() -> (
             # The core operations the line is held to, as the comparator
             # holds them (T2.1e): those of the calls before the reference
             # line's stop, and every one the runner ran.
-            held_ops = COMPARE.core_held(
-                case, line, COMPARE.line_stop(None, reference[key])
-            )['core']
+            # Where an owner-approved row moves the line's refusal to an
+            # earlier call, naming it under statements_differ (T2.1r, as
+            # contract/tests/test_runners.py reads it), and the line refuses
+            # there, it stops at that call.
+            stop = COMPARE.line_stop(None, reference[key])
+            calls = differ.get((key, 'python-core'), ())
+            if (
+                len(calls) == 1
+                and line['outcome']['result'] == 'refusal'
+                and line['outcome']['stage'] == calls[0]
+                and registered_key(key)
+            ):
+                stop = calls[0]
+            held_ops = COMPARE.core_held(case, line, stop)['core']
             missing = sorted(set(held_ops) - set(identity['operations']))
             if (
                 not identity['native_loaded']

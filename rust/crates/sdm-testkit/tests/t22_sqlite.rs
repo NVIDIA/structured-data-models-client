@@ -191,6 +191,51 @@ fn approved_naming(wanted: &str) -> Option<String> {
     None
 }
 
+/// The one public call an owner-approved entry's `case_outcomes` row names
+/// under `statements_differ` for `key` on `runner` (`compare.py`'s
+/// `statements_differ`, T2.1r): the call where the approved move ends the
+/// line, its later operations no expectation; none where no single row
+/// names one. Read from the register's text, block by block, as
+/// [`approved_naming`] reads it.
+fn approved_stop(key: &str, runner: &str) -> Option<&'static str> {
+    let text = std::fs::read_to_string(root().join("docs/design/rust-core/register.yaml")).unwrap();
+    let mut found = Vec::new();
+    for block in text.split("\n- id: ").skip(1) {
+        let approved = block.lines().any(|l| l.trim_end() == "  status: approved")
+            && block
+                .lines()
+                .any(|l| l.trim_end() == "  approved_by: owner");
+        if !approved {
+            continue;
+        }
+        for row in block
+            .lines()
+            .map(str::trim)
+            .filter(|l| l.starts_with("- {"))
+        {
+            let field = |name: &str| {
+                row.split(&format!("{name}: "))
+                    .nth(1)
+                    .map(|rest| rest.split([',', '}']).next().unwrap_or_default().trim())
+            };
+            let calls = row
+                .split("statements_differ: [")
+                .nth(1)
+                .and_then(|rest| rest.split(']').next());
+            if field("case") == Some(key)
+                && field("runner") == Some(runner)
+                && let Some(calls) = calls
+            {
+                found.extend(calls.split(',').map(str::trim).map(str::to_owned));
+            }
+        }
+    }
+    match found.as_slice() {
+        [call] => STAGES.into_iter().find(|stage| stage == call),
+        _ => None,
+    }
+}
+
 // --- the staging marker ------------------------------------------------------------
 
 #[test]
@@ -315,7 +360,19 @@ fn rust_host_runs_every_s1_case_on_sqlite() {
                 .iter()
                 .map(|o| o.as_str().unwrap().to_owned())
                 .collect();
-            let held = core_held(&operations, &ran, line_stop(&reference[&key]));
+            // Where an owner-approved row moves the line's refusal to an
+            // earlier call (statements_differ, its entry naming the key) and
+            // the line refuses, it stops there, as the comparator reads it.
+            let stop = match approved_stop(&key, "rust-host") {
+                Some(call)
+                    if line["outcome"]["result"] == "refusal"
+                        && approved_naming(&key).is_some() =>
+                {
+                    Some(call)
+                }
+                _ => line_stop(&reference[&key]),
+            };
+            let held = core_held(&operations, &ran, stop);
             if !held.is_subset(&ran) || (!held.is_empty() && line["core"].is_null()) {
                 problems.push(format!("{key}: its core operations did not run"));
             }
