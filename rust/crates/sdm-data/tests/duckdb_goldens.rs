@@ -2459,6 +2459,608 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"i.d\", t.\"kind\"\nFROM \"__sdm_seeds__\" s\nJOIN \"items\" t\n  ON t.\"i.d\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
         ],
     ),
+    (
+        r##"{"columns":["user_id","age","country","signup"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &["SELECT \"user_id\", \"age\", \"country\", \"signup\" FROM \"users\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns":["user_id","country","signup"],"filters":[{"column":"user_id","filter":"not_null"},{"column":"signup","filter":"not_null"}],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\", \"country\", \"signup\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user_id\" IS NOT NULL AND \"signup\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","age","signup"],"key":["user_id"],"request":"lookup","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"age\", t.\"signup\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":true,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","age","signup"],"filters":[{"column":"user_id","filter":"not_null"},{"column":"signup","filter":"not_null"}],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\", \"age\", \"signup\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user_id\" IS NOT NULL AND \"signup\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","country","signup"],"key":["user_id"],"request":"lookup","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"country\", t.\"signup\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"country\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":1000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user_id\" IS NOT NULL)\nUSING SAMPLE reservoir(1000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["line_id","order_id","qty"],"limit":1000,"request":"preview","table":{"source":["lines"]}}"##,
+        &["SELECT \"line_id\", \"order_id\", \"qty\" FROM \"lines\" LIMIT 1000"],
+    ),
+    (
+        r##"{"keys":[{"columns":["line_id"],"table":{"source":["lines"]}},{"columns":["order_id"],"table":{"source":["orders"]}},{"columns":["user_id"],"table":{"source":["users"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"line_id\") AS d, COUNT(CASE WHEN \"line_id\" IS NULL THEN 1 END) AS z\nFROM \"lines\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"",
+        ],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["shipments"]}]}"##,
+        &["PRAGMA table_info(\"shipments\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["shipments"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'shipments'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["shipment_id","line_id","mode"],"limit":1000,"request":"preview","table":{"source":["shipments"]}}"##,
+        &["SELECT \"shipment_id\", \"line_id\", \"mode\" FROM \"shipments\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["shipments"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'shipments'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"keys":[{"columns":["line_id"],"table":{"source":["lines"]}},{"columns":["order_id"],"table":{"source":["orders"]}},{"columns":["shipment_id"],"table":{"source":["shipments"]}},{"columns":["user_id"],"table":{"source":["users"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"line_id\") AS d, COUNT(CASE WHEN \"line_id\" IS NULL THEN 1 END) AS z\nFROM \"lines\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"order_id\") AS d, COUNT(CASE WHEN \"order_id\" IS NULL THEN 1 END) AS z\nFROM \"orders\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"shipment_id\") AS d, COUNT(CASE WHEN \"shipment_id\" IS NULL THEN 1 END) AS z\nFROM \"shipments\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"user_id\") AS d, COUNT(CASE WHEN \"user_id\" IS NULL THEN 1 END) AS z\nFROM \"users\"",
+        ],
+    ),
+    (
+        r##"{"columns":["line_id","order_id","qty"],"key":["order_id"],"order":[{"as_timestamp":false,"column":"line_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["lines"]},"window":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"line_id\", t.\"order_id\", t.\"qty\"\nFROM \"__sdm_seeds__\" s\nJOIN \"lines\" t\n  ON t.\"order_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY t.\"line_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", t.\"line_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["shipment_id","line_id","mode"],"key":["line_id"],"order":[{"as_timestamp":false,"column":"shipment_id","descending":false,"nulls_last":true}],"per_seed":8,"request":"neighbors","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["shipments"]},"window":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"shipment_id\", t.\"line_id\", t.\"mode\"\nFROM \"__sdm_seeds__\" s\nJOIN \"shipments\" t\n  ON t.\"line_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY t.\"shipment_id\" ASC NULLS LAST\n) <= 8\nORDER BY s.\"batch\", t.\"shipment_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true}],"per_seed":2,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 2\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["line_id","order_id","qty"],"key":["order_id"],"order":[{"as_timestamp":false,"column":"line_id","descending":false,"nulls_last":true}],"per_seed":2,"request":"neighbors","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["lines"]},"window":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"line_id\", t.\"order_id\", t.\"qty\"\nFROM \"__sdm_seeds__\" s\nJOIN \"lines\" t\n  ON t.\"order_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY t.\"line_id\" ASC NULLS LAST\n) <= 2\nORDER BY s.\"batch\", t.\"line_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts"],"key":["user_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"order_id","descending":false,"nulls_last":true}],"per_seed":4,"request":"neighbors","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["orders"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"user_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 4\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["accounts"]}]}"##,
+        &["PRAGMA table_info(\"accounts\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["accounts"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'accounts'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["account_id","owner_id","age"],"limit":1000,"request":"preview","table":{"source":["accounts"]}}"##,
+        &["SELECT \"account_id\", \"owner_id\", \"age\" FROM \"accounts\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["owners"]}]}"##,
+        &["PRAGMA table_info(\"owners\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["owners"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'owners'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["owner_id","tier"],"limit":1000,"request":"preview","table":{"source":["owners"]}}"##,
+        &["SELECT \"owner_id\", \"tier\" FROM \"owners\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["payments"]}]}"##,
+        &["PRAGMA table_info(\"payments\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["payments"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'payments'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["payment_id","account_id","amount","ts"],"limit":1000,"request":"preview","table":{"source":["payments"]}}"##,
+        &["SELECT \"payment_id\", \"account_id\", \"amount\", \"ts\" FROM \"payments\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["accounts"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'accounts'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["owners"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'owners'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["payments"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'payments'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"keys":[{"columns":["account_id"],"table":{"source":["accounts"]}},{"columns":["owner_id"],"table":{"source":["owners"]}},{"columns":["payment_id"],"table":{"source":["payments"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"account_id\") AS d, COUNT(CASE WHEN \"account_id\" IS NULL THEN 1 END) AS z\nFROM \"accounts\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"owner_id\") AS d, COUNT(CASE WHEN \"owner_id\" IS NULL THEN 1 END) AS z\nFROM \"owners\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"payment_id\") AS d, COUNT(CASE WHEN \"payment_id\" IS NULL THEN 1 END) AS z\nFROM \"payments\"",
+        ],
+    ),
+    (
+        r##"{"columns":[{"column":"ts","table":{"source":["payments"]}}],"request":"time_bounds"}"##,
+        &[
+            "SELECT\n  0 as table_index,\n  MIN(CAST(\"ts\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"ts\" AS TIMESTAMP)) as max_date\nFROM \"payments\"",
+        ],
+    ),
+    (
+        r##"{"columns":["account_id"],"filters":[{"column":"account_id","filter":"not_null"}],"key":["account_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["accounts"]}}"##,
+        &[
+            "SELECT \"account_id\"\nFROM (SELECT * FROM \"accounts\"\nWHERE \"account_id\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["amount","ts"],"key":["account_id"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"end","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["payments"]},"window":{"column":"ts","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"amount\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"payments\" t\n  ON t.\"account_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"end\"\n AND CAST(t.\"ts\" AS TIMESTAMP) > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns":["account_id","owner_id","age"],"key":["account_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["accounts"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"account_id\", t.\"owner_id\", t.\"age\"\nFROM \"__sdm_seeds__\" s\nJOIN \"accounts\" t\n  ON t.\"account_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["owner_id","tier"],"key":["owner_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"precision":20,"scale":0,"type":"decimal128"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["owners"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"owner_id\", t.\"tier\"\nFROM \"__sdm_seeds__\" s\nJOIN \"owners\" t\n  ON t.\"owner_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["payment_id","account_id","amount","ts"],"key":["account_id"],"order":[{"as_timestamp":true,"column":"ts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"payment_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["payments"]},"window":{"column":"ts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"payment_id\", t.\"account_id\", t.\"amount\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"payments\" t\n  ON t.\"account_id\" = s.\"key\"\n AND CAST(t.\"ts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"payment_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"ts\" AS TIMESTAMP) DESC NULLS LAST, t.\"payment_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["account_id","owner_id","age"],"key":["owner_id"],"order":[{"as_timestamp":false,"column":"account_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"precision":20,"scale":0,"type":"decimal128"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["accounts"]},"window":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"account_id\", t.\"owner_id\", t.\"age\"\nFROM \"__sdm_seeds__\" s\nJOIN \"accounts\" t\n  ON t.\"owner_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY t.\"account_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", t.\"account_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["line_id","order_id","qty","lts"],"limit":1000,"request":"preview","table":{"source":["lines"]}}"##,
+        &["SELECT \"line_id\", \"order_id\", \"qty\", \"lts\" FROM \"lines\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns":[{"column":"lts","table":{"source":["lines"]}}],"request":"time_bounds"}"##,
+        &[
+            "SELECT\n  0 as table_index,\n  MIN(CAST(\"lts\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"lts\" AS TIMESTAMP)) as max_date\nFROM \"lines\"",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","ts"],"filters":[{"column":"order_id","filter":"not_null"},{"column":"ts","filter":"not_null"}],"key":["order_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_id\", \"ts\"\nFROM (SELECT * FROM \"orders\"\nWHERE \"order_id\" IS NOT NULL AND \"ts\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["qty","lts"],"key":["order_id"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"end","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["lines"]},"window":{"column":"lts","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"qty\", t.\"lts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"lines\" t\n  ON t.\"order_id\" = s.\"key\"\n AND CAST(t.\"lts\" AS TIMESTAMP) <= s.\"end\"\n AND CAST(t.\"lts\" AS TIMESTAMP) > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts"],"key":["order_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["orders"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"order_id\", t.\"user_id\", t.\"price\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"order_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["line_id","order_id","qty","lts"],"key":["order_id"],"order":[{"as_timestamp":true,"column":"lts","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"line_id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["lines"]},"window":{"column":"lts","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"line_id\", t.\"order_id\", t.\"qty\", t.\"lts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"lines\" t\n  ON t.\"order_id\" = s.\"key\"\n AND CAST(t.\"lts\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"lts\" AS TIMESTAMP) DESC NULLS LAST, t.\"line_id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"lts\" AS TIMESTAMP) DESC NULLS LAST, t.\"line_id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["AdsInfo"]}]}"##,
+        &["PRAGMA table_info(\"AdsInfo\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["AdsInfo"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'AdsInfo'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["AdID","LocationID","CategoryID","Price"],"limit":1000,"request":"preview","table":{"source":["AdsInfo"]}}"##,
+        &["SELECT \"AdID\", \"LocationID\", \"CategoryID\", \"Price\" FROM \"AdsInfo\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["Category"]}]}"##,
+        &["PRAGMA table_info(\"Category\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["Category"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'Category'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["CategoryID","Level"],"limit":1000,"request":"preview","table":{"source":["Category"]}}"##,
+        &["SELECT \"CategoryID\", \"Level\" FROM \"Category\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["Location"]}]}"##,
+        &["PRAGMA table_info(\"Location\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["Location"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'Location'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["LocationID","RegionID"],"limit":1000,"request":"preview","table":{"source":["Location"]}}"##,
+        &["SELECT \"LocationID\", \"RegionID\" FROM \"Location\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["SearchInfo"]}]}"##,
+        &["PRAGMA table_info(\"SearchInfo\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["SearchInfo"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'SearchInfo'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["SearchID","SearchDate"],"limit":1000,"request":"preview","table":{"source":["SearchInfo"]}}"##,
+        &["SELECT \"SearchID\", \"SearchDate\" FROM \"SearchInfo\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["SearchStream"]}]}"##,
+        &["PRAGMA table_info(\"SearchStream\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["SearchStream"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'SearchStream'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["SearchID","AdID","IsClick","SearchDate"],"limit":1000,"request":"preview","table":{"source":["SearchStream"]}}"##,
+        &[
+            "SELECT \"SearchID\", \"AdID\", \"IsClick\", \"SearchDate\" FROM \"SearchStream\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["AdsInfo"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'AdsInfo'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["Category"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'Category'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["Location"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'Location'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["SearchInfo"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'SearchInfo'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["SearchStream"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'SearchStream'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"keys":[{"columns":["AdID"],"table":{"source":["AdsInfo"]}},{"columns":["CategoryID"],"table":{"source":["Category"]}},{"columns":["LocationID"],"table":{"source":["Location"]}},{"columns":["SearchID"],"table":{"source":["SearchInfo"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"AdID\") AS d, COUNT(CASE WHEN \"AdID\" IS NULL THEN 1 END) AS z\nFROM \"AdsInfo\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"CategoryID\") AS d, COUNT(CASE WHEN \"CategoryID\" IS NULL THEN 1 END) AS z\nFROM \"Category\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"LocationID\") AS d, COUNT(CASE WHEN \"LocationID\" IS NULL THEN 1 END) AS z\nFROM \"Location\"\nUNION ALL\nSELECT 3 AS k, COUNT(*) AS n, COUNT(DISTINCT \"SearchID\") AS d, COUNT(CASE WHEN \"SearchID\" IS NULL THEN 1 END) AS z\nFROM \"SearchInfo\"",
+        ],
+    ),
+    (
+        r##"{"columns":[{"column":"SearchDate","table":{"source":["SearchStream"]}}],"request":"time_bounds"}"##,
+        &[
+            "SELECT\n  0 as table_index,\n  MIN(CAST(\"SearchDate\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"SearchDate\" AS TIMESTAMP)) as max_date\nFROM \"SearchStream\"",
+        ],
+    ),
+    (
+        r##"{"columns":["AdID"],"filters":[{"column":"AdID","filter":"not_null"}],"key":["AdID"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["AdsInfo"]}}"##,
+        &[
+            "SELECT \"AdID\"\nFROM (SELECT * FROM \"AdsInfo\"\nWHERE \"AdID\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["IsClick","SearchDate"],"key":["AdID"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"end","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["SearchStream"]},"window":{"column":"SearchDate","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"IsClick\", t.\"SearchDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"SearchStream\" t\n  ON t.\"AdID\" = s.\"key\"\n AND CAST(t.\"SearchDate\" AS TIMESTAMP) <= s.\"end\"\n AND CAST(t.\"SearchDate\" AS TIMESTAMP) > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns":["AdID","LocationID","CategoryID","Price"],"key":["AdID"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["AdsInfo"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"AdID\", t.\"LocationID\", t.\"CategoryID\", t.\"Price\"\nFROM \"__sdm_seeds__\" s\nJOIN \"AdsInfo\" t\n  ON t.\"AdID\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["LocationID","RegionID"],"key":["LocationID"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["Location"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"LocationID\", t.\"RegionID\"\nFROM \"__sdm_seeds__\" s\nJOIN \"Location\" t\n  ON t.\"LocationID\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["CategoryID","Level"],"key":["CategoryID"],"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["Category"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"CategoryID\", t.\"Level\"\nFROM \"__sdm_seeds__\" s\nJOIN \"Category\" t\n  ON t.\"CategoryID\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["SearchID","AdID","IsClick","SearchDate"],"key":["AdID"],"order":[{"as_timestamp":true,"column":"SearchDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"AdID","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"IsClick","descending":false,"nulls_last":true},{"as_timestamp":false,"column":"SearchID","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["SearchStream"]},"window":{"column":"SearchDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"SearchID\", t.\"AdID\", t.\"IsClick\", t.\"SearchDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"SearchStream\" t\n  ON t.\"AdID\" = s.\"key\"\n AND CAST(t.\"SearchDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"SearchDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"AdID\" ASC NULLS LAST, t.\"IsClick\" ASC NULLS LAST, t.\"SearchID\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"SearchDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"AdID\" ASC NULLS LAST, t.\"IsClick\" ASC NULLS LAST, t.\"SearchID\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["AdID","LocationID","CategoryID","Price"],"key":["LocationID"],"order":[{"as_timestamp":false,"column":"AdID","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":6,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["AdsInfo"]},"window":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"AdID\", t.\"LocationID\", t.\"CategoryID\", t.\"Price\"\nFROM \"__sdm_seeds__\" s\nJOIN \"AdsInfo\" t\n  ON t.\"LocationID\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY t.\"AdID\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", t.\"AdID\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["AdID","LocationID","CategoryID","Price"],"key":["CategoryID"],"order":[{"as_timestamp":false,"column":"AdID","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":7,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["AdsInfo"]},"window":null}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"AdID\", t.\"LocationID\", t.\"CategoryID\", t.\"Price\"\nFROM \"__sdm_seeds__\" s\nJOIN \"AdsInfo\" t\n  ON t.\"CategoryID\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY t.\"AdID\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", t.\"AdID\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["SearchID","SearchDate"],"key":["SearchID"],"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["SearchInfo"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"SearchID\", t.\"SearchDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"SearchInfo\" t\n  ON t.\"SearchID\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["posts"]}]}"##,
+        &["PRAGMA table_info(\"posts\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["posts"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'posts'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"limit":1000,"request":"preview","table":{"source":["posts"]}}"##,
+        &[
+            "SELECT \"Id\", \"OwnerUserId\", \"ParentId\", \"PostTypeId\", \"CreationDate\" FROM \"posts\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","Reputation","CreationDate"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &["SELECT \"Id\", \"Reputation\", \"CreationDate\" FROM \"users\" LIMIT 1000"],
+    ),
+    (
+        r##"{"part":"columns","request":"describe","tables":[{"source":["votes"]}]}"##,
+        &["PRAGMA table_info(\"votes\")"],
+    ),
+    (
+        r##"{"part":"keys","request":"describe","tables":[{"source":["votes"]}]}"##,
+        &[
+            "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'votes'\n  AND database_name = current_database() AND schema_name = current_schema()",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","PostId","UserId","VoteTypeId","CreationDate"],"limit":1000,"request":"preview","table":{"source":["votes"]}}"##,
+        &[
+            "SELECT \"Id\", \"PostId\", \"UserId\", \"VoteTypeId\", \"CreationDate\" FROM \"votes\" LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["posts"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'posts'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"part":"foreign_keys","request":"describe","tables":[{"source":["votes"]}]}"##,
+        &[
+            "SELECT constraint_index, referenced_table,\n       constraint_column_names, referenced_column_names\nFROM duckdb_constraints()\nWHERE table_name = 'votes'\n  AND database_name = current_database() AND schema_name = current_schema()\n  AND constraint_type = 'FOREIGN KEY'",
+        ],
+    ),
+    (
+        r##"{"keys":[{"columns":["Id"],"table":{"source":["posts"]}},{"columns":["Id"],"table":{"source":["users"]}},{"columns":["Id"],"table":{"source":["votes"]}}],"request":"key_counts"}"##,
+        &[
+            "SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"posts\"\nUNION ALL\nSELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"users\"\nUNION ALL\nSELECT 2 AS k, COUNT(*) AS n, COUNT(DISTINCT \"Id\") AS d, COUNT(CASE WHEN \"Id\" IS NULL THEN 1 END) AS z\nFROM \"votes\"",
+        ],
+    ),
+    (
+        r##"{"columns":[{"column":"CreationDate","table":{"source":["votes"]}}],"request":"time_bounds"}"##,
+        &[
+            "SELECT\n  0 as table_index,\n  MIN(CAST(\"CreationDate\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"CreationDate\" AS TIMESTAMP)) as max_date\nFROM \"votes\"",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","CreationDate"],"filters":[{"column":"Id","filter":"not_null"},{"column":"CreationDate","filter":"not_null"}],"key":["Id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["posts"]}}"##,
+        &[
+            "SELECT \"Id\", \"CreationDate\"\nFROM (SELECT * FROM \"posts\"\nWHERE \"Id\" IS NOT NULL AND \"CreationDate\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["CreationDate"],"key":["PostId"],"order":null,"per_seed":null,"request":"neighbors","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"end","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}},{"name":"start","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["votes"]},"window":{"column":"CreationDate","lower":{"inclusive":false,"seed_column":"start"},"upper":{"inclusive":true,"seed_column":"end"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"votes\" t\n  ON t.\"PostId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"end\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) > s.\"start\"",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"posts\" t\n  ON t.\"Id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","Reputation","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":3,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"Id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":4,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"posts\" t\n  ON t.\"Id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["ParentId"],"order":[{"as_timestamp":true,"column":"CreationDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"Id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":5,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["posts"]},"window":{"column":"CreationDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"posts\" t\n  ON t.\"ParentId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","PostId","UserId","VoteTypeId","CreationDate"],"key":["PostId"],"order":[{"as_timestamp":true,"column":"CreationDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"Id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":6,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["votes"]},"window":{"column":"CreationDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"PostId\", t.\"UserId\", t.\"VoteTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"votes\" t\n  ON t.\"PostId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","Reputation","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":7,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"Id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":8,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["posts"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"posts\" t\n  ON t.\"Id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["ParentId"],"order":[{"as_timestamp":true,"column":"CreationDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"Id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":9,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["posts"]},"window":{"column":"CreationDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"posts\" t\n  ON t.\"ParentId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","PostId","UserId","VoteTypeId","CreationDate"],"key":["PostId"],"order":[{"as_timestamp":true,"column":"CreationDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"Id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":10,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["votes"]},"window":{"column":"CreationDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"PostId\", t.\"UserId\", t.\"VoteTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"votes\" t\n  ON t.\"PostId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","OwnerUserId","ParentId","PostTypeId","CreationDate"],"key":["OwnerUserId"],"order":[{"as_timestamp":true,"column":"CreationDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"Id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":11,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["posts"]},"window":{"column":"CreationDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"OwnerUserId\", t.\"ParentId\", t.\"PostTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"posts\" t\n  ON t.\"OwnerUserId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","PostId","UserId","VoteTypeId","CreationDate"],"key":["UserId"],"order":[{"as_timestamp":true,"column":"CreationDate","descending":true,"nulls_last":true},{"as_timestamp":false,"column":"Id","descending":false,"nulls_last":true}],"per_seed":32,"request":"neighbors","seeds":{"attachment":12,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}},{"name":"time","nullable":false,"type":{"type":"timestamp","unit":"ns","zone":null}}]},"table":{"source":["votes"]},"window":{"column":"CreationDate","lower":null,"upper":{"inclusive":true,"seed_column":"time"}}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"Id\", t.\"PostId\", t.\"UserId\", t.\"VoteTypeId\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"votes\" t\n  ON t.\"UserId\" = s.\"key\"\n AND CAST(t.\"CreationDate\" AS TIMESTAMP) <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST\n) <= 32\nORDER BY s.\"batch\", CAST(t.\"CreationDate\" AS TIMESTAMP) DESC NULLS LAST, t.\"Id\" ASC NULLS LAST",
+        ],
+    ),
+    (
+        r##"{"columns":["Id","Reputation","CreationDate"],"key":["Id"],"request":"lookup","seeds":{"attachment":13,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"Id\", t.\"Reputation\", t.\"CreationDate\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"Id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","price","ts"],"filters":[{"column":"order_id","filter":"not_null"},{"column":"ts","filter":"not_null"}],"key":["order_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_id\", \"price\", \"ts\"\nFROM (SELECT * FROM \"orders\"\nWHERE \"order_id\" IS NOT NULL AND \"ts\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
+    (
+        r##"{"columns":["order_id","user_id","ts"],"key":["order_id"],"request":"lookup","seeds":{"attachment":1,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["orders"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"order_id\", t.\"user_id\", t.\"ts\"\nFROM \"__sdm_seeds__\" s\nJOIN \"orders\" t\n  ON t.\"order_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"name":"key","nullable":true,"type":{"type":"int64"}},{"metadata":{"sdm:count_unread":"true"},"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"7"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user_id\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (7)",
+        ],
+    ),
 ];
 
 #[test]
