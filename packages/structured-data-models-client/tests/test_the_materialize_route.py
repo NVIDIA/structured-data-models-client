@@ -822,6 +822,13 @@ def test_a_numpy_context_size_reaches_the_core(
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
+    if isinstance(count, np.uint64) and int(np.__version__.split('.')[0]) < 2:
+        # NumPy 1 promotes a uint64 with a signed integer to float64, and
+        # the engine slices the context by that float, which pandas refuses:
+        # on NumPy 1 the old route crashes where the core takes the count.
+        with pytest.raises(TypeError, match='cannot do positional indexing'):
+            _materialize(num_context_samples=count)
+        return
     old = _materialize(num_context_samples=count)
     assert core._payloads == old._payloads
 
@@ -958,11 +965,16 @@ OUT_OF_RANGE = {
         'ELSE ts::TIMESTAMPTZ END AS ts FROM orders',
         'INTERNAL_ERROR',
     ),
+    # On pandas 2 the old route reads no text of year 1 as a time (a
+    # nanosecond count cannot hold it), so orders has no time column and it
+    # refuses the windowed question; on pandas 3 the engine fails converting.
     'text 0001': (
         'CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, '
         "strftime(DATE '0001-01-01' + (order_id * 7)::INTEGER, '%Y-%m-%d') "
         'AS ts FROM orders',
-        'INTERNAL_ERROR',
+        'INTERNAL_ERROR'
+        if int(pd.__version__.split('.')[0]) >= 3
+        else 'INVALID_REQUEST',
     ),
 }
 

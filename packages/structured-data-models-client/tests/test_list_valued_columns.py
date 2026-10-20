@@ -28,6 +28,30 @@ from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.dtypes import require_scalar_cells
 
+#: The pyarrow release that added each Arrow type an older runtime's pyarrow
+#: lacks (Databricks Runtime 15.4 ships pyarrow 14, 16.4 ships 15).
+ARROW_TYPE_ADDED = {
+    'list_view': 16,
+    'large_list_view': 16,
+    'binary_view': 16,
+    'string_view': 16,
+    'uuid': 18,
+    'json_': 19,
+}
+
+
+def _arrow_type_or_skip(pa, name):
+    r"""``pa.<name>``, or a skip naming the type and the pyarrow installed
+    where that pyarrow predates the type."""
+    factory = getattr(pa, name, None)
+    if factory is None:
+        pytest.skip(
+            f'pyarrow {pa.__version__} has no {name}, added in pyarrow '
+            f'{ARROW_TYPE_ADDED[name]}'
+        )
+    return factory
+
+
 TAGS = [['a', 'b'], ['b'], ['a'], ['a', 'b'], ['b'], ['a']]
 
 
@@ -299,18 +323,22 @@ def test_every_arrow_type_that_can_hold_a_sequence_is_walked(arrow):
     from sdm_client.wire.dtypes import _holds_only_scalars
 
     nested = {
-        'list': pa.list_(pa.string()),
-        'list_view': pa.list_view(pa.string()),
-        'large_list': pa.large_list(pa.string()),
-        'large_list_view': pa.large_list_view(pa.string()),
-        'fixed_size_list': pa.list_(pa.string(), 2),
-        'struct': pa.struct([('a', pa.int64())]),
-        'map': pa.map_(pa.string(), pa.int64()),
-        'dictionary_of_list': pa.dictionary(pa.int8(), pa.list_(pa.string())),
-        'run_end_encoded_list': pa.run_end_encoded(
+        'list': lambda: pa.list_(pa.string()),
+        'list_view': lambda: _arrow_type_or_skip(pa, 'list_view')(pa.string()),
+        'large_list': lambda: pa.large_list(pa.string()),
+        'large_list_view': lambda: _arrow_type_or_skip(pa, 'large_list_view')(
+            pa.string()
+        ),
+        'fixed_size_list': lambda: pa.list_(pa.string(), 2),
+        'struct': lambda: pa.struct([('a', pa.int64())]),
+        'map': lambda: pa.map_(pa.string(), pa.int64()),
+        'dictionary_of_list': lambda: pa.dictionary(
+            pa.int8(), pa.list_(pa.string())
+        ),
+        'run_end_encoded_list': lambda: pa.run_end_encoded(
             pa.int16(), pa.list_(pa.string())
         ),
-    }[arrow]
+    }[arrow]()
     assert not _holds_only_scalars(pd.ArrowDtype(nested))
 
 
@@ -386,9 +414,7 @@ def test_a_canonical_arrow_extension_over_a_scalar_is_not_walked():
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars
 
-    factory = getattr(pa, 'json_', None)
-    if factory is None:
-        pytest.skip('pyarrow has no json_')
+    factory = _arrow_type_or_skip(pa, 'json_')
     assert _holds_only_scalars(pd.ArrowDtype(factory()))
 
 
@@ -408,9 +434,10 @@ def test_a_uuid_column_is_walked_and_passes():
     from sdm_client.wire import serialize_column
     from sdm_client.wire.dtypes import _holds_only_scalars
 
+    uuid_type = _arrow_type_or_skip(pa, 'uuid')()
     value = uuid_module.uuid4()
     series = pd.Series(
-        pd.arrays.ArrowExtensionArray(pa.array([value.bytes], type=pa.uuid()))
+        pd.arrays.ArrowExtensionArray(pa.array([value.bytes], type=uuid_type))
     )
     assert not _holds_only_scalars(series.dtype)
     assert serialize_column(series, 'string') == [str(value)]
@@ -463,7 +490,8 @@ def test_every_arrow_type_whose_cells_are_not_scalars_is_walked(name):
     try:
         arrow_type = build()
     except AttributeError:  # pragma: no cover - older pyarrow
-        pytest.skip(f'pyarrow has no {name}')
+        _arrow_type_or_skip(pa, name)
+        raise
     assert not _holds_only_scalars(pd.ArrowDtype(arrow_type))
 
 
@@ -488,9 +516,11 @@ def test_every_arrow_scalar_type_stays_on_the_fast_path(name):
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars
 
-    factory = getattr(pa, name, None)
-    if factory is None:
-        pytest.skip(f'pyarrow has no {name}')
+    factory = (
+        _arrow_type_or_skip(pa, name)
+        if name in ARROW_TYPE_ADDED
+        else getattr(pa, name)
+    )
     arrow_type = (
         factory('us') if name in {'timestamp', 'duration'} else factory()
     )
@@ -502,7 +532,7 @@ def test_a_wrapped_binary_view_is_walked_too():
     pa = pytest.importorskip('pyarrow')
     from sdm_client.wire.dtypes import _holds_only_scalars
 
-    view = pa.binary_view()
+    view = _arrow_type_or_skip(pa, 'binary_view')()
     assert not _holds_only_scalars(
         pd.ArrowDtype(pa.run_end_encoded(pa.int16(), view))
     )
@@ -584,9 +614,11 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
         'opaque_over_list': lambda: pa.opaque(pa.list_(pa.string()), 't', 'v'),
         'dense_union': lambda: pa.dense_union([pa.field('a', pa.int64())]),
         'sparse_union': lambda: pa.sparse_union([pa.field('a', pa.int64())]),
-        'bool8': pa.bool8,
-        'uuid': pa.uuid,
-        'json': pa.json_,
+        # Added in pyarrow 18 (bool8, uuid) and 19 (json_): a pyarrow
+        # without one has no such type to sweep.
+        'bool8': lambda: pa.bool8(),
+        'uuid': lambda: pa.uuid(),
+        'json': lambda: pa.json_(),
         'month_day_nano_interval': pa.month_day_nano_interval,
         'fixed_shape_tensor': lambda: pa.fixed_shape_tensor(pa.float32(), (2,)),
     }
@@ -639,7 +671,11 @@ def test_no_arrow_type_is_skipped_whose_cells_would_be_refused():
 
     assert not offenders
     # A sweep that reaches nothing would pass just as quietly.
-    assert examined >= 25, f'the sweep only examined {examined} types'
+    # string_view, one of the types it examines, arrived in pyarrow 16: an
+    # older pyarrow (14 and 15, on Databricks Runtime 15.4 and 16.4) offers
+    # one fewer.
+    floor = 25 if hasattr(pa, 'string_view') else 24
+    assert examined >= floor, f'the sweep only examined {examined} types'
 
 
 # --- bytes is refused for a reason of its own ------------------------------

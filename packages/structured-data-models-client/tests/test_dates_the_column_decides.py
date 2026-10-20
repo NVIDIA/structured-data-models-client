@@ -227,6 +227,12 @@ def test_a_column_that_will_not_read_is_not_called_ambiguous(values, said):
     coercing the second leaves the rows that read, and coercing the first
     leaves a column of NaT, which this client refuses for a reason of its own.
     """
+    if 'CST' in values[0] and int(pd.__version__.split('.')[0]) < 3:
+        # pandas 2 reads the zone it does not know as no zone at all
+        # (`13:24:26 CST` is 13:24:26), so on this old route every value
+        # reads and the column is a time axis; pandas 3 reads none of them.
+        assert time_column(values) is not None
+        return
     with pytest.raises(StructuredDataError) as raised:
         time_column(values)
 

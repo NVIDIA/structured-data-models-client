@@ -20,6 +20,7 @@ from __future__ import annotations
 import ast
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
@@ -676,6 +677,39 @@ def _said(shown: list[Any]) -> list[Any]:
     return [w for w in shown if not issubclass(w.category, ResourceWarning)]
 
 
+def _runtime_directories() -> tuple[str, ...]:
+    r"""Where the runtime's pandas and pyarrow are installed."""
+    found = []
+    for name in ('pandas', 'pyarrow'):
+        spec = importlib.util.find_spec(name)
+        if spec is not None and spec.submodule_search_locations:
+            found.extend(
+                str(Path(location).resolve()) + os.sep
+                for location in spec.submodule_search_locations
+            )
+    return tuple(found)
+
+
+def _old_said(shown: list[Any]) -> list[Any]:
+    r"""What the old route's call said, as :func:`_said`, without the
+    deprecation warnings its pandas or pyarrow raised (register entry
+    HOST-5, owner-approved): an older pyarrow (14 and 15, on Databricks
+    Runtime 15.4 and 16.4) converts its samples with pandas internals newer
+    pandas deprecates (pandas 3 as a ``Pandas4Warning``), so there the old
+    route raises them and the core, which converts none, raises none. Only
+    the old route's are left out, so one the core raises still fails the
+    comparison."""
+    runtime = _runtime_directories()
+    return [
+        w
+        for w in _said(shown)
+        if not (
+            issubclass(w.category, DeprecationWarning)
+            and str(Path(w.filename).resolve()).startswith(runtime)
+        )
+    ]
+
+
 def _described(
     monkeypatch: pytest.MonkeyPatch, setup: tuple[str, ...], routes: str
 ) -> tuple[dict[str, Any], list[tuple[str, str]], Schema]:
@@ -686,7 +720,8 @@ def _described(
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(_connection(*setup)))
-    said = [(type(w.message).__name__, str(w.message)) for w in _said(shown)]
+    told = _said(shown) if routes else _old_said(shown)
+    said = [(type(w.message).__name__, str(w.message)) for w in told]
     return _projection(schema), said, schema
 
 
@@ -917,7 +952,7 @@ def _from_source(
             if str(w.message).startswith('[')
             else str(w.message),
         )
-        for w in _said(shown)
+        for w in (_said(shown) if routes else _old_said(shown))
     ]
     return _projection(schema), said, schema
 
@@ -1046,7 +1081,7 @@ def _named_on_the_old_route(
         warnings.simplefilter('always')
         schema = Schema.from_source(DuckDBSource(connection), tables)
     return _projection(schema), [
-        (type(w.message).__name__, str(w.message)) for w in _said(shown)
+        (type(w.message).__name__, str(w.message)) for w in _old_said(shown)
     ]
 
 

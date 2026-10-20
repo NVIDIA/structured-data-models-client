@@ -779,6 +779,13 @@ def test_a_model_that_loses_nothing_converts_without_a_warning(
     """
     with warnings.catch_warnings():
         warnings.simplefilter('error')
+        # Register entry HOST-5: on an older pyarrow (14 and 15, on Databricks
+        # Runtime 15.4 and 16.4) the old route's sampler converts with pandas
+        # internals newer pandas deprecates; the runtime's warnings, not the
+        # client's, so only those of pandas and pyarrow are let through.
+        warnings.filterwarnings(
+            'ignore', category=DeprecationWarning, module=r'(pandas|pyarrow)\.'
+        )
         schema = Schema.from_source(source.semantic_model('sales_mv'))
 
     (note,) = schema.conversion_notes
