@@ -10,9 +10,10 @@ The model is an argument:
 >>> with SDMClient(url='http://localhost:8000') as client:
 ...     result = client.predict(request, model=KumoTabular())
 
-Each client owns its own transport, so several can target different endpoints
+Each client owns its own backend, so several can target different endpoints
 or tenants at once, including from several threads: a prediction always goes to
-the endpoint and credential of the client that started it.
+the endpoint and credential of the client that started it, or for a client
+opened with :meth:`SDMClient.in_process`, to the models that client holds.
 """
 
 from __future__ import annotations

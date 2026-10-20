@@ -187,9 +187,11 @@ A request the model cannot answer is refused with a `StructuredDataError` whose
 not a `NimRequestError` and has no HTTP status, since nothing was sent. Inside
 a session the code is the reason's own, where a NIM files the refusal under
 `SESSION_CREATE_VALIDATION_FAILED` or `SESSION_PREDICT_SCHEMA_MISMATCH`. A
-request built by hand and passed to `Request.materialized` is checked for what
-the model needs to read it, not against every rule of the request contract, so
-a key the contract does not name is ignored here, where a NIM refuses it.
+request is checked for what the model needs to read it, not against every rule
+of the request contract: a name longer than the contract's 1,024 characters, or
+a key the contract does not name in a request built by hand and passed to
+`Request.materialized`, is answered here where a NIM refuses it with
+`VALIDATION_FAILED`.
 
 Two things differ by design. On a CPU it computes at full precision and draws
 its random numbers there, so its answers can differ from a GPU-hosted NIM's by
