@@ -106,7 +106,10 @@ deleted.
 Missing or malformed evidence fails: no baseline or declarations, either in
 another format, a field missing or retyped, an unreadable base, no merge
 base. A base that predates the baseline has nothing to compare, and the
-declarations must then be empty.
+declarations must then be empty. A baseline entry for a file outside
+``FROZEN`` is ignored, not refused: only the frozen files are compared, so
+nothing frozen loosens, and a later landing can widen the freeze while the
+gate judges it with its checkpoint's copy (T2.14a1).
 
 Threat model (decision E56, checkpoint 4): the threat is honest drift by
 cooperating agents, a rule added to the bridge by ordinary means and not
@@ -539,8 +542,6 @@ def load(
     if not base:
         for name in sorted(expected - set(files)):
             problems.append(f'{where}: no entry for the frozen file {name}')
-        for name in sorted(set(files) - expected):
-            problems.append(f'{where}: {name} is not a frozen bridge file')
     out: Baseline = {}
     for rel in sorted(set(files) if base else expected & set(files)):
         functions = files[rel]
