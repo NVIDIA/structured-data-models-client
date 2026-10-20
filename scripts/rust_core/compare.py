@@ -787,9 +787,11 @@ def _core_consistent(
     description or an error, never both, and its error ends the call there,
     as a refusal with its code; a description lets the call go on, so the
     outcome is the later calls', the user's edits first (``edit_schema``,
-    from T1.24b), whose refusal ends it beside the description. Off DuckDB
-    an accepted query goes on through the case's ``until``, and a later
-    call's error is the outcome (:func:`_later_error`)."""
+    from T1.24b), whose refusal ends it beside the description, as a
+    ``validate_query`` error does where the case's core validates its
+    query and that call ended it (T2.1r, DT-5). Off DuckDB an accepted
+    query goes on through the case's ``until``, and a later call's error
+    is the outcome (:func:`_later_error`)."""
     core = observation['core']
     if core is None:
         return
@@ -856,13 +858,21 @@ def _core_consistent(
         # beside the description (decision E67).
         edits = core.get('edits') or []
         edited = bool(edits) and edits[-1].get('op') == 'edit_schema'
+        operations = observation['identity'].get('operations') or []
         if 'edits' not in core:
             # rust-host records no edits: its operations say the last call
             # was an edit (T2.1e, a line held to the calls it makes).
-            operations = observation['identity'].get('operations') or []
             edited = operations[-1:] == ['edit_schema']
+        # A validate_query error after the description ends the call
+        # beside it as a refused edit does (T2.1r; DT-5's packed date
+        # literal), where the case validates its query and that call was
+        # the last one made.
+        last = operations[-1:]
+        validated = 'validate_query' in case['core'] and last == [
+            'validate_query'
+        ]
         if (core['described'] is None) == (core['error'] is None) and not (
-            edited and core['described'] is not None
+            (edited or validated) and core['described'] is not None
         ):
             report.fail(
                 f'{where}: core: not one description or one error', 'outcome'
