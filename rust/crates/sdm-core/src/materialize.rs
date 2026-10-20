@@ -3223,11 +3223,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         }
         sent.extend(walked.tables.iter().map(|t| t.name.clone()));
         // The lagged columns of this call's examples (T2.9): the narrowed
-        // context's, then this call's own entities, each its own row's.
-        // The lagged columns of this call's examples (T2.9): the narrowed
         // context's, then this call's own entities, each its own row's,
         // sliced from the whole request's columns, so each column's type
-        // is the request's whatever this call's rows hold (fix 3); the
+        // is the request's whatever this call's rows hold (fix 3), typed
+        // over the gathered context before narrowing (fix 4); the
         // columns are computed at the first call's payload, where the
         // reference's size refusal falls, held to the largest call's rows.
         if lag_columns.is_none()

@@ -154,11 +154,13 @@ impl Lag {
     }
 
     /// The lagged columns of the examples at `kept` (positions among the
-    /// examples the lags were read for: the whole request's), `__kumo_arl0__`
-    /// first; a condition's that none of them has a value in
-    /// [`LagValues::Empty`]. A call takes its slice with
-    /// [`LagColumn::rows`], so each column's type is the request's (T2.9
-    /// fix 3).
+    /// examples the lags were read for: the whole request's, the gathered
+    /// context before narrowing and every entity predicted for),
+    /// `__kumo_arl0__` first. A condition's column is [`LagValues::Empty`]
+    /// only where no example the lags were read for has a value, kept or
+    /// not, as the reference types the complete lagged column before it
+    /// narrows the context (T2.9 fix 4). A call takes its slice with
+    /// [`LagColumn::rows`], so each column's type is the request's (fix 3).
     pub fn columns(&self, kept: &[usize]) -> Result<Vec<LagColumn>, CoreError> {
         let examples = self.shifted.len();
         (0..self.steps)
@@ -217,7 +219,11 @@ impl Lag {
                             .iter()
                             .map(|&at| own(at).and_then(|i| v.get(i).copied()))
                             .collect();
-                        if values.iter().any(Option::is_some) {
+                        // Typed by the complete column, before `kept`
+                        // narrows it (fix 4).
+                        let complete =
+                            (0..examples).any(|e| own(e).and_then(|i| v.get(i).copied()).is_some());
+                        if complete {
                             LagValues::Bool(values)
                         } else {
                             LagValues::Empty(values.len())
@@ -403,6 +409,33 @@ mod tests {
         .unwrap();
         assert_eq!(none[0].values, LagValues::Empty(2));
         assert_eq!(none[0].rows(&[1]).values, LagValues::Empty(1));
+    }
+
+    /// Fix 4: every value of a condition's lag belongs to a context example
+    /// the narrowing discards; the column the kept examples get is still
+    /// `bool`, all null, as the reference types the complete lagged column
+    /// before it narrows the context.
+    #[test]
+    fn a_condition_s_lag_is_typed_before_the_context_is_narrowed() {
+        // Example 0 (discarded) has a row in its window, examples 1 and 2
+        // (kept) none.
+        let w = window(1, days(0), days(10), &[100 * DAY, 100 * DAY, 100 * DAY]).unwrap();
+        let lag = Lag {
+            steps: 1,
+            aggregation: Aggregation::Avg,
+            start: days(0),
+            end: days(10),
+            condition: Some((RelOp::Gt, Some(Constant::Int(1)))),
+            shifted: w.shifted.clone(),
+            rows: Rows {
+                batches: vec![0],
+                values: labels::Values::Float(vec![Some(3.0)]),
+                times: vec![Some(95 * DAY)],
+            },
+        };
+        let kept = lag.columns(&[1, 2]).unwrap();
+        assert_eq!(kept[0].values, LagValues::Bool(vec![None, None]));
+        assert_eq!(kept[0].rows(&[1]).values, LagValues::Bool(vec![None]));
     }
 
     /// A month's window is moved by the calendar, as pandas moves it: from
