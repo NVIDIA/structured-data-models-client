@@ -2235,3 +2235,31 @@ def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(
     done, _ = _run_install(tmp_path, fault)
     assert done.returncode != 0
     assert says in done.stderr, done.stderr
+
+
+# --- T2.0i: main's engine rows on every platform ------------------------------
+
+
+def test_t20i_every_engine_artifact_downloaded_is_one_engine_wheels_uploads() -> (
+    None
+):
+    r"""``main`` renamed the engine's artifacts to ``engine-wheels-<name>``
+    (``engine-wheels-linux-x86_64``), and a job that still downloads an old
+    name fails only once it runs; the aarch64 build image is the ghcr.io
+    copy of PyPA's, by the same digest (E131)."""
+    jobs = _workflow()['jobs']
+    rows = jobs['engine-wheels']['strategy']['matrix']['include']
+    uploaded = {f'engine-wheels-{row["name"]}' for row in rows}
+    downloaded = [
+        step['with']['name']
+        for job in jobs.values()
+        for step in job.get('steps', [])
+        if str(step.get('uses', '')).startswith('actions/download-artifact')
+        and str(step.get('with', {}).get('name', '')).startswith(
+            'engine-wheels'
+        )
+    ]
+    assert downloaded, 'no job downloads an engine artifact'
+    assert set(downloaded) <= uploaded, (sorted(downloaded), sorted(uploaded))
+    aarch64 = jobs['native-wheel-aarch64']['env']['MANYLINUX']
+    assert aarch64.startswith('ghcr.io/'), aarch64
