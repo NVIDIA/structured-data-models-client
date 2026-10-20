@@ -1,7 +1,7 @@
 # Phase 2 tracker: T2.13
 
 The design branch owns `tracker.md`; this file holds T2.13's section until it folds in.
-Lane c, on the phase head after T2.12's landing (347ffa31; T2.1n's landing, cb8d6fb4, and T2.1o's, dd285821, before it), then the test author's acceptance tests (`T2.13 tests:`, from `t213-tests`), then this package (`T2.13:` commits).
+Lane c, on the phase head after T2.8's landing (11d05883; T2.12's, 347ffa31, before it), then the test author's acceptance tests (`T2.13 tests:`, from `t213-tests`), then this package (`T2.13:` commits).
 
 ## T2.13
 
@@ -52,6 +52,13 @@ The test author moved the eight cases that need them (`filter.entity-column`, `f
 - Every T2.13 case left here passes on python-core (DuckDB, SQLite and Postgres) and rust-host (DuckDB and SQLite): `contract/tests/t213-pending.json`'s `pending` is empty, 257 keys authored (`test_t213_options.py`, `t213_options.rs`).
 - `rust:explain.forecast` holds each row's step explanation to the reference's (the test author's change, by the orchestrator's decision); the whole `by_forecast_step` explanation is held on python-core, where the Python user reads it. Recording a result's explanation and item metadata in both runners, so the gate compares them across hosts, is carried as a judging item for before the slice gate.
 - The implementer's own tests: `test_the_query_long_tail.py` (22, against the old route), the option vectors in `options.rs`, the `dict()` vectors in `response.rs`, U1's in `pql.rs`.
+
+### The rebase onto T2.8's landing
+
+- An item's explanation and metadata are read by T2.8's `sdm_wire::response::mapping`, the one reader of a mapping-valued response field (the mid-phase design check), in place of this package's own; it takes the list of pairs for a key that is not text, as this package wrote one. This package's `dict()` vectors, each recorded on the reference, stay as a test of it (`response.rs`), and pass. The Python host likewise reads every mapping the core gives with T2.8's `_mapping`, this package's own removed.
+- `explanation` and `metadata` leave `UNREAD_ITEM_FIELDS`; the core's test of the fields the result does not carry yet keeps `quantiles` alone, as T2.8 took `scores` out of it.
+- The transform field is in the working v27 again, regenerated on T2.8's entry; the bridge changes are declared anew, against 11d05883.
+- Merged mechanically, nothing of either side dropped: the result's columns (T2.8's scores and rankings beside the explanation and metadata), `absent` (both sides' fields), the test host's endpoint (T2.8's stand-in script kept, its probabilities-only answer generalized to the case's `Told`), the case lists, the reference recording, the baselines (T2.8's lines and this package's 28 per runner), the census and a refusal-map citation.
 
 ### CI on round 1
 
