@@ -97,8 +97,8 @@ KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 #: Where the reference fails by a bug of its own, the code it records, and
 #: the line the core is held to instead: num_neighbors=[-1] fails
 #: INTERNAL_ERROR on Postgres alone, and the core answers there as the
-#: reference answers on SQLite (the orchestrator, 2026-10-20; a register
-#: entry for the implementer).
+#: reference answers on SQLite but for its draw (the orchestrator,
+#: 2026-10-20; a register entry for the implementer).
 REFERENCE_FAILS = {
     'sample.num-neighbors.minus-one@postgres': (
         'INTERNAL_ERROR',
@@ -493,6 +493,24 @@ def differences(want: Any, got: Any, at: str = '') -> list[str]:
     return []
 
 
+def _but_the_draw(sent: list[Any]) -> list[Any]:
+    r"""Each request with its drawn context reduced to its row count and
+    the tables it carries, which a draw on another database keeps."""
+    out = []
+    for request in sent:
+        if isinstance(request, dict) and isinstance(
+            request.get('context'), dict
+        ):
+            request = dict(request)
+            context = request['context']
+            request['context'] = {
+                'rows': len(context['instance_table']['rows']),
+                'tables': sorted(context.get('related_tables', {})),
+            }
+        out.append(request)
+    return out
+
+
 @pytest.mark.parametrize('case_key', KEYS_ALL)
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
@@ -523,7 +541,13 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert _outcome(line) == _outcome(want), (
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )
-        found = differences(payloads(want), payloads(line))
+        wanted, got = payloads(want), payloads(line)
+        if case_key in REFERENCE_FAILS:
+            # Held to another database's line, whose draw is its own
+            # stream's (RS-2, RS-6): the request but its context, and of
+            # the context its size and its tables.
+            wanted, got = _but_the_draw(wanted), _but_the_draw(got)
+        found = differences(wanted, got)
         assert not found, f'{case_key}: the payload differs: ' + '; '.join(
             found
         )
