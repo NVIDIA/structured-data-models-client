@@ -90,3 +90,13 @@ P2E-16 to P2E-19 stay proposed until the owner's rows (KO2-72 to KO2-75) land.
 ## Fix 1
 
 The owner chose exact comparison for a float with a fraction in an `IN` list of an integer column inside a filter or a logical target (KO2-73): `int_member` gives no member for it, nor for a float past int64, and a whole float still matches its integer; a whole-target condition stays refused as the reference refuses it. `labels`' unit test expects `[T, T, F, T]` for `e.ni IN (1, 2.5) OR e.flag = true` and holds 2.0, 1e20 and -2.5 inside `NOT`. P2E-17's text says so. No case, label vector or baseline lists such a float against an integer column, so none moves.
+
+## Rebased onto e154a8cc, the owner's rows in
+
+- Rebased onto T2.1p's landing (e154a8cc), over T2.12 (contract v27; T2.10 adds no contract field, `contract_lock.py` clean). Conflicts resolved in the refusal census, the register, the empty-null map's citation, `tests/test_contract_cases.py` (the test author's file, T2.12's and T2.10's case lists side by side), the reference lines and the goldens; T2.12's NaN-key refusal now reads whether the target reads any table by key (`fetches`).
+- P2E-16 to P2E-19 approved by the owner, KO2-72 to KO2-75 (each row names its entry); P2E-19 names `target.aggregation.list-distinct` on both core runners and three databases, with baselines on python-core and rust-host.
+- Gate against e154a8cc (heavy lock, NVMe dirs): python-core and python-old 415 s, rust-host 138 s; both differ only on:
+  - `target.aggregation.list-distinct`: the outcome is P2E-19's, but the core refuses at materialize where the reference stops at predict, so the comparator still holds the predict call's inputs and route, the payload, the warnings and the statement count. T2.1r (lane a) adds the opt-in for an earlier refusal; once it lands, P2E-19's rows name materialize under `statements_differ`.
+  - `rank.decimal-key` and `rank.odd-column`: new cases of T2.10's test author, so they exist on no earlier head. They wait for the ranking in the core (T2.8): rust-host refuses every ranking (`problem_type`); python-core answers `rank.decimal-key` through the client's own decomposition, its question filtering on the DECIMAL key, and refuses `rank.odd-column`, whose question the client spells with the column unquoted.
+- Client tests 2706 passed; mypy clean; `sdm-core`, `sdm-engine`, `sdm-request` tests 242 passed; goldens' checks pass; the register check passes. Pushed at 9bcf3694.
+- Landing order (the orchestrator's): T2.8, T2.13, then T2.10 or T2.9, whichever is ready first; T2.10 rebases over T2.8 then (its `RowFilter` becomes `Windowed.filter`; the three forecast-vector files both packages change merged).
