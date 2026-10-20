@@ -143,6 +143,27 @@ def _refused_before_reading(case_id: str) -> bool:
     return False
 
 
+def _given_key(key: Any) -> Any:
+    r"""A primary key given to ``from_source`` as contract 23's ``Given``
+    writes it (decision E101, the codec's one classifier): a name or a list
+    of names as their list, None as itself, anything else unreadable."""
+    if key is None:
+        return {'value': None}
+    if isinstance(key, str):
+        return {'value': [key]}
+    if isinstance(key, list) and all(isinstance(k, str) for k in key):
+        return {'value': key}
+    return 'unreadable'
+
+
+def _given_time(column: Any) -> Any:
+    r"""A time column given to ``from_source`` as contract 23's ``Given``
+    writes it: a name or None as itself, anything else unreadable."""
+    if column is None or isinstance(column, str):
+        return {'value': column}
+    return 'unreadable'
+
+
 def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     r"""Each way a case's core operations depart from its own input: the
     source described is the one ``from_source`` names, materialize's
@@ -162,11 +183,10 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     if {k: v for k, v in source.items() if k != 'relationships'} != {
         'tables': list(named.get('tables', [])),
         'primary_keys': {
-            t: {'value': k if isinstance(k, list) else [k]}
-            for t, k in named.get('primary_keys', {}).items()
+            t: _given_key(k) for t, k in named.get('primary_keys', {}).items()
         },
         'time_columns': {
-            t: {'value': c} for t, c in named.get('time_columns', {}).items()
+            t: _given_time(c) for t, c in named.get('time_columns', {}).items()
         },
     } or source.get('relationships', []) != wanted_links:
         problems.append('describe_source is not of its source')
