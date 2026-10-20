@@ -6789,7 +6789,7 @@ entries:
     Schema.from_source, PredictiveQuery.materialize and SDMClient.predict on
     the core route over a DuckDB, SQLite or Postgres source with a column
     whose name holds a dot, a backtick, a line feed or a carriage return.
-  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-filter, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-filter, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-filter, name.line-break-target]
+  cases: [name.backtick-aggregation, name.backtick-entity, name.backtick-feature, name.backtick-filter, name.backtick-target, name.dot-aggregation, name.dot-entity, name.dot-feature, name.dot-filter, name.dot-target, name.line-break-aggregation, name.line-break-entity, name.line-break-feature, name.line-break-filter, name.line-break-target, rank.odd-column]
   core_only_columns:
   - users.a.b
   - users.a`b
@@ -6797,6 +6797,8 @@ entries:
   - orders.a.b
   - orders.a`b
   - "orders.a\nb"
+  - items.i.d
+  - buys.i.d
   refs:
   - eb6c68eb
   - P2B-2
@@ -6894,6 +6896,12 @@ entries:
   - {case: name.line-break-filter@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.line-break-filter@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
   - {case: name.line-break-filter@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a filter naming a column the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column, cell: ref-pandas3, runner: python-core, old: 'none', new: 'success at predict', summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'success', summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'success at predict', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
+  - {case: rank.odd-column@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'success', statements_differ: [materialize], summary: 'T2.10: a ranking over a key whose name holds a dot, which the reference leaves out, answered (KO2-36)'}
 
 - id: P2E-2
   title: A target filter on a column only the core names is refused by the core's not-yet rule target_filter, until T2.10
