@@ -133,6 +133,213 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_table": {
       "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::<module>": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_bits32": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_digits": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_exact": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_float32": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_float64": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_integral": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_json": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_of_bits32": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_scalar": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::decode_scalar": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::encode": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_key": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_name_or_none": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_text": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::integer": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::read": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::relation": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::relation_name": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::seed": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::<module>": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_link": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_made": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_schema_holding": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_store": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::column": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::leave_out": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::relationships": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::table": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_as_timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_detail": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_duckdb_text": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_instance": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_shown_timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_time_of_day": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_worded": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__call__": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__init__": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_Numeric.__init__": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_Numeric.field": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_after_read": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_array": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_table": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_type": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_cell": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_element_type": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_elements": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_interval": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_isoformat": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_own_transaction": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_psycopg_text": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_result": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_scalar_type": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_tags": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::json_text": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::key_set_json": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send_body": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     }
   }
 }

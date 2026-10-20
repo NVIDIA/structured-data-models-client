@@ -10,7 +10,9 @@ lands in Rust, not in the Python bridge. This guard holds it over the files
 that keep a row of the design's "Host-held semantics" ledger:
 
 - the ``_rust/`` bridges, ``_rust/schema.py``, ``_rust/materialize.py`` and
-  ``_rust/predict.py``, whole: every function and method;
+  ``_rust/predict.py``, with what they share, ``_rust/codec.py``,
+  ``_rust/edits.py``, ``_rust/errors.py`` and ``_rust/providers/postgres.py``
+  (T2.14a, FR P3-2), whole: every function and method;
 - the files shared with the old route, for the functions ``COVERED`` names:
   in ``client.py``, ``query.py`` and ``materializers/relational.py`` the
   ledgered functions and those the core route reaches through them; in
@@ -224,6 +226,10 @@ WHOLE = (
     _CLIENT / '_rust/schema.py',
     _CLIENT / '_rust/materialize.py',
     _CLIENT / '_rust/predict.py',
+    _CLIENT / '_rust/codec.py',
+    _CLIENT / '_rust/edits.py',
+    _CLIENT / '_rust/errors.py',
+    _CLIENT / '_rust/providers/postgres.py',
 )
 #: The files shared with the old route, covered for the functions named
 #: here and for their module statements: the ledgered rules and what the
@@ -233,6 +239,7 @@ COVERED: dict[Path, tuple[str, ...]] = {
         'SDMClient._answer_in_parts',
         'SDMClient._prepare',
         'SDMClient._send',
+        'SDMClient._send_body',
         'SDMClient._spec',
         'SDMClient.predict',
         '_adapter_for',
