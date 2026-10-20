@@ -690,6 +690,7 @@ def freeze_cases(results: list[Result]) -> None:
         on: bridge_freeze.Base | str = base,
         rewrite: bool = False,
         declare: dict[str, dict[str, str]] | None = None,
+        strict: bool = False,
     ) -> None:
         with tree(*FREEZE_TREE) as root:
             (root / bridge_freeze.CHANGES).write_text(changes)
@@ -705,7 +706,7 @@ def freeze_cases(results: list[Result]) -> None:
                 data = json.loads(path.read_text())
                 data['changes'] = declare
                 path.write_text(json.dumps(data))
-            problems = refused + bridge_freeze.check(root, on)
+            problems = refused + bridge_freeze.check(root, on, strict=strict)
             expect(
                 results,
                 f'bridge_freeze: {name}',
@@ -1728,6 +1729,91 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         'SDMClient._prepare: differs from the baseline',
     )
+    # T2.14a: strict, a copy judging its own tree (its bridge_freeze.py
+    # this file, byte for byte, as prepush.sh and CI's rust-lint run it),
+    # keeps every refusal T2.14a1's tolerances drop for the gate's
+    # checkpoint copy: each seed passes tolerant and is refused strict.
+    run_py = str(client / '_rust/run.py')
+    for name, change, declared, refusal in (
+        (
+            'a baseline file outside FROZEN',
+            lambda r: baseline(
+                r, lambda d: d['files'].update({run_py: {'go': dict(fake)}})
+            ),
+            None,
+            f'{run_py} is not a frozen bridge file',
+        ),
+        (
+            'an uncovered client.py name in the baseline',
+            lambda r: baseline(
+                r,
+                lambda d: d['files'][key_of['client']].update(
+                    {'SDMClient.close': dict(fake)}
+                ),
+            ),
+            None,
+            f'{key_of["client"]}::SDMClient.close: in the baseline but not '
+            'covered code',
+        ),
+        (
+            'a declaration of a file outside FROZEN',
+            lambda r: None,
+            {f'{run_py}::go': refactor},
+            f'{run_py}::go: declared in',
+        ),
+        (
+            'a declaration of an uncovered client.py name',
+            lambda r: None,
+            {f'{key_of["client"]}::SDMClient.close': refactor},
+            f'{key_of["client"]}::SDMClient.close: declared in',
+        ),
+    ):
+        case(f'control: {name}, tolerant', change, None, declare=declared)
+        case(f'{name}, strict', change, refusal, declare=declared, strict=True)
+    case('control: the tree unchanged, tolerant', lambda r: None, None)
+    case(
+        'control: the tree unchanged, strict', lambda r: None, None, strict=True
+    )
+
+    # own_tree: strict only where the tree's bridge_freeze.py is this file,
+    # byte for byte; problems() runs check with it.
+    script = REPO_ROOT / bridge_freeze.SCRIPT
+    with tree(*FREEZE_TREE) as root:
+        own = root / bridge_freeze.SCRIPT
+        seen: list[bool] = []
+        saved = bridge_freeze.check, bridge_freeze.base_baseline
+        try:
+            bridge_freeze.base_baseline = lambda _root, _ref: base
+            bridge_freeze.check = lambda _root, _base, *, strict=False: (
+                seen.append(strict) or []
+            )
+            for label, text, wanted in (
+                ('identical', script.read_bytes(), True),
+                ('a byte differs', script.read_bytes() + b'#', False),
+                ('missing', None, False),
+            ):
+                if own.exists():
+                    own.unlink()
+                if text is not None:
+                    own.parent.mkdir(parents=True, exist_ok=True)
+                    own.write_bytes(text)
+                seen.clear()
+                bridge_freeze.problems(root, 'origin/rust-core-phase-2')
+                expect(
+                    results,
+                    f"bridge_freeze: own_tree, the tree's copy {label}",
+                    []
+                    if bridge_freeze.own_tree(root) is wanted
+                    and seen == [wanted]
+                    else [
+                        f'own_tree {bridge_freeze.own_tree(root)}, problems() '
+                        f'ran check with strict {seen}, not {wanted}'
+                    ],
+                    fails_with=None,
+                )
+        finally:
+            bridge_freeze.check, bridge_freeze.base_baseline = saved
+
     case(
         'a format 2 entry without its counts',
         lambda r: baseline(
