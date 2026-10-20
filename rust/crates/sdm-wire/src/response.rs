@@ -346,8 +346,13 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
 /// keys a response's mappings by (`dict`), so two keys the reference holds
 /// one are one here, and only here: text by its text, null as
 /// itself, a boolean or a number by its exact value (an integer's digits, a
-/// whole double's digits, another double by its bits); none for a NaN, which
-/// equals no other key.
+/// whole double's digits, another double by its bits); every NaN one key.
+/// Two NaN objects are two keys to Python's `dict`, but the client reads a
+/// response with `json.loads`, which gives every `NaN` token the same NaN
+/// object, and `dict` finds a key that is the same object before it
+/// compares, so the reference keeps one key for them all (T2.13: the
+/// reference's `PredictionItem.from_dict` makes `[[NaN, 1], [NaN, 2]]`
+/// `{NaN: 2}`).
 fn key_of(key: &Value) -> Option<String> {
     match key {
         Value::Text(text) => Some(format!("s{text}")),
@@ -368,7 +373,7 @@ fn key_of(key: &Value) -> Option<String> {
         Value::Number(token) => {
             let float: f64 = token.parse().ok()?;
             if float.is_nan() {
-                None
+                Some("x".to_owned())
             } else if float.is_finite() && float.fract() == 0.0 {
                 Some(if float == 0.0 {
                     "n0".to_owned()
@@ -589,6 +594,25 @@ mod tests {
                 "{given}"
             );
         }
+    }
+
+    /// Every NaN is one key, as the reference holds them: `json.loads` gives
+    /// every `NaN` token the same object, which `dict` finds as one key
+    /// (T2.13); the first place is kept and the last value taken, and a NaN
+    /// is no other number's key.
+    #[test]
+    fn every_nan_key_is_one_key() {
+        let read = |text: &str| mapping(&answer(text), "prediction.explanation").unwrap();
+        assert_eq!(read("[[NaN,1],[NaN,2]]"), answer("[[NaN,2]]"));
+        assert_eq!(read("[[NaN,1],[0,2],[NaN,3]]"), answer("[[NaN,3],[0,2]]"));
+        assert_eq!(
+            read("[[NaN,1],[Infinity,2],[-Infinity,3]]"),
+            answer("[[NaN,1],[Infinity,2],[-Infinity,3]]")
+        );
+        assert_eq!(
+            read(r#"[[NaN,1],["NaN",2]]"#),
+            answer(r#"[[NaN,1],["NaN",2]]"#)
+        );
     }
 
     #[test]
