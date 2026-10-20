@@ -195,6 +195,15 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
     assert core._payloads[0]['output'] == old._payloads[0]['output']
 
 
+#: A time column of users, a distinct time each, for an anchor at each
+#: entity's own time (T2.11).
+SIGNED_UP = (
+    'ALTER TABLE users ADD COLUMN signup TIMESTAMP',
+    "UPDATE users SET signup = TIMESTAMP '2023-01-01' + to_days((user_id * 11)::INTEGER)",
+)
+STATIC = 'PREDICT users.age FOR EACH users.user_id'
+
+
 @pytest.mark.parametrize(
     'query',
     [
@@ -411,41 +420,113 @@ def test_a_nan_lag_is_refused_on_the_core_route_only(
 
 
 @pytest.mark.parametrize(
-    ('options', 'rule'),
+    ('setup', 'options'),
     [
-        ({'num_neighbors': [8, 8]}, 'num_neighbors'),
-        # A sequence JSON does not know, written as its items (fix round 1,
-        # the subagent's P2-1), so refused by name as a list is.
-        ({'num_neighbors': range(2)}, 'num_neighbors'),
-        ({'context_anchor_time': ANCHOR}, 'context_anchor_time'),
-        ({'anchor_time': 'entity'}, 'anchor_entity'),
-        # A seed given as None, which the reference reads as unseeded.
-        ({'random_seed': None}, 'unseeded'),
-        # The first in name order, before the seed, as the bridge refused
-        # them until T1.24.
-        (
-            {'top_k': 3, 'num_hops': 2, 'random_seed': None},
-            'num_hops',
-        ),
+        ((), {'num_hops': 3}),
+        ((), {'num_hops': 1}),
+        ((), {'num_neighbors': [3, 2, 1]}),
+        ((), {'num_neighbors': [3, 0, 5]}),
+        ((), {'num_neighbors': [2, 0.5, 4]}),
+        # A sequence JSON does not know, written as its items.
+        ((), {'num_neighbors': range(2, 4)}),
+        ((), {'max_pq_iterations': 2}),
+        ((), {'use_prediction_time': True}),
+        ((), {'return_embeddings': True}),
+        ((), {'exclude_cols_dict': {'orders': ['price'], 'users': ['age']}}),
+        ((), {'context_anchor_time': pd.Timestamp('2023-12-01')}),
+        (SIGNED_UP, {'query': STATIC, 'anchor_time': 'entity'}),
+        (SIGNED_UP, {'query': STATIC, 'max_pq_iterations': 1.5}),
     ],
+    ids=lambda value: (
+        'signed-up'
+        if value == SIGNED_UP
+        else '-'.join(sorted(value))
+        if isinstance(value, dict)
+        else 'shop'
+    ),
 )
-def test_what_the_core_does_not_take_yet_is_refused_by_name(
-    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any], rule: str
+def test_the_sampling_options_are_taken_as_the_old_route_takes_them(
+    monkeypatch: pytest.MonkeyPatch,
+    setup: tuple[str, ...],
+    options: dict[str, Any],
 ) -> None:
-    # Every option passes through to the core, which refuses by name what
-    # it does not take (T1.24, decision E61): the bridge refuses none of
-    # its own, so the refusal is the core's, mapped by the host.
+    # T2.11: the core reads each sampling option's value and samples as the
+    # reference's engine does, payload for payload.
+    options = dict(options)
+    if options.get('anchor_time') == 'entity':
+        arguments = {**options}
+        monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            connection = _connection(*setup)
+            schema = Schema.from_source(DuckDBSource(connection))
+            query = arguments.pop('query')
+            core = (
+                PredictiveQuery(query, schema)
+                .materialize(indices=[0, 1], **arguments)
+                ._payloads[0]
+            )
+        monkeypatch.delenv(_routing.ENVIRONMENT)
+        if importlib.util.find_spec('sdm_relational_engine') is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                old = (
+                    PredictiveQuery(query, schema)
+                    .materialize(indices=[0, 1], **arguments)
+                    ._payloads[0]
+                )
+            assert json.loads(json.dumps(core)) == json.loads(
+                json.dumps(old, default=str)
+            )
+        anchors = core['context']['instance_table']['columns']
+        assert '__kumo_anchor_time' in anchors
+        return
+    core = _both_routes(monkeypatch, *setup, **options)
+    if options.get('use_prediction_time'):
+        assert core['inference']['use_prediction_time'] is True
+
+
+@pytest.mark.parametrize(
+    ('options', 'field'),
+    [
+        ({'num_hops': None}, 'num_hops'),
+        ({'num_neighbors': ['x']}, 'num_neighbors'),
+        # A negative size, which the reference's databases read three ways
+        # (P2I-4, KO2-82).
+        ({'num_neighbors': [2, -1]}, 'num_neighbors'),
+        ({'max_pq_iterations': 0}, 'max_pq_iterations'),
+        ({'use_prediction_time': None}, 'use_prediction_time'),
+        ({'exclude_cols_dict': {'orders': ['order_id']}}, 'exclude_cols_dict'),
+        ({'exclude_cols_dict': {'nowhere': []}}, 'exclude_cols_dict'),
+        ({'context_anchor_time': 'entity'}, 'context_anchor_time'),
+    ],
+    ids=lambda value: (
+        '-'.join(map(str, value)) if isinstance(value, dict) else value
+    ),
+)
+def test_a_sampling_option_the_engine_refuses_is_the_caller_s_error(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any], field: str
+) -> None:
+    # Refused as the reference refuses it, INVALID_REQUEST, naming the
+    # option (T2.11).
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_source(DuckDBSource(_connection()))
-        arguments = {'indices': [0, 1], 'anchor_time': ANCHOR, **options}
-        with pytest.raises(StructuredDataError) as refused:
-            PredictiveQuery(QUERY, schema).materialize(**arguments)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert type(refused.value).__name__ == 'UnsupportedRequestError'
-    assert refused.value.details['operation'] == 'materialize'
-    assert refused.value.details['rule'] == rule
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(**options)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details.get('field') == field
+
+
+def test_an_unseeded_sample_is_a_new_sample_of_the_entities_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `random_seed=None` draws a new sample each call (T2.11, KO2-76): the
+    # same entities predicted, each context row one of the source's users.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    for _ in range(3):
+        payload = _materialize(random_seed=None)._payloads[0]
+        assert payload['metadata']['num_prediction_examples'] == 2
+        rows = payload['context']['related_tables']
+        assert set(rows) <= {'users', 'orders'}
 
 
 @pytest.mark.parametrize(
@@ -1304,15 +1385,15 @@ def test_two_materializers_each_check_their_source_once(
 def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # An option the core does not take is refused before anything is read
-    # (P1B-3): the state that run leaves says nothing was read, so the next
+    # An option refused before anything is read (more hops than the
+    # endpoint reads): the state that run leaves says nothing was read, so the next
     # call checks the indexes and warns; one refused after the check (an
     # entity missing, refused before the time bounds are read) keeps it,
     # and the next call skips it, reading the bounds.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     connection, schema = _shop_logged()
     query = PredictiveQuery(QUERY, schema)
-    assert _calls([query], connection, indices=[0, 1], num_hops=1) == [(0, 0)]
+    assert _calls([query], connection, indices=[0, 1], num_hops=7) == [(0, 0)]
     assert _calls([query], connection, indices=[0, 1]) == [(6, 1)]
     other = PredictiveQuery(QUERY, schema)
     assert _calls([other], connection, indices=[None, 1]) == [(1, 1)]

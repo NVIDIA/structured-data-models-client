@@ -47,15 +47,12 @@ use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
 use sdm_engine::sample::{self, SEED_TIME};
+use sdm_request::options::Hop;
 use sdm_request::payload::{SampledColumn, SampledLink, SampledTable};
 
 use crate::describe::{ask, ask_all_vec};
 use crate::materialize::{Times, batches, key_set, named, one_batch};
 use crate::run::{Asker, internal};
-
-/// The hops walked: the default two (`num_hops`), each keeping the run
-/// mode's neighbors of each row (`_DEFAULT_NUM_NEIGHBORS`, [`Walk::neighbors`]).
-const HOPS: usize = 2;
 
 /// One table the walk reached: its rows, in the order numbered, as the
 /// frames they came in, and the example each was reached for.
@@ -66,20 +63,20 @@ struct Visit {
     /// Each row's number, by its key and example (the reference's
     /// `Mapper`), for a table with a key.
     nodes: BTreeMap<(Key, usize), usize>,
-    /// The rows reached at each hop.
-    counts: [usize; HOPS + 1],
+    /// The rows reached at each hop, the entity's first.
+    counts: Vec<usize>,
     /// The frames visited so far.
     offset: usize,
 }
 
 impl Visit {
-    fn new(name: &str) -> Visit {
+    fn new(name: &str, hops: usize) -> Visit {
         Visit {
             name: name.to_owned(),
             frames: Vec::new(),
             batches: Vec::new(),
             nodes: BTreeMap::new(),
-            counts: [0; HOPS + 1],
+            counts: vec![0; hops + 1],
             offset: 0,
         }
     }
@@ -116,8 +113,13 @@ pub(crate) struct Walk<'a> {
     pub anchors: &'a [i64],
     pub nulls: NullOrder,
     pub entity: &'a Table,
-    /// The neighbors kept of each row at each hop, by the run mode.
-    pub neighbors: [u64; HOPS],
+    /// The hops walked, each with the neighbors it keeps of each row: the
+    /// run mode's two by default, or as the sampling options ask
+    /// (`num_hops`, `num_neighbors`, [`options::neighbors`]); the walk ends
+    /// at a hop of size zero.
+    ///
+    /// [`options::neighbors`]: sdm_request::options::neighbors
+    pub neighbors: &'a [Hop],
     /// The features left out, by table: a static target's columns, which
     /// the reference's sampler neither reads nor sends
     /// (`get_exclude_cols_dict`, `exclude_cols_dict`).
@@ -215,7 +217,7 @@ impl Walk<'_> {
     /// [`sample_columns`].
     pub(crate) async fn run(&self, entity_rows: RecordBatch) -> Result<Walked, CoreError> {
         let examples = entity_rows.num_rows();
-        let mut visits = vec![Visit::new(&self.entity.name)];
+        let mut visits = vec![Visit::new(&self.entity.name, self.neighbors.len())];
         let mut edges: Vec<Edge> = Vec::new();
         {
             let entity = &mut visits[0];
@@ -236,6 +238,10 @@ impl Walk<'_> {
             entity.counts[0] = examples;
         }
         for (hop, &neighbors) in self.neighbors.iter().enumerate() {
+            // A hop of size zero ends the walk (`neighbors == 0`).
+            let Hop::Keep(neighbors) = neighbors else {
+                break;
+            };
             // The frames each table held when this hop began. A table
             // reached by two paths gains frames for the next hop while this
             // one runs, through whichever of its neighbors is visited first,
@@ -409,6 +415,8 @@ impl Walk<'_> {
         let Some(pkey_column) = table.primary_key.as_deref() else {
             return Err(internal("a table referred to has no key"));
         };
+        // A missing anchor travels as a null bound (`sample::seeds`): the
+        // source reaches no row of a timed table for it.
         let times: Vec<i64> = batch.iter().map(|&b| self.anchors[b]).collect();
         let mut requests = Vec::with_capacity(referring.len());
         for (src, fkey) in &referring {
@@ -661,7 +669,8 @@ fn reach(visits: &mut Vec<Visit>, name: &str) -> usize {
     match visits.iter().position(|v| v.name == name) {
         Some(at) => at,
         None => {
-            visits.push(Visit::new(name));
+            let hops = visits[0].counts.len() - 1;
+            visits.push(Visit::new(name, hops));
             visits.len() - 1
         }
     }

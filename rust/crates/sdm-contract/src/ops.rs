@@ -706,13 +706,13 @@ pub struct Materialize {
     /// The sampling seed, an integer of any size.
     pub seed: Option<Seed>,
     /// Whether the caller asked for an unseeded sample, a new one each
-    /// call (`random_seed=None`), with `seed` left out; the core samples
-    /// under a seed and refuses it by name, `unseeded` (decision E61).
+    /// call (`random_seed=None`), with `seed` left out; from contract v27
+    /// the core draws it under a seed of its own, new each call (T2.11).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unseeded: bool,
     /// Whether the caller anchored each entity at its own time
-    /// (`anchor_time='entity'`), with `anchor_time` left out; refused by
-    /// name, `anchor_entity`, until the core takes it (decision E61).
+    /// (`anchor_time='entity'`), with `anchor_time` left out; from contract
+    /// v27 taken for a static query (T2.11).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub anchor_entity: bool,
     /// A bytes attachment of a JSON object of the call's option values the
@@ -728,21 +728,24 @@ pub struct Materialize {
     /// the most rows one model call scores, which only lowers the profile's
     /// (`main`'s multi-call `predict`, read from T2.8c); `top_k`, how
     /// many candidates a ranking keeps, in place of the query's `TOP k`,
-    /// read from T2.8; and from contract v27, `lag_timesteps`, the past
-    /// steps of a temporal target added as features (T2.9), any value,
-    /// which the core refuses where the reference's engine refuses it, once
-    /// the context is labelled. The core reads it with `sdm-wire`'s
+    /// read from T2.8; from contract v27, `lag_timesteps`, the past steps
+    /// of a temporal target added as features (T2.9), any value, which the
+    /// core refuses where the reference's engine refuses it, once the
+    /// context is labelled; and from contract v27 the sampling options
+    /// (T2.11): `num_hops` and `num_neighbors`, the hops walked and each
+    /// one's size; `max_pq_iterations`; `use_prediction_time`;
+    /// `return_embeddings`, which names `embeddings` among the payload's
+    /// outputs; `exclude_cols_dict`, as given; and `context_anchor_time`,
+    /// written as `anchor_time` is (a `ts` scalar), or as the text
+    /// `entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s
     /// bounded reader and holds each value's type to what the reference's
     /// client takes, so the host checks none of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<AttachmentId>,
     /// The names of the call's other sampling options, which this message
-    /// carries no value of (the reference's `context_anchor_time`,
-    /// `exclude_cols_dict`,
-    /// `max_pq_iterations`, `num_hops`, `num_neighbors`,
-    /// `return_embeddings` and `use_prediction_time`): the core
-    /// takes none of them yet and refuses the first in name order by its
-    /// name, and another name as `INVALID_REQUEST` (decision E61). The host
+    /// carries no value of (none from contract v27: every sampling option
+    /// travels in `values`): the core refuses any name it is given as
+    /// `INVALID_REQUEST` (decision E61). The host
     /// passes each the call gave, so it refuses none of its own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
@@ -1161,6 +1164,10 @@ pub struct Predicted {
     /// first where it was given more than once, in the same order), which a
     /// host gives back as the outputs named in `outputs`, each candidate as
     /// the value it was given as, found by its position.
+    ///
+    /// Contract v27 adds, after those, `embeddings` (list of float64, an
+    /// answer's embedding in the order written, null where it has none;
+    /// T2.11).
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.
     pub model: String,

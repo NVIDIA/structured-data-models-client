@@ -894,6 +894,7 @@ mod tests {
                     explanation: None,
                     metadata: None,
                     quantiles: None,
+                    embeddings: None,
                 })
                 .collect(),
             answers: crate::predict::AnswerType::Bool,

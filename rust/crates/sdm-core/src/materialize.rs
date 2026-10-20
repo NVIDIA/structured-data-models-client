@@ -95,7 +95,7 @@ use sdm_engine::sample::{self, SEED_END, SEED_START};
 use sdm_engine::time::Instant;
 use sdm_engine::time::offset::{Offset, timeframe};
 use sdm_engine::time::text::{Reader, Unread};
-use sdm_request::options::{self, AskedSeed, Kind as Task};
+use sdm_request::options::{self, AskedAnchor, AskedSeed, Kind as Task};
 use sdm_request::payload::{self, RESERVED, Sampled};
 
 use crate::describe::{ask, describe};
@@ -133,6 +133,9 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     ),
     (CONTEXT_BEFORE_DATA, &[]),
     (ANCHOR_AFTER_DATA, &[]),
+    (CONTEXT_AFTER_ANCHOR, &[]),
+    (CONTEXT_LEAKS, &[]),
+    (HOPS_IGNORED, &[]),
     (CONTEXT_COVERAGE, &[]),
     (CONTEXT_CAPPED, &[]),
     (TABLES_UNLINKED, &["one", "several"]),
@@ -144,6 +147,15 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
 /// The notice that the default run mode gathered as many context examples
 /// as it takes (the client's `_warn_of_a_context_the_default_mode_capped`).
 pub const CONTEXT_CAPPED: &str = "CONTEXT_CAPPED";
+/// The warning that the context is anchored after the predictions
+/// (`_validate_time`, T2.11).
+pub const CONTEXT_AFTER_ANCHOR: &str = "CONTEXT_AFTER_ANCHOR";
+/// The warning that a temporal context's window reaches past the
+/// predictions' anchor (`_validate_time`, T2.11).
+pub const CONTEXT_LEAKS: &str = "CONTEXT_LEAKS";
+/// The warning that `num_hops` is ignored for `num_neighbors`
+/// (`_resolve_options`, T2.11).
+pub const HOPS_IGNORED: &str = "HOPS_IGNORED";
 /// The notice that tables of the schema no relationship connects to the
 /// entity table are not in the request (`_warn_of_tables_left_out`).
 pub const TABLES_UNLINKED: &str = "TABLES_UNLINKED";
@@ -266,17 +278,20 @@ pub fn fingerprint(
 /// anything of it is used: one naming a table's bounds twice, or bounds no
 /// read gives (a smallest time after the largest, or one of the two
 /// missing without the other: a time column holding no time gives
-/// neither).
+/// neither); or one holding bounds or stored times with the index check
+/// not made, which every run makes before it reads either (M6).
 pub fn check_memo(memo: &SamplerMemo) -> Result<(), CoreError> {
     let mut tables = BTreeSet::new();
-    let sound = memo.bounds.iter().all(|b| {
-        tables.insert(&b.table)
-            && match (b.min, b.max) {
-                (Some(min), Some(max)) => min <= max,
-                (None, None) => true,
-                _ => false,
-            }
-    });
+    let read = !memo.bounds.is_empty() || !memo.stored_times.is_empty();
+    let sound = (memo.indexes_checked || !read)
+        && memo.bounds.iter().all(|b| {
+            tables.insert(&b.table)
+                && match (b.min, b.max) {
+                    (Some(min), Some(max)) => min <= max,
+                    (None, None) => true,
+                    _ => false,
+                }
+        });
     let mut spelled = BTreeSet::new();
     if sound && memo.stored_times.iter().all(|s| spelled.insert(&s.table)) {
         return Ok(());
@@ -1885,43 +1900,40 @@ fn consistent(description: &mut SourceDescription) -> Result<(), CoreError> {
     sdm_schema::assemble::check_links(description)
 }
 
-/// The refusal of one of the reference's sampling options this message
-/// carries by name only (`Materialize::options`), which this core takes
-/// none of yet, by its own name; a name that is not one of the
-/// reference's options is the host's fault, `INVALID_REQUEST`.
-fn option_not_taken(name: &str) -> CoreError {
-    match name {
-        "context_anchor_time" => not_yet("context_anchor_time"),
-        "exclude_cols_dict" => not_yet("exclude_cols_dict"),
-        "max_pq_iterations" => not_yet("max_pq_iterations"),
-        "num_hops" => not_yet("num_hops"),
-        "num_neighbors" => not_yet("num_neighbors"),
-        "return_embeddings" => not_yet("return_embeddings"),
-        "use_prediction_time" => not_yet("use_prediction_time"),
-        _ => invalid(
-            "an option named is not one of the sampling options",
-            "options",
-        ),
+/// The names of options the host passes without their values
+/// (`Materialize::options`): from T2.11 every sampling option the
+/// reference takes travels in the call's values, so any name here is the
+/// host's fault, `INVALID_REQUEST`, refused before anything of the call is
+/// read (decision E61).
+fn options_taken(inputs: &Inputs) -> Result<(), CoreError> {
+    if inputs.options.is_empty() {
+        return Ok(());
     }
+    Err(invalid(
+        "an option named is not one of the sampling options",
+        "options",
+    ))
 }
 
-/// The call's options this core does not take yet, each refused by its
-/// name before anything else of the call is read, as the host's bridge
-/// refused them before the core ran until T1.24 (decision E61): the other
-/// sampling options, the first in name order; an unseeded sample; and an
-/// anchor at each entity's own time; the hops they ask bounded first
-/// ([`options::hops`]).
-fn options_taken(inputs: &Inputs, unseeded: bool) -> Result<(), CoreError> {
-    if let Some(first) = inputs.options.iter().min() {
-        return Err(option_not_taken(first));
+/// A seed for an unseeded sample (`random_seed=None`), a new one each
+/// call, as the reference draws a new sample each call: the host's clock
+/// (`HostFacts.now`, the core reading none of its own), mixed by
+/// SplitMix64's finalizer, at most the provider's largest seed. Every
+/// provider then draws as it draws under a seed, and the sample is judged
+/// by its properties (KO2-76, register P2I-2).
+fn fresh_seed(now: &Scalar, max_seed: u64) -> u64 {
+    let clock = match now {
+        Scalar::Timestamp { value, .. } => *value as u64,
+        _ => 0,
+    };
+    let mut z = clock.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    let drawn = z ^ (z >> 31);
+    match max_seed.checked_add(1) {
+        Some(bound) => drawn % bound,
+        None => drawn,
     }
-    if unseeded {
-        return Err(not_yet("unseeded"));
-    }
-    if inputs.anchor_entity {
-        return Err(not_yet("anchor_entity"));
-    }
-    Ok(())
 }
 
 /// The rows of `array` holding a NaN: none but in a float column.
@@ -2492,7 +2504,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             false,
         ),
     };
-    options_taken(&inputs, unseeded)?;
+    options_taken(&inputs)?;
     if seed.as_ref().is_some_and(Seed::is_negative) {
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
@@ -2503,6 +2515,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     #[cfg(feature = "test-ops")]
     let labels_only = inputs.labels_only;
+    let inputs_anchor_entity = inputs.anchor_entity;
     let Inputs {
         mut description,
         query,
@@ -2514,6 +2527,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         most_calls,
         ..
     } = inputs;
+    // The sampling options the engine reads later than the client's
+    // checks, each read where the reference reads it (T2.11).
+    let deferred = asked_values.clone();
     let options::Asked {
         num_context_samples,
         prediction_statistic,
@@ -2523,6 +2539,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         lag_timesteps,
         ..
     } = asked_values;
+    let anchor_entity = inputs_anchor_entity;
     // The most context examples asked for, which narrows the context the
     // mode gathers (`_narrow_context`); the bound above holds it to the
     // best mode's.
@@ -2536,7 +2553,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // The seed reaches this entry as the integer the caller gave, of any
     // size (decision H7); numpy's generator takes it whole, and the sample
     // takes it as the narrowest exact scalar.
-    let seed = seed.unwrap_or_else(|| Seed::from(DEFAULT_SEED));
+    // An unseeded sample draws under a seed of its own, new each call.
+    let seed = match seed {
+        Some(seed) => seed,
+        None if unseeded => Seed::from(u128::from(fresh_seed(
+            &facts.now,
+            asker.capabilities()?.max_seed,
+        ))),
+        None => Seed::from(DEFAULT_SEED),
+    };
     let entropy = Entropy::from_hex(seed.magnitude_hex())
         .ok_or_else(|| internal("a seed's digits do not read"))?;
 
@@ -2629,6 +2654,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // errors may be refused for another of them than the reference's first
     // (decision E41(k)(i)).
     missing_indexes(&mut memo, &graph, asker.capabilities()?.index_advice).await?;
+    // The context's anchor and the candidates per example, read with the
+    // task (`_get_task_table`).
+    let (context_anchor, max_pq_iterations) = options::task_table(&deferred)?;
     if keys::missing(&indices) {
         return Err(invalid("an entity to predict for is missing", "indices"));
     }
@@ -2662,12 +2690,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let mut windows = Vec::new();
     asked.target.windowed(&mut windows);
     let fetches = fetches(&graph, &asked.entity_table, &windows)?;
-    // The subgraph is walked as the reference walks it from the entity
-    // table (`subgraph`); an entity table referring to another is not
-    // sampled yet.
-    if !graph.foreign_keys(&entity.name).is_empty() {
-        return Err(not_yet("parent_table"));
-    }
 
     // The times every fetch below returns, read as the reference's engine
     // reads them.
@@ -2707,78 +2729,58 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         )),
     };
 
-    // The anchor, and the times it is checked against.
-    let mut bounds: Option<Bounds> = None;
-    let anchor = match anchor_time {
-        None if bounded.is_empty() => TIME_MIN,
-        None => {
-            let read = time_bounds(&mut memo, &read_times, &bounded).await?;
-            let max = read.max;
-            bounds = Some(read);
-            max
-        }
-        // A zoned anchor counts its UTC instant, the zone only how it is
-        // shown: read at its UTC wall clock, as the reference's engine
-        // reads one (`to_naive_utc`).
-        Some(Scalar::Timestamp { unit, value, .. }) => match unit {
-            Unit::Ns => value,
-            Unit::Us => value
-                .checked_mul(1_000)
-                .ok_or_else(|| sample::out_of_range("anchor_time"))?,
-        },
-        Some(_) => {
-            return Err(invalid("an anchor time is a ts scalar", "anchor_time"));
-        }
-    };
-    // The context's anchor: a window's end before the anchor, by the
-    // calendar for months; a static query's is the anchor itself.
-    let context_anchor = match &span {
-        Some((_, end)) => end.negated().add_to(anchor, "anchor_time")?,
-        None => anchor,
-    };
-    let bounds = match bounds {
-        Some(bounds) => Some(bounds),
-        None if bounded.is_empty() => None,
-        None => Some(time_bounds(&mut memo, &read_times, &bounded).await?),
-    };
-    if let Some(bounds) = &bounds {
-        if anchor < bounds.min {
+    // An anchor at each entity's own time (`anchor_time='entity'`) is a
+    // static query's only, of an entity table with a time column, with the
+    // context anchored the same way; no time bounds are read or checked
+    // for it (`_get_task_table`). Otherwise the anchor and the context's
+    // anchor, checked against the data's times.
+    let (anchor, context_anchor, earliest) = if anchor_entity {
+        if span.is_some() {
             return Err(invalid(
-                "the anchor time is before the earliest time in the data",
+                "an anchor at each entity's own time is for a static query only",
                 "anchor_time",
             ));
         }
-        if context_anchor < bounds.min {
+        if entity.time_column.is_none() {
             return Err(invalid(
-                "the context's anchor time is before the earliest time in the data",
+                "an anchor at each entity's own time needs the entity table to have a time column",
                 "anchor_time",
-            ));
+            )
+            .with_field("table", Detail::text(&entity.name)));
         }
-        // A static query's window is empty: its context reaches back no
-        // further than its anchor, which was checked above.
-        if let Some((_, end)) = &span
-            && reaches(end.negated(), context_anchor)? < i128::from(bounds.min)
-        {
-            warn(
-                asker,
-                CONTEXT_BEFORE_DATA,
-                "the context reaches back before the data",
-            );
+        if matches!(context_anchor, AskedAnchor::At(_)) {
+            return Err(shared_anchor());
         }
-        if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
-            warn(
-                asker,
-                ANCHOR_AFTER_DATA,
-                "the anchor time is after the data",
-            );
-        }
-    }
+        (TIME_MIN, TIME_MIN, None)
+    } else {
+        anchors_checked(
+            asker,
+            &mut memo,
+            &read_times,
+            &bounded,
+            span.map(|(_, end)| end),
+            anchor_time,
+            &context_anchor,
+        )
+        .await?
+    };
 
     // The examples: a reservoir sample of the entity table, kept one row
     // per entity, with the entity table's columns the query reads; for a
     // temporal query, walked back from the context's anchor by the window.
     let context_examples = mode.context_examples();
-    let trials = ITERATIONS * context_examples;
+    // `max_pq_iterations` times as many candidates as examples (T2.11); a
+    // float's count is no slice bound for a temporal query's walk, the
+    // engine's `TypeError`, the caller's error.
+    let trials = max_pq_iterations
+        .unwrap_or(options::Iterations::Whole(ITERATIONS as u64))
+        .trials(context_examples, span.is_some())
+        .ok_or_else(|| {
+            invalid(
+                "max_pq_iterations is a whole number for a query over a window",
+                "max_pq_iterations",
+            )
+        })?;
     let mut entity_columns = BTreeSet::from([key.clone()]);
     if let Some(time) = &entity.time_column {
         entity_columns.insert(time.clone());
@@ -2865,9 +2867,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             entity_time.as_deref(),
             context_anchor,
             timeframe(*start, *end, "anchor_time")?,
-            bounds.as_ref().map_or(TIME_MAX, |b| b.min),
+            earliest.unwrap_or(TIME_MAX),
             trials,
         )?,
+        None if anchor_entity => sample::entity_examples(
+            &mut rng,
+            kept.len(),
+            entity_time.as_deref().unwrap_or_default(),
+            sample::MISSING_ANCHOR,
+        ),
         None => {
             sample::static_examples(&mut rng, kept.len(), entity_time.as_deref(), context_anchor)
         }
@@ -3073,7 +3081,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // features, as the reference's sampler requires.
     let mut excluded_columns = BTreeSet::new();
     asked.target.entity_columns(&mut excluded_columns);
-    let excluded: Vec<(String, String)> = excluded_columns
+    let mut excluded: Vec<(String, String)> = excluded_columns
         .into_iter()
         .map(|column| (entity.name.clone(), column))
         .collect();
@@ -3085,6 +3093,24 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             ));
         }
     }
+    // Then the columns the caller keeps out (`exclude_cols_dict`, T2.11),
+    // merged after the query's (`_columns_to_leave_out`), each a feature of
+    // a table of the graph, as the reference's sampler requires.
+    // (`_columns_to_leave_out`, then the hops `_resolve_options` resolves,
+    // then the names `sample_subgraph` checks.)
+    let exclude_cols = options::excluded(&deferred)?;
+    let walk_hops = options::neighbors(&deferred, mode)?;
+    let hops_ignored = options::hops_ignored(&deferred);
+    // The engine says it ignores `num_hops` where `num_neighbors` is given
+    // (`_resolve_options`), once the task is labelled.
+    if let Some(num_hops) = hops_ignored {
+        asker.warn(CoreWarning {
+            code: HOPS_IGNORED.into(),
+            message: "num_hops is ignored where num_neighbors is given".into(),
+            fields: [("num_hops".to_owned(), Detail::text(&num_hops))].into(),
+        });
+    }
+    excluded_by_caller(&graph, &exclude_cols, &mut excluded)?;
     if num_train > TABLE_ROWS {
         return Err(invalid(
             "the context holds more rows than a request takes",
@@ -3103,6 +3129,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // entities the whole request scores.
     let mut lag_columns: Option<Vec<sdm_request::payload::LagColumn>> = None;
     let all_scored = num_test;
+    // The columns each call reads of its examples' entity rows: with an
+    // anchor at each entity's own time, its time column too, which anchors
+    // each row (`_sample_subgraph`), sent only where it is a feature.
+    let mut entity_read = entity_names.clone();
+    if anchor_entity
+        && let Some(time) = &entity.time_column
+        && !entity_read.contains(time)
+    {
+        entity_read.push(time.clone());
+    }
     let mut gathered = Vec::with_capacity(calls);
     let mut sent = BTreeSet::new();
     let mut answering = 0;
@@ -3129,7 +3165,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     asker,
                     sample::by_pkey(
                         entity,
-                        entity_names.clone(),
+                        entity_read.clone(),
                         key_set(asker, sample::seeds(all_keys, vec![])?)?,
                         true,
                     )?,
@@ -3170,6 +3206,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         let mut order: Vec<usize> = (0..positions.len()).collect();
         order.sort_by_key(|&row| positions[row]);
         let entity_rows = take_batch(&looked_up, &order)?;
+        // Each predicted entity anchored at its own time, read from its row.
+        if anchor_entity && let Some(time) = &entity.time_column {
+            let times = times_ns(named(&entity_rows, time)?, time)?;
+            for (at, time) in anchors[train_anchors..].iter_mut().zip(&times[num_train..]) {
+                // A null time is a missing anchor (`NaT`), never the
+                // no-anchor sentinel.
+                *at = time.unwrap_or(sample::MISSING_ANCHOR);
+            }
+        }
         let entity_rows = RecordBatch::try_new(
             Arc::new(arrow_schema::Schema::new(
                 entity_names
@@ -3198,7 +3243,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             anchors: &anchors,
             nulls,
             entity,
-            neighbors: mode.neighbors(),
+            neighbors: &walk_hops,
             excluded: &excluded,
         }
         .run(entity_rows)
@@ -3243,6 +3288,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             .flatten()
             .map(|column| column.rows(&rows))
             .collect();
+        // The options the engine's request model holds to a boolean, read
+        // as the request is built.
+        let (use_prediction_time, return_embeddings) = options::request_flags(&deferred)?;
 
         let built = payload::build(&Sampled {
             num_train,
@@ -3256,6 +3304,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             entity_table: entity.name.clone(),
             source_query: source_query.clone(),
             run_mode: mode,
+            use_prediction_time,
+            return_embeddings,
             options: options.clone(),
             statistic: statistic.clone(),
             rows_per_call: largest,
@@ -3283,6 +3333,177 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         asked.range.is_some(),
     );
     Ok(Gathered::Request(gathered, source_query))
+}
+
+/// The refusal of anchors set apart where one is each entity's own time
+/// (`_get_task_table`'s "needs to be shared").
+fn shared_anchor() -> CoreError {
+    invalid(
+        "an anchor at each entity's own time is shared by the context and the predictions",
+        "context_anchor_time",
+    )
+}
+
+/// The anchor and the context's anchor, in nanoseconds, checked against
+/// the times of the tables that bound them (`bounded`, `_validate_time`):
+/// the anchor given, or the latest time of those tables; the context's
+/// anchor given (`context_anchor_time`, T2.11), or the window's end
+/// (`end`, a temporal query's) before the anchor, by the calendar for
+/// months, a static query's being the anchor itself. Also the earliest
+/// time of those tables, where it was read.
+async fn anchors_checked(
+    asker: &Asker,
+    memo: &mut Memo<'_>,
+    read_times: &Times,
+    bounded: &[&Table],
+    end: Option<Offset>,
+    anchor_time: Option<Scalar>,
+    context_given: &AskedAnchor,
+) -> Result<(i64, i64, Option<i64>), CoreError> {
+    let mut bounds: Option<Bounds> = None;
+    let anchor = match anchor_time {
+        None if bounded.is_empty() => TIME_MIN,
+        None => {
+            let read = time_bounds(memo, read_times, bounded).await?;
+            let max = read.max;
+            bounds = Some(read);
+            max
+        }
+        // A zoned anchor counts its UTC instant, the zone only how it is
+        // shown: read at its UTC wall clock, as the reference's engine
+        // reads one (`to_naive_utc`).
+        Some(Scalar::Timestamp { unit, value, .. }) => match unit {
+            Unit::Ns => value,
+            Unit::Us => value
+                .checked_mul(1_000)
+                .ok_or_else(|| sample::out_of_range("anchor_time"))?,
+        },
+        Some(_) => {
+            return Err(invalid("an anchor time is a ts scalar", "anchor_time"));
+        }
+    };
+    let context_anchor = match context_given {
+        AskedAnchor::Entity => return Err(shared_anchor()),
+        AskedAnchor::At(at) => *at,
+        AskedAnchor::Absent => match end {
+            Some(end) => end.negated().add_to(anchor, "anchor_time")?,
+            None => anchor,
+        },
+    };
+    let bounds = match bounds {
+        Some(bounds) => Some(bounds),
+        None if bounded.is_empty() => None,
+        None => Some(time_bounds(memo, read_times, bounded).await?),
+    };
+    if let Some(bounds) = &bounds {
+        if anchor < bounds.min {
+            return Err(invalid(
+                "the anchor time is before the earliest time in the data",
+                "anchor_time",
+            ));
+        }
+        if context_anchor < bounds.min {
+            return Err(invalid(
+                "the context's anchor time is before the earliest time in the data",
+                "anchor_time",
+            ));
+        }
+        // The reference's three warnings of the context's anchor, of which
+        // it gives the first that holds: a context anchored after the
+        // predictions; a temporal context whose window reaches past the
+        // predictions' anchor; a context reaching back before the data. A
+        // static query's window is empty, so its context reaches back no
+        // further than its anchor, which was checked above.
+        // Each names the two anchors, as the reference's words show them.
+        let anchored = |code: &str, message: &str| {
+            let at = |value: i64| {
+                Detail::Scalar(Scalar::Timestamp {
+                    unit: Unit::Ns,
+                    zone: None,
+                    value,
+                })
+            };
+            asker.warn(CoreWarning {
+                code: code.into(),
+                message: message.into(),
+                fields: [
+                    ("context_anchor".to_owned(), at(context_anchor)),
+                    ("anchor".to_owned(), at(anchor)),
+                ]
+                .into(),
+            });
+        };
+        if context_anchor > anchor {
+            anchored(
+                CONTEXT_AFTER_ANCHOR,
+                "the context's anchor time is after the predictions' anchor time",
+            );
+        } else if let Some(end) = end
+            && reaches(end, context_anchor)? > i128::from(anchor)
+        {
+            anchored(
+                CONTEXT_LEAKS,
+                "the context's window reaches past the predictions' anchor time",
+            );
+        } else if let Some(end) = end
+            && reaches(end.negated(), context_anchor)? < i128::from(bounds.min)
+        {
+            warn(
+                asker,
+                CONTEXT_BEFORE_DATA,
+                "the context reaches back before the data",
+            );
+        }
+        if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
+            warn(
+                asker,
+                ANCHOR_AFTER_DATA,
+                "the anchor time is after the data",
+            );
+        }
+    }
+    Ok((anchor, context_anchor, bounds.map(|b| b.min)))
+}
+
+/// Adds the columns the caller keeps out of the request (`exclude_cols_dict`)
+/// to `excluded`, each once, in the order given, as the reference merges
+/// them after the query's (`_columns_to_leave_out`) and its sampler reads
+/// them (`sample_subgraph`): a table the graph does not hold, or a name
+/// that is not one of its table's features (its key and foreign keys
+/// never are), is the caller's error, `INVALID_REQUEST` naming
+/// `exclude_cols_dict`, the table and the column.
+fn excluded_by_caller(
+    graph: &Graph,
+    given: &[(String, Vec<sdm_wire::json::Value>)],
+    excluded: &mut Vec<(String, String)>,
+) -> Result<(), CoreError> {
+    for (table_name, columns) in given {
+        let table = graph.table(table_name).ok_or_else(|| {
+            invalid(
+                "a table the caller keeps columns of is not in the graph",
+                "exclude_cols_dict",
+            )
+            .with_field("table", Detail::text(table_name))
+        })?;
+        let features = graph.features(table);
+        for column in columns {
+            let name = column
+                .as_text()
+                .filter(|name| features.iter().any(|(n, _)| n == name));
+            let Some(name) = name else {
+                return Err(invalid(
+                    "a column the caller keeps out is not one of its table's features",
+                    "exclude_cols_dict",
+                )
+                .with_field("table", Detail::text(table_name)));
+            };
+            let pair = (table.name.clone(), name.to_owned());
+            if !excluded.contains(&pair) {
+                excluded.push(pair);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// `at + offset` in nanoseconds: a fixed span added without bound, as the

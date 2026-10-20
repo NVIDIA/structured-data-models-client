@@ -352,6 +352,12 @@ WARNINGS: dict[str, type[Warning]] = {
     'CONTEXT_BEFORE_DATA': UserWarning,
     'ANCHOR_AFTER_DATA': UserWarning,
     'CONTEXT_COVERAGE': UserWarning,
+    # From T2.11, the engine's warnings of the sampling options: a context
+    # anchored after the predictions, or whose window reaches past them,
+    # and num_hops ignored for num_neighbors.
+    'CONTEXT_AFTER_ANCHOR': UserWarning,
+    'CONTEXT_LEAKS': UserWarning,
+    'HOPS_IGNORED': UserWarning,
     'TIME_VALUES_UNREAD': UserWarning,
     'DATES_READ_DAY_FIRST': UserWarning,
     'DATE_LITERAL_DAY_FIRST': UserWarning,
@@ -568,6 +574,27 @@ SAID: dict[str, dict[str | None, str]] = {
     },
     'ANCHOR_AFTER_DATA': {
         None: 'the anchor time is after the latest time in the data'
+    },
+    # From T2.11, the engine's words for the sampling options' warnings.
+    'CONTEXT_AFTER_ANCHOR': {
+        None: (
+            "Context anchor timestamp (got '{context_anchor!t}') is set to a "
+            'later date than the prediction anchor timestamp (got '
+            "'{anchor!t}'). Please make sure this is intended."
+        )
+    },
+    'CONTEXT_LEAKS': {
+        None: (
+            'Aggregation for context examples at timestamp '
+            "'{context_anchor!t}' will leak information from the prediction "
+            "anchor timestamp '{anchor!t}'. Please make sure this is intended."
+        )
+    },
+    'HOPS_IGNORED': {
+        None: (
+            "Received custom 'num_neighbors' option; ignoring custom "
+            "'num_hops={num_hops}' option"
+        )
     },
     'CONTEXT_COVERAGE': {
         None: (

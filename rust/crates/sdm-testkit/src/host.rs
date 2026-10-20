@@ -1550,7 +1550,39 @@ fn start_materialize(
             Value::Object(options.clone()),
         );
     }
+    // The sampling options the case's call gives (T2.11), as the Python
+    // host passes them (`VALUED`), spliced in below as the case wrote them;
+    // `context_anchor_time` as that host writes it (a `ts` scalar, or the
+    // literal `entity`).
+    let given = &case.input.materialize;
+    if let Some(context) = &given.context_anchor_time {
+        let written = if context == "entity" {
+            Value::from("entity")
+        } else {
+            let ns = iso_date_ns(context)
+                .ok_or_else(|| anyhow!("{}: context_anchor_time is not a date", case.id))?;
+            json!({"t": "ts", "v": ns.to_string(), "unit": "ns", "zone": null})
+        };
+        values.insert("context_anchor_time".to_owned(), written);
+    }
+    // An anchor at each entity's own time, which the Python host passes as
+    // `anchor_entity` beside no anchor time.
+    let anchor_entity = given.anchor_time.as_deref() == Some("entity");
     let mut values_bytes = serde_json::to_vec(&Value::Object(values))?;
+    for (name, value) in [
+        ("random_seed", &given.random_seed),
+        ("num_hops", &given.num_hops),
+        ("num_neighbors", &given.num_neighbors),
+        ("max_pq_iterations", &given.max_pq_iterations),
+        ("use_prediction_time", &given.use_prediction_time),
+        ("return_embeddings", &given.return_embeddings),
+        ("exclude_cols_dict", &given.exclude_cols_dict),
+    ] {
+        if let Some(written) = value {
+            values_bytes.pop();
+            values_bytes.extend_from_slice(format!(r#","{name}":{}}}"#, written.0).as_bytes());
+        }
+    }
     // `rows_per_call` as the case wrote it (T2.8c's cases), whatever JSON
     // scalar it is, read as the Python host reads and hands the caller's
     // value over (`as_python_sends`): the core holds its type and size to
@@ -1630,7 +1662,7 @@ fn start_materialize(
             anchor_time,
             seed,
             unseeded: false,
-            anchor_entity: false,
+            anchor_entity,
             values: Some(AttachmentId(6)),
             options: vec![],
             most_parts: None,
@@ -2101,8 +2133,9 @@ fn predict(
         // (`endpoint::answered_by`), its bytes as they travel; else the
         // scripted endpoint, failing the case's call, and answering beside
         // the rule's prediction what the case tells it to (probabilities,
-        // quantiles, an explanation, item metadata), as the Python runner
-        // serves it (T2.8, T2.9, T2.13), by the call's number.
+        // quantiles, an explanation, item metadata, embeddings), as the
+        // Python runner serves it (T2.8, T2.9, T2.13, T2.11), by the call's
+        // number.
         let (status, answered) = match endpoint::scripted(&body) {
             Some(given) => given,
             None => {
@@ -2112,11 +2145,7 @@ fn predict(
                     quantiles: case.input.quantiles.unwrap_or(false),
                     explanation: case.input.explanation.unwrap_or(false),
                     item_metadata: case.input.item_metadata.unwrap_or(false),
-                    // Not read from the case yet: the gate builds this host
-                    // with the checkpoint's case.rs, which has no
-                    // `embeddings` until T2.1t lands; T2.11 wires it to the
-                    // case's `input.embeddings` then.
-                    embeddings: false,
+                    embeddings: case.input.embeddings.unwrap_or(false),
                 };
                 let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
                 let (status, answered) =
@@ -2271,4 +2300,40 @@ mod rows_per_call_tests {
             );
         }
     }
+}
+
+/// A date or time the case writes (`YYYY-MM-DD`, with `THH:MM:SS` or a
+/// space before the time), in nanoseconds since the epoch, as
+/// `pd.Timestamp` reads it; `None` for any other text.
+fn iso_date_ns(text: &str) -> Option<i64> {
+    let (date, time) = match text.split_once(['T', ' ']) {
+        Some((date, time)) => (date, Some(time)),
+        None => (text, None),
+    };
+    let mut parts = date.splitn(3, '-');
+    let year: i64 = parts.next()?.parse().ok()?;
+    let month: i64 = parts.next()?.parse().ok()?;
+    let day: i64 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    let seconds = match time {
+        None => 0,
+        Some(time) => {
+            let mut hms = time.splitn(3, ':');
+            let h: i64 = hms.next()?.parse().ok()?;
+            let m: i64 = hms.next()?.parse().ok()?;
+            let s: i64 = hms.next().map_or(Some(0), |s| s.parse().ok())?;
+            h * 3_600 + m * 60 + s
+        }
+    };
+    (days * 86_400 + seconds).checked_mul(1_000_000_000)
 }

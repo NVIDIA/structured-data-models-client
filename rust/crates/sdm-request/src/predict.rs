@@ -950,6 +950,8 @@ pub struct Row {
     /// Each quantile's value, keyed as the answer wrote it, in the order
     /// written, a mapping as the explanation (T2.9).
     pub quantiles: Option<Value>,
+    /// The answer's embedding, in the order written (T2.11).
+    pub embeddings: Option<Vec<f64>>,
 }
 
 /// The answer to one call, or the parts of one request put together.
@@ -1235,6 +1237,7 @@ pub fn layout(
             explanation: item.explanation.clone(),
             metadata: item.metadata.clone(),
             quantiles: item.quantiles.clone(),
+            embeddings: item.embeddings.clone(),
         });
     }
     let explanation = response
@@ -1443,10 +1446,10 @@ pub fn by_step(steps: Vec<(u32, Part)>) -> Result<Part, CoreError> {
 /// The outputs the caller named that the answer does not carry
 /// (`PredictionResult.absent`), each once, in the order named: none for an
 /// answer with no rows; `prediction` when no answer holds one,
-/// `probabilities` or `quantiles` when none holds any, `explanation` when
-/// the result has none ([`Part::explanation`]), and the fields this build
-/// refuses an answer for carrying always; a name the result does not know
-/// is taken as carried.
+/// `probabilities`, `quantiles` or `embeddings` when none holds any,
+/// `explanation` when the result has none ([`Part::explanation`]), and the
+/// fields this build refuses an answer for carrying always; a name the
+/// result does not know is taken as carried.
 pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
     if part.rows.is_empty() {
         return vec![];
@@ -1475,7 +1478,10 @@ pub fn absent(part: &Part, named: &[String]) -> Vec<String> {
                     .is_none_or(|q| matches!(q, Value::Object(m) if m.is_empty()))
             }),
             "explanation" => part.explanation.is_none(),
-            "embeddings" => true,
+            "embeddings" => part
+                .rows
+                .iter()
+                .all(|r| r.embeddings.as_ref().is_none_or(Vec::is_empty)),
             _ => false,
         })
         .cloned()
@@ -1750,6 +1756,23 @@ pub fn table(part: &Part) -> Result<RecordBatch, CoreError> {
                 of(r).map(|v| String::from_utf8_lossy(&v.to_bytes()).into_owned())
             }))));
         }
+    }
+    // Each answer's embedding, a list of float64, null where it has none
+    // (`_SEQUENCE_FIELDS`, T2.11).
+    if rows.iter().any(|r| r.embeddings.is_some()) {
+        let mut builder = ListBuilder::new(Float64Builder::new());
+        for row in &rows {
+            match &row.embeddings {
+                Some(given) => {
+                    builder.values().append_slice(given);
+                    builder.append(true);
+                }
+                None => builder.append(false),
+            }
+        }
+        let column = builder.finish();
+        fields.push(Field::new("embeddings", column.data_type().clone(), true));
+        columns.push(Arc::new(column));
     }
     fields.push(Field::new("answer_index", DataType::Int64, false));
     columns.push(Arc::new(Int64Array::from_iter_values(

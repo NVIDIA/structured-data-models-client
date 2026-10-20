@@ -2795,7 +2795,7 @@ entries:
     PredictiveQuery.materialize with indices over a DuckDB source under a
     forced core route past the entity count, the context size or the hops
     the endpoint takes.
-  cases: [T1.28a]
+  cases: [T1.28a, sample.num-hops.seven, sample.num-neighbors.seven-hops]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E78}
@@ -2808,6 +2808,17 @@ entries:
     refusal is named): for the reviewer or the owner, never self-approved.
     The alternative, a host mapping UNSUPPORTED_REQUEST to the base class
     by the error's fields, would be a rule in the host.
+    T2.11 names its two hop-bound cases here: the same refusal of more
+    than six hops, num_hops=7 and seven num_neighbors sizes, its class
+    name the only difference.
+  case_outcomes:
+  - {case: sample.num-hops.seven, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-hops.seven@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-hops.seven@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-neighbors.seven-hops, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-neighbors.seven-hops@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+  - {case: sample.num-neighbors.seven-hops@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal UNSUPPORTED_REQUEST at materialize (StructuredDataError)', new: 'refusal UNSUPPORTED_REQUEST at materialize (UnsupportedRequestError)', summary: 'more than six hops refused as UnsupportedRequestError, a subclass of the reference''s class'}
+
 
 - id: P1B-21
   title: AVG, MIN or MAX compared with NULL is refused by name only where the reference fails INTERNAL_ERROR
@@ -7948,3 +7959,183 @@ entries:
     tests/test_the_materialize_route.py
     (test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code[text
     0001]), which holds the core's VALUE_OUT_OF_RANGE on every pandas.
+
+- id: P2I-1
+  title: A sampling option value the reference writes into its SQL as given is read as its DuckDB sampler reads it, and one that is no number is refused by name
+  kind: change
+  old_behavior: >-
+    The reference's engine writes each num_neighbors size into its SQL as
+    Python formats it (`ROW_NUMBER() <= {size}`), checking only that a
+    size equal to zero ends the walk; its DuckDB sampler then reads a
+    float's whole part, True as one, and text spelling a number as that
+    number, while text that is no number fails the statement (DuckDB's
+    parser or binder error, INTERNAL_ERROR) or, where it is SQL, runs as
+    part of it. It multiplies a float max_pq_iterations into a float row
+    count, which a static query's DuckDB reservoir rounds half to even and
+    a temporal query's walk refuses (a TypeError, INVALID_REQUEST). Its
+    SQLite and Postgres samplers read some of these values otherwise
+    (Postgres refuses `<= True`).
+  new_behavior: >-
+    The core reads every such value as the reference's DuckDB sampler
+    reads it, on every database: a size's whole part, a boolean as 0 or
+    1, a number spelled as text as that number, a size below one keeping
+    no referring rows; a float max_pq_iterations of a static query
+    rounded half to even, a temporal query's refused INVALID_REQUEST
+    naming max_pq_iterations. A num_neighbors size that is text spelling
+    no number, a list or none is refused INVALID_REQUEST naming
+    num_neighbors (not_a_whole_number) before anything is read.
+  affected_inputs: >-
+    materialize on the core route with num_neighbors holding a size that
+    is not an integer, or with a max_pq_iterations that is a float.
+  cases: [T2.11]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-82}
+  notes: >-
+    Proposed by T2.11's implementer, never self-approved. Recorded as
+    approved under the owner's overnight delegation (KO2-82), as KO2-70
+    recorded T2.9's P2F-1, by the orchestrator's instruction. Measured on the
+    reference venv (python-ref 6298913c) with DuckDB:
+    num_neighbors=[2.0, 3], [True, 2], ['3', 2] and [2.5, 0.5, 3] answer;
+    max_pq_iterations=1.5 answers a static query and refuses a temporal
+    one (INVALID_REQUEST, "slice indices must be integers"); DuckDB reads
+    reservoir(1000.5 ROWS) as 1,000 and 1000.6 as 1,001. The refusal of
+    text spelling no number replaces a reference crash or a statement the
+    caller's text rewrites (E66(b)'s class), but text such as '3 OR TRUE'
+    the reference runs, so it refuses an input the reference accepts: the
+    owner's, sent at the next check-in with the recommendation to keep it
+    (no caller means SQL by a hop size). Reading SQLite's and Postgres'
+    values as DuckDB's reads them answers where those references fail. The orchestrator approved the
+    direction under the overnight delegation (KO2-82, 2026-10-20): a named
+    refusal of text the reference would splice into its SQL beats running
+    it; kept proposed for the owner's reading.
+    Measured at T2.11's round 1: the reference's Postgres sampler answers
+    num_neighbors=[2.5, 0.5, 3] otherwise than its DuckDB one (264
+    context orders where DuckDB's sends 191); the core sends DuckDB's on
+    every database, inside this entry's class.
+
+- id: P2I-2
+  title: An unseeded sample is drawn under a fresh seed each call, where the reference draws its engine's own unseeded sample
+  kind: change
+  old_behavior: >-
+    With random_seed=None the reference's entity sample is its engine's
+    unseeded draw: DuckDB's reservoir sample with no REPEATABLE clause,
+    SQLite's ORDER BY RANDOM(), Postgres' ORDER BY random() with no
+    setseed; its target shuffle a NumPy generator seeded from the
+    operating system.
+  new_behavior: >-
+    The core draws a seed of its own each call (the host's clock,
+    HostFacts.now, mixed by SplitMix64's finalizer, at most the provider's
+    largest seed; the core reads no clock or entropy of its own) and
+    samples as under that seed on every database (two unseeded calls
+    whose host clocks read the same microsecond draw the same sample):
+    DuckDB's REPEATABLE reservoir, SQLite's seeded stream (RS-2),
+    Postgres' setseed (RS-6), and the same NumPy generator. Each call is
+    a new sample of the same size from the same rows; no provider and no
+    contract message changes for it.
+  affected_inputs: >-
+    materialize on the core route with random_seed=None.
+  cases: [T2.11]
+  refs:
+  - KO2-23
+  - RS-2
+  - RS-6
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-82}
+  notes: >-
+    Proposed by T2.11's implementer, never self-approved. Recorded as
+    approved under the owner's overnight delegation (KO2-82), as KO2-70
+    recorded T2.9's P2F-1, by the orchestrator's instruction. Design choice 8
+    says unseeded SQLite keeps ORDER BY RANDOM(); the implementer chose a
+    fresh seed instead, under the overnight delegation (tracker-T2.11.md):
+    the owner judges unseeded sampling by its properties (KO2-76: the
+    right number of rows, every row in the source, the same rows under a
+    seed), which both satisfy; a fresh seed needs no change to the data
+    contract's seeded sample request, to any provider or to the
+    conformance kit, and keeps one sampling path. Reviewers may approve it
+    as a difference of an unseeded draw's stream only, or send it to the
+    owner. Accepted by the orchestrator under the overnight
+    delegation (KO2-82, 2026-10-20) as a design deviation: it meets KO2-76's
+    properties, and design choice 8's ORDER BY RANDOM() chose how SQLite
+    draws, not what a caller sees (tracker-T2.11.md).
+
+- id: P2I-3
+  title: Entities anchored at their own time are ordered latest first, equal times in their shuffled order
+  kind: keep
+  old_behavior: >-
+    With anchor_time='entity' the reference shuffles every sampled entity
+    and orders them by their time, latest first (`sort_values(ascending=
+    False)`), pandas' default sort keeping the shuffled order among equal
+    times where it sorts stably: an Arrow-backed column, or a NumPy one of
+    up to 16 rows.
+  new_behavior: >-
+    The core orders them with a stable sort, latest first, so equal times
+    keep the shuffled order, an entity with no time last.
+  affected_inputs: >-
+    materialize on the core route with anchor_time='entity' over an
+    entity table whose sampled rows repeat a time.
+  cases: [T2.11]
+  status: rejected
+  approved_by: reviewer
+  decision_ref: null
+  notes: >-
+    Proposed by T2.11's implementer, never self-approved. Registered in
+    case the reference's frame holds the time column as a NumPy
+    datetime64 of more than 16 rows, where NumPy's unstable sort (its
+    order machine-dependent under its SIMD sorts) may order equal times
+    otherwise; on DuckDB the reference's rows arrive Arrow-backed.
+    Rejected by T2.11's round-1 Claude reviewer (approved_by records who
+    rejected it, as the schema reads that field for a rejected entry) and
+    withdrawn at T2.11 fix 1, its ID kept: that reviewer measured that the reference holds the entity time as NumPy
+    datetime64[ns] on all three databases and sorts it with NumPy's
+    generic introsort (argsort(kind='quicksort'), which no SIMD path
+    takes for datetime64), deterministic and the same on every machine
+    and cell, so this entry's premise (Arrow-backed columns, a
+    machine-dependent SIMD order) was wrong. The core now ports that sort
+    (sdm_engine::sample::introsort_argsort, under pandas' descending
+    reverse-sort-reverse) and orders equal times as the reference does;
+    no difference is left to keep.
+
+- id: P2I-4
+  title: A negative num_neighbors size is refused by name, where the reference's three samplers answer it three ways
+  kind: change
+  old_behavior: >-
+    The reference writes a negative num_neighbors size into its SQL as
+    given, and its samplers disagree: DuckDB's keeps no referring rows at
+    that hop (`ROW_NUMBER() <= -1`) and answers; SQLite's keeps every one
+    (`LIMIT -1` is no limit) and answers; Postgres' fails the statement
+    (INTERNAL_ERROR).
+  new_behavior: >-
+    The core refuses a num_neighbors size below zero (a number, a float or
+    text spelling one) before anything is read, INVALID_REQUEST naming
+    num_neighbors, the reason negative and the hop's place, on every
+    database.
+  affected_inputs: >-
+    materialize on the core route with a negative num_neighbors size.
+  cases: [sample.num-neighbors.minus-one]
+  refs:
+  - P2I-1
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-82}
+  notes: >-
+    Proposed by T2.11's implementer, never self-approved. Recorded as
+    approved under the owner's overnight delegation (KO2-82), as KO2-70
+    recorded T2.9's P2F-1, by the orchestrator's instruction. The
+    orchestrator's decision under the overnight delegation (KO2-82,
+    2026-10-20), replacing this entry's first form (no referring rows on
+    every database): the test author measured that the reference answers
+    differently on each database, so there is no single behaviour to
+    match, and a named refusal tells the caller what is wrong instead of
+    a database-dependent answer. It refuses an input DuckDB's and SQLite's
+    references answer, so it is the owner's, read in the morning.
+  case_outcomes:
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: python-core, old: 'none', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'none', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
+  - {case: sample.num-neighbors.minus-one, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s DuckDB sampler keeps no referring rows and answers'}
+  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at predict', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
+  - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
+  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
+  - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}

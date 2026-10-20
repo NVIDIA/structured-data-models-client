@@ -72,8 +72,9 @@ if TYPE_CHECKING:
 
 #: The options the contract carries in fields of their own (from T1.28a
 #: the seed, the statistic and the inference options among the call's
-#: values; from T2.9, contract v27, ``lag_timesteps`` among them). The core
-#: is told the names of the rest (decision E61).
+#: values; from T2.9, contract v27, ``lag_timesteps`` among them, and from
+#: T2.11 the sampling options). The core is told the names of the rest
+#: (decision E61).
 TAKEN = frozenset(
     {
         'anchor_time',
@@ -83,12 +84,20 @@ TAKEN = frozenset(
         'top_k',
         'rows_per_call',
         'lag_timesteps',
+        'context_anchor_time',
+        'exclude_cols_dict',
+        'max_pq_iterations',
+        'num_hops',
+        'num_neighbors',
+        'return_embeddings',
+        'use_prediction_time',
     }
 )
 
 #: The options whose values the core reads, as the caller gave them, in the
-#: call's values (T1.28a; ``lag_timesteps`` from T2.9): their types and
-#: bounds are the core's.
+#: call's values (T1.28a; ``lag_timesteps`` from T2.9, the sampling options
+#: from T2.11): their types and bounds are the core's. ``context_anchor_time``
+#: is written as the anchor time is (:func:`_context_anchor`).
 VALUED = frozenset(
     {
         'random_seed',
@@ -99,6 +108,10 @@ VALUED = frozenset(
         'top_k',
         'rows_per_call',
         'lag_timesteps',
+        'exclude_cols_dict',
+        'max_pq_iterations',
+        'return_embeddings',
+        'use_prediction_time',
     }
 )
 
@@ -180,6 +193,24 @@ def _anchor(value: Any) -> dict[str, Any] | None:
         )
     zone = None if value.tzinfo is None else str(value.tzinfo)
     return codec.timestamp(int(value.as_unit('ns').value), 'ns', zone)
+
+
+def _context_anchor(options: dict[str, Any]) -> dict[str, Any]:
+    r"""``context_anchor_time`` among the call's values, where the call names
+    it (T2.11): a ``pandas.Timestamp`` as the anchor time is written, the
+    literal ``'entity'`` and none as they are, and any other value as the
+    text ``unreadable``, which the core refuses as the engine refuses it,
+    where the engine refuses it."""
+    import pandas as pd
+
+    if 'context_anchor_time' not in options:
+        return {}
+    value = options['context_anchor_time']
+    if isinstance(value, pd.Timestamp):
+        return {'context_anchor_time': _anchor(value)}
+    if value is None or (isinstance(value, str) and value == 'entity'):
+        return {'context_anchor_time': value}
+    return {'context_anchor_time': 'unreadable'}
 
 
 def _indices(indices: Sequence[Any]) -> Any:
@@ -372,6 +403,7 @@ def gather(
                     name: options[name]
                     for name in sorted(set(options) & VALUED)
                 },
+                **_context_anchor(options),
             },
         ),
     }

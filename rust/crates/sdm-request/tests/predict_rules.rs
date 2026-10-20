@@ -29,6 +29,7 @@ fn row(row_index: i64, id: i64, prediction: Answer) -> Row {
         explanation: None,
         metadata: None,
         quantiles: None,
+        embeddings: None,
     }
 }
 

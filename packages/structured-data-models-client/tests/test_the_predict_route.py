@@ -841,3 +841,42 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     assert past.value.code == 'INVALID_REQUEST'
     assert past.value.details['field'] == 'payload'
     assert past.value.details['bytes'] == limit + 1
+
+
+def test_embeddings_are_the_old_route_s_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T2.11: an answer's embeddings, asked for among the outputs, read as
+    # the client's bindings read them and given back as the old route
+    # gives them: one list per row, the items holding each as a tuple.
+    request = _materialized(monkeypatch)
+    [rows] = [request.payloads[0]['predict']['instance_table']['rows']]
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r9',
+        'model': 'kumo-relational',
+        'metadata': {},
+        'predictions': [
+            {
+                'id': str(instance),
+                'row_index': index,
+                'prediction': 1.5 + index,
+                'embeddings': [0.25 * index, '-1.5', 3],
+            }
+            for index, instance in enumerate(instances)
+        ],
+    }
+    outputs = ['prediction', 'embeddings']
+    with _answering(200, json.dumps(answer).encode()) as (url, received):
+        core, old = _both(monkeypatch, request, url, outputs=outputs)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.items == old.items
+    assert core.items[1].embeddings == (0.25, -1.5, 3.0)
+    assert json.loads(received[0])['output']['fields'] == outputs
+    # Not an array of numbers: the response is not the contract's, on both.
+    answer['predictions'][0]['embeddings'] = 'x'
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        core, old = _both(monkeypatch, request, url, outputs=outputs)
+    assert (type(core), core.code) == (type(old), old.code)
+    assert core.code == 'INVALID_RESPONSE'

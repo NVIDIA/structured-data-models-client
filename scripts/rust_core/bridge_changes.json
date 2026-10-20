@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T2.8: the module gains _candidates, the host's encoding of a ranking's candidates as the contract's given candidates, each of its own type (Materialize.candidates), the ranking's decomposition and its refusals being the core's (sdm-request's ranking, sdm-core's ranking); T2.9: lag_timesteps joins the options whose values the core reads (TAKEN, VALUED; contract v27), its rule (the engine's refusals and the lagged target) the core's; the host passes the value as the caller gave it, no rule added"
+      "moved": "T2.11: the sampling options (context_anchor_time, exclude_cols_dict, max_pq_iterations, num_hops, num_neighbors, return_embeddings, use_prediction_time) join the options whose values the core reads (TAKEN, VALUED); their types, bounds and effects are the core's (sdm-request options, sdm-core materialize and subgraph); no rule added here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T2.8: a ranking's candidates sent as Materialize.candidates and top_k among the call's values (TAKEN, VALUED), the caller's part limit (decompose.MOST_PARTS) sent on every call, the core holding a forecast's steps and a ranking's candidates to it, and a ranking's state kept (the first candidate's position, each later question's candidate, its name, payload and query, and top_k); the decomposition, its refusals and the forecast's top_k and MOST_PARTS refusals are the core's; and a refactor, T2.9 fix 3: the call's values attachment is written with codec.attachment(named=True), so a value JSON cannot hold is refused naming its option (details field), as fix 2 meant; every other attachment's refusal unchanged; no rule added"
+      "moved": "T2.11: the call's values carry context_anchor_time as _context_anchor writes it; the context's anchor, its checks and warnings are sdm-core materialize's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -36,7 +36,7 @@
       "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
-      "moved": "T2.13: each item's explanation and metadata, and the result's explanation, which the core reads (response::mapping) and chooses (Part.explanation), handed to PredictionItem and PredictionResult as the reference holds them, each mapping made by T2.8's _mapping; no rule added; T2.9: an item's quantiles, which the core reads (response::mapping, each value a double as _float_dict holds it) and lays out as a mapping's JSON text (contract v27), handed to PredictionItem by the same _mapping; no rule added"
+      "moved": "T2.11: an answer's embeddings, which the core reads and lays out (sdm-wire response, sdm-request predict), handed into each PredictionItem as the tuple the bindings hold; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
       "moved": "T2.8: a ranking the core gathered is predicted by the core, as a forecast is (T1.36 fix 21): its outputs' check, the check of every question before any is sent, the candidates left out, each question's call and the reassembly are the core's; the old route's are unchanged"
@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -340,6 +340,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send_body": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_context_anchor": {
+      "moved": "T2.11: context_anchor_time written for the core as anchor_time is (a ts scalar), the literal 'entity' and none as they are, any other value as the text 'unreadable', which the core refuses where the engine refuses it (sdm-request options); no type check here"
     }
   }
 }

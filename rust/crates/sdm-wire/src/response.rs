@@ -32,14 +32,14 @@
 //! finite number, each refusal naming `prediction.quantiles`), and kept as
 //! the [`mapping`] it is, each value written as the double it reads as.
 //!
+//! From T2.11 an item's `embeddings` is read as the bindings'
+//! `_float_tuple` reads it, as `scores` is: absent or `null` is none, any
+//! value not an array refused (`not_a_sequence`), each member a number.
+//!
 //! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it, and its other field (`embeddings`) is
-//! not read or type-checked: when one is there and not null, it is named in
-//! [`PredictionItem::carried`], for the caller to refuse by name as a field
-//! the result does not carry yet (`UNSUPPORTED_REQUEST`, register P1B-4),
-//! where the bindings would refuse a malformed one as a response not the
-//! contract's (`INVALID_RESPONSE`, decision E45(f)); T1.28 reads them.
-//! Members the bindings do not read are ignored, as there.
+//! bindings take it. From T2.11 every other field the bindings read is
+//! read, so [`PredictionItem::carried`] names none. Members the bindings
+//! do not read are ignored, as there.
 
 use crate::json::{Value, is_integer_token, whole};
 
@@ -59,7 +59,7 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
-pub const UNREAD_ITEM_FIELDS: [&str; 1] = ["embeddings"];
+pub const UNREAD_ITEM_FIELDS: [&str; 0] = [];
 
 /// One answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -91,6 +91,9 @@ pub struct PredictionItem {
     /// value the double it reads as; absent and `null` alike are `None`
     /// (T2.9).
     pub quantiles: Option<Value>,
+    /// The item's embedding, in the order written; absent and `null` alike
+    /// are `None` (T2.11).
+    pub embeddings: Option<Vec<f64>>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
 }
@@ -202,6 +205,16 @@ impl PredictionItem {
             )?),
             Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
         };
+        let embeddings = match value.get("embeddings") {
+            None | Some(Value::Null) => None,
+            Some(Value::Array(members)) => Some(
+                members
+                    .iter()
+                    .map(|v| number(v, "prediction.embeddings"))
+                    .collect::<Result<_, Refused>>()?,
+            ),
+            Some(_) => return Err(refused("prediction.embeddings", "not_a_sequence")),
+        };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
             .filter(|name| !matches!(value.get(name), None | Some(Value::Null)))
@@ -217,6 +230,7 @@ impl PredictionItem {
             explanation,
             metadata,
             quantiles,
+            embeddings,
             carried,
         })
     }

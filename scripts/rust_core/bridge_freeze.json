@@ -18,7 +18,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "a01b48b17479db297608f40fea444336b22647888f47b941b00e85b6bc274cf9"
+        "fingerprint": "6cec9d501f6943f1c9aadf604cb371e452ca2788504138c99f371b09eabbfa8b"
       },
       "Unresolved.__init__": {
         "fingerprint": "c0b3ba4e9b03529f042be0997a497d6e8f69c45ce50b92ec1c529c60dd27365c"
@@ -31,6 +31,9 @@
       },
       "_candidates": {
         "fingerprint": "547181dfbd4cd6d05d2a8a4c49309af531daa80bb6c21809790a6482c4d3c5c4"
+      },
+      "_context_anchor": {
+        "fingerprint": "c94d62a7d024f1a909501507ef1afdcaa05cebe6c750f2a6342de3206aab7c0b"
       },
       "_indices": {
         "fingerprint": "5f823fd5a856df6d4b3f2ca28d0ee23fa11662360a6ea7bf1ca74ea76374fece"
@@ -51,7 +54,7 @@
         "fingerprint": "e8a27ee5705c5728f41e932b7996380ab3143f341fc1effd626e89057231ff44"
       },
       "gather": {
-        "fingerprint": "a237d6b3c60b8afb97aadd29e3631a8e5ef80ae5aee776038c14521acd733cda"
+        "fingerprint": "be5eedead2141905e274d7889f7c0f2c5299c89735d98a9fd66623508b8e13c4"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py": {
@@ -92,7 +95,7 @@
         "fingerprint": "e77c413784f97bb64785920923f9bfa9ccf2cf43293f9997ead0fef5bfa46a4d"
       },
       "_result": {
-        "fingerprint": "4ab23b971006a1d2838fe23e43c12163a687a5c4ac1e847a8636454e02f2b66d"
+        "fingerprint": "8124aab1b9c1fb5e791201b28ef89a7731692293ca7044a5f072e87e0a1a0477"
       },
       "_rows": {
         "fingerprint": "26390e66fe27333b53b3821dafe2653c060e041b9b8993a409cf99fefc3ef370"
@@ -209,7 +212,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "4aa3e556ef1d0b6780482a8b47c5e85bd25924682730008119c51f82c497d836"
+        "fingerprint": "15ca43479a569373e31ae075ad04e7d26d4db6d8cc26a9269c4a367d31875b0b"
       },
       "_Words.convert_field": {
         "fingerprint": "9c6b585a9de0ab074b251a7e534dfdbe29ce9d4ee357a143a119ec78a35fd972"

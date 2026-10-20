@@ -599,18 +599,20 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
 }
 
 #[test]
-fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
+fn every_field_an_answer_carries_is_laid_out_or_refused_as_malformed() {
     let base = r#"{"id":"r1","model":"m","metadata":{},"predictions":[ITEM,{"id":"3","row_index":1,"prediction":1.0}]}"#;
-    // Embeddings alone are not carried yet: an item's quantiles are from
-    // T2.9, its explanation and metadata from T2.13, its scores and
-    // rankings from T2.8.
-    let item = r#"{"id":"2","row_index":0,"prediction":1.0,"embeddings":[0.5]}"#;
+    // From T2.11 every field an item carries is laid out: embeddings with
+    // T2.11, quantiles with T2.9, an explanation and metadata with T2.13,
+    // scores and rankings with T2.8; embeddings not a list of numbers are
+    // the endpoint's fault.
+    let item = r#"{"id":"2","row_index":0,"prediction":1.0,"embeddings":[0.5, "0.25"]}"#;
+    let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
+    assert!(step.is_ok(), "{item}: {step:?}");
+    let item = r#"{"id":"2","row_index":0,"prediction":1.0,"embeddings":"x"}"#;
     let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
     let error = step.unwrap_err();
-    assert_eq!(error.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(rule(&error), Some(&text("response_field")));
-    assert_eq!(error.fields["operation"], text("predict"));
-    assert_eq!(error.fields["field"], text("embeddings"));
+    assert_eq!(error.code, ErrorCode::InvalidResponse);
+    assert_eq!(error.fields["field"], text("prediction.embeddings"));
     // An item's scores and rankings are laid out (T2.8), read as the
     // bindings read them: a scores field not a list, or a ranking no dict
     // makes, is the endpoint's fault.

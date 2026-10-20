@@ -51,6 +51,8 @@ fn shop() -> Sampled {
         labels: Labels::Float(vec![1.5, 0.0, 42.25]),
         windowed: true,
         run_mode: RunMode::Fast,
+        use_prediction_time: false,
+        return_embeddings: false,
         options: Options::default(),
         statistic: Some("mean".into()),
         top_k: None,
@@ -133,6 +135,8 @@ fn family() -> Sampled {
         labels: Labels::Float(vec![f32::NAN, 3.0]),
         windowed: false,
         run_mode: RunMode::Best,
+        use_prediction_time: false,
+        return_embeddings: false,
         options: Options::default(),
         statistic: None,
         top_k: None,
@@ -543,4 +547,25 @@ fn what_the_readers_read_is_defined_with_the_type_they_read() {
             .collect();
         assert!(named.iter().any(|n| *n), "{option}");
     }
+}
+
+#[test]
+fn a_missing_entity_anchor_is_sent_as_null_and_the_others_as_their_times() {
+    // T2.11 fix 1: a scored entity anchored at its own time, which is
+    // null, is the reference's `NaT`: null in the anchor column, never the
+    // no-anchor sentinel's 1677 time; the payload still holds the payload
+    // definition.
+    let mut sampled = shop();
+    sampled.anchors[4] = sdm_engine::sample::MISSING_ANCHOR;
+    let payload = built(&sampled);
+    let table = &payload["predict"]["instance_table"];
+    let columns = table["columns"].as_array().unwrap();
+    let at = columns
+        .iter()
+        .position(|c| c == "__kumo_anchor_time")
+        .expect("the anchor column is sent");
+    let rows = table["rows"].as_array().unwrap();
+    assert_eq!(rows[1][at], Value::Null);
+    assert!(rows[0][at].as_str().unwrap().starts_with("2024-02-27"));
+    assert_eq!(check("StatePayload", &payload), Ok(()));
 }

@@ -585,6 +585,9 @@ def _result(
                 quantiles=None
                 if row.get('quantiles') is None
                 else _mapping(row['quantiles']),
+                embeddings=None
+                if row.get('embeddings') is None
+                else tuple(row['embeddings']),
             )
             for row in rows
         ],

@@ -202,6 +202,12 @@ pub struct Sampled {
     /// The query, as the reference writes it back.
     pub source_query: String,
     pub run_mode: RunMode,
+    /// Whether the model is told each example's anchor time
+    /// (`use_prediction_time`, T2.11).
+    pub use_prediction_time: bool,
+    /// Whether the outputs name `embeddings` (`return_embeddings`,
+    /// `_output_fields`, T2.11).
+    pub return_embeddings: bool,
     /// The inference options, read for this task ([`crate::options`]).
     pub options: Options,
     /// The regression's statistic the caller chose.
@@ -881,7 +887,15 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 cells: sampled
                     .anchors
                     .iter()
-                    .map(|a| Value::Text(iso_microseconds(*a)))
+                    .map(|a| {
+                        // A missing anchor (an entity's own time null,
+                        // `NaT`) is sent as null, as the reference sends it.
+                        if *a == sdm_engine::sample::MISSING_ANCHOR {
+                            Value::Null
+                        } else {
+                            Value::Text(iso_microseconds(*a))
+                        }
+                    })
                     .collect(),
             });
             Some(name)
@@ -1091,11 +1105,14 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         }
     };
 
-    let fields: Vec<String> = match kind {
+    let mut fields: Vec<String> = match kind {
         Kind::Regression if sampled.options.output_type == "quantiles" => vec!["quantiles".into()],
         Kind::Regression => vec!["prediction".into()],
         Kind::Binary | Kind::Multiclass => vec!["prediction".into(), "probabilities".into()],
     };
+    if sampled.return_embeddings {
+        fields.push("embeddings".into());
+    }
     // The task's and the inference's sections, typed by the task's kind.
     macro_rules! task {
         ($target:expr) => {
@@ -1112,7 +1129,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         ($config:expr) => {
             Inference {
                 run_mode: sampled.run_mode.wire_name().to_owned(),
-                use_prediction_time: false,
+                use_prediction_time: sampled.use_prediction_time,
                 inference_config: $config,
             }
         };
