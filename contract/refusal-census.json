@@ -980,6 +980,26 @@
         }
       },
       "until": "from_source"
+    },
+    {
+      "site": "rule:open_window",
+      "why": "a ranking whose aggregation has no window start (sdm-core ranking.rs, T2.8); the query validator refuses a target window with no start first on both routes, so the site is not reached from the public calls this way",
+      "input": {
+        "base": "shop",
+        "setup": [
+          "CREATE TABLE items AS SELECT i::BIGINT AS item_id FROM range(4) t(i)",
+          "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+        ],
+        "pql": "PREDICT LIST_DISTINCT(buys.item_id, -INF, 30, days) RANK TOP 2 FOR EACH users.user_id",
+        "materialize": {
+          "indices": [
+            0,
+            1
+          ],
+          "anchor_time": "2024-03-01"
+        }
+      },
+      "until": "materialize"
     }
   ]
 }
