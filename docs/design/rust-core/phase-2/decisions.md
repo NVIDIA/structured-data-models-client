@@ -113,10 +113,11 @@ Sources: the owner's replies on 2026-10-19 to the orchestrator's questions H, J,
 
 ## The final gate's checks (MID2, 2026-10-20)
 
-Sources: the owner's answer on 2026-10-20 to the mid-phase checkpoint's finding P2-1, and the owner's 2026-10-17 answer on P2B-8, whose row was to land with the next owner-row docs landing.
+Sources: the owner's answers on 2026-10-20 to the mid-phase checkpoint's finding P2-1 and to T2.21's question on exact large ids, and the owner's 2026-10-17 answer on P2B-8, whose row was to land with the next owner-row docs landing.
 Quotes are the owner's words; the Decision cell restates the question and the recommendation the owner answered.
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 | KO2-76 | Q (MID2 P2-1): the locked set still requires the census, coverage, L3, L7 and ci gate steps that KO2-53 turned into end-of-phase reports; KO2-25 (H24 Postgres common-input comparison stays gating) contradicts KO2-53; KO2-23's unseeded SQLite comparison on common inputs has no tool. As recommended: the census, coverage, L3, L7 and ci steps leave the locked gate and are judged as end-of-phase reports read by both reviewers; the CI-green parts of checks 1, 3, 4, 5, 8 and 10 are judged by `land.py`'s exact-SHA rule; the Postgres common-input comparison (H24) is a report, superseding KO2-25's "stays a gating check"; unseeded SQLite sampling (KO2-23) is judged by properties: row count, every row exists in the data, same rows when seeded | "re what the final gate checks: Sure, let's go with the recommendation." | approved by owner 2026-10-20 |
 | KO2-77 | P2B-8: on the four key-cast vectors where the reference rounds an entity onto a key it doesn't name, the core keeps refusing by name: a refusal of input the reference accepts | "keep refusing" | approved by owner 2026-10-17 |
+| KO2-78 | Q (T2.21): on Postgres, a numeric id past 2^53 that the caller names as a key, links by a foreign key, or links by an edit is refused by the reference (INVALID_REQUEST at materialize). As recommended: the core makes such an id work, keeping it exact, a lifted refusal with a register entry (T2.21 adds it and cites this row) | "regarding the id staying exact and the user getting their answer - sure, let's do what you recommend" | approved by owner 2026-10-20 |
