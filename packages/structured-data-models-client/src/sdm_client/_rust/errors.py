@@ -498,6 +498,12 @@ def _worded(code: str, details: dict[str, Any]) -> str | None:
     return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
 
 
+class RuntimeWarning(builtins.RuntimeWarning):  # noqa: A001 - the reference's name
+    r"""The class NumPy's warning of a cast that overflows is shown as
+    (FX-1): the reference's ``RuntimeWarning``, owned by this client, as
+    :class:`UserWarning` is."""
+
+
 class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
     r"""The class the core's sampler warnings are shown as: the reference's
     ``UserWarning`` (a subclass of it, named so, so a filter, a
@@ -518,6 +524,7 @@ WARNINGS: dict[str, type[Warning]] = {
     'CONTEXT_BEFORE_DATA': UserWarning,
     'ANCHOR_AFTER_DATA': UserWarning,
     'CONTEXT_COVERAGE': UserWarning,
+    'FLOAT32_OVERFLOW': RuntimeWarning,
     # From T2.11, the engine's warnings of the sampling options: a context
     # anchored after the predictions, or whose window reaches past them,
     # and num_hops ignored for num_neighbors.
@@ -725,22 +732,32 @@ SAID: dict[str, dict[str | None, str]] = {
             + index
             + ' in {tables} '
             + table
-            + ' for optimal database querying; indices on primary and foreign '
-            'keys speed sampling up'
+            + ' for optimal database querying. For improving runtime, we '
+            'strongly suggest to create indices for primary and foreign keys, '
+            'e.g., automatically by instantiating Kumo Relational via '
+            '`KumoRelational(graph, optimize=True)`.'
         )
         for index in ('index', 'indices')
         for table in ('table', 'tables')
     },
+    # M4: the engine's words for a context reaching back before the data
+    # and an anchor after it (`_validate_time`), naming the times.
     'CONTEXT_BEFORE_DATA': {
         None: (
-            "the context's anchor time is too early, or the aggregation's "
-            'window too long, for the data to reach back as far as the '
-            'examples need'
+            'Context anchor timestamp is too early or aggregation time range '
+            'is too large. To form proper input data, we would need data back '
+            "to '{back_to!t}', however, your data only contains data back to "
+            "'{earliest!t}'."
         )
     },
     'ANCHOR_AFTER_DATA': {
-        None: 'the anchor time is after the latest time in the data'
+        None: (
+            "Anchor timestamp '{anchor!t}' is after the latest timestamp "
+            "'{latest!t}' in the data. Please make sure this is intended."
+        )
     },
+    # FX-1: NumPy's words for a double past float32's range cast to float32.
+    'FLOAT32_OVERFLOW': {None: 'overflow encountered in cast'},
     # From T2.11, the engine's words for the sampling options' warnings.
     'CONTEXT_AFTER_ANCHOR': {
         None: (

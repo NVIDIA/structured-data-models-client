@@ -111,6 +111,10 @@ pub const FILTER_CHOSE_EXAMPLES: &str = "FILTER_CHOSE_EXAMPLES";
 pub const CONTEXT_BEFORE_DATA: &str = "CONTEXT_BEFORE_DATA";
 /// The warning that the anchor time is after the data.
 pub const ANCHOR_AFTER_DATA: &str = "ANCHOR_AFTER_DATA";
+/// The warning that a double past float32's range was cast to float32, an
+/// infinity, as the reference's executor casts a float target (NumPy's
+/// `RuntimeWarning`, FX-1).
+pub const FLOAT32_OVERFLOW: &str = "FLOAT32_OVERFLOW";
 /// The warning that a large entity table gave fewer than half the context
 /// examples asked for, which the reference gives once in a process
 /// (`_coverage_warned`).
@@ -136,6 +140,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     ),
     (CONTEXT_BEFORE_DATA, &[]),
     (ANCHOR_AFTER_DATA, &[]),
+    (FLOAT32_OVERFLOW, &[]),
     (CONTEXT_AFTER_ANCHOR, &[]),
     (CONTEXT_LEAKS, &[]),
     (HOPS_IGNORED, &[]),
@@ -1319,6 +1324,35 @@ fn label_values(array: &ArrayRef) -> Result<labels::Values, CoreError> {
         },
         _ => return Err(not_yet("target_type")),
     })
+}
+
+/// Whether a double of `array` is finite and past float32's range, so the
+/// executor's cast of it to float32 ([`label_values`], [`static_column`])
+/// makes it an infinity, which NumPy warns of (FX-1).
+fn float32_overflows(array: &ArrayRef) -> bool {
+    array.data_type() == &DataType::Float64
+        && array
+            .as_primitive::<Float64Type>()
+            .iter()
+            .flatten()
+            .any(|v| v.is_finite() && (v as f32).is_infinite())
+}
+
+/// The warning NumPy gives where the executor's cast of a double to
+/// float32 overflows (FX-1), which the host shows as the reference's
+/// `RuntimeWarning`. Not over a source whose floats the reference reads as
+/// pandas' nullable `Float64` (Postgres's, `_sanitize_postgres_frame`, the
+/// reading that takes a NaN as missing), whose cast to float32 warns of
+/// nothing.
+fn warn_float32_overflow(asker: &Asker) {
+    if asker.reads_nan_as_missing() {
+        return;
+    }
+    warn(
+        asker,
+        FLOAT32_OVERFLOW,
+        "a double past float32's range was cast to float32, as an infinity",
+    );
 }
 
 /// A `UInt64` column at int64, as pandas' `astype('int64')` takes it: a
@@ -3516,24 +3550,31 @@ async fn anchors_checked(
         // predictions' anchor; a context reaching back before the data. A
         // static query's window is empty, so its context reaches back no
         // further than its anchor, which was checked above.
-        // Each names the two anchors, as the reference's words show them.
-        let anchored = |code: &str, message: &str| {
-            let at = |value: i64| {
-                Detail::Scalar(Scalar::Timestamp {
-                    unit: Unit::Ns,
-                    zone: None,
-                    value,
-                })
-            };
+        // Each names the times it compares, as the reference's words show
+        // them.
+        let at = |value: i64| {
+            Detail::Scalar(Scalar::Timestamp {
+                unit: Unit::Ns,
+                zone: None,
+                value,
+            })
+        };
+        let timed = |code: &str, message: &str, fields: [(&str, i64); 2]| {
             asker.warn(CoreWarning {
                 code: code.into(),
                 message: message.into(),
-                fields: [
-                    ("context_anchor".to_owned(), at(context_anchor)),
-                    ("anchor".to_owned(), at(anchor)),
-                ]
-                .into(),
+                fields: fields
+                    .into_iter()
+                    .map(|(name, value)| (name.to_owned(), at(value)))
+                    .collect(),
             });
+        };
+        let anchored = |code: &str, message: &str| {
+            timed(
+                code,
+                message,
+                [("context_anchor", context_anchor), ("anchor", anchor)],
+            );
         };
         if context_anchor > anchor {
             anchored(
@@ -3548,19 +3589,30 @@ async fn anchors_checked(
                 "the context's window reaches past the predictions' anchor time",
             );
         } else if let Some(end) = end
-            && reaches(end.negated(), context_anchor)? < i128::from(bounds.min)
+            && let back = reaches(end.negated(), context_anchor)?
+            && back < i128::from(bounds.min)
         {
-            warn(
-                asker,
-                CONTEXT_BEFORE_DATA,
-                "the context reaches back before the data",
-            );
+            // How far back the context reaches, and the earliest time of
+            // the data (M4): a reach past what a time holds names neither.
+            match i64::try_from(back) {
+                Ok(back) => timed(
+                    CONTEXT_BEFORE_DATA,
+                    "the context reaches back before the data",
+                    [("back_to", back), ("earliest", bounds.min)],
+                ),
+                Err(_) => warn(
+                    asker,
+                    CONTEXT_BEFORE_DATA,
+                    "the context reaches back before the data",
+                ),
+            }
         }
         if i128::from(anchor) > i128::from(bounds.max) + DAY_NS {
-            warn(
-                asker,
+            // The anchor and the latest time of the data (M4).
+            timed(
                 ANCHOR_AFTER_DATA,
                 "the anchor time is after the data",
+                [("anchor", anchor), ("latest", bounds.max)],
             );
         }
     }
@@ -3950,6 +4002,9 @@ impl Labelling<'_> {
         Ok(match shape {
             Shape::Column(column) => {
                 let array = named(self.sampled, column)?;
+                if float32_overflows(&take(array, self.entity_rows)?) {
+                    warn_float32_overflow(self.asker);
+                }
                 labels::Target::Column(if whole {
                     static_column(array, self.entity_rows)?
                 } else {
@@ -3958,9 +4013,17 @@ impl Labelling<'_> {
             }
             Shape::Aggregated(windowed) => labels::Target::Aggregated(aggregate(
                 windowed,
-                fetched
-                    .get(&windowed.table)
-                    .ok_or_else(|| internal("an aggregation's table was not read"))?,
+                {
+                    let rows = fetched
+                        .get(&windowed.table)
+                        .ok_or_else(|| internal("an aggregation's table was not read"))?;
+                    if let Some(column) = &windowed.column
+                        && float32_overflows(named(&rows.rows, column)?)
+                    {
+                        warn_float32_overflow(self.asker);
+                    }
+                    rows
+                },
                 &self.examples.anchors,
                 self.examples.index.len(),
                 "anchor_time",

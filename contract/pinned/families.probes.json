@@ -153,43 +153,43 @@
     },
     "shape.diamond-from-source": {
      "described": "09c0fd57efb1f71fe190c401780374af9fbaf63f1805892c8a83cefdcbae090d",
-     "warnings": "adfe159065470a8978276403c62184e52fd74256259b8d5ca7f4ea6a63596c56"
+     "warnings": "95434e700a86b440c0d7bcb9dc6c5123b00df26eef4b9ab884576528e5c23d31"
     },
     "shape.diamond.addresses": {
      "described": "075af865e7f739c14fd09bd79f4560a5973537499c0b03154a4edd1f55ee35ce",
-     "warnings": "7769a9c4d848fa983d1e44010e1330a312415ff22ef033631556623f79ad77bb"
+     "warnings": "96ea6d78631fc14c82c4a682e84660dd759504ec59538831c7520a3e5c31223a"
     },
     "shape.one-column-two-tables": {
      "described": "c80ff6b98c12bfc0c4918fd65ef5c5e50abbda3a7f69dabe157446e2c072b8f2",
-     "warnings": "21d32c803cbe7aad4aa2670927593a181c3631e4a178c8f4914c95f90761028d"
+     "warnings": "94ddbbfd4c326ae5a9f75211033ed49f01f91e5ad54027911e8cfa832d33cc69"
     },
     "shape.same-table-twice.buyers": {
      "described": "9fa9c3b028cdabc45f67cf18b60c3f9a9aae5a6d0b46012a1ef78809941a622a",
-     "warnings": "a584fcfe9ff04dbbd4a44367f86ecdde7d1b8a2c2e324ad35ef0380eed3b42e4"
+     "warnings": "f08d6ce476169f6c87ef3e0bf6b59b56b12c27d35783f9fd61b175b180762855"
     },
     "shape.same-table-twice.customers": {
      "described": "9fa9c3b028cdabc45f67cf18b60c3f9a9aae5a6d0b46012a1ef78809941a622a",
-     "warnings": "314aaff2ab04d4569eaba8a5200d2de8ea070d2579c7fc8b04014ddc48f70ece"
+     "warnings": "85bb2d62ff36ac77a942273b51891fce75d96ee44776107d5c3e2fdf3cadcc30"
     },
     "shape.star.customers": {
      "described": "83f3ffc83a41521e80203234ae5f5dafc4ded720e986984c0f5091e5a95e0004",
-     "warnings": "6d22e50924ffa8b31be0d8393b5bdffe7e1c99fa70d93727e89b6d5ca7203ea2"
+     "warnings": "2be1e9e215f03d834c79b7e8d19cff4f89c45324d1e5d71e6c56248f75b1f440"
     },
     "shape.star.products": {
      "described": "83f3ffc83a41521e80203234ae5f5dafc4ded720e986984c0f5091e5a95e0004",
-     "warnings": "f74fc94441751d3bf2e6846dc0f862850dc4c3557051fda281a2d71d3d9fc8c1"
+     "warnings": "4c1354d2265c366bf6ac448b8a6a4b3dca1c807967922a0f87ce2bcaaba8fbcc"
     },
     "shape.star.stores": {
      "described": "83f3ffc83a41521e80203234ae5f5dafc4ded720e986984c0f5091e5a95e0004",
-     "warnings": "9ec671bcdade004d5b8de37b0acd80270278864a1d82f74e614495491bb3837b"
+     "warnings": "d11a6e90ddb667a524208d5f1d5cc1e85c7a555321da27f44e64116c44a905a7"
     },
     "shape.two-paths.keyed": {
      "described": "9086c4cc36e389b58ccb2f59e320a2f035517124c1b7b4885bea806d7e96f8ef",
-     "warnings": "0cbcb2c65f60bc35ce10a2b915d38b069e0febf048f56bc963bf61e572ee0473"
+     "warnings": "d146530f413c7a30c492951db3d7da6bced11626a840ce75aaffcbe7343811a6"
     },
     "shape.two-paths.keyless": {
      "described": "2b0b028e4c1e7bb53f59f0acf0c887d921598d959a8a1d2faaf1f6bf57dadc5e",
-     "warnings": "6d7e40026cf9b031b282762c5ba2d8b577b8b6354c0e6c523146adff52ce1fae"
+     "warnings": "e61a688e82fe3b561de3062571b40d3ac45936bbe1fe154814ab0eca888fdb3d"
     }
    }
   },

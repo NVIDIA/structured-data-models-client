@@ -1232,7 +1232,7 @@ pub fn whole_table(
                 (values::times_of_day(one, low, 1).into_iter().next(), None)
             }
             _ => (
-                values::first_temporal(one, low),
+                values::first_temporal(one, low).map(infinity_as_read),
                 values::instants(one, low).first().copied().flatten(),
             ),
         };
@@ -1250,6 +1250,28 @@ pub fn whole_table(
         rows,
         columns: read,
     })
+}
+
+/// A whole table's smallest timestamp as the reference reads it: DuckDB's
+/// infinity (Arrow's `i64::MAX`, its negative `-i64::MAX`, of any unit) is
+/// the largest or smallest `datetime` its `fetchall` hands over, without a
+/// zone, which the reference shows as it is (FX-4); any other value as it
+/// is.
+fn infinity_as_read(value: Scalar) -> Scalar {
+    match value {
+        Scalar::Timestamp { value, .. } if value == i64::MAX || value == -i64::MAX => {
+            Scalar::Timestamp {
+                unit: Unit::Us,
+                zone: None,
+                value: if value > 0 {
+                    DATETIME_MAX_US
+                } else {
+                    DATETIME_MIN_US
+                },
+            }
+        }
+        other => other,
+    }
 }
 
 /// The time column among the timestamps, as the reference chooses it
