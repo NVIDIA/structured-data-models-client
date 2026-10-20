@@ -81,12 +81,14 @@ def _failures(who: str, operations: list[str], code: str | None) -> list[str]:
 def test_a_validate_query_error_after_a_description_is_its_refusal(
     who: str,
 ) -> None:
+    r"""Exit: the description then validate_query's error passes as its refusal."""
     validated = ['describe_source', 'validate_query']
     assert _failures(who, validated, 'INVALID_REQUEST') == []
 
 
 @pytest.mark.parametrize('who', WHO)
 def test_an_outcome_unlike_the_validate_query_error_differs(who: str) -> None:
+    r"""Exit: an outcome code unlike the error's is the outcome-against-core difference."""
     validated = ['describe_source', 'validate_query']
     assert _failures(who, validated, 'UNSUPPORTED_REQUEST') == [
         f'{ID}: {who}: outcome against core: expected '
@@ -99,6 +101,7 @@ def test_an_outcome_unlike_the_validate_query_error_differs(who: str) -> None:
 def test_a_description_and_an_error_with_no_validate_query_step_fail(
     who: str,
 ) -> None:
+    r"""Exit: nothing else loosens; no validate_query ending the call still fails."""
     wanted = [f'{ID}: {who}: core: not one description or one error']
     assert _failures(who, ['describe_source'], 'INVALID_REQUEST') == wanted
     # Validated and then another call: validate_query did not end it.
