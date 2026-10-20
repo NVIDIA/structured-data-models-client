@@ -209,7 +209,9 @@ class Relational:
         )
 
     @staticmethod
-    def row_ids(table: Mapping[str, Any]) -> list[str | None]:
+    def row_ids(
+        table: Mapping[str, Any], spec: Mapping[str, Any]
+    ) -> list[str | None]:
         r"""Each row's ``instance_id``, which the client matches its answer
         to before putting the entity's own key on it."""
         return [str(value) for value in values(table, INSTANCE_ID)]

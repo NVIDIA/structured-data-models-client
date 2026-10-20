@@ -127,7 +127,15 @@ class InProcessBackend:
             context = served.context(payload)
             query = served.query(context, payload, payload['schema'])
             answer = _run(_fit(model, context), query)
-            items = _items(served, task, context, payload, answer, fields)
+            items = _items(
+                served,
+                task,
+                payload['schema'],
+                context,
+                payload,
+                answer,
+                fields,
+            )
             return adapter.answered(
                 items, outputs, payload, model=served.model_id
             )
@@ -174,7 +182,13 @@ class InProcessBackend:
             query = served.query(session.context, payload, session.schema)
             answer = _run(session.fitted, query)
             items = _items(
-                served, task, session.context, payload, answer, fields
+                served,
+                task,
+                session.schema,
+                session.context,
+                payload,
+                answer,
+                fields,
             )
             return adapter.answered(
                 items, outputs, {**pinned, **payload}, model=served.model_id
@@ -382,13 +396,16 @@ def _autocast(device: Any) -> Any:
 def _items(
     served: Tabular | Relational,
     task: Mapping[str, Any],
+    schema: Mapping[str, Any],
     context: Context,
     payload: Mapping[str, Any],
     answer: Any,
     fields: list[str],
 ) -> list[Any]:
     r"""One answer per scored row, under the id the request gave that row."""
-    ids = served.row_ids(payload['predict']['instance_table'])
+    ids = served.row_ids(
+        payload['predict']['instance_table'], schema['instance_table']
+    )
     if task['kind'] != 'regression':
         return classified(answer, context.encoded, context.labels, ids, fields)
     output = payload.get('output') or {}

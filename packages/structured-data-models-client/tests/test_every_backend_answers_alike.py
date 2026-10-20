@@ -207,6 +207,31 @@ def test_a_key_wider_than_a_double_comes_back_exactly(client_for):
     )
 
 
+def test_a_key_of_several_columns_answers_under_its_values(client_for):
+    frame = people()[['person_id', 'age', 'visits', 'churn']].assign(
+        tenant=['a', 'b'] * 30
+    )
+    schema = Schema.from_data(
+        {'instance': frame}, primary_keys={'instance': ['tenant', 'person_id']}
+    )
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+        schema=schema,
+    )
+    with client_for('kumo-tabular') as client:
+        answer = client.predict(request, model=KumoTabular())
+
+    assert [item.id for item in answer.items] == [
+        f'["{tenant}",{person}]'
+        for tenant, person in zip(
+            frame['tenant'][45:], frame['person_id'][45:], strict=True
+        )
+    ]
+
+
 @pytest.mark.parametrize(
     ('inference', 'code'),
     [

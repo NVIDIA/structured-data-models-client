@@ -6,6 +6,7 @@ r"""``kumo-tabular`` in process: one table, each row scored from its columns."""
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from typing import Any
 
@@ -17,6 +18,7 @@ from sdm_client.in_process.columns import (
     labelled,
     stype_of,
 )
+from sdm_client.in_process.tables import values
 
 _READS = frozenset({'numerical', 'categorical'})
 
@@ -111,7 +113,20 @@ class Tabular:
         return context.instance.tensor(table, 'predict instance table'), None
 
     @staticmethod
-    def row_ids(table: Mapping[str, Any]) -> list[str | None]:
-        r"""No id: each answer is matched to its row by position, and the
-        client puts the row's key on it."""
-        return [None] * len(table['rows'])
+    def row_ids(
+        table: Mapping[str, Any], spec: Mapping[str, Any]
+    ) -> list[str | None]:
+        r"""A key of several columns answers under the JSON of its values as
+        they were sent, which the client hands back as the row's id.
+
+        Otherwise there is no id: each answer is matched to its row by
+        position, and the client puts the row's own key on it.
+        """
+        key = spec.get('primary_key')
+        if not isinstance(key, list) or len(key) < 2:
+            return [None] * len(table['rows'])
+        cells = [values(table, name) for name in key]
+        return [
+            json.dumps(list(values_of), separators=(',', ':'), default=str)
+            for values_of in zip(*cells, strict=True)
+        ]
