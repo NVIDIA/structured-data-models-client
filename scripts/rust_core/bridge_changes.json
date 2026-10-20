@@ -36,7 +36,7 @@
       "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
-      "moved": "T2.13: each item's explanation and metadata, and the result's explanation, which the core reads (response::mapping) and chooses (Part.explanation), handed to PredictionItem and PredictionResult as the reference holds them, each mapping made by T2.8's _mapping; no rule added; T2.9: an item's quantiles, which the core reads and lays out (contract v27's quantiles column), are handed to PredictionItem as the endpoint keyed them; no rule added"
+      "moved": "T2.13: each item's explanation and metadata, and the result's explanation, which the core reads (response::mapping) and chooses (Part.explanation), handed to PredictionItem and PredictionResult as the reference holds them, each mapping made by T2.8's _mapping; no rule added; T2.9: an item's quantiles, which the core reads (response::mapping, each value a double as _float_dict holds it) and lays out as a mapping's JSON text (contract v27), handed to PredictionItem by the same _mapping; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
       "moved": "T2.8: a ranking the core gathered is predicted by the core, as a forecast is (T1.36 fix 21): its outputs' check, the check of every question before any is sent, the candidates left out, each question's call and the reassembly are the core's; the old route's are unchanged"
