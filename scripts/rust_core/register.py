@@ -143,15 +143,40 @@ def inventory_ids(root: Path) -> set[str]:
 def reference_outcomes(root: Path) -> dict[str, str]:
     r"""Each case's outcome in the committed reference (``success`` or
     ``refusal``), by case."""
-    found: dict[str, str] = {}
+    return {
+        case: str(outcome['result'])
+        for case, outcome in _reference_lines(root).items()
+    }
+
+
+def reference_refusals(root: Path) -> dict[str, str]:
+    r"""The call each line the committed reference refuses stopped at, by
+    the line's key: a row whose old outcome is ``none`` (a line with no
+    baseline yet) moves the reference's own (T2.1r)."""
+    return {
+        case: outcome['stage']
+        for case, outcome in _reference_lines(root).items()
+        if outcome.get('result') == 'refusal'
+        and isinstance(outcome.get('stage'), str)
+    }
+
+
+def _reference_lines(root: Path) -> dict[str, dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = {}
     for path in sorted((root / REFERENCE).glob('*.jsonl')):
         for line in path.read_text(encoding='utf-8').splitlines():
             try:
                 observation = json.loads(line)
-                found[observation['case']] = observation['outcome']['result']
+                case, outcome = observation['case'], observation['outcome']
             except (ValueError, RecursionError, KeyError, TypeError):
                 # The reference's own test refuses such a line by name.
                 continue
+            if (
+                isinstance(case, str)
+                and isinstance(outcome, dict)
+                and 'result' in outcome
+            ):
+                found[case] = outcome
     return found
 
 
@@ -234,6 +259,7 @@ def problems(
     corpus = case_ids(root)
     inventory = inventory_ids(root)
     accepted = reference_outcomes(root)
+    refused = reference_refusals(root)
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
@@ -268,7 +294,9 @@ def problems(
                             f'of {ref["file"]}'
                         )
         for outcome in entry.get('case_outcomes', []):
-            found += _outcome_problems(entry, outcome, corpus, accepted)
+            found += _outcome_problems(
+                entry, outcome, corpus, accepted, refused
+            )
         for item in entry.get('more_exact', []):
             # A line's key: the case, or the case and its database (T2.1d).
             if (
@@ -338,6 +366,7 @@ def _outcome_problems(
     outcome: dict[str, Any],
     corpus: dict[str, Any],
     accepted: dict[str, str],
+    refused: dict[str, str] | None = None,
 ) -> list[str]:
     where = f'{entry["id"]}: {outcome["case"]} on {outcome["runner"]}'
     found = []
@@ -351,6 +380,13 @@ def _outcome_problems(
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
     calls = outcome.get('statements_differ')
     form = _statements_differ_form(old, new, calls)
+    stage = (refused or {}).get(outcome['case'])
+    if form is None and outcome['old'] == 'none' and stage is not None:
+        # A line with no baseline yet moves the reference's own refusal,
+        # at the call it stopped at, to an earlier one (T2.1r).
+        theirs = {'result': 'refusal', 'code': None, 'stage': stage}
+        if _statements_differ_form(theirs, new, calls) == 'earlier':
+            form = 'earlier'
     if calls is not None and form is None:
         # The call whose statements differ is the one refused: the
         # reference's, on a move from that refusal to an answer, or the
