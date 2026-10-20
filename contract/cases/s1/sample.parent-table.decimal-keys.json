@@ -1,0 +1,99 @@
+{
+  "format": "sdm-case/1",
+  "id": "sample.parent-table.decimal-keys",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "decimal128/foreign-key",
+    "decimal128/primary-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE owners AS SELECT (9007199254740992 + i)::DECIMAL(20,0) AS owner_id, ['gold', 'basic'][1 + i] AS tier FROM range(2) t(i)",
+      "CREATE TABLE accounts AS SELECT i::BIGINT AS account_id, (9007199254740992 + i % 2)::DECIMAL(20,0) AS owner_id, (30 + i)::INTEGER AS age FROM range(6) t(i)",
+      "CREATE TABLE payments AS SELECT i::BIGINT AS payment_id, (i % 6)::BIGINT AS account_id, (5 + i)::DOUBLE AS amount, TIMESTAMP '2023-01-01' + to_days((i * 9)::INTEGER) AS ts FROM range(36) t(i)"
+    ],
+    "pql": "PREDICT SUM(payments.amount, 0, 30, days) FOR EACH accounts.account_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-09-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1693526400000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "accounts as the entity table, linked to owners by DECIMAL(20,0) keys 2**53 and 2**53 + 1, one integer apart and one float64: each account reaches its own owner (gold or basic), the keys never merged (KO2-35)",
+  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+}

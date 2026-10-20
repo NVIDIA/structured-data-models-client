@@ -500,6 +500,60 @@ T210_TARGETS = (
 )
 
 
+#: T2.11's S1 cases for the sampling options, none in the inventory:
+#: each option with values the reference takes and values it refuses,
+#: anchor_time='entity' and an entity table with a parent, each carrying
+#: its call as far as the reference goes. The unseeded cases are judged by
+#: properties (KO2-76) and kept in contract/tests/t211-unseeded/.
+T211_SAMPLING = (
+    'sample.anchor-entity',
+    'sample.anchor-entity.context-entity',
+    'sample.anchor-entity.context-time',
+    'sample.anchor-entity.no-time-column',
+    'sample.anchor-entity.regression',
+    'sample.anchor-entity.temporal',
+    'sample.context-anchor-time',
+    'sample.context-anchor-time.entity',
+    'sample.context-anchor-time.later',
+    'sample.context-anchor-time.too-early',
+    'sample.embeddings-answered',
+    'sample.embeddings-only',
+    'sample.exclude-cols.key',
+    'sample.exclude-cols.list',
+    'sample.exclude-cols.null',
+    'sample.exclude-cols.orders-price',
+    'sample.exclude-cols.text-columns',
+    'sample.exclude-cols.unknown-column',
+    'sample.exclude-cols.unknown-table',
+    'sample.exclude-cols.users-age',
+    'sample.max-pq-iterations-1',
+    'sample.max-pq-iterations.text',
+    'sample.max-pq-iterations.zero',
+    'sample.num-hops-1',
+    'sample.num-hops-3',
+    'sample.num-hops.bool',
+    'sample.num-hops.fraction',
+    'sample.num-hops.seven',
+    'sample.num-hops.text',
+    'sample.num-hops.zero',
+    'sample.num-neighbors-2-2',
+    'sample.num-neighbors-4',
+    'sample.num-neighbors.empty',
+    'sample.num-neighbors.number',
+    'sample.num-neighbors.over-num-hops',
+    'sample.num-neighbors.seven-hops',
+    'sample.num-neighbors.zero',
+    'sample.parent-table',
+    'sample.parent-table.decimal-keys',
+    'sample.parent-table.static',
+    'sample.return-embeddings',
+    'sample.seed-7',
+    'sample.seed.negative',
+    'sample.use-prediction-time',
+    'sample.use-prediction-time.false',
+)
+
+
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
 ):
@@ -529,6 +583,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # T2.9 the forecasting cases, each carrying its call as far as the
     # reference goes, and T2.10 its target cases, each an acceptance case;
     # T2.21 its exact-key cases, each carrying its call through predict.
+    # reference goes; T2.11 the sampling options' cases likewise.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -543,6 +598,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T29_FORECASTING,
         *T210_TARGETS,
         *T221_EXACT_KEYS,
+        *T211_SAMPLING,
     }
     for case_id in (*T28C_MULTICALL, *T213_OPTIONS, *T210_TARGETS):
         assert committed[case_id]['status'] == 'acceptance', case_id
@@ -554,6 +610,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T28_RANKING,
         *T29_FORECASTING,
         *T221_EXACT_KEYS,
+        *T211_SAMPLING,
     ):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
