@@ -120,6 +120,9 @@ Round 2 (Claude): one P2 and one P3.
   The replay now answers a diagnostic case's fetch past its recording as the provider's error (vendor code `past the recording`, a note printed), so the core refuses it `PROVIDER_ERROR` and the case is observed; the comparison reports the diagnostic difference, and an acceptance case past its recording still fails the run.
   Run as CI runs it, the Postgres cross-host leg passes `legs` and the comparison.
 
+- One mapping encoding and one reader (the mid-phase design check): a mapping-valued response field is JSON object text in a Utf8 column, a list of mappings a list of those texts, a mapping keyed by other than text the JSON text of its pairs; `sdm_wire::response::mapping` is the one reader, Python's `dict` key equality living only there.
+  It now also reads an object of two members as a pair, as `dict` does; nothing any observation records changes. T2.9 and T2.13 move to it when they rebase.
+
 ### Rebase onto T2.12 (347ffa31)
 
 T2.12 landed first and opened contract v27; the lane was rebased onto it and this package's contract fields added to that working entry (the schema and the lock's v27 line regenerated, `contract_lock.py`: 2 merged and unchanged, 1 working).

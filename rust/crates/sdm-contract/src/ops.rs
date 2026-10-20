@@ -1112,10 +1112,18 @@ pub struct Predicted {
     /// choice 1; written from T2.8 and T2.9), after `probabilities` and
     /// before `answer_index`, each where an answer carries it: `scores`
     /// (list of float64, an item's scores in the endpoint's order),
-    /// `rankings` (list of utf8, an item's rankings, each the JSON text of
-    /// the reference's item value), and `quantiles` (list of struct
+    /// `rankings` (list of utf8, an item's rankings, each a mapping), and
+    /// `quantiles` (list of struct
     /// `quantile` float64, `value` float64, a forecast's quantiles in the
     /// endpoint's order).
+    ///
+    /// A mapping-valued field (T2.8, contract v27) is laid out as JSON
+    /// object text in a Utf8 column, and a list of mappings as a list of
+    /// those texts: a JSON object when every key is text, otherwise (a key
+    /// that is a number, a boolean or null) the JSON list of its `[key,
+    /// value]` pairs, as a JSON object holds no other key. Each is read
+    /// from the answer as Python's `dict` reads it, keys equal as Python's
+    /// are, by the one reader `sdm_wire::response::mapping`.
     ///
     /// A ranking's result (T2.8, contract v27), one row per entity asked
     /// about, in place

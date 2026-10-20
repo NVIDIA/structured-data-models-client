@@ -222,21 +222,25 @@ fn probability(value: &Value) -> Result<f64, Refused> {
     number(value, "prediction.probabilities")
 }
 
-/// A rankings field as the bindings' `_mapping_tuple` reads it, `tuple(
-/// dict(item) for item in value)`: each member a mapping as Python's `dict`
-/// makes one, of an object as it is, of a list of pairs (each a list of two
-/// whose first member a dict may key by, text, a number, a boolean or null,
-/// or text of two characters, a character to a character), and of empty
-/// text none; text iterates its characters and an object its names, each
-/// made a mapping as a member is. A key given twice keeps its first place
-/// and spelling and takes the last value, keys equal as Python's are (`1`,
-/// `1.0` and `true` one key, a NaN none but itself). A mapping keyed by text
-/// alone is a JSON object; one with another key is the list of its pairs,
-/// `[[key, value], ...]`, as JSON can hold no other key. Anything else is
-/// refused (`not_a_mapping`), as `dict` refuses it.
-pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
-    const FIELD: &str = "prediction.rankings";
-    let not = || refused(FIELD, "not_a_mapping");
+/// One mapping of a response field, as Python's `dict` makes one of the
+/// value the transport read: of an object as it is, of a list of pairs, and
+/// of empty text none. A pair is a list of two whose first member a dict
+/// may key by (text, a number, a boolean or null), text of two characters
+/// (a character to a character), or an object of two members (its first
+/// name to its second, as `dict` iterates an object's names). A key given
+/// twice keeps its first place and spelling and takes the last value, keys
+/// equal as Python's are ([`key_of`]). Anything else is refused
+/// (`not_a_mapping`, naming `field`), as `dict` refuses it.
+///
+/// The one reader of a mapping-valued response field (T2.8; the
+/// explanation, the item metadata and the quantiles read it too): the core
+/// lays a mapping out as JSON object text in a Utf8 column, a list of
+/// mappings as a list of those texts. A mapping keyed by text alone is the
+/// JSON object; one with another key (a number, a boolean or null) is the
+/// JSON list of its pairs, `[[key, value], ...]`, as a JSON object holds no
+/// other key. Both forms are read here, keys equal as Python's are in both.
+pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
+    let not = || refused(field, "not_a_mapping");
     // Two characters, as `dict` reads a pair from text.
     let pair_of = |text: &str| -> Option<(Value, Value)> {
         let mut chars = text.chars();
@@ -245,68 +249,83 @@ pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
         };
         Some((Value::Text(a.to_string()), Value::Text(b.to_string())))
     };
-    let mapping = |member: &Value| -> Result<Value, Refused> {
-        match member {
-            Value::Object(_) => Ok(member.clone()),
-            Value::Text(text) if text.is_empty() => Ok(Value::Object(vec![])),
-            Value::Array(pairs) => {
-                let mut built: Vec<(Value, Value)> = Vec::new();
-                for pair in pairs {
-                    let (key, value) = match pair {
-                        Value::Array(two) => match two.as_slice() {
-                            [Value::Array(_) | Value::Object(_), _] => return Err(not()),
-                            [key, value] => (key.clone(), value.clone()),
-                            _ => return Err(not()),
-                        },
-                        Value::Text(text) => pair_of(text).ok_or_else(not)?,
+    match member {
+        Value::Object(_) => Ok(member.clone()),
+        Value::Text(text) if text.is_empty() => Ok(Value::Object(vec![])),
+        Value::Array(pairs) => {
+            let mut built: Vec<(Value, Value)> = Vec::new();
+            for pair in pairs {
+                let (key, value) = match pair {
+                    Value::Array(two) => match two.as_slice() {
+                        [Value::Array(_) | Value::Object(_), _] => return Err(not()),
+                        [key, value] => (key.clone(), value.clone()),
                         _ => return Err(not()),
-                    };
-                    let named = key_of(&key);
-                    match built
-                        .iter_mut()
-                        .find(|(k, _)| named.is_some() && key_of(k) == named)
-                    {
-                        Some(kept) => kept.1 = value,
-                        None => built.push((key, value)),
-                    }
-                }
-                if built.iter().all(|(k, _)| matches!(k, Value::Text(_))) {
-                    Ok(Value::Object(
-                        built
-                            .into_iter()
-                            .filter_map(|(k, v)| match k {
-                                Value::Text(name) => Some((name, v)),
-                                _ => None,
-                            })
-                            .collect(),
-                    ))
-                } else {
-                    Ok(Value::Array(
-                        built
-                            .into_iter()
-                            .map(|(k, v)| Value::Array(vec![k, v]))
-                            .collect(),
-                    ))
+                    },
+                    Value::Text(text) => pair_of(text).ok_or_else(not)?,
+                    Value::Object(two) => match two.as_slice() {
+                        [(first, _), (second, _)] => {
+                            (Value::Text(first.clone()), Value::Text(second.clone()))
+                        }
+                        _ => return Err(not()),
+                    },
+                    _ => return Err(not()),
+                };
+                let named = key_of(&key);
+                match built
+                    .iter_mut()
+                    .find(|(k, _)| named.is_some() && key_of(k) == named)
+                {
+                    Some(kept) => kept.1 = value,
+                    None => built.push((key, value)),
                 }
             }
-            _ => Err(not()),
+            if built.iter().all(|(k, _)| matches!(k, Value::Text(_))) {
+                Ok(Value::Object(
+                    built
+                        .into_iter()
+                        .filter_map(|(k, v)| match k {
+                            Value::Text(name) => Some((name, v)),
+                            _ => None,
+                        })
+                        .collect(),
+                ))
+            } else {
+                Ok(Value::Array(
+                    built
+                        .into_iter()
+                        .map(|(k, v)| Value::Array(vec![k, v]))
+                        .collect(),
+                ))
+            }
         }
-    };
-    match value {
-        Value::Array(members) => members.iter().map(mapping).collect(),
-        Value::Text(text) => text
-            .chars()
-            .map(|c| mapping(&Value::Text(c.to_string())))
-            .collect(),
-        Value::Object(members) => members
-            .iter()
-            .map(|(name, _)| mapping(&Value::Text(name.clone())))
-            .collect(),
         _ => Err(not()),
     }
 }
 
-/// A dict key as Python's equality holds it: text by its text, null as
+/// A rankings field as the bindings' `_mapping_tuple` reads it, `tuple(
+/// dict(item) for item in value)`: each member a [`mapping`]; text iterates
+/// its characters and an object its names, each made a mapping as a member
+/// is. Anything else is refused (`not_a_mapping`).
+pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
+    const FIELD: &str = "prediction.rankings";
+    let one = |member: &Value| mapping(member, FIELD);
+    match value {
+        Value::Array(members) => members.iter().map(one).collect(),
+        Value::Text(text) => text
+            .chars()
+            .map(|c| one(&Value::Text(c.to_string())))
+            .collect(),
+        Value::Object(members) => members
+            .iter()
+            .map(|(name, _)| one(&Value::Text(name.clone())))
+            .collect(),
+        _ => Err(refused(FIELD, "not_a_mapping")),
+    }
+}
+
+/// A dict key as Python's equality holds it, which the reference's client
+/// keys a response's mappings by (`dict`), so two keys the reference holds
+/// one are one here, and only here: text by its text, null as
 /// itself, a boolean or a number by its exact value (an integer's digits, a
 /// whole double's digits, another double by its bits); none for a NaN, which
 /// equals no other key.
@@ -480,4 +499,35 @@ pub fn numeric_text(text: &str) -> Option<f64> {
         return None;
     }
     plain.parse::<f64>().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(text: &str) -> Value {
+        crate::json::read(text.as_bytes()).unwrap()
+    }
+
+    #[test]
+    fn a_mapping_is_read_as_python_s_dict_reads_it() {
+        let made = |text: &str| {
+            mapping(&read(text), "f").map(|v| String::from_utf8(v.to_bytes()).unwrap())
+        };
+        assert_eq!(made(r#"{"a":1}"#), Ok(r#"{"a":1}"#.to_owned()));
+        // A pair of each form: a list of two, two characters, and an object
+        // of two members, its first name to its second.
+        assert_eq!(
+            made(r#"[["a",1],"bc",{"d":0,"e":0}]"#),
+            Ok(r#"{"a":1,"b":"c","d":"e"}"#.to_owned())
+        );
+        // Keys equal as Python's are one, the first kept, the last value.
+        assert_eq!(
+            made(r#"[[1,"x"],[1.0,"y"],[true,"z"]]"#),
+            Ok(r#"[[1,"z"]]"#.to_owned())
+        );
+        assert!(made(r#"[{"a":0}]"#).is_err());
+        assert!(made(r#"[[[1],2]]"#).is_err());
+        assert!(made("3").is_err());
+    }
 }
