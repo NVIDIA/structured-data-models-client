@@ -19,6 +19,7 @@ import sys
 import threading
 import warnings
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -536,9 +537,15 @@ def test_releasing_a_session_does_not_wait_for_a_model_to_finish(
         client.close()
 
 
-def test_an_answer_carries_the_id_the_request_was_sent_under(tabular):
+def test_an_answer_carries_the_id_the_request_was_sent_under(
+    tabular, monkeypatch
+):
     """A NIM echoes the request's id back, and a batch lists them, so an
-    answer from this process carries the id its request went out under."""
+    answer from this process carries the id its request went out under
+    rather than one of its own or none."""
+    monkeypatch.setattr(
+        'sdm_client.adapters.tabular._request_id', lambda: 'sdm-known'
+    )
     frame = people()
     request = Request(
         context=frame.iloc[:45],
@@ -547,5 +554,81 @@ def test_an_answer_carries_the_id_the_request_was_sent_under(tabular):
         task='classification',
     )
     with SDMClient.in_process(tabular) as client:
-        result = client.predict(request, model=KumoTabular())
-    assert result.request_id
+        assert (
+            client.predict(request, model=KumoTabular()).request_id
+            == 'sdm-known'
+        )
+
+
+def test_a_session_answers_under_the_id_it_was_scored_with(
+    relational, monkeypatch
+):
+    """The scoring call has its own id, not the one the context was pinned
+    with, and the answer carries it."""
+    ids = iter(['sdm-pinned', 'sdm-scored'])
+    monkeypatch.setattr(
+        'sdm_client.adapters.relational._request_id', lambda: next(ids)
+    )
+    request = PredictiveQuery(COUNT, graph()).materialize(
+        indices=[0, 1], model=KumoRelational()
+    )
+    with SDMClient.in_process(relational) as client:
+        with client.fit(request, model=KumoRelational()) as fitted:
+            assert fitted.predict(request).request_id == 'sdm-scored'
+
+
+def test_a_numpy_scalar_holding_no_python_value_is_refused_not_recursed_on(
+    tabular,
+):
+    """``np.longdouble(1).item()`` is an ``np.longdouble``, so reading one
+    by its Python value has to stop rather than ask itself again."""
+    frame = people()
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+        inference={'use_prediction_time': np.longdouble(1)},
+    )
+    with SDMClient.in_process(tabular) as client:
+        error = refused(lambda: client.predict(request, model=KumoTabular()))
+    assert error.code == 'INVALID_REQUEST'
+
+
+def test_closing_beats_a_call_that_was_already_running(relational, monkeypatch):
+    """``close()`` no longer waits for a model, so a call that was running
+    when it landed must not put back what closing just released."""
+    running, release = threading.Event(), threading.Event()
+    fitted = type(relational).fit
+
+    def watched(self, *args, **kwargs):
+        running.set()
+        assert release.wait(timeout=60)
+        return fitted(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(relational), 'fit', watched)
+    request = PredictiveQuery(COUNT, graph()).materialize(
+        indices=[0, 1], model=KumoRelational()
+    )
+    client = SDMClient.in_process(relational)
+    backend = client._backend
+    failed: list[BaseException] = []
+
+    def pin() -> None:
+        try:
+            client.fit(request, model=KumoRelational())
+        except BaseException as error:
+            failed.append(error)
+
+    call = threading.Thread(target=pin)
+    call.start()
+    try:
+        assert running.wait(timeout=60)
+        client.close()
+        release.set()
+        call.join(timeout=120)
+        assert not call.is_alive()
+    finally:
+        release.set()
+    assert failed, 'the call carried on against a closed client'
+    assert backend._sessions == {}

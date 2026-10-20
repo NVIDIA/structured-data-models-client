@@ -108,7 +108,7 @@ INTERNAL_PATTERNS = (
     # as structured-data-models-nim, and is still refused.
     re.compile(
         r'\bstructured-data-models-'
-        r'(?!(?:client|api|pql|connectors|relational-engine)\b)\w',
+        r'(?!(?:client|api|pql|connectors|relational-engine)(?![\w-]))\w',
         re.IGNORECASE,
     ),
 )

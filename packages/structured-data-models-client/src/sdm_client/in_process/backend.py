@@ -162,6 +162,7 @@ class InProcessBackend:
             fitted = _fit(model, context)
             session_id = uuid.uuid4().hex
             with self._state:
+                self._require_open()
                 self._sessions[session_id] = _Session(
                     served=served,
                     task=copy.deepcopy(payload['task']),
@@ -220,13 +221,19 @@ class InProcessBackend:
     def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
 
-        Holds the state lock, so a model is loaded once.
+        Runs are serialized, so a model is loaded once. The load is not held
+        under the state lock, because it fetches published weights and
+        releasing a session should not wait for that, and a client closed
+        while it ran does not keep what it loaded.
         """
         served = _SERVED[model_id]
         with self._state:
             model = self._models.get(model_id)
-            if model is None and self._loads:
-                model = self._models[model_id] = _loaded(served, self._device)
+        if model is None and self._loads:
+            model = _loaded(served, self._device)
+            with self._state:
+                self._require_open()
+                self._models[model_id] = model
         if model is None:
             raise StructuredDataError(
                 f'{model_id} is not served by this client, which was opened '

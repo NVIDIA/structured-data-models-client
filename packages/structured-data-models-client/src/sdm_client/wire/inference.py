@@ -61,10 +61,14 @@ def _boolean(value: Any) -> bool:
 
     A NumPy scalar is read as the Python value it holds: a frame hands those
     back, and a payload built by hand keeps them, but ``np.False_`` is not a
-    ``bool`` and ``np.int64(0)`` is not an ``int``.
+    ``bool`` and ``np.int64(0)`` is not an ``int``. One that holds no Python
+    value, such as ``np.longdouble``, whose ``item()`` is itself, is refused
+    like any other value that is not a boolean.
     """
     if isinstance(value, np.generic):
-        return _boolean(value.item())
+        plain = value.item()
+        if not isinstance(plain, np.generic):
+            return _boolean(plain)
     if isinstance(value, bool):
         return value
     if isinstance(value, str) and value.lower() in _TRUE | _FALSE:
