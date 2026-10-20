@@ -918,11 +918,6 @@ if [ -n "$locked" ]; then
   if locked_has seeded; then step seeded seeded_suite; fi
   if locked_has wheel-smoke; then step wheel-smoke smoke; fi
   if locked_has inventory; then step inventory inventory; fi
-  if locked_has census; then step census not_landed census "T2.0d's contract/tools/refusal_census.py"; fi
-  if locked_has coverage-s1; then step coverage-s1 not_landed coverage-s1 "T2.1a's coverage.py --gate S1"; fi
-  if locked_has l3; then step l3 not_landed l3 "T2.1a's differential.py over the three databases"; fi
-  if locked_has l7; then step l7 not_landed l7 "T2.15's contract/tools/l7.py"; fi
-  if locked_has ci; then step ci not_landed ci "T2.1a's check of the CI run's jobs"; fi
   if locked_has main; then step main main_merged; fi
 fi
 

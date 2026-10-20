@@ -6178,11 +6178,11 @@ entries:
   - 'contract/key-cast-vectors.json#decimal128-38-37.wide.inexact success -> refusal INVALID_REQUEST'
   status: approved
   approved_by: owner
-  decision_ref: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-77}
   notes: >-
     Approved by the owner on 2026-10-17 ("keep refusing"), relayed by the
-    orchestrator: owner 2026-10-17, P2B-8; its decisions row lands with the
-    next owner-row docs landing, which this entry then cites. A refusal of
+    orchestrator: owner 2026-10-17, P2B-8; its decisions row is KO2-77
+    (T2.1s). A refusal of
     inputs the reference accepts, kept since these entities would be
     answered only by being taken for a key the caller did not name. Found
     by the key-cast vectors at T2.0c.

@@ -13,7 +13,7 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.0a | Design, decisions, tracker, locked-set file; learnings 17-22 | – | in review | Rounds below | Revised with the owner's answers (fix 12) |
 | T2.0f | The locked-set reader for Phase 2, check 7's `main` ancestry, the `<case>@<database>` keys | H | landed | b8f704e3 | Lands after T2.0e and before T2.0a, so the lock reads with the checkpoint's reader |
 | T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | B | in progress | – | Lands from lane B after T2.0e and T2.0a (orchestrator's decision) |
-| T2.0d | Refusal census | H | not started | – | First run on DuckDB |
+| T2.0d | Refusal census | H | dropped | – | Folded into T2.1a, which landed the census tool and its first DuckDB run (abd6846b, [tracker-T2.1a.md](tracker-T2.1a.md)); a one-time report at the phase end, not a gate step (KO2-53, KO2-76) |
 | T2.0b | Carried tooling rows | H | not started | – | After T2.0e (both change `ratchet.py`) |
 | T2.1a | The S1 judging path, all cases on three databases | A | not started | – | |
 | T2.1b | Contract v26, with the table source | A | not started | – | |
