@@ -10,7 +10,6 @@
     "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb"
   ],
-  "seam": "decimal",
   "cells": [
     "decimal128/feature"
   ],
