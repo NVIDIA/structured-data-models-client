@@ -30,7 +30,6 @@ use arrow_schema::SchemaRef;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
     AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderCapabilities, ProviderError,
-    SqlParam,
 };
 use sdm_contract::ops::{OperationResult, SAMPLER_STATE_VERSION, SamplerMemo, SamplerState};
 use sdm_contract::run::{Endpoint, FetchStep, ModelCall, ReplyId};
@@ -220,28 +219,20 @@ impl Asker {
     /// dialect binds keys as text (`DataAccess::bound_keys`, T2.14d): the
     /// attachment replaced, once, before the host takes it.
     fn bind_keys(&self, data: &DataAccess, plan: &FetchPlan) -> Result<(), CoreError> {
-        let FetchPlan::Sql { statements, .. } = plan else {
-            return Ok(());
-        };
-        for statement in statements {
-            for param in &statement.params {
-                let SqlParam::KeySet { keys, .. } = param else {
-                    continue;
-                };
-                let mut shared = lock(&self.shared);
-                if shared.bound.contains(&keys.attachment) {
-                    continue;
-                }
-                let Some(Attachment::Arrow(made)) = shared.attachments.get(&keys.attachment) else {
-                    continue;
-                };
-                if let Some(bound) = data.bound_keys(made)? {
-                    shared
-                        .attachments
-                        .insert(keys.attachment, Attachment::Arrow(bound));
-                }
-                shared.bound.insert(keys.attachment);
+        for attachment in plan.key_sets() {
+            let mut shared = lock(&self.shared);
+            if shared.bound.contains(&attachment) {
+                continue;
             }
+            let Some(Attachment::Arrow(made)) = shared.attachments.get(&attachment) else {
+                continue;
+            };
+            if let Some(bound) = data.bound_keys(made)? {
+                shared
+                    .attachments
+                    .insert(attachment, Attachment::Arrow(bound));
+            }
+            shared.bound.insert(attachment);
         }
         Ok(())
     }

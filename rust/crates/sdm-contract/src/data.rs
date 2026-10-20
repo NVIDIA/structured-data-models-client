@@ -845,6 +845,22 @@ impl FetchPlan {
             FetchPlan::Sql { expect, .. } | FetchPlan::Host { expect } => expect,
         }
     }
+
+    /// The attachments of the key sets the plan's statements bind, in
+    /// order, each as often as it is bound; none for a host plan.
+    pub fn key_sets(&self) -> Vec<AttachmentId> {
+        match self {
+            FetchPlan::Sql { statements, .. } => statements
+                .iter()
+                .flat_map(|statement| &statement.params)
+                .filter_map(|param| match param {
+                    SqlParam::KeySet { keys, .. } => Some(keys.attachment),
+                    _ => None,
+                })
+                .collect(),
+            FetchPlan::Host { .. } => Vec::new(),
+        }
+    }
 }
 
 /// The data-layer port (decision H14): what the core plans every data
