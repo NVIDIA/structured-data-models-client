@@ -179,18 +179,23 @@ with SDMClient.in_process(relational) as client:
 It answers as the NIM does. The request is prepared exactly as it is for a NIM,
 and the model is run on it directly, with no HTTP in between. The context is
 fitted with the NIM's seed and settings, and `fit()` holds its session in
-memory. A request the model cannot answer is refused with a
-`StructuredDataError` whose `code` says why, from the codes a NIM uses, such as
-`UNSUPPORTED_OUTPUT`. It is not a `NimRequestError` and has no HTTP status,
-since nothing was sent. Inside a session the code is the reason's own, where a
-NIM files the refusal under `SESSION_CREATE_VALIDATION_FAILED` or
-`SESSION_PREDICT_SCHEMA_MISMATCH`. On a GPU it computes as the NIM does, and on
-the same GPU it gives the NIM's answers exactly. Two things differ by design.
-On a CPU it computes at full precision and draws its random numbers there, so
-its answers can differ from a GPU-hosted NIM's by more than rounding: in one
-comparison a class probability moved by 0.16. And the limits a deployment sets
-to protect a shared server are not applied, since none is shared here; see
-[limits](../reference/limits.md).
+memory. On a GPU it computes as the NIM does, and on the same GPU it gives the
+NIM's answers exactly.
+
+A request the model cannot answer is refused with a `StructuredDataError` whose
+`code` says why, from the codes a NIM uses, such as `UNSUPPORTED_OUTPUT`. It is
+not a `NimRequestError` and has no HTTP status, since nothing was sent. Inside
+a session the code is the reason's own, where a NIM files the refusal under
+`SESSION_CREATE_VALIDATION_FAILED` or `SESSION_PREDICT_SCHEMA_MISMATCH`. A
+request built by hand and passed to `Request.materialized` is checked for what
+the model needs to read it, not against every rule of the request contract, so
+a key the contract does not name is ignored here, where a NIM refuses it.
+
+Two things differ by design. On a CPU it computes at full precision and draws
+its random numbers there, so its answers can differ from a GPU-hosted NIM's by
+more than rounding: in one comparison a class probability moved by 0.16. And
+the limits a deployment sets to protect a shared server are not applied, since
+none is shared here; see [limits](../reference/limits.md).
 
 This needs `pip install 'structured-data-models-client[in-process]'`, which
 brings PyTorch, on Python 3.11 or later. A relational request is still

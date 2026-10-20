@@ -267,9 +267,10 @@ def test_a_long_question_is_sent_within_the_contract_and_answered(client_for):
         f'users.age > {i}' for i in range(60)
     )
     request = PredictiveQuery(query, graph()).materialize(indices=[0, 1])
+    logged = request.payloads[0]['metadata']['source_query']
     sent = RelationalAdapter().prediction_plan(request, ('prediction',))
-    assert len(query) > 1024
-    assert all(len(p['metadata']['source_query']) <= 1024 for p in sent)
+    assert len(logged) > 1024
+    assert [p['metadata']['source_query'] for p in sent] == [logged[:1024]]
     with client_for('kumo-relational') as client:
         answer = client.predict(request, model=KumoRelational())
 

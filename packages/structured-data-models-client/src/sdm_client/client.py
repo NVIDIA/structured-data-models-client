@@ -251,7 +251,8 @@ class FittedModel:
 
 
 class SDMClient:
-    r"""A connection to one Universal TFM NIM.
+    r"""A connection to one Universal TFM NIM, or to models run in this
+    process when opened with :meth:`in_process`.
 
     Use it as a context manager, or call :meth:`close`.
     """
@@ -445,7 +446,8 @@ class SDMClient:
         return describe(self._spec(model))
 
     def health_ready(self) -> bool:
-        r"""Whether the NIM answers ``GET /v1/health/ready`` with 200."""
+        r"""Whether the NIM answers ``GET /v1/health/ready`` with 200, or for
+        a client opened with :meth:`in_process`, whether it is still open."""
         return self._backend.health_ready()
 
     def predict(
