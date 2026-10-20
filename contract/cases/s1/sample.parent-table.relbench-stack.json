@@ -35,7 +35,7 @@
       "DROP TABLE orders",
       "DROP TABLE users",
       "CREATE TABLE users AS SELECT i::BIGINT AS Id, (10 * i)::INTEGER AS Reputation, TIMESTAMP '2019-01-01' + to_days((i * 20)::INTEGER) AS CreationDate FROM range(6) t(i)",
-      "CREATE TABLE posts AS SELECT i::BIGINT AS Id, (i % 6)::BIGINT AS OwnerUserId, CASE WHEN i < 4 THEN NULL ELSE (i % 4)::BIGINT END AS ParentId, (1 + i % 2)::INTEGER AS PostTypeId, TIMESTAMP '2020-01-01' + to_days((i * 9)::INTEGER) AS CreationDate FROM range(20) t(i)",
+      "CREATE TABLE posts AS SELECT i::BIGINT AS Id, (i % 6)::BIGINT AS OwnerUserId, ((i + 1) % 20)::BIGINT AS ParentId, (1 + i % 2)::INTEGER AS PostTypeId, TIMESTAMP '2020-01-01' + to_days((i * 9)::INTEGER) AS CreationDate FROM range(20) t(i)",
       "CREATE TABLE votes AS SELECT i::BIGINT AS Id, ((i * i) % 20)::BIGINT AS PostId, (i % 6)::BIGINT AS UserId, (1 + i % 3)::INTEGER AS VoteTypeId, TIMESTAMP '2020-01-05' + to_days((i * 3)::INTEGER) AS CreationDate FROM range(120) t(i)"
     ],
     "from_source": {
@@ -203,6 +203,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "RelBench rel-stack's stack-post-votes-90d (contract/tools/relbench.py), a few dozen rows of its shape: posts as the entity table, linked to its parent users and to itself (ParentId), votes counted per post over 90 days",
+  "why": "RelBench rel-stack's stack-post-votes-90d (contract/tools/relbench.py), a few dozen rows of its shape: posts as the entity table, linked to its parent users and to itself (ParentId, never null: a null foreign key is P1B-13's, covered by its own cases), votes counted per post over 90 days",
   "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
 }
