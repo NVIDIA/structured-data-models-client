@@ -10,8 +10,6 @@
   "pg-values:moved:_isoformat",
   "pg-values:moved:json_text",
   "pg-values:moved:key_set_json",
-  "stype:decimal.stype-past-float-precision",
-  "stype:decimal.stype-past-float-precision@postgres",
   "wording:fx4:infinity.timestamp.negative",
   "wording:fx4:infinity.timestamp.positive",
   "wording:fx4:infinity.timestamptz.negative",
