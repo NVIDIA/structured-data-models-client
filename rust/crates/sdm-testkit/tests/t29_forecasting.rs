@@ -282,6 +282,17 @@ fn integer(cell: &Value) -> Option<u64> {
     cell.get("i64")?.as_str()?.parse().ok()
 }
 
+/// A row's quantiles, each key with its value's IEEE-754 bits, in the
+/// order written: from the JSON object text of the mapping (contract v27,
+/// a mapping-valued field as T2.8 lays one out, `{"utf8": text}`).
+fn pairs(cell: &Value) -> Option<Vec<(String, String)>> {
+    let text = cell.get("utf8")?.as_str()?;
+    let read: serde_json::Map<String, Value> = serde_json::from_str(text).ok()?;
+    read.into_iter()
+        .map(|(k, v)| Some((k, format!("{:016x}", v.as_f64()?.to_bits()))))
+        .collect()
+}
+
 /// Why a predicted answer's result does not hold each row's quantiles as
 /// its step's call answered them, if it does not.
 fn quantile_problem(key: &str, answer: &Value) -> Option<String> {
@@ -298,11 +309,7 @@ fn quantile_problem(key: &str, answer: &Value) -> Option<String> {
     };
     let step = at("forecast_step");
     let keys = |cell: &Value| -> Option<Vec<String>> {
-        cell.get("map")?
-            .as_array()?
-            .iter()
-            .map(|pair| pair[0].as_str().map(str::to_owned))
-            .collect()
+        Some(pairs(cell)?.into_iter().map(|(k, _)| k).collect())
     };
     let Some(column) = (0..names.len()).find(|&c| {
         !rows.is_empty()
@@ -317,16 +324,7 @@ fn quantile_problem(key: &str, answer: &Value) -> Option<String> {
     for row in rows {
         let index = integer(&row[row_index])?;
         let call = step.and_then(|s| integer(&row[s])).map_or(0, |s| s - 1);
-        let given: Vec<(String, String)> = row[column]["map"]
-            .as_array()?
-            .iter()
-            .map(|pair| {
-                (
-                    pair[0].as_str().unwrap_or_default().to_owned(),
-                    pair[1].as_str().unwrap_or_default().to_owned(),
-                )
-            })
-            .collect();
+        let given = pairs(&row[column])?;
         if given != spread(call, index) {
             return Some(format!(
                 "{key}: row {index} of step {} holds {given:?}, not its call's quantiles",
