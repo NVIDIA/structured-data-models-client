@@ -414,24 +414,6 @@ def attachment(value: Any, *, named: bool = False) -> bytes:
 
 #: A value no contract type holds, as the contract writes it.
 UNREADABLE = 'unreadable'
-#: The longest text :func:`spelled` gives the core; a value whose ``repr``
-#: is longer is given as :data:`UNREADABLE`, so a control message stays
-#: within its cap.
-SPELLED_MOST = 2_000
-
-
-def spelled(value: Any) -> Any:
-    r"""A value no contract type holds, as ``Given`` writes it with the
-    text Python shows it as (``repr``), which the core names in its refusal
-    as the reference names the value (T2.14b); :data:`UNREADABLE` where its
-    ``repr`` fails or is past :data:`SPELLED_MOST` characters."""
-    try:
-        text = repr(value)
-    except Exception:  # noqa: BLE001 - a caller's value's own repr
-        return UNREADABLE
-    if not isinstance(text, str) or len(text) > SPELLED_MOST:
-        return UNREADABLE
-    return {'spelled': str.__str__(text)}
 
 
 def given(value: Any) -> Any:
@@ -440,16 +422,15 @@ def given(value: Any) -> Any:
 
 
 def given_text(value: Any) -> Any:
-    r"""Text as the contract writes it, or any other value
-    :func:`spelled`."""
+    r"""Text as the contract writes it, or :data:`UNREADABLE`."""
     if isinstance(value, str):
         return given(str.__str__(value))
-    return spelled(value)
+    return UNREADABLE
 
 
 def given_name_or_none(value: Any) -> Any:
     r"""A name or ``None`` (a time column), as the contract writes it, or
-    any other value :func:`spelled`."""
+    :data:`UNREADABLE`."""
     if value is None:
         return given(None)
     return given_text(value)
@@ -465,10 +446,10 @@ def given_key(value: Any) -> tuple[Any, Any]:
     if isinstance(value, (bytes, Mapping, AbstractSet)) or not isinstance(
         value, Iterable
     ):
-        return spelled(value), None
+        return UNREADABLE, None
     names = tuple(value)
     if not all(isinstance(name, str) for name in names):
-        return spelled(value), None
+        return UNREADABLE, None
     return given([str.__str__(name) for name in names]), names
 
 

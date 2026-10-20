@@ -27,15 +27,49 @@ Paths are under `packages/structured-data-models-client/src/sdm_client/`; a defi
 
 | MID2 row | Rule held outside the core | Where, at 1d85bce3 | Owner |
 |---|---|---|---|
-| P2-4 | Host-resolved facts: whether the target is windowed and its entity table, read from the old validator's tree for every query but T2.18's `Unresolved` ones, though the core returns both (`QueryFacts`) | `_rust/materialize.py`'s `asked` (`:470`) | T2.14b |
 | P2-4 | The old validator's pick: which validator resolves a query, chosen by a Python column-name check (`schema.py`'s `names_a_query_cannot_say`) | `query.py`'s `PredictiveQuery._resolve` (`:636`, the check at `:662-666`) | T2.14b |
-| P2-4 | The host's own step numbering: its call counter stamped on a refusal as `_forecast_step`, which `client.py`'s `_said_of_the_part` prefers over the core's `forecast_step`, and set on batched calls that are not a forecast too | `_rust/predict.py`'s `predict` (`:395`, in `model_call`); read at `client.py:878` | T2.14b |
-| P2-4 | Any ranking split still in Python: the split itself is the core's since T2.8 (`sdm-request`'s ranking); what remains is the host's call counter mapped to a candidate's position, stamped as `_ranking_candidate` | `_rust/predict.py`'s `predict` (`:398`); read at `client.py:895` | T2.14b |
-| P2-2 (rest) | The candidate-repeat rule: a candidate equal to one given before it is a repeat by Python equality, as the reference's `dict.fromkeys` keeps the first | `_rust/materialize.py`'s `_candidates` (`:213`) | T2.14b |
-| P2-3 | The Postgres value rules: an interval tagged `sdm:interval` = `timedelta` (`INTERVAL_TAG`, `:67`); a JSON scalar written with Python's `str()`, so JSON `true` reaches the core as `"True"` (`json_text`, `:222`); an interval built with months always 0 (`_interval`, `:234`); how a `numeric` past 76 digits or with no precision is read (`_Numeric`, `:325`); the core's key set encoded as JSON text for the dialect's `$1::jsonb` binding (`key_set_json`, `:494`); seed times written as pandas' `Timestamp.isoformat` writes them (`_isoformat`, `:524`) | `_rust/providers/postgres.py` | T2.14d |
-| Phase 1 ledger (`phase-1/design.md`, design scope item 5) | The answer re-encoded before the core reads it, and the made-up too-deep body coupled to the core's reader's depth | `_rust/predict.py`'s `_encoded` (`:137`) and `_ENCODED_DEPTH` (`:134`), used at `:381` and `:409` | T2.14b |
 
 ### Deviations
 
 - Landed in two parts: T2.1v first (the checkpoint's copy judges only what it freezes; first landed as "T2.14a1", an ID outside the package-ID pattern, rolled back and landed again as T2.1v), since the gate's checkpoint copy of the freeze refused a baseline naming files outside its own `FROZEN`, so no candidate could widen the freeze; T2.14a then, rebased onto T2.1v's landing.
 Packages landing after T2.14a (T2.11, T2.13b) declare their changes to the newly frozen files in their next fix round, as the brief says.
+
+
+## T2.14b
+
+T2.14b is the host clean-up (the design's T2.14b row), with T2.14d (the Postgres value rules, MID2 P2-3) and the decimal stype fix riding along in the same landing, by the owner's granularity decision.
+Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/sdm-testkit/tests/t214b_host.rs`, `rust/crates/sdm-schema/tests/t214b_decimal_stype.rs`, `packages/structured-data-models-client/tests_test_ops/test_t214d_postgres_values.py`), gated by `contract/tests/t214b-pending.json`.
+
+### What changed
+
+- **Response bytes untouched.**
+  The HTTP transport's `predict_body` gives back the endpoint's answer as the bytes it sent, and the Databricks transport's `predict_body` the served model's answer text; `SDMClient._send_body` hands either to the core as it is.
+  `_rust/predict.py`'s `_encoded`, `_ENCODED_DEPTH` and the made-up too-deep body are deleted.
+  An answer the reference's transport refuses as not a JSON object is still refused by the transport (`TRANSPORT_ERROR`, as the reference); one nested past the interpreter's reader goes to the core, which refuses it as too deep (register P1B-22).
+- **Facts from the core.**
+  `_rust/materialize.py`'s `asked` reads the target's windowing and entity table from the core's `Materialized.query` for every query.
+  A refused call's forecast step and ranking candidate are the core's `forecast_step` and `ranking_candidate`, put on the raised refusal by `_rust/run.py`'s `_of_the_part`; the host's call counter (`_forecast_step`, `_ranking_candidate`) is gone.
+  The candidate repeats are the core's (`sdm-request`'s `ranking::distinct`, Python's equality by key): the host passes each candidate as given and no longer writes `repeat`.
+- **State version.**
+  An unknown `RequestState` version is refused by name: the core adds the version it reads (`reads`), and the host says both.
+- **Wording (KO2-32 and the carried notes).**
+  The core decides each refusal's code and fields; `_rust/errors.py`'s `WORDED` and `SAID` word them in the reference's words, with no rule beyond the tables.
+  G15: `describe_source`'s and `edit_schema`'s refusals carry a `reason` and what the reference names (the tables or the columns the table has, the data type on the wire, the meaning, the link's key).
+  The generic refusals at materialize and predict (the sampling options, the anchor rules, a missing exclusion, the hops, the seed, a one-class binary target, a text candidate on an integer key, a non-finite target) carry a `reason`, the table, the value given as the host wrote it and what the graph has, and are worded as the reference words them.
+  M4: `CONTEXT_BEFORE_DATA` and `ANCHOR_AFTER_DATA` name their times and are said, with `MISSING_INDICES`, in the reference's words.
+  FX-1: the core gives `FLOAT32_OVERFLOW` where a finite double becomes infinite in a target's or an aggregate's float32 cast (not on Postgres, which the reference reads as nullable `Float64`), shown as a `RuntimeWarning` in pandas' words.
+  FX-4: a whole table's smallest timestamp that is DuckDB's infinity is shown as `datetime.max` or `datetime.min`, as the reference's `fetchall` hands it over.
+- **T2.14d.**
+  `sdm-data`'s new `pg_values.rs` holds the Postgres value rules (a JSON value as the reference writes it, a `numeric` past 76 digits by its declaration, a key set's zone-less times and binary as the reference binds them); `sdm-core` applies them to each Postgres fetch (`DataAccess::conform`, `DataAccess::bound_keys`).
+  The Postgres provider only moves the driver's rows into Arrow: `json_text`, `_interval`, `_after_read`, `_Numeric`, `key_set_json` and `_isoformat` are gone.
+  No statement's text changed, so the rust-host Postgres replay is not re-recorded.
+- **Decimal stype.**
+  `decimal_to_f64` moved from `sdm-engine`'s `labels.rs` into `sdm-contract`'s `scalar.rs`; `sdm-schema`'s inference reads a `Decimal128` of scale above 0 as that double, so stype counting, key scoring and distinct examples count what the reference's cast counts.
+  Materialize and predict keep exact decimals (P2B-1).
+- **Ledger.**
+  The rows moved (P2-4's facts, step numbering and ranking split; P2-2's repeats; P2-3; the answer re-encoding) are deleted from the ledger above, their bridge entries declared `moved` naming T2.14b in `scripts/rust_core/bridge_changes.json`, and `bridge_freeze.json` rewritten with `--write`.
+
+### Deviations
+
+- The old validator's pick (`PredictiveQuery._resolve`) stays in the ledger: the core route still builds the old validator's query object for the materializer's call, though no fact is read from it any more.
+- Thirteen wording keys stay pending, each blocked by a decision the owner holds: the reference's message names an input value that H17 keeps out of every error (`key.uint64-above-int64-max`'s cell, `rank.entities-by-candidates.at`'s missing keys), the literal E79 keeps out of a refusal (`date.day-first-then-packed`), or a value no contract type holds, which E101 has the host write as `unreadable` with nothing of it (`wording.key-number`, `wording.time-number`).

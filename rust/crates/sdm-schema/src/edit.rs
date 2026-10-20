@@ -235,9 +235,7 @@ fn primary_key(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "primary_key")?;
     let names = match key {
-        Given::Unreadable | Given::Spelled(_) => {
-            return Err(key_not_names(table, "primary_key", key.spelled()));
-        }
+        Given::Unreadable => return Err(key_not_names(table, "primary_key")),
         Given::Value(None) => {
             let shape = &mut description.tables[at];
             shape.duplicate_keys = Some(Scalar::UInt64(0));
@@ -287,14 +285,7 @@ fn time_column(
 ) -> Result<Option<ColumnRef>, CoreError> {
     let at = table_at(description, table, "time_column")?;
     let name = match column {
-        Given::Unreadable | Given::Spelled(_) => {
-            return Err(time_column_not_a_name(
-                table,
-                "time_column",
-                column.spelled(),
-                &columns_of(&description.tables[at]),
-            ));
-        }
+        Given::Unreadable => return Err(time_column_not_a_name(table, "time_column")),
         Given::Value(None) => {
             description.tables[at].time_column = None;
             return Ok(None);
@@ -353,11 +344,8 @@ fn stype_of(
         );
         return Err(match stype {
             Given::Value(text) => refused
-                .with_field("rule", Detail::text("not_a_semantic_type"))
+                .with_field("reason", Detail::text("not_a_semantic_type"))
                 .with_field("given_text", Detail::text(text)),
-            Given::Spelled(text) => refused
-                .with_field("rule", Detail::text("not_a_semantic_type_spelled"))
-                .with_field("given", Detail::text(text)),
             Given::Unreadable => refused,
         });
     };
@@ -419,13 +407,8 @@ fn leave_out(
 ) -> Result<(), CoreError> {
     let at = table_at(description, table, "column")?;
     let Given::Value(name) = column else {
-        return Err(time_column_not_a_name(
-            table,
-            "column",
-            column.spelled(),
-            &columns_of(&description.tables[at]),
-        )
-        .with_field("rule", Detail::text("column_not_a_name")));
+        return Err(invalid("a column named is not its table's", "column")
+            .with_field("table", Detail::text(table)));
     };
     let shape = &mut description.tables[at];
     let index = column_at(shape, name, "column")?;
@@ -435,7 +418,7 @@ fn leave_out(
             table,
             name,
         )
-        .with_field("rule", Detail::text("left_out_key")));
+        .with_field("reason", Detail::text("left_out_key")));
     }
     if shape.time_column.as_deref() == Some(name.as_str()) {
         return Err(named(
@@ -443,7 +426,7 @@ fn leave_out(
             table,
             name,
         )
-        .with_field("rule", Detail::text("left_out_time_column")));
+        .with_field("reason", Detail::text("left_out_time_column")));
     }
     shape.columns.remove(index);
     Ok(())
@@ -469,15 +452,10 @@ fn relationships(
     let mut given = Vec::with_capacity(links.len());
     for link in links {
         let Given::Value(link) = link else {
-            let refused = invalid(
+            return Err(invalid(
                 "a relationship given is not a relationship",
                 "relationships",
-            )
-            .with_field("rule", Detail::text("not_a_relationship"));
-            return Err(match link.spelled() {
-                Some(text) => refused.with_field("given", Detail::text(text)),
-                None => refused,
-            });
+            ));
         };
         checked(&description.tables, link)?;
         given.push(link.clone());

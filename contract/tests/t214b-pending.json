@@ -7,7 +7,13 @@
   "wording:named:key.uint64-above-int64-max",
   "wording:named:rank.entities-by-candidates.at",
   "wording:named:rank.entities-by-candidates.at@postgres",
-  "wording:named:rank.entities-by-candidates.at@sqlite"
+  "wording:named:rank.entities-by-candidates.at@sqlite",
+  "wording:named:wording.key-number",
+  "wording:named:wording.key-number@postgres",
+  "wording:named:wording.key-number@sqlite",
+  "wording:named:wording.time-number",
+  "wording:named:wording.time-number@postgres",
+  "wording:named:wording.time-number@sqlite"
  ],
  "authored": [
   "host:facts-from-the-core",

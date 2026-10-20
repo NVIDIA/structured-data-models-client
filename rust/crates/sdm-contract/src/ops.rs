@@ -635,17 +635,11 @@ pub enum SchemaEdit {
 /// error raised while reading a collection is the caller's, never
 /// `unreadable`. Whether a value is valid (an empty key, a column the
 /// table lacks) is the core's call, never the host's.
-///
-/// A value no contract type holds may instead be given `{"spelled":
-/// "<text>"}`, the text the host's language shows it as (in Python, its
-/// `repr`), which the core takes as `unreadable` and names in its refusal
-/// (`given`), as the reference names the value (T2.14b).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Given<T> {
     Value(T),
     Unreadable,
-    Spelled(String),
 }
 
 impl<T> Given<T> {
@@ -653,16 +647,7 @@ impl<T> Given<T> {
     pub fn value(&self) -> Option<&T> {
         match self {
             Given::Value(value) => Some(value),
-            Given::Unreadable | Given::Spelled(_) => None,
-        }
-    }
-
-    /// The host's text of a value no contract type holds, where it gave
-    /// one.
-    pub fn spelled(&self) -> Option<&str> {
-        match self {
-            Given::Spelled(text) => Some(text),
-            Given::Value(_) | Given::Unreadable => None,
+            Given::Unreadable => None,
         }
     }
 }
