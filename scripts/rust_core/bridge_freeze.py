@@ -115,6 +115,12 @@ gate judges it with its checkpoint's copy (T2.14a1). On the same
 principle this copy judges only what it freezes: a baseline entry for a
 name of a frozen file it does not cover, and a declaration of an entry it
 does not measure, are ignored; every entry it freezes is judged as before.
+Those tolerances are for a copy judging another tree's lists, the gate's
+checkpoint copy. A copy judging its own tree (strict: the tree's
+``bridge_freeze.py`` is this file, byte for byte, as where ``prepush.sh``
+and CI's ``rust-lint`` run it) keeps every refusal: a baseline entry for a
+file or name it does not freeze, so the baseline holds what ``--write``
+writes, and a declaration of an entry it does not freeze, stale (T2.14a).
 
 Threat model (decision E56, checkpoint 4): the threat is honest drift by
 cooperating agents, a rule added to the bridge by ordinary means and not
@@ -481,13 +487,16 @@ def _covered(rel: Path, measured: Measured) -> list[str]:
     return sorted(name for name in names if name in measured)
 
 
-def _freezes(rel: Path, name: str) -> bool:
+def _freezes(rel: Path, name: str, strict: bool = False) -> bool:
     """Whether this copy freezes ``name`` of ``rel``: what it judges. A later
     copy may freeze more (T2.14a1): the gate judges a candidate with its
     checkpoint's copy, which ignores the entries and declarations of what it
-    does not freeze and judges everything it does freeze as before."""
-    return rel in FROZEN and (
-        rel in WHOLE or name == MODULE or name in COVERED.get(rel, ())
+    does not freeze and judges everything it does freeze as before. A
+    ``strict`` run, a copy judging its own tree, judges every entry."""
+    return (
+        strict
+        or rel in FROZEN
+        and (rel in WHOLE or name == MODULE or name in COVERED.get(rel, ()))
     )
 
 
@@ -526,7 +535,7 @@ def _json(text: str, where: str) -> tuple[Any, list[str]]:
 
 
 def load(
-    text: str | None, where: str, *, base: bool = False
+    text: str | None, where: str, *, base: bool = False, strict: bool = False
 ) -> tuple[Baseline | None, list[str]]:
     """A baseline read and checked, or the problems that stop it: its
     fingerprints, from format 3 or format 2 (whose counts are ignored, each
@@ -562,6 +571,9 @@ def load(
     if not base:
         for name in sorted(expected - set(files)):
             problems.append(f'{where}: no entry for the frozen file {name}')
+        if strict:
+            for name in sorted(set(files) - expected):
+                problems.append(f'{where}: {name} is not a frozen bridge file')
     out: Baseline = {}
     for rel in sorted(set(files) if base else expected & set(files)):
         functions = files[rel]
@@ -632,6 +644,8 @@ def exactness(
     code: Mapping[Path, Measured | None],
     baseline: Baseline,
     deleted_by_main: frozenset[str] = frozenset(),
+    *,
+    strict: bool = False,
 ) -> list[str]:
     """Where the code differs from the baseline. A covered name the file no
     longer defines is excused only when ``deleted_by_main`` holds its key
@@ -655,7 +669,9 @@ def exactness(
                 )
         now = covered[str(rel)]
         for name in sorted(
-            name for name in set(recorded) - set(now) if _freezes(rel, name)
+            name
+            for name in set(recorded) - set(now)
+            if _freezes(rel, name, strict)
         ):
             problems.append(
                 f'{rel}::{name}: in the baseline but not covered code: {remedy}'
@@ -709,6 +725,7 @@ def ratchet(
     declared: Mapping[str, tuple[str, str]],
     spent: Mapping[str, tuple[str, str]],
     main: Callable[[str, str, str | None], str | None] | None = None,
+    strict: bool = False,
 ) -> list[str]:
     """The tripwire against the merge base: every entry changed, new or
     gone is declared, once, with a reason that fits; ``main`` judges a
@@ -722,7 +739,7 @@ def ratchet(
         now = baseline.get(name_of, {})
         held = base.get(name_of, {})
         for name in sorted(set(now) | set(held)):
-            if name not in held and not _freezes(rel, name):
+            if name not in held and not _freezes(rel, name, strict):
                 continue
             key = f'{rel}::{name}'
             current[key] = now.get(name)
@@ -775,7 +792,7 @@ def ratchet(
                 )
     for key in sorted(set(declared) - set(changed)):
         rel_of, _, name = key.partition('::')
-        if key not in current and not _freezes(Path(rel_of), name):
+        if key not in current and not _freezes(Path(rel_of), name, strict):
             continue
         if spent.get(key) != declared[key]:
             problems.append(
@@ -785,12 +802,13 @@ def ratchet(
     return problems
 
 
-def check(root: Path, base: Base | str) -> list[str]:
+def check(root: Path, base: Base | str, *, strict: bool = False) -> list[str]:
     """Every problem of the tree at ``root``. ``base`` is what the merge
-    base holds, or why there is no base."""
+    base holds, or why there is no base; ``strict`` keeps the refusals a
+    copy judging its own tree keeps (:func:`own_tree`)."""
     path = root / BASELINE
     text = path.read_text(encoding='utf-8') if path.is_file() else None
-    baseline, problems = load(text, str(BASELINE))
+    baseline, problems = load(text, str(BASELINE), strict=strict)
     path = root / CHANGES
     declared, unreadable = load_changes(
         path.read_text(encoding='utf-8') if path.is_file() else None,
@@ -809,6 +827,7 @@ def check(root: Path, base: Base | str) -> list[str]:
         code,
         baseline,
         frozenset(key for key, (kind, _) in declared.items() if kind == 'main'),
+        strict=strict,
     )
     problems += shadowing(root)
     if isinstance(base, str):
@@ -842,8 +861,16 @@ def check(root: Path, base: Base | str) -> list[str]:
         declared=declared,
         spent=spent,
         main=base.main,
+        strict=strict,
     )
     return problems
+
+
+def own_tree(root: Path) -> bool:
+    """Whether this copy judges its own tree: the tree's ``bridge_freeze.py``
+    is this file, byte for byte, so the lists it judges by are the tree's."""
+    path = root / SCRIPT
+    return path.is_file() and path.read_bytes() == Path(__file__).read_bytes()
 
 
 # --- git and the command line --------------------------------------------------
@@ -1054,7 +1081,7 @@ def problems(root: Path = REPO_ROOT, ref: str | None = None) -> list[str]:
         return [f'the base branch: {error}']
     if not ref.strip():
         return [f'the base branch is blank (--base or {BASE_ENV}): name one']
-    return check(root, base_baseline(root, ref))
+    return check(root, base_baseline(root, ref), strict=own_tree(root))
 
 
 def write(root: Path) -> list[str]:
