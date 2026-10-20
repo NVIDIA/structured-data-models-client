@@ -102,6 +102,15 @@ INTERNAL_PATTERNS = (
     # package, structured-data-models, is public and is what the in-process
     # extra installs, so it is named like any other dependency.
     re.compile(r'\bkumoml', re.IGNORECASE),
+    # The bare name is public now, and is what the in-process extra installs,
+    # so it is named like any other dependency. A suffix that is not one of
+    # the five distributions published here is still an internal build, such
+    # as structured-data-models-nim, and is still refused.
+    re.compile(
+        r'\bstructured-data-models-'
+        r'(?!(?:client|api|pql|connectors|relational-engine)\b)\w',
+        re.IGNORECASE,
+    ),
 )
 
 # Files that legitimately name internal infrastructure. A provenance record has

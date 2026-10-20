@@ -87,6 +87,20 @@ def check_columns(
             f'{where} names column(s) {repeated} more than once',
             code='VALIDATION_FAILED',
         )
+    odd = next(
+        (
+            (index, len(row))
+            for index, row in enumerate(table.get('rows') or ())
+            if len(row) != len(named)
+        ),
+        None,
+    )
+    if odd is not None:
+        raise StructuredDataError(
+            f'{where} row {odd[0]} carries {odd[1]} cells for '
+            f'{len(named)} column(s)',
+            code='VALIDATION_FAILED',
+        )
     declared = set(schema.get('columns') or {})
     missing = sorted(declared - set(named) - unasked)
     undeclared = sorted(set(named) - declared)

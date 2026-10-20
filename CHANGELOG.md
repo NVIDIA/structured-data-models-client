@@ -32,9 +32,10 @@ these packages. All five distributions share one version and one entry.
   container image out of the release path.
 - A request's inference options are written in the types the contract
   gives them before it is sent: `use_prediction_time` spelled `'no'` is sent
-  as `false`, and a value that cannot be read as its type, such as a
-  `run_mode` that is not text, is refused with `INVALID_REQUEST` before
-  sending, where a NIM answered `422 VALIDATION_FAILED`.
+  as `false`, a NumPy boolean or integer is sent as the value it holds, and a
+  value that cannot be read as its type, such as a `run_mode` that is not
+  text, is refused with `INVALID_REQUEST` before sending, where a NIM
+  answered `422 VALIDATION_FAILED`.
 
 ### Fixed
 

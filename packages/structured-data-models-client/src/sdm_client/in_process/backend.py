@@ -62,6 +62,11 @@ class InProcessBackend:
             none, each is loaded from its published weights on first use.
         device: Where to load models this backend loads itself. Defaults to
             CUDA when available, else the CPU.
+
+    One model runs at a time: a second thread asking for a prediction waits
+    for the first to finish. Releasing a session, closing the client and
+    asking whether it is ready do not wait, so a caller can still let go of
+    what it holds while a prediction is running.
     """
 
     serves_sessions = True
@@ -87,7 +92,8 @@ class InProcessBackend:
         self._loads = not models
         self._device = _device(device, torch) if self._loads else None
         self._sessions: dict[str, _Session] = {}
-        self._lock = threading.RLock()
+        self._state = threading.RLock()
+        self._runs = threading.Lock()
         self._closed = False
 
     @property
@@ -96,14 +102,15 @@ class InProcessBackend:
 
     def close(self) -> None:
         r"""Release every session and the models this backend loaded."""
-        with self._lock:
+        with self._state:
             self._sessions.clear()
             self._models.clear()
             self._closed = True
 
     def health_ready(self) -> bool:
-        self._require_open()
-        return True
+        r"""Whether this backend can answer. A closed one says no, rather
+        than raising at a caller polling it as a boolean."""
+        return not self._closed
 
     def list_models(self) -> list[str]:
         r"""The models this backend answers for."""
@@ -137,7 +144,11 @@ class InProcessBackend:
                 fields,
             )
             return adapter.answered(
-                items, outputs, payload, model=served.model_id
+                items,
+                outputs,
+                payload,
+                model=served.model_id,
+                request_id=_request_id(payload),
             )
 
     def create_session(
@@ -150,13 +161,14 @@ class InProcessBackend:
             context = served.context(payload)
             fitted = _fit(model, context)
             session_id = uuid.uuid4().hex
-            self._sessions[session_id] = _Session(
-                served=served,
-                task=copy.deepcopy(payload['task']),
-                schema=copy.deepcopy(payload['schema']),
-                context=context.fitted(),
-                fitted=fitted,
-            )
+            with self._state:
+                self._sessions[session_id] = _Session(
+                    served=served,
+                    task=copy.deepcopy(payload['task']),
+                    schema=copy.deepcopy(payload['schema']),
+                    context=context.fitted(),
+                    fitted=fitted,
+                )
             return session_id
 
     def session_predict(
@@ -168,7 +180,8 @@ class InProcessBackend:
         pinned: Mapping[str, Any],
     ) -> PredictionResult:
         with self._running():
-            session = self._sessions.get(session_id)
+            with self._state:
+                session = self._sessions.get(session_id)
             if session is None:
                 raise StructuredDataError(
                     f'no session {session_id!r} is open in this process',
@@ -191,29 +204,34 @@ class InProcessBackend:
                 fields,
             )
             return adapter.answered(
-                items, outputs, {**pinned, **payload}, model=served.model_id
+                items,
+                outputs,
+                {**pinned, **payload},
+                model=served.model_id,
+                request_id=_request_id(payload),
             )
 
     def delete_session(self, session_id: str) -> None:
         r"""Release a session. Releasing one that is gone is not an error."""
-        with self._lock:
+        with self._state:
             self._require_open()
             self._sessions.pop(session_id, None)
 
     def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
 
-        Called holding the lock, so a model is loaded once.
+        Holds the state lock, so a model is loaded once.
         """
         served = _SERVED[model_id]
-        model = self._models.get(model_id)
-        if model is None and self._loads:
-            model = self._models[model_id] = _loaded(served, self._device)
+        with self._state:
+            model = self._models.get(model_id)
+            if model is None and self._loads:
+                model = self._models[model_id] = _loaded(served, self._device)
         if model is None:
             raise StructuredDataError(
                 f'{model_id} is not served by this client, which was opened '
                 f'with {self.list_models()} only',
-                code='INVALID_SCHEMA',
+                code='INVALID_CONFIGURATION',
             )
         if model.training:
             raise StructuredDataError(
@@ -226,9 +244,14 @@ class InProcessBackend:
     @contextlib.contextmanager
     def _running(self) -> Iterator[None]:
         r"""Run one call at a time, reporting a failure the client did not
-        foresee as one of its own errors, with the original as its cause."""
-        with self._lock:
-            self._require_open()
+        foresee as one of its own errors, with the original as its cause.
+
+        Holds the run lock alone, so releasing a session or closing the
+        client does not wait for a model to finish.
+        """
+        with self._runs:
+            with self._state:
+                self._require_open()
             try:
                 yield
             except StructuredDataError:
@@ -304,6 +327,11 @@ def _loaded(served: Tabular | Relational, device: Any) -> Any:
         ) from error
 
 
+def _request_id(payload: Mapping[str, Any]) -> str:
+    r"""The id the client put on this request, which a NIM echoes back."""
+    return str((payload.get('metadata') or {}).get('request_id') or '')
+
+
 def _check_task(served: Tabular | Relational, model: Any, kind: str) -> None:
     r"""Refuse a task this model does not answer, or was loaded without.
 
@@ -345,7 +373,42 @@ def _fields(
             f'it produces {list(served.outputs[kind])}',
             code='UNSUPPORTED_OUTPUT',
         )
+    if kind == 'regression':
+        _check_regression_output(payload, fields)
     return fields
+
+
+def _statistic(payload: Mapping[str, Any]) -> str:
+    return (payload.get('output') or {}).get('prediction_statistic') or 'mean'
+
+
+def _levels(payload: Mapping[str, Any]) -> Sequence[float]:
+    levels = (payload.get('output') or {}).get('quantile_levels')
+    return levels or QUANTILE_LEVELS
+
+
+def _check_regression_output(
+    payload: Mapping[str, Any], fields: Sequence[str]
+) -> None:
+    r"""Refuse an output option the answer cannot be built from.
+
+    Checked here rather than where the answer is built, because a fit and a
+    run stand between the two and can take minutes on a GPU.
+    """
+    statistic = _statistic(payload)
+    if statistic not in ('mean', 'median'):
+        raise StructuredDataError(
+            f'prediction_statistic is {statistic!r}; it is mean or median',
+            code='UNSUPPORTED_OUTPUT',
+        )
+    if 'quantiles' in fields and not all(
+        isinstance(level, (int, float)) and 0.001 <= level <= 0.999
+        for level in _levels(payload)
+    ):
+        raise StructuredDataError(
+            'quantile levels must be between 0.001 and 0.999',
+            code='UNSUPPORTED_OUTPUT',
+        )
 
 
 def _fit(model: Any, context: Context) -> Any:
@@ -408,12 +471,4 @@ def _items(
     )
     if task['kind'] != 'regression':
         return classified(answer, context.encoded, context.labels, ids, fields)
-    output = payload.get('output') or {}
-    statistic = output.get('prediction_statistic') or 'mean'
-    if statistic not in ('mean', 'median'):
-        raise StructuredDataError(
-            f'prediction_statistic is {statistic!r}; it is mean or median',
-            code='UNSUPPORTED_OUTPUT',
-        )
-    levels = output.get('quantile_levels') or QUANTILE_LEVELS
-    return regressed(answer, ids, fields, statistic, levels)
+    return regressed(answer, ids, fields, _statistic(payload), _levels(payload))

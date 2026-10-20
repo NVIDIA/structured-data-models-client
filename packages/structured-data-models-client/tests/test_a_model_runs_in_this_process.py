@@ -16,6 +16,7 @@ from __future__ import annotations
 import copy
 import subprocess
 import sys
+import threading
 import warnings
 
 import pandas as pd
@@ -422,3 +423,129 @@ def test_without_the_extra_the_extra_is_named():
         'in-process',
         str(names_the_python),
     ], run.stderr
+
+
+def test_a_closed_client_says_it_is_not_ready_rather_than_raising(tabular):
+    """A caller polling readiness as a boolean gets one either way."""
+    client = SDMClient.in_process(tabular)
+    assert client.health_ready() is True
+    client.close()
+    assert client.health_ready() is False
+
+
+def test_a_model_this_client_was_not_opened_with_is_a_configuration(tabular):
+    """Nothing is wrong with the request's schema, so the code does not say
+    there is: the client was opened without that model."""
+    gathered = PredictiveQuery(COUNT, graph()).materialize(
+        indices=[0, 1], model=KumoRelational()
+    )
+    with SDMClient.in_process(tabular) as client:
+        error = refused(
+            lambda: client.predict(gathered, model=KumoRelational())
+        )
+    assert error.code == 'INVALID_CONFIGURATION'
+    assert 'kumo-tabular' in error.message
+
+
+def tampered(change) -> Request:
+    """A gathered request with its payload changed, as one passed to
+    ``Request.materialized`` by hand may be."""
+    gathered = PredictiveQuery(COUNT, graph()).materialize(
+        indices=[0, 1], model=KumoRelational()
+    )
+    payload = copy.deepcopy(gathered.payloads[0])
+    change(payload)
+    return Request.materialized(
+        payloads=(payload,),
+        schema=gathered.schema,
+        query=gathered.query,
+        indices=gathered.indices,
+    )
+
+
+def test_an_output_option_is_refused_before_the_model_runs(
+    relational, monkeypatch
+):
+    """A fit and a run stand between the request and the answer, and take
+    minutes on a GPU, so an option the answer cannot be built from is
+    refused before them."""
+    request = tampered(
+        lambda p: p.setdefault('output', {}).update(prediction_statistic='mode')
+    )
+    ran = []
+    monkeypatch.setattr(
+        type(relational),
+        'fit',
+        lambda self, *a, **k: ran.append(True),
+    )
+    with SDMClient.in_process(relational) as client:
+        error = refused(lambda: client.predict(request, model=KumoRelational()))
+    assert error.code == 'UNSUPPORTED_OUTPUT'
+    assert ran == []
+
+
+def test_releasing_a_session_does_not_wait_for_a_model_to_finish(
+    tabular, monkeypatch
+):
+    """``client.py`` offers a client to several threads. One model runs at a
+    time, but letting go of what the client holds is not a model run, and a
+    thread doing so waits for the model if they share one lock."""
+    frame = people()
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+    )
+    running, release, released = (
+        threading.Event(),
+        threading.Event(),
+        threading.Event(),
+    )
+    fitted = type(tabular).fit
+
+    def watched(self, *args, **kwargs):
+        running.set()
+        assert release.wait(timeout=60)
+        return fitted(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(tabular), 'fit', watched)
+    client = SDMClient.in_process(tabular)
+    backend = client._backend
+    try:
+        call = threading.Thread(
+            target=lambda: client.predict(request, model=KumoTabular())
+        )
+        call.start()
+        assert running.wait(timeout=60)
+
+        def let_go() -> None:
+            backend.delete_session('none')
+            released.set()
+
+        threading.Thread(target=let_go, daemon=True).start()
+        assert released.wait(timeout=10), (
+            'releasing a session waited for the model to finish'
+        )
+        assert client.health_ready() is True
+        release.set()
+        call.join(timeout=120)
+        assert not call.is_alive()
+    finally:
+        release.set()
+        client.close()
+
+
+def test_an_answer_carries_the_id_the_request_was_sent_under(tabular):
+    """A NIM echoes the request's id back, and a batch lists them, so an
+    answer from this process carries the id its request went out under."""
+    frame = people()
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+    )
+    with SDMClient.in_process(tabular) as client:
+        result = client.predict(request, model=KumoTabular())
+    assert result.request_id

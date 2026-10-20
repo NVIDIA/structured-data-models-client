@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+import numpy as np
+
 from sdm_client.errors import StructuredDataError
 
 #: The longest ``run_mode`` the contract allows.
@@ -55,6 +57,14 @@ def typed_inference(inference: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _boolean(value: Any) -> bool:
+    r"""``value`` as the boolean a NIM reads it as.
+
+    A NumPy scalar is read as the Python value it holds: a frame hands those
+    back, and a payload built by hand keeps them, but ``np.False_`` is not a
+    ``bool`` and ``np.int64(0)`` is not an ``int``.
+    """
+    if isinstance(value, np.generic):
+        return _boolean(value.item())
     if isinstance(value, bool):
         return value
     if isinstance(value, str) and value.lower() in _TRUE | _FALSE:

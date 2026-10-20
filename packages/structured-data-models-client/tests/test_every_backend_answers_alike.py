@@ -492,6 +492,16 @@ def _without(table: dict, column: str) -> None:
             ),
             'VALIDATION_FAILED',
         ),
+        (
+            lambda p: p['context']['related_tables']['users']['rows'][0].pop(),
+            'VALIDATION_FAILED',
+        ),
+        (
+            lambda p: p['context']['related_tables']['users']['rows'][0].append(
+                1.0
+            ),
+            'VALIDATION_FAILED',
+        ),
     ],
 )
 def test_a_request_built_by_hand_is_refused_where_it_states_another_question(
@@ -506,3 +516,20 @@ def test_a_request_built_by_hand_is_refused_where_it_states_another_question(
             client.predict(request, model=KumoRelational())
 
     assert refused.value.code == code
+
+
+@pytest.mark.parametrize(
+    'value', [np.bool_(False), np.int64(0), np.int64(1), np.bool_(True)]
+)
+def test_a_numpy_boolean_built_by_hand_is_read_as_the_boolean_it_holds(
+    client_for, value
+):
+    """A frame hands back NumPy scalars and a hand-built payload keeps them,
+    where the tabular path is converted on its way out."""
+    request = hand_built(
+        lambda p: p.setdefault('inference', {}).update(
+            use_prediction_time=value
+        )
+    )
+    with client_for('kumo-relational') as client:
+        assert len(client.predict(request, model=KumoRelational()).items) == 2
