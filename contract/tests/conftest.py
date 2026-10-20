@@ -36,14 +36,20 @@ ONE_AT_A_TIME = frozenset(
 #: The scope the files in :data:`ONE_AT_A_TIME` share.
 SHARED_SCOPE = 'contract/tests: a family run in memory'
 
-#: The files given out before any other, slowest first: each runs the gate
-#: or the ratchet over a temporary repository, minutes per test.
+#: The files given out before any other, slowest first as measured: most
+#: run the gate or the ratchet over a temporary repository, minutes a test.
 SLOW_FIRST = (
     'test_gate_modes.py',
     'test_cross_host.py',
     'test_t20f_gate.py',
     'test_gate_controls.py',
+    'test_t132e_time_feature_family.py',
     'test_gate_evidence_paths.py',
+    'test_t136_forecast.py',
+    'test_cross_host_evidence.py',
+    'test_t20_locked_set.py',
+    'test_t20_checkpoints.py',
+    'test_t20f_main_seeds.py',
 )
 
 #: A file given out as two units, by test name: its tests starting with the
@@ -65,9 +71,17 @@ def scope_of(nodeid: str) -> str:
 
 
 def rank(scope: str) -> int:
-    r"""Where a unit goes out: by :data:`SLOW_FIRST`, every other unit after."""
-    name = PurePosixPath(scope.partition('::')[0]).name
-    return SLOW_FIRST.index(name) if name in SLOW_FIRST else len(SLOW_FIRST)
+    r"""Where a unit goes out: by :data:`SLOW_FIRST`, every other unit after
+    (:data:`SHARED_SCOPE` where the first of its files is)."""
+    names = (
+        ONE_AT_A_TIME
+        if scope == SHARED_SCOPE
+        else {PurePosixPath(scope.partition('::')[0]).name}
+    )
+    return min(
+        (SLOW_FIRST.index(name) for name in names if name in SLOW_FIRST),
+        default=len(SLOW_FIRST),
+    )
 
 
 @pytest.hookimpl(optionalhook=True)
