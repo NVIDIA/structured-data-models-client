@@ -480,24 +480,39 @@ pub struct Materialize {
     /// input.
     #[serde(default, deserialize_with = "present")]
     pub lag_timesteps: Option<Written>,
-    /// The sampling options (T2.11), each kept as written, any JSON value,
-    /// `null` included (`Some(Value::Null)`, the public call's `None`: an
-    /// unseeded sample for `random_seed`), so a value the reference
-    /// refuses is the case's input; absent, `None`.
+    /// The sampling options (T2.11), each kept as the text the case wrote,
+    /// any JSON value, `null` included (`Some(AsWritten("null"))`, the
+    /// public call's `None`: an unseeded sample for `random_seed`), so a
+    /// value the reference refuses is the case's input and no number of
+    /// any size passes through a double; absent, `None`.
     #[serde(default, deserialize_with = "present")]
-    pub random_seed: Option<Value>,
+    pub random_seed: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
-    pub num_hops: Option<Value>,
+    pub num_hops: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
-    pub num_neighbors: Option<Value>,
+    pub num_neighbors: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
-    pub max_pq_iterations: Option<Value>,
+    pub max_pq_iterations: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
-    pub use_prediction_time: Option<Value>,
+    pub use_prediction_time: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
-    pub return_embeddings: Option<Value>,
+    pub return_embeddings: Option<AsWritten>,
     #[serde(default, deserialize_with = "present")]
-    pub exclude_cols_dict: Option<Value>,
+    pub exclude_cols_dict: Option<AsWritten>,
+}
+
+/// Any JSON value, `null`, a list and an object included, kept as the
+/// exact text the case wrote (whitespace around it trimmed): a number of
+/// any size or form, nested or not, passes through nothing that would
+/// change it (T2.11's sampling options).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsWritten(pub String);
+
+impl<'de> Deserialize<'de> for AsWritten {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<AsWritten, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        Ok(AsWritten(raw.get().trim().to_owned()))
+    }
 }
 
 /// A JSON scalar other than `null` (a number, a bool or a string), kept as

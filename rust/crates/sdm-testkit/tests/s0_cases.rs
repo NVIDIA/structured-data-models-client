@@ -500,3 +500,68 @@ fn an_index_is_an_integer_literal_of_any_size_or_text() {
         assert!(with_index("index-refused", literal).is_err(), "{literal}");
     }
 }
+
+/// T2.1t: the sampling options are kept as the text the case wrote, any
+/// JSON value: an integer past 2**64, a 401-digit number, nested in a list
+/// or an object too, `null`, a boolean and text, so no value the reference
+/// takes or refuses passes through a double or fails to load.
+#[test]
+fn the_sampling_options_are_kept_exactly_as_written() {
+    let wide = format!("1{}", "0".repeat(400));
+    let given = [
+        ("random_seed", "18446744073709551617".to_owned()),
+        ("num_hops", wide.clone()),
+        ("num_neighbors", format!("[{wide}, -1, 2.50]")),
+        ("max_pq_iterations", "1e400".to_owned()),
+        ("use_prediction_time", "\"yes\"".to_owned()),
+        ("return_embeddings", "true".to_owned()),
+        (
+            "exclude_cols_dict",
+            "{\"users\": [\"age\"], \"n\": 18446744073709551617}".to_owned(),
+        ),
+    ];
+    let mut case = accepted();
+    for (name, _) in &given {
+        case["input"]["materialize"][*name] = serde_json::json!(format!("<{name}>"));
+    }
+    let mut text = serde_json::to_string(&case).unwrap();
+    for (name, written) in &given {
+        text = text.replace(&format!("\"<{name}>\""), written);
+    }
+    let directory = scratch("sampling-options");
+    let path = directory.join("case.json");
+    std::fs::write(&path, &text).unwrap();
+    let loaded = case::load(&[path]).unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+    let call = &loaded[0].case.input.materialize;
+    let read = [
+        &call.random_seed,
+        &call.num_hops,
+        &call.num_neighbors,
+        &call.max_pq_iterations,
+        &call.use_prediction_time,
+        &call.return_embeddings,
+        &call.exclude_cols_dict,
+    ];
+    for ((name, written), held) in given.iter().zip(read) {
+        assert_eq!(
+            held.as_ref().map(|w| w.0.as_str()),
+            Some(written.as_str()),
+            "{name}"
+        );
+    }
+    // null is kept as itself, the public call's None; absent is none.
+    let mut case = accepted();
+    case["input"]["materialize"]["random_seed"] = serde_json::Value::Null;
+    let directory = scratch("sampling-options-null");
+    let path = directory.join("case.json");
+    std::fs::write(&path, serde_json::to_string(&case).unwrap()).unwrap();
+    let loaded = case::load(&[path]).unwrap();
+    std::fs::remove_dir_all(&directory).unwrap();
+    let call = &loaded[0].case.input.materialize;
+    assert_eq!(
+        call.random_seed.as_ref().map(|w| w.0.as_str()),
+        Some("null")
+    );
+    assert_eq!(call.num_hops, None);
+}
