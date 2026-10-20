@@ -61,16 +61,22 @@ def _reference(key: str) -> dict[str, Any]:
 
 
 def _fewer(warnings: list[str], keep: int) -> list[str]:
-    r"""``warnings`` with only the first ``keep`` DeprecationWarnings, the
-    rest in their order."""
-    out, seen = [], 0
+    r"""``warnings`` with each run of consecutive DeprecationWarnings cut to
+    its first ``keep``, the rest in their order: repeats dropped, as the
+    core drops them."""
+    out, run = [], 0
     for name in warnings:
-        if name == DEPRECATION:
-            seen += 1
-            if seen > keep:
-                continue
+        run = run + 1 if name == DEPRECATION else 0
+        if run > keep:
+            continue
         out.append(name)
     return out
+
+
+#: Per database, how many of each run the core keeps: two in all, as the
+#: core shows them (SQLite's five are a run of two and a run of three
+#: around a UserWarning; Postgres's one run of five).
+KEPT = {'sqlite': 1, 'postgres': 2}
 
 
 def _entry(
@@ -102,15 +108,16 @@ def _warnings_failures(
 ) -> list[str]:
     r"""``compare()``'s ``warnings`` failures on python-core's line of
     ``CASE`` on ``database``, the reference's own line but for its
-    warnings, ``shown`` (two DeprecationWarnings of the reference's five
-    when None), under a register of ``entries``."""
+    warnings, ``shown`` (two DeprecationWarnings of the reference's five,
+    :data:`KEPT` of each run, when None), under a register of
+    ``entries``."""
     key = CASE if database == 'duckdb' else f'{CASE}@{database}'
     reference = _reference(key)
     mine = copy.deepcopy(reference)
     mine['identity']['runner'] = 'python-core'
     mine['identity']['reference'] = None
     if shown is None:
-        shown = _fewer(reference['host']['warnings'], 2)
+        shown = _fewer(reference['host']['warnings'], KEPT[database])
     mine['host'] = {'warnings': shown}
     (tmp / 'ref.jsonl').write_text(json.dumps(reference) + '\n')
     (tmp / 'core.jsonl').write_text(json.dumps(mine) + '\n')
@@ -167,7 +174,7 @@ def test_more_deprecations_than_the_reference_fail(tmp_path: Path) -> None:
 
 def test_another_class_is_held_exactly(tmp_path: Path) -> None:
     r"""Exit: every other class the same in count and relative order."""
-    fewer = _fewer(_reference(f'{CASE}@sqlite')['host']['warnings'], 2)
+    fewer = _fewer(_reference(f'{CASE}@sqlite')['host']['warnings'], 1)
     assert 'UserWarning' in fewer and 'SDMWarning' in fewer
     owner = [_entry(BOTH)]
     # A UserWarning too many, or one missing.
@@ -196,3 +203,28 @@ def test_an_unnamed_line_or_runner_is_held_as_before(tmp_path: Path) -> None:
     # Another runner named.
     rust = [_entry(BOTH, runners=['rust-host'])]
     assert _warnings_failures(tmp_path, 'sqlite', None, rust)
+
+
+@pytest.mark.parametrize('database', ['sqlite', 'postgres'])
+def test_no_deprecation_at_all_fails(tmp_path: Path, database: str) -> None:
+    r"""Exit (the reviewer's): only repeats may be dropped, so each run of
+    the reference's keeps at least one; none at all fails."""
+    key = f'{CASE}@{database}'
+    none = [w for w in _reference(key)['host']['warnings'] if w != DEPRECATION]
+    assert _warnings_failures(tmp_path, database, none, [_entry(BOTH)])
+
+
+def test_a_deprecation_moved_across_another_class_fails(
+    tmp_path: Path,
+) -> None:
+    r"""Exit (the reviewer's): each run collapsed to one, the two sides are
+    the same list; a DeprecationWarning moved to the other side of the
+    UserWarning, two in all, fails."""
+    warnings = _reference(f'{CASE}@sqlite')['host']['warnings']
+    assert warnings[:3] == [DEPRECATION, DEPRECATION, 'UserWarning']
+    # The reference's runs: two before the UserWarning, three after it.
+    before = [DEPRECATION, DEPRECATION, 'UserWarning', 'SDMWarning']
+    after = ['UserWarning', DEPRECATION, DEPRECATION, 'SDMWarning']
+    owner = [_entry(BOTH)]
+    assert _warnings_failures(tmp_path, 'sqlite', before, owner)
+    assert _warnings_failures(tmp_path, 'sqlite', after, owner)
