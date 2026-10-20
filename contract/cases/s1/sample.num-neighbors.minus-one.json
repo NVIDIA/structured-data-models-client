@@ -80,15 +80,15 @@
         "zone": null
       },
       "seed": null
-    },
-    "predict": {
-      "model": "kumo-relational"
     }
   },
   "expect": {
-    "outcome": "success",
-    "stage": "predict"
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "num_neighbors holds a negative neighbour count"
   },
-  "why": "num_neighbors=[-1]: the reference takes a negative count on DuckDB, reaching no neighbour (orders left out with a warning), and on SQLite, reaching every neighbour (LIMIT -1 is no limit there); on Postgres it fails INTERNAL_ERROR, its own bug, and the core answers there as on SQLite but for its draw (the orchestrator, 2026-10-20; a register entry)",
+  "why": "num_neighbors=[-1]: the reference disagrees across databases (DuckDB reaches no neighbour, SQLite every one, as its LIMIT -1 is no limit, Postgres fails INTERNAL_ERROR), so the core refuses a negative neighbour count by name, INVALID_REQUEST naming num_neighbors, on all three (KO2-82; register entry P2I-4)",
   "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
 }

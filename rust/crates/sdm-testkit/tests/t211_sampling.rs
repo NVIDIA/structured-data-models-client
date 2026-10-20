@@ -269,6 +269,19 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
     None
 }
 
+/// The cases whose answer the orchestrator decided apart from the
+/// reference's (`contract/tests/test_t211_sampling.py`'s `DECIDED`):
+/// num_neighbors=[-1], which the reference answers differently on each
+/// database, refused by name, INVALID_REQUEST (KO2-82; register P2I-4).
+const DECIDED: [&str; 1] = ["sample.num-neighbors.minus-one"];
+
+/// A decided case's expected outcome, as its case file's `expect` says it,
+/// in the shape of an observation's.
+fn decided(id: &str) -> Value {
+    let expect = &read_json(&root().join(format!("contract/cases/s1/{id}.json")))["expect"];
+    serde_json::json!({"outcome": {"result": expect["outcome"], "code": expect["code"]}})
+}
+
 /// Each T2.11 case on `database` through rust-host, held to python-ref's
 /// line: a key not pending must answer as the reference does, a pending
 /// key must still differ.
@@ -284,6 +297,9 @@ fn answers_as_the_reference(database: &str) {
         let found = match (observed.get(&key), reference.get(&key)) {
             (None, _) => Some("not observed".to_owned()),
             (_, None) => Some("no python-ref line".to_owned()),
+            (Some(line), Some(_)) if DECIDED.contains(&id.as_str()) => {
+                problem(&id, line, &decided(&id))
+            }
             (Some(line), Some(wanted)) => problem(&id, line, wanted),
         };
         match (found, pending.contains(&key)) {

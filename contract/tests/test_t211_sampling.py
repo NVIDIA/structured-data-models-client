@@ -96,16 +96,21 @@ def key(case_id: str, database: str) -> str:
 
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
-#: Where the reference fails by a bug of its own, the code it records, and
-#: the line the core is held to instead: num_neighbors=[-1] fails
-#: INTERNAL_ERROR on Postgres alone (DuckDB reaches no neighbour, SQLite
-#: every one), and the core answers there as the reference answers on
-#: SQLite but for its draw (the orchestrator,
-#: 2026-10-20; a register entry for the implementer).
-REFERENCE_FAILS = {
+#: The cases whose answer the orchestrator decided apart from the
+#: reference's, by decision row, with the reference's recorded outcome on
+#: each database: num_neighbors=[-1] reaches no neighbour on DuckDB, every
+#: neighbour on SQLite (its LIMIT -1) and fails INTERNAL_ERROR on
+#: Postgres, so the core refuses a negative neighbour count by name,
+#: INVALID_REQUEST naming num_neighbors, on all three (KO2-82; register
+#: entry P2I-4, the implementer's). Each is held to its case's expect.
+DECIDED = {'sample.num-neighbors.minus-one': 'KO2-82'}
+DECIDED_REFERENCE = {
+    'sample.num-neighbors.minus-one': ('success', None, None),
+    'sample.num-neighbors.minus-one@sqlite': ('success', None, None),
     'sample.num-neighbors.minus-one@postgres': (
+        'refusal',
+        'StructuredDataError',
         'INTERNAL_ERROR',
-        'sample.num-neighbors.minus-one@sqlite',
     ),
 }
 
@@ -266,13 +271,17 @@ def test_python_ref_s_line_is_at_its_case_file_and_ends_as_expected(
     assert line['identity']['runner'] == 'python-ref'
     assert line['identity']['inputs']['case'] == digest
     expect = case['expect']
-    if case_key in REFERENCE_FAILS:
-        code, _ = REFERENCE_FAILS[case_key]
-        assert _outcome(line) == (
-            'refusal',
-            'materialize',
-            'StructuredDataError',
-            code,
+    if case_key in DECIDED_REFERENCE:
+        # The reference's answer, recorded as it is; the case expects the
+        # decision's (DECIDED).
+        result, error, code = DECIDED_REFERENCE[case_key]
+        outcome = _outcome(line)
+        assert (outcome[0], outcome[2], outcome[3]) == (result, error, code)
+        assert outcome != (
+            expect['outcome'],
+            expect['stage'],
+            expect.get('error'),
+            expect.get('code'),
         )
         return
     assert _outcome(line) == (
@@ -344,9 +353,9 @@ def test_the_reference_s_requests_show_each_option_s_effect(
         not in sent('sample.num-neighbors.zero')['predict']['related_tables']
     )
     # num_neighbors=[-1]: no neighbour on DuckDB, every neighbour on SQLite
-    # (its LIMIT -1), a failure on Postgres (REFERENCE_FAILS).
+    # (its LIMIT -1), a failure on Postgres (DECIDED_REFERENCE).
     minus_one = 'sample.num-neighbors.minus-one'
-    if minus_one + on not in REFERENCE_FAILS:
+    if database != 'postgres':
         reached = 'orders' in sent(minus_one)['predict']['related_tables']
         assert reached == (database == 'sqlite')
     assert sent('sample.use-prediction-time')['inference'][
@@ -513,24 +522,6 @@ def differences(want: Any, got: Any, at: str = '') -> list[str]:
     return []
 
 
-def _but_the_draw(sent: list[Any]) -> list[Any]:
-    r"""Each request with its drawn context reduced to its row count and
-    the tables it carries, which a draw on another database keeps."""
-    out = []
-    for request in sent:
-        if isinstance(request, dict) and isinstance(
-            request.get('context'), dict
-        ):
-            request = dict(request)
-            context = request['context']
-            request['context'] = {
-                'rows': len(context['instance_table']['rows']),
-                'tables': sorted(context.get('related_tables', {})),
-            }
-        out.append(request)
-    return out
-
-
 @pytest.mark.parametrize('case_key', KEYS_ALL)
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
@@ -555,19 +546,24 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = reference_lines()[
-            REFERENCE_FAILS.get(case_key, (None, case_key))[1]
-        ]
+        if case['id'] in DECIDED:
+            # The decision's answer, not the reference's: the case's
+            # expected refusal (its result, stage and code), no request
+            # sent.
+            expect = case['expect']
+            outcome = _outcome(line)
+            assert (outcome[0], outcome[1], outcome[3]) == (
+                expect['outcome'],
+                expect['stage'],
+                expect['code'],
+            ), f'{case_key}: {outcome} where {DECIDED[case["id"]]} has {expect}'
+            assert line['public']['payloads'] == [], case_key
+            return
+        want = reference_lines()[case_key]
         assert _outcome(line) == _outcome(want), (
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )
-        wanted, got = payloads(want), payloads(line)
-        if case_key in REFERENCE_FAILS:
-            # Held to another database's line, whose draw is its own
-            # stream's (RS-2, RS-6): the request but its context, and of
-            # the context its size and its tables.
-            wanted, got = _but_the_draw(wanted), _but_the_draw(got)
-        found = differences(wanted, got)
+        found = differences(payloads(want), payloads(line))
         assert not found, f'{case_key}: the payload differs: ' + '; '.join(
             found
         )
