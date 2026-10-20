@@ -280,9 +280,9 @@ def test_the_reference_observations_carry_the_recording_s_identity() -> None:
     assert reference_problems() == []
     header, distributions, _ = read_environment(ENVIRONMENT)
     # The reference the owner approved for Phase 2 (T2.0c: b413e9a, T0.3's,
-    # with main 327fda03 merged), and the cell's versions among the
-    # distributions.
-    assert header['reference'].startswith('6298913c')
+    # with main 327fda03 merged; T2.0i, KO2-84: main f2ad8d61 merged), and
+    # the cell's versions among the distributions.
+    assert header['reference'].startswith('43e55f4f')
     for line in ('pandas==3.0.6', 'pyarrow==25.0.1', 'numpy==2.5.3'):
         assert line in distributions
 
