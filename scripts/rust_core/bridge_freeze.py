@@ -109,7 +109,10 @@ base. A base that predates the baseline has nothing to compare, and the
 declarations must then be empty. A baseline entry for a file outside
 ``FROZEN`` is ignored, not refused: only the frozen files are compared, so
 nothing frozen loosens, and a later landing can widen the freeze while the
-gate judges it with its checkpoint's copy (T2.14a1).
+gate judges it with its checkpoint's copy (T2.14a1). On the same
+principle this copy judges only what it freezes: a baseline entry for a
+name of a frozen file it does not cover, and a declaration of an entry it
+does not measure, are ignored; every entry it freezes is judged as before.
 
 Threat model (decision E56, checkpoint 4): the threat is honest drift by
 cooperating agents, a rule added to the bridge by ordinary means and not
@@ -471,6 +474,16 @@ def _covered(rel: Path, measured: Measured) -> list[str]:
     return sorted(name for name in names if name in measured)
 
 
+def _freezes(rel: Path, name: str) -> bool:
+    """Whether this copy freezes ``name`` of ``rel``: what it judges. A later
+    copy may freeze more (T2.14a1): the gate judges a candidate with its
+    checkpoint's copy, which ignores the entries and declarations of what it
+    does not freeze and judges everything it does freeze as before."""
+    return rel in FROZEN and (
+        rel in WHOLE or name == MODULE or name in COVERED.get(rel, ())
+    )
+
+
 def entries(measured: Mapping[Path, Measured | None]) -> Baseline:
     """The covered functions' fingerprints, by file and name."""
     return {
@@ -634,7 +647,9 @@ def exactness(
                     'commit that deleted it'
                 )
         now = covered[str(rel)]
-        for name in sorted(set(recorded) - set(now)):
+        for name in sorted(
+            name for name in set(recorded) - set(now) if _freezes(rel, name)
+        ):
             problems.append(
                 f'{rel}::{name}: in the baseline but not covered code: {remedy}'
             )
@@ -700,6 +715,8 @@ def ratchet(
         now = baseline.get(name_of, {})
         held = base.get(name_of, {})
         for name in sorted(set(now) | set(held)):
+            if name not in held and not _freezes(rel, name):
+                continue
             key = f'{rel}::{name}'
             current[key] = now.get(name)
             if name not in held:
@@ -750,6 +767,9 @@ def ratchet(
                     f'candidate merged from main: {why}'
                 )
     for key in sorted(set(declared) - set(changed)):
+        rel_of, _, name = key.partition('::')
+        if key not in current and not _freezes(Path(rel_of), name):
+            continue
         if spent.get(key) != declared[key]:
             problems.append(
                 f'{key}: declared in {CHANGES}, but unchanged against the base '
