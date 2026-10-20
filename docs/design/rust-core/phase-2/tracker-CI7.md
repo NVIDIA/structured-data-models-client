@@ -28,4 +28,4 @@ It changes judging files (`ci.yml` and scripts under `scripts/rust_core/`), so i
 ### For the landing
 
 Protected paths changed, for the Protected-paths trailer:
-`.github/workflows/ci.yml`, `scripts/rust_core/native_wheel.py`, `scripts/rust_core/rust_notices.py`, `scripts/rust_core/wheel_smoke.py`, `packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt`.
+`.github/workflows/ci.yml`, `scripts/rust_core/native_wheel.py`, `scripts/rust_core/rust_notices.py`, `scripts/rust_core/wheel_smoke.py`, `packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt`, and the test author's `packages/structured-data-models-client/tests/test_dates_the_column_decides.py`, `test_list_valued_columns.py`, `test_semantic_model_source.py`, `test_the_materialize_route.py` and `test_the_schema_route.py` (same directory).
