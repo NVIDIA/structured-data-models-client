@@ -145,10 +145,10 @@ class ErrorTranslator:
         lineage = err.lineage
         if lineage == [PQLGrammarParser.RULE_prog]:
             # From kumo/pquery/grammar/PQLGrammarParser.py:prog
-            if recognizer_state == 34:
+            if recognizer_state == 36:
                 return 'Query does not start with the PREDICT keyword. '
             # From kumo/pquery/grammar/PQLGrammarParser.py:prog
-            if recognizer_state == 37:
+            if recognizer_state == 39:
                 if 'FOR EACH' in token_strings:
                     for_each_idx = token_strings.index('FOR EACH')
                     return (
