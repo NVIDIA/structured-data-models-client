@@ -1,7 +1,23 @@
-# NVIDIA Structured Data Models Client
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/logo_light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo_dark.svg">
+  <img src="docs/images/logo_light.svg" alt="Structured Data Models" width="125">
+</picture>
+</p>
 
-Ask a predictive question of one table, or of a whole relational schema, and
-get an answer without training a model for each dataset.
+<h1 align="center">NVIDIA Structured Data Models Client
+
+[![PyPI](https://img.shields.io/pypi/v/structured-data-models-client?style=flat&color=76B900)](https://pypi.org/project/structured-data-models-client)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
+[![License: Apache 2.0](https://img.shields.io/badge/license-apache%202.0-brightgreen.svg?style=flat&color=76B900)](LICENSE)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat&color=76B900)](CONTRIBUTING.md)
+[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat&color=76B900)](docs/index.md)
+
+</h1>
+
+**Ask a predictive question of one table, or of a whole relational schema, and
+get an answer without training a model for each dataset.**
 
 ```bash
 pip install 'structured-data-models-client[relational]'
