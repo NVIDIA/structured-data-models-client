@@ -817,7 +817,7 @@ def freeze_cases(results: list[Result]) -> None:
             f'{rel}: neither a bridge file nor the home of a ledgered rule'
             for rel in bridge_freeze.FROZEN
             if rel not in l0_deps.BRIDGE_FILES
-            and rel.parent.name != '_rust'
+            and '_rust' not in rel.parts
             and not any(
                 f'`{name.split(".")[-1]}`' in ledger or f'`{name}`' in ledger
                 for name in bridge_freeze.COVERED.get(rel, ())
