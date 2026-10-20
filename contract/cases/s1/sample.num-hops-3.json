@@ -33,7 +33,8 @@
   "input": {
     "base": "shop",
     "setup": [
-      "CREATE TABLE lines AS SELECT i::BIGINT AS line_id, (i % 80)::BIGINT AS order_id, (1 + i % 5)::INTEGER AS qty FROM range(40) t(i)"
+      "CREATE TABLE lines AS SELECT i::BIGINT AS line_id, (i % 80)::BIGINT AS order_id, (1 + i % 5)::INTEGER AS qty FROM range(40) t(i)",
+      "CREATE TABLE shipments AS SELECT i::BIGINT AS shipment_id, (i % 40)::BIGINT AS line_id, ['air', 'sea'][1 + i % 2] AS mode FROM range(40) t(i)"
     ],
     "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
     "materialize": {
@@ -90,6 +91,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "num_hops=3 over users, orders and lines: three hops of the default neighbour counts",
+  "why": "num_hops=3 over users, orders, lines and shipments: the third hop reaches shipments, which the default two hops leave out",
   "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
 }

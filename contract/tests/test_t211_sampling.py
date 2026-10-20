@@ -18,7 +18,8 @@ The cases, ``contract/cases/s1/sample.*.json``, each a few dozen rows of
 the shop base, run on DuckDB, SQLite and Postgres through ``predict``, each
 option with values the reference takes and values it refuses:
 
-- ``num_hops`` (1 and 3 over users, orders and lines; 0, 7, 1.5, True and
+- ``num_hops`` (1 over users, orders and lines, 3 over shipments too;
+  0, 7, 1.5, True and
   '2' refused), ``num_neighbors`` ([4], [2, 2], [0], with num_hops; [], 5
   and seven hops refused), ``max_pq_iterations`` (1 over a sparse label;
   0 and 'x' refused), ``use_prediction_time`` (True, False),
@@ -273,7 +274,8 @@ def test_the_reference_s_requests_show_each_option_s_effect(
 ) -> None:
     r"""The cases exercise what they name (no vacuous seed): in
     python-ref's request on each database, num_hops=1 leaves lines out and
-    3 keeps it; num_neighbors=[4] holds each scored user to 4 of its 10
+    3 reaches shipments, three hops out; num_neighbors=[4] holds each
+    scored user to 4 of its 10
     orders and [2, 2] each to 2; [0] leaves orders out; use_prediction_time
     is sent; exclude_cols_dict drops the column it names; a context anchor
     two months early labels no context example after it; an entity anchor
@@ -289,7 +291,7 @@ def test_the_reference_s_requests_show_each_option_s_effect(
         return _sent(case_id + on)
 
     assert 'lines' not in sent('sample.num-hops-1')['predict']['related_tables']
-    assert 'lines' in sent('sample.num-hops-3')['predict']['related_tables']
+    assert 'shipments' in sent('sample.num-hops-3')['predict']['related_tables']
     for case_id, most in (
         ('sample.num-neighbors-4', 4),
         ('sample.num-neighbors-2-2', 2),

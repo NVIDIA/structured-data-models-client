@@ -21,6 +21,7 @@ change from draw to draw. python-core must:
 - draw the right number of rows: as many context examples, the same
   entities asked about at the same anchor with as many rows of each table
   around them, the same request schema and the same result;
+- draw anew on each call: a second run's context examples differ;
 - draw only rows the source holds: every context example's entity is a
   user, its label is that user's at its anchor time (the orders in the 30
   days after it, the rule the recorder checked against the reference's
@@ -149,7 +150,7 @@ def _server() -> bool:
 
 
 @functools.cache
-def core_run(database: str) -> dict[str, Any]:
+def core_run(database: str, run: int = 0) -> dict[str, Any]:
     r"""python-core over the unseeded cases on ``database``: each
     observation by its key, or under ``''`` why the run failed whole."""
     with tempfile.TemporaryDirectory(prefix='t211u-') as tmp:
@@ -244,6 +245,12 @@ def test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties(
         found = problems(
             case_key.split('@')[0], line, vectors()['keys'][case_key]
         )
+        # A new sample each call: a second run draws other context
+        # examples, as the reference's two runs did (draws_differ).
+        again = core_run(database, 1).get(case_key)
+        if not found and again is not None:
+            if recorder().examples(line) == recorder().examples(again):
+                found.append('two runs drew the same context')
         assert not found, f'{case_key}: ' + '; '.join(found)
 
     held(case_key, check)

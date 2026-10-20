@@ -22,7 +22,8 @@
 //!   judged by properties (KO2-76) against
 //!   `contract/t211-unseeded-vectors.json`: a success through predict, the
 //!   entities asked about as the reference asks them, as many context
-//!   examples, each of a user, and every sampled row a row of its table.
+//!   examples, each of a user, every sampled row a row of its table, and
+//!   two runs drawing different context examples (a new sample each call).
 //!
 //! Gating: `contract/tests/t211-pending.json`'s `pending` names, as
 //! `rust:<case key>` and `unseeded-rust:<case key>`, the keys that failed
@@ -401,7 +402,9 @@ fn unseeded_problems(line: &Value, wanted: &Value, given: &Value) -> Vec<String>
                 .as_array()
                 .into_iter()
                 .flatten()
-                .map(|r| Value::Array(r.as_array().unwrap().iter().map(written).collect()).to_string())
+                .map(|r| {
+                    Value::Array(r.as_array().unwrap().iter().map(written).collect()).to_string()
+                })
                 .collect();
             let held: Vec<&str> = sampled["columns"]
                 .as_array()
@@ -435,6 +438,10 @@ fn draws_as_the_reference(database: &str) {
     let ids = case_ids("unseeded-rust:", database);
     assert!(!ids.is_empty(), "no unseeded case authored on {database}");
     let observed = observe("contract/tests/t211-unseeded", &ids, database);
+    // A second run: an unseeded sample is a new one each call, so its
+    // context examples differ from the first run's (112 drawn of many; the
+    // reference's two runs differ on every database, `draws_differ`).
+    let again = observe("contract/tests/t211-unseeded", &ids, database);
     let vectors = read_json(&root().join("contract/t211-unseeded-vectors.json"));
     let pending = named("pending", "unseeded-rust:");
     let mut problems = Vec::new();
@@ -442,7 +449,19 @@ fn draws_as_the_reference(database: &str) {
         let key = key(&id, database);
         let found = match observed.get(&key) {
             None => vec!["not observed".to_owned()],
-            Some(line) => unseeded_problems(line, &vectors["keys"][&key], &vectors["cases"][&id]),
+            Some(line) => {
+                let mut found =
+                    unseeded_problems(line, &vectors["keys"][&key], &vectors["cases"][&id]);
+                let drawn = |o: Option<&Value>| {
+                    o.map(|o| {
+                        o["core"]["predicted"]["body"]["context"]["instance_table"]["rows"].clone()
+                    })
+                };
+                if found.is_empty() && drawn(Some(line)) == drawn(again.get(&key)) {
+                    found.push("two runs drew the same context: no unseeded draw".to_owned());
+                }
+                found
+            }
         };
         match (found.is_empty(), pending.contains(&key)) {
             (false, false) => problems.push(format!("{key}: {}", found.join("; "))),
