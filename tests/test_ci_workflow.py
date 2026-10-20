@@ -1853,7 +1853,27 @@ def test_t20_a_name_the_expression_lets_through_fails_the_phase_check_by_name(
 
 # --- CI7: aarch64 wheels and the Databricks runtime cells (KO2-38, KO2-40) ---
 
-LOCKED_SET = ROOT / 'docs/design/rust-core/phase-2/locked-set.yaml'
+DESIGN = ROOT / 'docs/design/rust-core/phase-2/design.md'
+#: The jobs KO2-38 and KO2-40 promise, which the design's CI7 row names:
+#: the aarch64 native wheels beside x86_64, the two aarch64 smoke lanes,
+#: and the six runtime cells. The row names the cells only as "six
+#: ``runtime-install (<runtime>)`` jobs"; these are the six the locked set
+#: named for check 10 until KO2-76 judged that check's CI part by land.py's
+#: exact-SHA rule instead.
+CI7_JOBS = (
+    'native-wheel (aarch64, shipped)',
+    'native-wheel (aarch64, test-ops)',
+    'wheel-smoke (aarch64-floor)',
+    'wheel-smoke (aarch64-newest)',
+)
+RUNTIME_CELLS = (
+    'runtime-install (dbr14.3)',
+    'runtime-install (dbr15.4)',
+    'runtime-install (dbr16.4)',
+    'runtime-install (dbr17.3)',
+    'runtime-install (serverless5)',
+    'runtime-install (serverless6)',
+)
 INSTALL_GUIDE = ROOT / 'docs/get-started/installation.md'
 NATIVE_WHEEL = ROOT / 'scripts/rust_core/native_wheel.py'
 WHEEL_NAME = 'structured_data_models_client-1.0.0-cp310-abi3-{}.whl'
@@ -1877,34 +1897,32 @@ def _job_names(job_id: str, job: dict[str, Any]) -> list[str]:
     return names
 
 
-def test_ci7_check_10_s_patterns_each_name_a_job_of_the_workflow() -> None:
-    r"""Locked check 10's CI patterns, as the locked-set file holds them,
-    each match a job this workflow runs, the six runtime cells and the
-    aarch64 smoke lanes among them, so the gate's ``ci`` step can resolve
-    them on a run."""
-    import fnmatch
-
-    half = yaml.safe_load(LOCKED_SET.read_text())['halves']['2a']
+def test_ci7_the_promised_jobs_are_jobs_of_the_workflow() -> None:
+    r"""The jobs KO2-38 and KO2-40 promise, as the design's CI7 row names
+    them, are jobs this workflow runs: the aarch64 native wheels and smoke
+    lanes, and exactly six runtime cells, each by name. Under KO2-76 check
+    10's CI part is judged by land.py's exact-SHA rule, so this, not a
+    locked-set pattern, keeps the jobs from going missing."""
+    [row] = [
+        line
+        for line in DESIGN.read_text().splitlines()
+        if line.startswith('| CI7 |')
+    ]
+    for promised in (
+        '`wheel-smoke (aarch64-floor)`',
+        '`(aarch64-newest)`',
+        'six `runtime-install (<runtime>)` jobs',
+        '`ubuntu-24.04-arm`',
+    ):
+        assert promised in row, promised
     names = [
         name
         for job_id, job in _workflow()['jobs'].items()
         for name in _job_names(job_id, job)
     ]
-    for pattern in half['ci']['10']:
-        assert fnmatch.filter(names, pattern), pattern
+    assert set(CI7_JOBS) <= set(names), sorted(set(CI7_JOBS) - set(names))
     runtimes = sorted(n for n in names if n.startswith('runtime-install ('))
-    assert runtimes == sorted(
-        p.replace('*', '')
-        for p in half['ci']['10']
-        if p.startswith('runtime-install (')
-    )
-    assert len(runtimes) == 6
-    assert {
-        'wheel-smoke (aarch64-floor)',
-        'wheel-smoke (aarch64-newest)',
-        'native-wheel (aarch64, shipped)',
-        'native-wheel (aarch64, test-ops)',
-    } <= set(names)
+    assert runtimes == sorted(RUNTIME_CELLS)
 
 
 def test_ci7_the_aarch64_jobs_run_natively_on_arm() -> None:
