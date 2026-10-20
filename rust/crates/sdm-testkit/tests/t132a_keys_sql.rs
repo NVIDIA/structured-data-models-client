@@ -75,7 +75,9 @@ fn key_cases() -> (Vec<Case>, bases::Bases) {
     let mut cases: Vec<Case> = loaded
         .into_iter()
         .map(|l| l.case)
-        .filter(|c| c.id.starts_with("key."))
+        // The family is the inventory's keys seam; later packages' `key.*`
+        // cases outside it (T2.21's `key.past-2-53.*`, no seam) are not.
+        .filter(|c| c.id.starts_with("key.") && c.seam.as_deref() == Some("keys"))
         .collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
     assert_eq!(cases.len(), 9, "the keys family's nine cases");

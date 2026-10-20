@@ -25,7 +25,11 @@
 //!   given (`key.past-2-53.given-key`), the key and the link given
 //!   (`.given-link`) or the link set by an edit (`.edited-link`), and
 //!   nothing declared, the run answers as the control does: each
-//!   `user_id` described as the control describes it, and the call the
+//!   `user_id` in the schema `materialize` was given (the description, the
+//!   edit made) held as the control holds it (what it was received as, its
+//!   dtype and meaning; whether it is nullable or unique is the
+//!   database's fact, which a SQL key declares and a given key does not),
+//!   and the call the
 //!   core wrote the control's (the `payload` rule: but its request id).
 //!   On the base the key is read as doubles, and 2**53 + 1 is refused
 //!   as inexact (the mid-phase design check's reproduction).
@@ -190,23 +194,34 @@ fn observe(id: &str) -> Observed {
     host::run_memory_over(&case, &source(&case), &layer::root()).unwrap()
 }
 
-/// Each `user_id` column as the description holds it, by table.
+/// The parts of a column's description that are its representation: what
+/// it was received as, its dtype and its meaning. Whether it is nullable or
+/// unique is the database's fact (a SQL key declares both, a given key
+/// neither), so it is left out.
+const REPRESENTATION: [&str; 3] = ["received", "dtype", "stype"];
+
+/// Each `user_id` column's representation, by table, in the schema
+/// `materialize` was given: the description with the case's edits made
+/// (an edited link's schema as it stands after the edit).
 fn key_columns(observed: &Observed) -> Vec<(String, Value)> {
-    let described = observed
-        .described
-        .as_ref()
-        .unwrap_or_else(|| panic!("no description: {:?}", observed.answer));
+    let schema = observed
+        .inputs
+        .iter()
+        .find(|input| input["op"] == "materialize")
+        .map(|input| &input["schema"])
+        .unwrap_or_else(|| panic!("materialize not started: {:?}", observed.answer));
     let mut found = Vec::new();
-    for table in described["tables"].as_array().unwrap() {
+    for table in schema["tables"].as_array().unwrap() {
         for column in table["columns"].as_array().unwrap() {
             if column["name"] == KEY {
-                let mut column = column.clone();
-                // What the column was before the schema joined on it is
-                // the run's own account, not its representation.
-                if let Some(c) = column.as_object_mut() {
-                    c.remove("stype_before_key");
-                }
-                found.push((table["name"].as_str().unwrap().to_owned(), column));
+                let held: serde_json::Map<String, Value> = REPRESENTATION
+                    .iter()
+                    .map(|part| ((*part).to_owned(), column[*part].clone()))
+                    .collect();
+                found.push((
+                    table["name"].as_str().unwrap().to_owned(),
+                    Value::Object(held),
+                ));
             }
         }
     }

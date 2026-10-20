@@ -1,10 +1,6 @@
 {
  "about": "T2.21's acceptance tests that failed when the test author wrote them, before the implementation, by key (contract/tests/test_t221_exact_keys.py as py:<key>, sdm-testkit's tests/t221_exact_keys.rs as rust:<key>). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [
-  "rust:key.past-2-53.given-key@memory-marked",
-  "rust:key.past-2-53.given-link@memory-marked",
-  "rust:key.past-2-53.edited-link@memory-marked"
- ],
+ "pending": [],
  "authored": [
   "py:key.past-2-53.given-key",
   "py:key.past-2-53.given-link",
