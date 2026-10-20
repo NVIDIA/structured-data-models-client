@@ -101,7 +101,9 @@ More exact than the reference (T2.0g, approved by the owner on
 core answers more exactly than the reference (the nearest double where the
 reference's cast is one unit in the last place off, an exact text id where
 it sends a float). Each field is a path as this prints a difference
-(``public.payloads/0/2/context/...``, ``core.predicted.body/0/...``), ``*``
+(``public.payloads/0/2/context/...``, ``core.predicted.body/0/...``, or
+on a request asked in several calls ``core.predicted.calls/<n>/...``,
+T2.1r), ``*``
 standing for any one key or index. For that case and runner, the
 ``schema``, ``result`` and ``payload`` rules leave out the value at each
 such path, on both sides, and compare everything else; a field present on
@@ -268,8 +270,8 @@ MORE_EXACT_RUNNERS = ('python-core', 'rust-host')
 #: A ``more_exact`` field: a path under one of the roots the host and
 #: payload rules compare, at least one key or index below it.
 _MORE_EXACT_FIELD = re.compile(
-    r'(public\.schema|public\.result|public\.payloads|core\.predicted\.body)'
-    r'(/[^/]+)+'
+    r'(public\.schema|public\.result|public\.payloads|core\.predicted\.body'
+    r'|core\.predicted\.calls)(/[^/]+)+'
 )
 #: What stands for a value ``more_exact`` leaves out, on both sides.
 _MORE_EXACT = 'left out: more exact than the reference'
