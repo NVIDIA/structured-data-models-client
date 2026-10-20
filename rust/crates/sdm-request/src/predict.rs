@@ -598,12 +598,19 @@ pub fn preflight(
             continue;
         }
         let column = column.unwrap_or_default();
+        let constant = constant_context(column, query);
         if classifies(kind) {
-            return Err(unsupported(model, "every context row has the same answer")
-                .with_field("target", Detail::text(column))
-                .with_field("classes_in_context", count(1)));
+            // Named as the notice names the target, for the host's words
+            // (the adapter's `_how_to_name_the_target`).
+            let mut error = unsupported(model, "every context row has the same answer")
+                .with_field("field", Detail::text("context"))
+                .with_field("reason", Detail::text("one_class"));
+            for (name, value) in constant.fields {
+                error = error.with_field(name, value);
+            }
+            return Err(error.with_field("classes_in_context", count(1)));
         }
-        notices.push(constant_context(column, query));
+        notices.push(constant);
         break;
     }
     if !outputs.iter().any(|o| o == "explanation") {

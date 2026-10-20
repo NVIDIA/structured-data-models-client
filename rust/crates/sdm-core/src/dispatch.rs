@@ -312,7 +312,12 @@ pub(crate) fn materialize(
                     ErrorCode::InvalidRequest,
                     "a sampling seed cannot be negative",
                 )
-                .with_field("field", Detail::text("seed")));
+                .with_field("field", Detail::text("seed"))
+                .with_field("reason", Detail::text("negative"))
+                .with_field(
+                    "given",
+                    Detail::text(crate::materialize::seed_text(request.seed.as_ref())),
+                ));
             }
             // The sampler state's version first, by name, before anything of
             // the state is read, as a request state's (decision H23); then

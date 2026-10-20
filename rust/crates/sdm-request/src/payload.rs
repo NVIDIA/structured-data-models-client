@@ -48,7 +48,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
 use sdm_wire::payload::{
@@ -68,6 +68,9 @@ pub const ENTITY_REFERENCE: &str = "__kumo_entity_ref";
 pub const ANCHOR_TIME: &str = "__kumo_anchor_time";
 /// The instance table's label column.
 pub const TARGET: &str = "TARGET";
+/// The name the request's table of examples goes by, as a refusal of one
+/// of its cells names it (the reference's `_serialize_frame`).
+pub const INSTANCE_TABLE: &str = "instance_table";
 /// The names the wire gives its own columns, which a column of the data
 /// may not take (the client's `_RESERVED`).
 pub const RESERVED: [&str; 2] = [INSTANCE_ID, ANCHOR_TIME];
@@ -247,6 +250,29 @@ fn invalid(message: &str, column: &str) -> CoreError {
     .with_field("column", Detail::text(column))
 }
 
+/// A value no request holds, with the value as Python writes a float
+/// (`inf`, `-inf`) for the host's words (the reference's `_NON_FINITE_MSG`).
+fn not_finite(column: &str, value: f64) -> CoreError {
+    let shown = if value.is_nan() {
+        "nan"
+    } else if value > 0.0 {
+        "inf"
+    } else {
+        "-inf"
+    };
+    invalid(
+        "a value is not finite, and a request holds finite numbers or nulls",
+        column,
+    )
+    .with_field("field", Detail::text("request"))
+    .with_field("reason", Detail::text("not_finite"))
+    .with_field("value", Detail::text(shown))
+}
+
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
+}
+
 fn internal(message: &str) -> CoreError {
     CoreError::new(ErrorKind::Internal, ErrorCode::InternalError, message)
 }
@@ -350,7 +376,13 @@ fn decimal_text(value: i128, scale: i8) -> String {
 /// int64, refused, as the reference refuses it.
 fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
     if value < i128::from(i64::MIN) || value > i128::from(i64::MAX) {
-        return Err(invalid("a value is outside the range int64 holds", column));
+        // The range, for the host's words (the reference's
+        // `_cell_json_value`), never the value (decision H17); the table and
+        // row are its caller's.
+        return Err(invalid("a value is outside the range int64 holds", column)
+            .with_field("field", Detail::text("request"))
+            .with_field("reason", Detail::text("past_int64"))
+            .with_field("dtype", Detail::text("int64")));
     }
     if value.abs() > JSON_SAFE {
         return Ok(Value::Text(value.to_string()));
@@ -362,12 +394,7 @@ fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
     if value.is_nan() {
         return Ok(Value::Null);
     }
-    Value::float(value).ok_or_else(|| {
-        invalid(
-            "a value is not finite, and a request holds finite numbers or nulls",
-            column,
-        )
-    })
+    Value::float(value).ok_or_else(|| not_finite(column, value))
 }
 
 /// A decimal's unscaled `value` at `scale` as a float64 cell: the nearest
@@ -379,12 +406,7 @@ fn decimal_float(value: i128, scale: i8, column: &str) -> Result<Value, CoreErro
     let float: f64 = format!("{value}e{}", -i32::from(scale))
         .parse()
         .map_err(|_| internal("a decimal's text is not a number"))?;
-    Value::float(float).ok_or_else(|| {
-        invalid(
-            "a value is not finite, and a request holds finite numbers or nulls",
-            column,
-        )
-    })
+    Value::float(float).ok_or_else(|| not_finite(column, float))
 }
 
 /// `ns` nanoseconds since the epoch as the reference writes a time:
@@ -589,7 +611,7 @@ fn arrow_column(
         dtype,
         cells: rows
             .iter()
-            .map(|&row| cell(array, row, name, dtype))
+            .map(|&row| cell(array, row, name, dtype).map_err(|e| e.with_field("row", count(row))))
             .collect::<Result<_, _>>()?,
     })
 }
@@ -867,8 +889,12 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     };
     let reference_cells = first
         .iter()
-        .map(|row| match row {
-            Some(row) => cell(key_array, *row, &reference, reference_dtype),
+        .enumerate()
+        .map(|(at, row)| match row {
+            Some(row) => cell(key_array, *row, &reference, reference_dtype).map_err(|e| {
+                e.with_field("table", Detail::text(INSTANCE_TABLE))
+                    .with_field("row", count(at))
+            }),
             None => Ok(Value::Null),
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -928,9 +954,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 return Err(internal("a sampled column does not align with its rows"));
             }
             let key = table.primary_key.as_deref() == Some(name.as_str());
-            frame
-                .columns
-                .push(sampled_column(name, column, &rows, key)?);
+            frame.columns.push(
+                sampled_column(name, column, &rows, key)
+                    .map_err(|e| e.with_field("table", Detail::text(&table.name)))?,
+            );
         }
         let mut stypes = vec![(INSTANCE_ID.to_owned(), Stype::Id)];
         stypes.extend(table.stypes.iter().cloned());

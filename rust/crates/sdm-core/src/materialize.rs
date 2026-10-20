@@ -324,6 +324,37 @@ fn count(n: usize) -> Detail {
     Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
 
+/// A seed's value as decimal text, `-` before a negative one, of any size,
+/// for the host's words.
+pub(crate) fn seed_text(seed: Option<&Seed>) -> String {
+    let Some(seed) = seed else {
+        return String::new();
+    };
+    // Each hexadecimal digit into a little-endian vector of decimal digits.
+    let mut digits: Vec<u8> = vec![0];
+    for hex in seed.magnitude_hex().chars() {
+        let mut carry = hex.to_digit(16).unwrap_or(0);
+        for digit in &mut digits {
+            let value = u32::from(*digit) * 16 + carry;
+            *digit = (value % 10) as u8;
+            carry = value / 10;
+        }
+        while carry > 0 {
+            digits.push((carry % 10) as u8);
+            carry /= 10;
+        }
+    }
+    while digits.len() > 1 && digits.last() == Some(&0) {
+        digits.pop();
+    }
+    let text: String = digits.iter().rev().map(|d| char::from(b'0' + d)).collect();
+    if seed.is_negative() && text != "0" {
+        format!("-{text}")
+    } else {
+        text
+    }
+}
+
 /// The scalar a sample's seed travels as: as exact as the integer is, the
 /// narrowest of `u64` and a 38-digit decimal that holds it.
 pub fn seed_scalar(seed: &Seed) -> Result<Scalar, CoreError> {
@@ -2033,7 +2064,6 @@ fn nan_rows(array: &ArrayRef) -> BTreeSet<usize> {
 /// The prefix of the column the reference's engine folds a key of several
 /// columns into (`composite_key.DERIVED_PREFIX`), and the longest name it
 /// gives one (`MAX_DERIVED_NAME`).
-const FOLDED_PREFIX: &str = "__kumo_key_";
 const FOLDED_NAME_MOST: usize = 200;
 
 /// A schema keyed by several columns somewhere, refused as the reference
@@ -2076,13 +2106,7 @@ fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreErro
                 "a float cannot be part of a key of several columns: its text is not reproducible",
             ));
         }
-        let name = format!(
-            "{FOLDED_PREFIX}{}",
-            key.iter()
-                .map(|c| c.bytes().map(|b| format!("{b:02x}")).collect::<String>())
-                .collect::<Vec<_>>()
-                .join("_")
-        );
+        let name = sdm_engine::graph::folded_name(key);
         if name.len() > FOLDED_NAME_MOST {
             return Err(refused(
                 &table.name,
@@ -2101,10 +2125,13 @@ fn refuse_composite_keys(description: &SourceDescription) -> Result<(), CoreErro
     }
     match first {
         None => Ok(()),
-        Some((table, key)) => Err(refused(
-            &table,
-            &key,
-            "a table keyed by several columns cannot be sampled: the SQL samplers fold its key into a column of the name they reserve",
+        Some((table, key)) => Err(sdm_engine::graph::with_reserved(
+            refused(
+                &table,
+                &key,
+                "a table keyed by several columns cannot be sampled: the SQL samplers fold its key into a column of the name they reserve",
+            ),
+            description,
         )),
     }
 }
@@ -2583,7 +2610,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             ErrorCode::InvalidRequest,
             "a sampling seed cannot be negative",
         )
-        .with_field("field", Detail::text("seed")));
+        .with_field("field", Detail::text("seed"))
+        .with_field("reason", Detail::text("negative"))
+        .with_field("given", Detail::text(seed_text(seed.as_ref()))));
     }
     #[cfg(feature = "test-ops")]
     let labels_only = inputs.labels_only;
@@ -2652,7 +2681,8 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     let indices = Arc::clone(indices.column(0));
     if indices.is_empty() {
-        return Err(invalid("the entities to predict for are none", "indices"));
+        return Err(invalid("the entities to predict for are none", "indices")
+            .with_field("reason", Detail::text("empty")));
     }
     // More entities than one call scores are gathered as several calls
     // (`main`'s 1fc5a686), up to a population the host's limit holds,
@@ -2684,10 +2714,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             &*zones,
         )?;
         if resolved.query.is_none() {
-            return Err(invalid(
-                "the query does not resolve against the schema",
-                "query",
-            ));
+            return Err(unresolved(&query, &resolved.diagnostics));
         }
         refuse_composite_keys(&description)?;
     }
@@ -2709,10 +2736,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // before it materializes it (`PredictiveQuery._resolve`), so this run,
     // which reads the same literals, does not give it again.
     let (Some(validated), Some(source_query)) = (validation.query, validation.text) else {
-        return Err(invalid(
-            "the query does not resolve against the schema",
-            "query",
-        ));
+        return Err(unresolved(&query, &validation.diagnostics));
     };
     // An entity filter chooses the labelled examples, never the entities
     // scored, which the client says before it gathers
@@ -2832,13 +2856,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             return Err(invalid(
                 "an anchor at each entity's own time is for a static query only",
                 "anchor_time",
-            ));
+            )
+            .with_field("reason", Detail::text("entity_not_static")));
         }
         if entity.time_column.is_none() {
             return Err(invalid(
                 "an anchor at each entity's own time needs the entity table to have a time column",
                 "anchor_time",
             )
+            .with_field("reason", Detail::text("entity_without_time_column"))
             .with_field("table", Detail::text(&entity.name)));
         }
         if matches!(context_anchor, AskedAnchor::At(_)) {
@@ -3334,10 +3360,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             }
         }
         if positions.len() != examples_total {
+            // The table, for the host's words, never the keys not found
+            // (decision H17).
             return Err(invalid(
                 "an entity to predict for is not in the entity table",
                 "indices",
-            ));
+            )
+            .with_field("reason", Detail::text("not_in_table"))
+            .with_field("table", Detail::text(&entity.name)));
         }
         let mut order: Vec<usize> = (0..positions.len()).collect();
         order.sort_by_key(|&row| positions[row]);
@@ -3471,6 +3501,21 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     Ok(Gathered::Request(gathered, source_query))
 }
 
+/// The refusal of a query that does not resolve against the schema, with
+/// the query and each error PQL found (its message names where), for the
+/// host's words (`PredictiveQuery._refusal`).
+fn unresolved(query: &str, diagnostics: &[sdm_contract::ops::PqlDiagnostic]) -> CoreError {
+    let reasons: Vec<Scalar> = diagnostics
+        .iter()
+        .filter(|d| d.severity == sdm_contract::ops::Severity::Error)
+        .map(|d| Scalar::Utf8(d.message.clone()))
+        .collect();
+    invalid("the query does not resolve against the schema", "query")
+        .with_field("reason", Detail::text("unresolved"))
+        .with_field("query", Detail::text(query))
+        .with_field("reasons", Detail::List(reasons))
+}
+
 /// The refusal of anchors set apart where one is each entity's own time
 /// (`_get_task_table`'s "needs to be shared").
 fn shared_anchor() -> CoreError {
@@ -3478,6 +3523,7 @@ fn shared_anchor() -> CoreError {
         "an anchor at each entity's own time is shared by the context and the predictions",
         "context_anchor_time",
     )
+    .with_field("reason", Detail::text("entity_not_shared"))
 }
 
 /// The anchor and the context's anchor, in nanoseconds, checked against
@@ -3532,17 +3578,31 @@ async fn anchors_checked(
         None => Some(time_bounds(memo, read_times, bounded).await?),
     };
     if let Some(bounds) = &bounds {
+        // Each names the times, as the reference's words show them.
+        let at = |value: i64| {
+            Detail::Scalar(Scalar::Timestamp {
+                unit: Unit::Ns,
+                zone: None,
+                value,
+            })
+        };
         if anchor < bounds.min {
             return Err(invalid(
                 "the anchor time is before the earliest time in the data",
                 "anchor_time",
-            ));
+            )
+            .with_field("reason", Detail::text("anchor_before_data"))
+            .with_field("anchor", at(anchor))
+            .with_field("earliest", at(bounds.min)));
         }
         if context_anchor < bounds.min {
             return Err(invalid(
                 "the context's anchor time is before the earliest time in the data",
                 "anchor_time",
-            ));
+            )
+            .with_field("reason", Detail::text("context_before_data"))
+            .with_field("context_anchor", at(context_anchor))
+            .with_field("earliest", at(bounds.min)));
         }
         // The reference's three warnings of the context's anchor, of which
         // it gives the first that holds: a context anchored after the
@@ -3633,11 +3693,15 @@ fn excluded_by_caller(
 ) -> Result<(), CoreError> {
     for (table_name, columns) in given {
         let table = graph.table(table_name).ok_or_else(|| {
+            let mut tables: Vec<&str> = graph.tables.iter().map(|t| t.name.as_str()).collect();
+            tables.sort_unstable();
             invalid(
                 "a table the caller keeps columns of is not in the graph",
                 "exclude_cols_dict",
             )
+            .with_field("reason", Detail::text("unknown_table"))
             .with_field("table", Detail::text(table_name))
+            .with_field("tables", names(tables))
         })?;
         let features = graph.features(table);
         for column in columns {
@@ -3645,11 +3709,21 @@ fn excluded_by_caller(
                 .as_text()
                 .filter(|name| features.iter().any(|(n, _)| n == name));
             let Some(name) = name else {
+                let mut excludable: Vec<&str> = features.iter().map(|(n, _)| n.as_str()).collect();
+                excludable.sort_unstable();
+                // The column as the caller gave it, its JSON text, for the
+                // host's words.
                 return Err(invalid(
                     "a column the caller keeps out is not one of its table's features",
                     "exclude_cols_dict",
                 )
-                .with_field("table", Detail::text(table_name)));
+                .with_field("reason", Detail::text("not_a_feature"))
+                .with_field("table", Detail::text(table_name))
+                .with_field(
+                    "given",
+                    Detail::text(String::from_utf8_lossy(&column.to_bytes()).into_owned()),
+                )
+                .with_field("columns", names(excludable)));
             };
             let pair = (table.name.clone(), name.to_owned());
             if !excluded.contains(&pair) {

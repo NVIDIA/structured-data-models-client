@@ -193,6 +193,12 @@ fn mistyped(field: &str, reason: &'static str) -> CoreError {
     .with_field("reason", Detail::text(reason))
 }
 
+/// A value the caller gave, as the JSON text the host wrote it in, which a
+/// refusal names for the host's words (`given`).
+fn given_text(value: &Value) -> Detail {
+    Detail::text(String::from_utf8_lossy(&value.to_bytes()).into_owned())
+}
+
 /// An integer token's digits as decimal text, its sign apart.
 fn integer(field: &str, value: &Value) -> Result<(bool, String), CoreError> {
     match value {
@@ -205,8 +211,9 @@ fn integer(field: &str, value: &Value) -> Result<(bool, String), CoreError> {
             Ok((negative && !digits.is_empty(), digits.to_owned()))
         }
         // A boolean, a float or anything else: not a whole number, as the
-        // client's check (`numbers.Integral`, a bool excluded) refuses it.
-        _ => Err(mistyped(field, "not_a_whole_number")),
+        // client's check (`numbers.Integral`, a bool excluded) refuses it,
+        // naming the value given, for the host's words.
+        _ => Err(mistyped(field, "not_a_whole_number").with_field("given", given_text(value))),
     }
 }
 
@@ -300,7 +307,9 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
                 // count past the endpoint's is refused as such first.
                 asked.neighbors = Some(hops.clone());
             }
-            ("num_neighbors", _) => return Err(mistyped(name, "not_a_sequence")),
+            ("num_neighbors", v) => {
+                return Err(mistyped(name, "not_a_sequence").with_field("given", given_text(v)));
+            }
             ("max_pq_iterations", v) => asked.max_pq_iterations = Some(v.clone()),
             ("context_anchor_time", v) => asked.context_anchor_time = Some(v.clone()),
             ("exclude_cols_dict", v) => asked.exclude_cols_dict = Some(v.clone()),
@@ -386,7 +395,7 @@ pub fn task_table(asked: &Asked) -> Result<(AskedAnchor, Option<Iterations>), Co
     let iterations = asked
         .max_pq_iterations
         .as_ref()
-        .map(iterations)
+        .map(|v| iterations(v).map_err(|e| e.with_field("given", given_text(v))))
         .transpose()?;
     Ok((anchor, iterations))
 }
@@ -404,10 +413,12 @@ pub fn excluded(asked: &Asked) -> Result<Vec<(String, Vec<Value>)>, CoreError> {
             .iter()
             .map(|(table, columns)| match columns {
                 Value::Array(columns) => Ok((table.clone(), columns.clone())),
-                _ => Err(mistyped(NAME, "not_a_sequence").with_field("table", Detail::text(table))),
+                _ => Err(mistyped(NAME, "not_a_sequence")
+                    .with_field("table", Detail::text(table))
+                    .with_field("given", given_text(columns))),
             })
             .collect(),
-        Some(_) => Err(mistyped(NAME, "not_a_mapping")),
+        Some(other) => Err(mistyped(NAME, "not_a_mapping").with_field("given", given_text(other))),
     }
 }
 
@@ -809,17 +820,26 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
         (None, Some(n)) => ("num_hops", n),
         (None, None) => return Ok(()),
     };
+    // How many hops were asked, as the host's words name them.
+    let asked = value.map(|n| format!("{}{n}", if negative && n > 0 { "-" } else { "" }));
+    let named = |error: CoreError| match &asked {
+        Some(n) => error.with_field("hops", Detail::text(n)),
+        None => error,
+    };
     if negative || value == Some(0) {
-        return Err(invalid(field, "no_hop"));
+        return Err(named(invalid(field, "no_hop"))
+            .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))));
     }
     if value.is_none_or(|n| n > HOPS_MAX) {
-        return Err(CoreError::new(
-            ErrorKind::Unsupported,
-            ErrorCode::UnsupportedRequest,
-            "the sampling options ask more hops than the endpoint reads",
-        )
-        .with_field("field", Detail::text(field))
-        .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))));
+        return Err(named(
+            CoreError::new(
+                ErrorKind::Unsupported,
+                ErrorCode::UnsupportedRequest,
+                "the sampling options ask more hops than the endpoint reads",
+            )
+            .with_field("field", Detail::text(field))
+            .with_field("limit", Detail::Scalar(Scalar::UInt64(HOPS_MAX as u64))),
+        ));
     }
     Ok(())
 }

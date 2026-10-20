@@ -25,7 +25,7 @@
       "owner": "T1.28b",
       "register": "none",
       "reference": "same",
-      "where": "rust/crates/sdm-request/src/predict.rs:602",
+      "where": "rust/crates/sdm-request/src/predict.rs:605",
       "holds": "every context row has the same answer",
       "why": "The reference's own refusal at predict, in stage, class and code: a comparison whose context holds one answer, which decimal.compare-finer-eq (no d equals 1.5) and the past-precision comparisons (every d below, or none above, a constant past DECIMAL(38, 0)) give on both, the core's refusal since T1.28b; T2.0c's exact comparison reaches it as the reference does",
       "observed": {

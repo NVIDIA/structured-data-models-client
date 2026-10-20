@@ -32,6 +32,7 @@ from __future__ import annotations
 import builtins
 import contextlib
 import datetime
+import json
 import string
 import warnings
 from collections.abc import Callable, Mapping
@@ -458,6 +459,130 @@ WORDED: dict[tuple[str, ...], str] = {
         )
         for many, holds in (('', 'holds'), ('_several', 'hold'))
     },
+    # T2.14b: the generic refusals at materialize and predict, in the
+    # reference's words. A value the caller gave travels as the JSON text the
+    # host wrote it in (``given``), said with ``!G``, ``!S`` or ``!N``.
+    ('INVALID_REQUEST', 'num_hops', 'not_a_whole_number'): (
+        'num_hops must be a whole number, got {given!N} {given!G}'
+    ),
+    ('INVALID_REQUEST', 'num_neighbors', 'not_a_sequence'): (
+        'num_neighbors must be a sequence of hop sizes'
+    ),
+    **{
+        ('INVALID_REQUEST', field, 'no_hop'): (
+            spelled + ', which asks for no hop at all, and the endpoint reads '
+            'between 1 and {limit}. A request that crosses no relationship is '
+            'a single-table one: give a hop, such as num_neighbors=[8, 8], or '
+            'ask it of kumo-tabular'
+        )
+        for field, spelled in (
+            ('num_hops', 'num_hops is {hops}'),
+            ('num_neighbors', 'num_neighbors is empty'),
+        )
+    },
+    **{
+        ('UNSUPPORTED_REQUEST', field): (
+            'this request samples {hops} hops and the endpoint reads at most '
+            '{limit}'
+        )
+        for field in ('num_hops', 'num_neighbors')
+    },
+    ('INVALID_REQUEST', 'seed', 'negative'): (
+        'random_seed is {given}, and a seed is not negative; pass a number '
+        'from 0 upwards, or leave it out to let the sampler choose'
+    ),
+    ('INVALID_REQUEST', 'max_pq_iterations', 'below_one'): (
+        "'max_pq_iterations' must be greater than zero (got {given!S})"
+    ),
+    ('INVALID_REQUEST', 'max_pq_iterations', 'not_a_whole_number'): (
+        "'<' not supported between instances of '{given!N}' and 'int'"
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'not_a_mapping'): (
+        'exclude_cols_dict must map a table name to the columns to leave '
+        'out, got {given!N}'
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'not_a_sequence'): (
+        'exclude_cols_dict[{table!r}] must be a sequence of column names, '
+        'got {given!N}'
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'unknown_table'): (
+        "'exclude_cols_dict' names table '{table}', which is not in the "
+        'graph. Available tables: {tables!r}'
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'not_a_feature'): (
+        "'exclude_cols_dict' names column '{given!S}' of table '{table}', "
+        'which is not one of its feature columns (primary and foreign keys '
+        'are never sent as features). Excludable columns: {columns!r}'
+    ),
+    ('INVALID_REQUEST', 'context_anchor_time', 'entity_not_shared'): (
+        "Anchor time 'entity' needs to be shared for context and prediction "
+        'examples'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'entity_without_time_column'): (
+        "Anchor time 'entity' requires the entity table '{table}' to have a "
+        'time column'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'entity_not_static'): (
+        "Anchor time 'entity' is only valid for static predictive queries"
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'anchor_before_data'): (
+        "Anchor timestamp '{anchor!t}' is before the earliest timestamp "
+        "'{earliest!t}' in the data."
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'context_before_data'): (
+        'Context anchor timestamp is too early or aggregation time range is '
+        'too large. To make this prediction, we would need data back to '
+        "'{context_anchor!t}', however, your data only contains data back "
+        "to '{earliest!t}'."
+    ),
+    ('INVALID_REQUEST', 'indices', 'empty'): (
+        'indices names no entity, and gathering a relational request means '
+        'sampling a neighbourhood around each one, so there is nothing here '
+        'to gather. An empty batch is still answered: build it as '
+        'Request(predict=<no rows>) and predict() returns the empty result '
+        'without sending'
+    ),
+    ('INVALID_REQUEST', 'indices', 'not_in_table'): (
+        "Some of the primary keys asked for do not exist in the '{table}' table"
+    ),
+    ('INVALID_REQUEST', 'request', 'past_int64'): (
+        "Column '{table}.{column}' row {row}: a value is outside the range "
+        '{dtype} represents (-9223372036854775808 to '
+        '9223372036854775807); send the column as strings'
+    ),
+    ('INVALID_REQUEST', 'request', 'not_finite'): (
+        'encountered a non-finite value ({value}); NIM requests must contain '
+        'finite numbers or nulls'
+    ),
+    **{
+        ('INVALID_REQUEST', 'schema', f'reserved_{many}'): (
+            '{reserved!c} '
+            + uses
+            + ' reserved by the SQL backends: a column may not start with '
+            '{prefix!r}, because the generated joins already select columns '
+            'of that name and the reference would be ambiguous. Rename the '
+            'column, or project it under another name.'
+        )
+        for many, uses in (('name', 'uses a name'), ('names', 'use names'))
+    },
+    ('INVALID_REQUEST', 'query', 'unresolved'): (
+        '{query!r} is not a query a relational model can answer: {reasons!R}'
+    ),
+    **{
+        ('UNSUPPORTED_REQUEST', 'context', 'one_class', variant): (
+            'every context row has the same '
+            + said
+            + ', and a classification needs at least two classes to learn '
+            'from. Gather a wider context with num_context_samples, or ask '
+            'about entities whose answers differ'
+        )
+        for variant, said in (
+            ('column', '{target}'),
+            ('predicted', '{predicted}'),
+            ('question', 'answer to {question!r}'),
+            ('answer', 'answer'),
+        )
+    },
 }
 
 
@@ -495,6 +620,11 @@ def _worded(code: str, details: dict[str, Any]) -> str | None:
         len(details.get('tables') or ()) > 1
     ):
         said = f'{said}_several'
+    # A rule said several ways, by the core's ``variant`` of it.
+    if 'variant' in details:
+        template = WORDED.get((code, field, str(said), str(details['variant'])))
+        if template is not None:
+            return template
     return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
 
 
@@ -978,6 +1108,18 @@ class _Words(string.Formatter):
             return ', '.join(repr(name) for name in value)
         if conversion == 'c':
             return ', '.join(str(name) for name in value)
+        if conversion == 'R':
+            return '; '.join(str(reason) for reason in value)
+        if conversion in ('G', 'S', 'N'):
+            # A value the caller gave, as the JSON text the host wrote it
+            # in: its ``repr``, its ``str`` or its type's name, as Python
+            # holds the value JSON reads back.
+            given = json.loads(value)
+            if conversion == 'G':
+                return repr(given)
+            if conversion == 'S':
+                return str(given)
+            return type(given).__name__
         if conversion == 't':
             if isinstance(value, str):
                 return str(_as_timestamp(value))
