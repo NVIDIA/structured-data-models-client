@@ -471,17 +471,19 @@ def _without(table: dict, column: str) -> None:
             'INVALID_SCHEMA',
         ),
         (
-            lambda p: [
-                _without(p[half]['related_tables']['users'], 'age')
-                for half in ('context', 'predict')
-            ],
+            lambda p: _without(p['context']['related_tables']['users'], 'age'),
             'INVALID_SCHEMA',
         ),
         (
-            lambda p: [
-                _with(p[half]['related_tables']['users'], 'ghost', 1.0)
-                for half in ('context', 'predict')
-            ],
+            lambda p: _with(
+                p['context']['related_tables']['users'], 'ghost', 1.0
+            ),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: _with(
+                p['predict']['related_tables']['users'], 'ghost', 1.0
+            ),
             'INVALID_SCHEMA',
         ),
         (

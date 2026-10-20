@@ -88,9 +88,9 @@ class FittedModel:
 
     ``pinned`` is what the session pinned, minus the context itself. Reading an
     answer needs the task and the schema, where the key an id stands for is
-    named. The rows have been uploaded and live on the endpoint, so
-    keeping a second encoded copy for the lifetime of the handle would hold a
-    whole dataset for nothing.
+    named. The rows have been uploaded and live on the endpoint, or in process
+    have been fitted and are not kept, so keeping a second encoded copy for the
+    lifetime of the handle would hold a whole dataset for nothing.
 
     It is not constructed directly. What it is built from is how the client
     talks to a model and what the session pinned, none of which is public.
