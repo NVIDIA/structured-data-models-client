@@ -141,3 +141,11 @@ Sources: the owner's answer on 2026-10-20 (UTC) to the orchestrator's question 1
 | # | Decision | Reason | Status |
 |---|---|---|---|
 | KO2-84 | Reference: `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1`, origin/main f2ad8d61 merged into rust-core-reference for Phase 2's second update; the orchestrator made the merge and pushed the branch, and T2.0i re-records the reference and every file citing it at this commit | "5. Sure, you can bring these commits in, should be minor"; "1. Yes, you do it. Just be careful, and do it on latest main. These changes should be minor" | approved by owner 2026-10-20 |
+
+## The owner's T2.13b answer (2026-10-20)
+
+Sources: the owner's answer late on 2026-10-20 (UTC) to the orchestrator's question on T2.13b's aggregation differences in the entity filter and ASSUMING (A: the core answers and the differences are registered; B: the standalone case refused by name), relayed by the orchestrator.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-85 | A (T2.13b): an entity filter or an ASSUMING clause over a windowed AVG, MIN or MAX where some example has no value is answered from each example's own values, standing alone or inside NOT, AND or OR, where the reference picks examples by shifted values or fails (IndexError as INTERNAL_ERROR in a filter, a broadcast error as INVALID_REQUEST in an assumption); P2E-16 (KO2-72) is widened to both clauses | "T2.13b: Yes, keep the new behavior and record these as known" | approved by owner 2026-10-20 |

@@ -7154,34 +7154,49 @@ entries:
   - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
 
 - id: P2E-16
-  title: A logical target joins each example's own conditions where an average, minimum or maximum has no value for an earlier example
+  title: A logical target, an entity filter or an assumption joins each example's own conditions where an average, minimum or maximum has no value for an earlier example
   kind: change
   old_behavior: >-
     The reference's executor reads a condition on a windowed AVG, MIN or
-    MAX inside NOT, AND or OR through execute_join, which always drops the
-    examples whose window holds no value and renumbers the rest from 0
-    (filter_na=True); execute_logical_operation then joins that shorter
+    MAX through execute_join, which always drops the examples whose window
+    holds no value and renumbers the rest from 0 (filter_na=True).
+    Inside NOT, AND or OR (a target's, an entity filter's or an
+    assumption's), execute_logical_operation then joins that shorter
     series with the other side by index (pandas alignment). Where an
     example without a value comes before one with a value, each later
     label is another example's (measured at 6298913c: AVG(...) > 2 AND
     COUNT(...) > 0 over examples 0, 2 and 4 with averages labels them
-    [F, T, F] where each example's own conditions give [F, F, T]); where
-    the lengths cannot meet (NOT of such a condition, or two of them), the
-    executor raises IndexError ("Boolean index has wrong length"), which
-    the client gives as INTERNAL_ERROR.
+    [F, T, F] where each example's own conditions give [F, F, T]); in an
+    entity filter or an assumption the shifted values choose examples
+    whose own values fail the condition (T2.13b round 1: WHERE AVG(...) >
+    50 OR users.country = 'US' chose 48 of 136 such examples; the
+    generated DuckDB sources g05, g12, g26 and g47 of seed 27). Where the
+    lengths cannot meet (NOT of such a condition, two of them, or such a
+    condition standing alone as the entity filter or the assumption, which
+    execute and-s into the examples' mask), the executor fails: IndexError
+    ("Boolean index has wrong length"), which the client gives as
+    INTERNAL_ERROR, for a target or an entity filter; numpy's broadcast
+    ValueError ("operands could not be broadcast together"), which the
+    client gives as INVALID_REQUEST, for an assumption.
   new_behavior: >-
     The core joins each example's own conditions (sdm-engine labels::truth,
-    T2.10): an example whose average, minimum or maximum has no value has
-    no label, every other example is labelled from its own values, and
-    NOT and two such conditions are answered the same way. Where every
-    example of the reference's first batch has a value the two agree.
+    T2.10; the entity filter's and the assumption's from T2.13b): an
+    example whose average, minimum or maximum has no value has no label
+    (in a target) or is not chosen (in an entity filter or an assumption),
+    every other example is labelled and chosen from its own values, and
+    NOT, two such conditions and a condition standing alone are answered
+    the same way: the request is gathered, or, where no example is chosen,
+    refused as a context no example was collected for (INVALID_REQUEST,
+    with the reason the reference's sampler gives). Where every example of
+    the reference's first batch has a value the two agree.
   affected_inputs: >-
     PredictiveQuery.materialize on the core route of a query whose target
-    is NOT, AND or OR over a condition on a windowed AVG, MIN or MAX, where
-    some example's window holds no value of it, on DuckDB, SQLite and
-    Postgres.
-  cases: [T2.10]
-  refs: [T2.10, KO2-70]
+    is NOT, AND or OR over a condition on a windowed AVG, MIN or MAX, or
+    whose entity filter (FOR EACH ... WHERE) or ASSUMING clause is such a
+    condition, alone or inside NOT, AND or OR, where some example's window
+    holds no value of it, on DuckDB, SQLite and Postgres.
+  cases: [T2.10, T2.13b]
+  refs: [T2.10, T2.13b, KO2-70, KO2-85]
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-72}
@@ -7195,6 +7210,16 @@ entries:
     class.
     Approved by the owner on 2026-10-19 as KO2-72 (relayed by the
     orchestrator; T2.1p).
+    Widened to the entity filter and ASSUMING by T2.13b, which reuses the
+    evaluator for both clauses: its differential (four OR ... AVG sources
+    differ in the payload, and agree with SUM in place of AVG) and round
+    1's reviews (a standalone AVG or MIN filter: the reference's
+    INTERNAL_ERROR, the core 168 and 104 context examples, each meeting its
+    own condition by SQL; a standalone AVG assumption: the reference's
+    INVALID_REQUEST broadcast error, the core answers; the same on DuckDB,
+    SQLite and Postgres). The owner chose to keep the core's behavior and
+    record these as known on 2026-10-20 (KO2-85, relayed by the
+    orchestrator).
 
 - id: P2E-17
   title: A constant past a narrow integer column's type, or a float with a fraction in IN, is compared exactly in a filter or a logical target, where the reference casts it

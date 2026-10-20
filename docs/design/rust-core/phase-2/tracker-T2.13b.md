@@ -30,7 +30,7 @@ Both conditions choose the examples by T2.10's evaluator; the core decides the c
 ### Exits
 
 - Every key of the eight cases and the lag case passes on python-core (DuckDB, SQLite, Postgres) and rust-host (DuckDB, SQLite): `contract/tests/test_t213_options.py` 485 passed with a Postgres server named, `t213_options.rs` passed; the lag case (`lag.not-filtered-2`) passed already and keeps passing (`test_t29_forecasting.py`, `t29_forecasting.rs`).
-- The refusal census: neither rule has a site left; the census's remaining failures are T2.11's ten lifted rules, fixed in T2.11's own test commit.
+- The refusal census: neither rule has a site left, and `tests/test_t21a_refusal_census.py` passes on T2.11's final candidate.
 - Each refusal these two reach says what the reference says, word for word on all three databases: `filter.matches-none` (the anchor is not the reason, the filter named) and `assuming.no-examples` (too restrictive); the notice's words are the reference's for every filter case.
 - L4: python-core's fetches for the nine cases on DuckDB, SQLite and Postgres are already goldens (`SDM_L4_OBSERVATIONS` over each run: `duckdb_goldens`, `sqlite_goldens`, `postgres_goldens` pass), so no golden is added.
 - Baselines: the nine cases' lines on python-core, python-old and rust-host (27), by `ratchet.py accept` from the gate's DuckDB run (`gate.sh --base 4e5e26c9 --run python-core,python-old,rust-host`: observations, compare, l0 and coverage ok; the ratchet failed only on these missing baselines, and `ratchet.py check` passes once they are committed).
@@ -40,10 +40,17 @@ Both conditions choose the examples by T2.10's evaluator; the core decides the c
 - The reference (43e55f4f, semantically 6298913c), read before the code: `execute`'s mask, `_get_query_time_offset_dict`'s order, `to_autoregressive_query`, `get_exclude_cols_dict`, `_diagnose_empty_sample`, the client's notice, and `option_record.said`, which keeps each warning once (a ranking's three parts give one line).
 - Differential, old route against core (`contract/tools/differential.py probe` and `compare`), on the 50 generated DuckDB sources of seed 27, each query given one of seven clauses: a numeric and a text entity column filter, a filter over an aggregation, an assumption, a negated `IN` filter with an assumption, a filter `OR` of a column and an `AVG`, and a filter no entity passes.
   - 33 agree; 6 differ as approved P1B-11 (an empty table, the reference's `RuntimeError`), the same without the clause.
-  - 4 differ in the payload, every one the `OR ... AVG(...)` clause: the reference packs an average's values onto the examples that have one before it joins them to the other side (`execute_join` with `filter_na=True`), which misaligns them; the core aligns them, as approved register entry P2E-16 (KO2-72) records for a target's `NOT`, `AND` and `OR`. Rerun with `SUM` in place of `AVG`, all four agree.
+  - 4 differ in the payload, every one the `OR ... AVG(...)` clause: the reference packs an average's values onto the examples that have one before it joins them to the other side (`execute_join` with `filter_na=True`), which misaligns them; the core aligns them (P2E-16, widened under KO2-85). Rerun with `SUM` in place of `AVG`, all four agree.
   - 7 differ in the schema `from_source` infers, the same with the original generator spec and no clause (column `d`: categorical on the old route, numerical on the core): before any query, not this package's; reported to the orchestrator. Their materialize outcomes are the same on both routes.
 
-### Deviations and questions
+### Deviations
 
-- None registered. The `AVG`, `MIN` or `MAX` alignment is P2E-16's difference of the shared evaluator, met here through an entity filter or an assumption, which P2E-16's `affected_inputs` names only for a target: whether to widen it to both clauses is the orchestrator's question (asked in the handoff), not entered here.
+- The aggregation differences of the shared evaluator, met through both clauses, are approved and recorded (P2E-16, widened under KO2-85; the owner chose to keep the core's behavior):
+  - inside `NOT`, `AND` or `OR`, a windowed `AVG`, `MIN` or `MAX` with no value for an earlier example: the reference shifts values onto other examples and chooses examples whose own values fail the condition (the four `OR ... AVG` sources above; round 1's review, `WHERE AVG(...) > 50 OR users.country = 'US'`, 48 of 136);
+  - such a condition standing alone as the entity filter or the assumption: the reference fails (`IndexError`, `INTERNAL_ERROR`, in a filter; numpy's broadcast `ValueError`, `INVALID_REQUEST`, in an assumption), and the core chooses each example by its own values, gathering the request or refusing a context no example was collected for (round 1's review: `WHERE AVG(orders.price, -90, 0, days) > 40` and `MIN(...) < 20`, 168 and 104 examples, each meeting its condition by SQL; `ASSUMING AVG(orders.price, 0, 30, days) > 30` answered; the same on DuckDB, SQLite and Postgres).
 - The generated sources' stype difference above is pre-existing and outside this package.
+
+### Fix round
+
+- Round 1 (both reviewers; Codex approved): no code change. The standalone `AVG`, `MIN` or `MAX` filter or assumption, which the tracker had left out, is recorded with the `OR` and `AND` case: P2E-16 widened to both clauses, the owner's answer as KO2-85 in `decisions.md`.
+  Rebased onto T2.11's final candidate 145df928; the census conflict resolved as both sides' removals (T2.11's ten probes and this package's two).
