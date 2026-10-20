@@ -35,5 +35,5 @@ declared as data instead of discovered from a 422.
 - **You want to train a model.** These models do not train. If you need a model
   fitted to your data, this is the wrong tool.
 - **Your data cannot leave your environment.** Run a NIM in your environment
-  and point the client at it.
-- **You want inference in-process.** Everything here is an HTTP call.
+  and point the client at it, or run the model in your own process with
+  `SDMClient.in_process()`.

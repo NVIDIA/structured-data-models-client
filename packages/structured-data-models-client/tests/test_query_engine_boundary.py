@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import PredictiveQuery, Relationship, Schema
+from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
 from sdm_client.materializers.relational import (
     RelationalMaterializer,
@@ -218,7 +219,8 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
     asked = query('PREDICT users.age FOR EACH users.user_id')
     scored = [5, 6, 7, 8, 9]
     client = SDMClient(url='http://localhost:8000')
-    client._transport = transport = Echo()
+    transport = Echo()
+    client._backend = NimBackend(transport)
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = asked.materialize(indices=scored, num_context_samples=20)
@@ -441,7 +443,7 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
             return super().predict(payload)
 
     client = SDMClient(url='http://localhost:8000')
-    client._transport = FailsOnTheSecondCall()
+    client._backend = NimBackend(FailsOnTheSecondCall())
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = query('PREDICT users.age FOR EACH users.user_id').materialize(

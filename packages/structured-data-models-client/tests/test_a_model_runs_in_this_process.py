@@ -2,17 +2,18 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The models run in this Python process, answering as their NIM does.
+"""A model run in this process, as structured-data-models runs it.
 
 Small random-weight models stand in for the published ones, so nothing is
-downloaded and no GPU is needed. What is checked is that a request reaches the
-model as its own API would be called, and comes back as a NIM answers it.
+downloaded and no GPU is needed. What a NIM answers alike is held in
+``test_every_backend_answers_alike``; this is what only a model in this
+process has: the answer the model itself gives, how a model is loaded and
+kept, and a refusal that carries no HTTP status, since nothing was sent.
 """
 
 from __future__ import annotations
 
 import copy
-import json
 import subprocess
 import sys
 import warnings
@@ -26,14 +27,12 @@ from sdm_client import (
     NimRequestError,
     PredictiveQuery,
     Request,
-    Schema,
     SDMClient,
     StructuredDataError,
 )
 
 COUNT = 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
 BINARY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
-MULTICLASS = 'PREDICT users.tier FOR EACH users.user_id'
 
 
 @pytest.fixture(scope='module')
@@ -110,9 +109,11 @@ def graph() -> dict[str, pd.DataFrame]:
     return {'users': users, 'items': items, 'orders': pd.DataFrame(rows)}
 
 
-def refused(call) -> NimRequestError:
-    with pytest.raises(NimRequestError) as caught:
+def refused(call) -> StructuredDataError:
+    with pytest.raises(StructuredDataError) as caught:
         call()
+    assert not isinstance(caught.value, NimRequestError)
+    assert not hasattr(caught.value, 'status_code')
     return caught.value
 
 
@@ -167,20 +168,6 @@ def test_a_tabular_answer_is_the_one_the_model_gives_when_called_directly(
     ]
 
 
-@pytest.mark.parametrize('query', [COUNT, BINARY, MULTICLASS])
-def test_a_session_answers_as_one_call_does(relational, query):
-    request = PredictiveQuery(query, graph()).materialize(indices=[0, 1, 2, 3])
-    with SDMClient.in_process(relational) as client:
-        once = client.predict(request, model=KumoRelational()).to_pandas()
-        again = client.predict(request, model=KumoRelational()).to_pandas()
-        with client.fit(request, model=KumoRelational()) as fitted:
-            pinned = fitted.predict(request).to_pandas()
-
-    assert once['id'].tolist() == [0, 1, 2, 3]
-    pd.testing.assert_frame_equal(once, again)
-    pd.testing.assert_frame_equal(once, pinned)
-
-
 @pytest.mark.parametrize(
     ('query', 'rows'),
     [
@@ -218,102 +205,96 @@ def test_a_ranking_and_a_forecast_are_asked_as_the_questions_it_serves(
         assert sorted(set(answer['forecast_step'])) == [1, 2, 3]
 
 
-def test_each_refusal_is_the_one_a_nim_answers_with(relational, tabular):
-    tables = graph()
-    request = PredictiveQuery(COUNT, tables).materialize(indices=[0, 1])
-    one = PredictiveQuery(BINARY, tables).materialize(indices=[0])
-    texty = Schema.from_data(tables)
-    texty['users']['tier'].stype = 'text'
-    with SDMClient.in_process(relational, tabular) as client:
-        cases = {
-            ('UNSUPPORTED_OUTPUT', 422): lambda: client.predict(
-                request,
-                model=KumoRelational(),
-                outputs=['prediction', 'scores'],
-            ),
-            (
-                'UNSUPPORTED_OUTPUT',
-                422,
-                "explanation'] not",
-                "supported: ['prediction', 'probabilities'].",
-            ): lambda: client.predict(
-                one,
-                model=KumoRelational(),
-                outputs=['prediction', 'explanation'],
-            ),
-            ('UNSUPPORTED_DTYPE', 422, 'tier'): lambda: client.predict(
-                PredictiveQuery(COUNT, texty).materialize(indices=[0, 1]),
-                model=KumoRelational(),
-            ),
-            ('VALIDATION_FAILED', 422, 'source_query'): lambda: client.predict(
-                PredictiveQuery(
-                    f'{COUNT} WHERE '
-                    + ' OR '.join(f'users.age > {i}' for i in range(60)),
-                    tables,
-                ).materialize(indices=[0, 1]),
-                model=KumoRelational(),
-            ),
-            ('INVALID_REQUEST', 400): lambda: client.predict(
-                PredictiveQuery(COUNT, tables).materialize(
-                    indices=[0, 1], inference_config={'num_estimators': 4}
-                ),
-                model=KumoRelational(),
-            ),
-            ('UNSUPPORTED_TASK', 422, "'regression']."): lambda: client.predict(
-                PredictiveQuery(
-                    'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) '
-                    'FOR EACH users.user_id',
-                    tables,
-                ).materialize(indices=[0, 1]),
-                model=KumoRelational(),
-            ),
-            ('VALIDATION_FAILED', 422): lambda: client.predict(
-                Request(
-                    context=people().iloc[:40][['person_id', 'churn']],
-                    predict=people().iloc[40:][['person_id']],
-                    target='churn',
-                    task='classification',
-                ),
-                model=KumoTabular(),
-            ),
-            ('UNSUPPORTED_DTYPE', 422, 'seen'): lambda: client.predict(
-                Request(
-                    context=people()
-                    .assign(seen=pd.Timestamp('2024-01-01'))
-                    .iloc[:40][['person_id', 'age', 'seen', 'churn']],
-                    predict=people()
-                    .assign(seen=pd.Timestamp('2024-01-01'))
-                    .iloc[40:][['person_id', 'age', 'seen']],
-                    target='churn',
-                    task='classification',
-                ),
-                model=KumoTabular(),
-            ),
-        }
-        for (code, status, *named), call in cases.items():
-            error = refused(call)
-            assert (error.code, error.status_code) == (code, status), named
-            assert all(name in error.message for name in named)
+def hand_built(change) -> Request:
+    r"""A gathered request with its payload changed, as one passed to
+    ``Request.materialized`` by hand may be."""
+    gathered = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
+    payload = copy.deepcopy(gathered.payloads[0])
+    change(payload)
+    return Request.materialized(
+        payloads=(payload,),
+        schema=gathered.schema,
+        query=gathered.query,
+        indices=gathered.indices,
+    )
 
 
-def test_a_refusal_inside_a_session_is_filed_as_the_sessions(relational):
-    """A NIM reports a request refused while creating a session under that
-    session's code. A holdout can empty a relational context, or leave a
-    binary one a single class, after the client has checked it; the NIM
-    refuses both."""
-    tables = graph()
-    texty = Schema.from_data(tables)
-    texty['users']['tier'].stype = 'text'
+GHOST = {'format': 'arrays', 'columns': ['k'], 'rows': []}
+
+
+def _without(table: dict, column: str) -> None:
+    position = table['columns'].index(column)
+    del table['columns'][position]
+    for row in table['rows']:
+        del row[position]
+
+
+@pytest.mark.parametrize(
+    ('change', 'code'),
+    [
+        (
+            lambda p: p['task'].update(entity_table_names=['orders']),
+            'TASK_SCHEMA_MISMATCH',
+        ),
+        (lambda p: p['task'].update(top_k=3), 'UNSUPPORTED_FEATURE'),
+        (
+            lambda p: p['task'].update(anchor_time_column='nowhere'),
+            'TASK_SCHEMA_MISMATCH',
+        ),
+        (
+            lambda p: p['task']['target'].update(dtype='timestamp[us]'),
+            'TASK_SCHEMA_MISMATCH',
+        ),
+        (
+            lambda p: p['predict']['related_tables'].pop('orders'),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: p['predict']['related_tables'].update(ghost=GHOST),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: [
+                p[half]['related_tables'].update(ghost=GHOST)
+                for half in ('context', 'predict')
+            ],
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: _without(p['predict']['related_tables']['orders'], 'ts'),
+            'INVALID_SCHEMA',
+        ),
+    ],
+)
+def test_a_request_built_by_hand_is_refused_where_it_states_another_question(
+    relational, change, code
+):
+    """The model scores the table its rows link to, from a timestamp the
+    instance table declares, over the tables the context carries. A request
+    saying otherwise is refused rather than answered as something else."""
+    request = hand_built(change)
     with SDMClient.in_process(relational) as client:
-        for request, holdout in (
-            (PredictiveQuery(COUNT, texty).materialize(indices=[0, 1]), None),
+        error = refused(lambda: client.predict(request, model=KumoRelational()))
+    assert error.code == code
+
+
+def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(
+    relational,
+):
+    """A holdout edits the context after the client has checked it, so an
+    empty context, or a binary one left a single class, is refused here."""
+    tables = graph()
+    with SDMClient.in_process(relational) as client:
+        for request, holdout, code in (
             (
                 PredictiveQuery(COUNT, tables).materialize(indices=[0, 1]),
                 list(range(40)),
+                'VALIDATION_FAILED',
             ),
             (
                 PredictiveQuery(BINARY, tables).materialize(indices=[1, 3]),
                 list(range(0, 40, 2)),
+                'TASK_SCHEMA_MISMATCH',
             ),
         ):
             error = refused(
@@ -321,38 +302,31 @@ def test_a_refusal_inside_a_session_is_filed_as_the_sessions(relational):
                     request, model=KumoRelational(), holdout=holdout
                 )
             )
-            assert (error.code, error.status_code) == (
-                'SESSION_CREATE_VALIDATION_FAILED',
-                422,
-            )
+            assert error.code == code
 
 
-def test_each_session_call_takes_only_its_own_fields(relational):
-    """A session is created without inference options and scored without
-    the task it already holds; a NIM refuses either one sent."""
-    payload = _relational_payload()
-    created = {
-        name: payload[name] for name in ('model', 'task', 'schema', 'context')
-    }
-    scored = {'predict': payload['predict'], 'output': payload['output']}
-    with SDMClient.in_process(relational) as client:
-        transport = client._transport
-        session = transport.create_session(created)['session_id']
-        for call, extra in (
-            (
-                lambda: transport.create_session({**created, 'inference': {}}),
-                'inference',
-            ),
-            (
-                lambda: transport.session_predict(
-                    session, {**scored, 'task': payload['task']}
-                ),
-                'task',
-            ),
-        ):
-            error = refused(call)
-            assert (error.code, error.status_code) == ('VALIDATION_FAILED', 422)
-            assert f'{extra}: Extra inputs are not permitted' in error.message
+@pytest.mark.parametrize(
+    ('frame', 'code'),
+    [
+        (people()[['person_id', 'churn']], 'VALIDATION_FAILED'),
+        (
+            people().assign(seen=pd.Timestamp('2024-01-01'))[
+                ['person_id', 'age', 'seen', 'churn']
+            ],
+            'UNSUPPORTED_DTYPE',
+        ),
+    ],
+)
+def test_a_table_the_model_cannot_read_is_refused(tabular, frame, code):
+    request = Request(
+        context=frame.iloc[:40],
+        predict=frame.iloc[40:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+    )
+    with SDMClient.in_process(tabular) as client:
+        error = refused(lambda: client.predict(request, model=KumoTabular()))
+    assert error.code == code
 
 
 def test_a_task_the_model_was_not_loaded_for_is_refused(sdm):
@@ -368,214 +342,8 @@ def test_a_task_the_model_was_not_loaded_for_is_refused(sdm):
     )
     with SDMClient.in_process(regressor) as client:
         error = refused(lambda: client.predict(request, model=KumoTabular()))
-    assert (error.code, error.status_code) == ('UNSUPPORTED_TASK', 422)
+    assert error.code == 'UNSUPPORTED_TASK'
     assert "['regression']" in error.message
-
-
-@pytest.mark.parametrize(
-    ('inference', 'refusal'),
-    [
-        ({'use_prediction_time': 'no'}, None),
-        ({'run_mode': {}}, ('VALIDATION_FAILED', 422)),
-        ({'use_prediction_time': True}, ('INVALID_REQUEST', 400)),
-    ],
-)
-def test_inference_options_are_read_as_the_nim_reads_them(
-    tabular, inference, refusal
-):
-    """Typed first, so a boolean spelled ``'no'`` asks for nothing and a
-    value of the wrong kind is invalid, then judged by the model's own NIM."""
-    frame = people()
-    request = Request(
-        context=frame.iloc[:45][['person_id', 'age', 'churn']],
-        predict=frame.iloc[45:][['person_id', 'age']],
-        target='churn',
-        task='classification',
-        inference=inference,
-    )
-    with SDMClient.in_process(tabular) as client:
-        if refusal is None:
-            assert len(client.predict(request, model=KumoTabular())) == 15
-            return
-        error = refused(lambda: client.predict(request, model=KumoTabular()))
-    assert (error.code, error.status_code) == refusal
-
-
-def _tabular_payload(task: str) -> dict:
-    from sdm_client.adapters.tabular import TabularAdapter
-
-    frame = people()[['person_id', 'age', 'churn']]
-    request = Request(
-        context=frame.iloc[:45],
-        predict=frame.iloc[45:].drop(columns=['churn']),
-        target='churn',
-        task=task,
-    )
-    return next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
-
-
-def _relational_payload() -> dict:
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    request = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
-    return next(
-        iter(RelationalAdapter().prediction_plan(request, ('prediction',)))
-    )
-
-
-def _without(table: dict, column: str) -> None:
-    position = table['columns'].index(column)
-    del table['columns'][position]
-    for row in table['rows']:
-        del row[position]
-
-
-@pytest.mark.parametrize(
-    ('model', 'change', 'answer'),
-    [
-        (
-            'tabular',
-            lambda p: p['schema'].update(
-                relationships=[
-                    {
-                        'source_columns': ['age'],
-                        'target_table': 'other',
-                        'target_columns': ['age'],
-                    }
-                ]
-            ),
-            ('UNSUPPORTED_FEATURE', 422, 'relationships are not'),
-        ),
-        (
-            'regression',
-            lambda p: p.update(
-                output={'fields': ['prediction'], 'quantile_levels': [1.5]}
-            ),
-            None,
-        ),
-        (
-            'relational',
-            lambda p: _without(p['predict']['related_tables']['orders'], 'ts'),
-            ('INVALID_SCHEMA', 422, "missing=['ts'], extra=[]"),
-        ),
-        (
-            'relational',
-            lambda p: p['predict']['related_tables'].update(
-                ghost={'format': 'arrays', 'columns': ['k'], 'rows': []}
-            ),
-            ('INVALID_SCHEMA', 422, "'ghost' is not declared"),
-        ),
-        (
-            'relational',
-            lambda p: p['predict']['related_tables'].pop('orders'),
-            ('INVALID_SCHEMA', 422, "reference table(s) ['orders']"),
-        ),
-        (
-            'relational',
-            lambda p: p['task'].update(entity_table_names=['orders']),
-            (
-                'TASK_SCHEMA_MISMATCH',
-                422,
-                "entity table 'orders' but the instance table links to 'users'",
-            ),
-        ),
-        (
-            'relational',
-            lambda p: p['task'].update(top_k=3),
-            ('UNSUPPORTED_FEATURE', 422, "task options: ['top_k']"),
-        ),
-        (
-            'relational',
-            lambda p: p['task'].update(anchor_time_column='nowhere'),
-            ('TASK_SCHEMA_MISMATCH', 422, "anchor time column 'nowhere'"),
-        ),
-        (
-            'relational',
-            lambda p: p['task']['target'].update(dtype='timestamp[us]'),
-            (
-                'TASK_SCHEMA_MISMATCH',
-                422,
-                "'regression' targets declared as 'timestamp[us]'",
-            ),
-        ),
-        (
-            'tabular',
-            lambda p: p.update(
-                schema={
-                    **p['schema'],
-                    'related_tables': {
-                        't': {'columns': {'a': {'dtype': 'int64'}}}
-                    },
-                },
-                inference={'bogus': True},
-            ),
-            ('UNSUPPORTED_FEATURE', 422, 'related tables are not'),
-        ),
-        (
-            'tabular',
-            lambda p: p.update(bogus=True),
-            ('VALIDATION_FAILED', 422, 'bogus: Extra inputs are not'),
-        ),
-        ('tabular', lambda p: p.update(schema_=p.pop('schema')), None),
-        (
-            'tabular',
-            lambda p: p.update(
-                inference={'run_mode': 7, 'inference_config': [1]},
-                metadata={'source_query': 'x' * 1025},
-            ),
-            (
-                'VALIDATION_FAILED',
-                422,
-                'inference.run_mode: Input should be a valid string; '
-                'inference.inference_config: Input should be a valid '
-                'dictionary; metadata.source_query: String should have at '
-                'most 1024 characters',
-            ),
-        ),
-    ],
-)
-def test_a_request_is_read_in_the_order_the_nim_reads_it(
-    relational, tabular, model, change, answer
-):
-    """Each table supplies exactly its declared columns, a split carries
-    every table the relationships name, the task names the entity its rows
-    link to, nothing carries a key the contract does not name, and a field
-    the request does not ask for is not judged."""
-    payload = (
-        _relational_payload()
-        if model == 'relational'
-        else _tabular_payload(
-            'regression' if model == 'regression' else 'classification'
-        )
-    )
-    change(payload)
-    with SDMClient.in_process(relational, tabular) as client:
-        if answer is None:
-            client._transport.predict(payload)
-            return
-        error = refused(lambda: client._transport.predict(payload))
-    code, status, said = answer
-    assert (error.code, error.status_code) == (code, status)
-    assert said in error.message
-
-
-def test_a_row_is_answered_under_its_key_as_sent(tabular):
-    """A key named as a list answers each row under the JSON of its values
-    as they were sent, so an integer wider than a double keeps its digits
-    as a string, as a NIM keeps them."""
-    payload = _tabular_payload('classification')
-    payload['schema']['instance_table']['primary_key'] = ['person_id']
-    table = payload['predict']['instance_table']
-    position = table['columns'].index('person_id')
-    for index, row in enumerate(table['rows']):
-        row[position] = str(2**53 + 1 + index)
-    with SDMClient.in_process(tabular) as client:
-        answer = client._transport.predict(payload)
-    assert answer['predictions'][0]['id'] == json.dumps(
-        [table['rows'][0][position]]
-    )
 
 
 def test_a_model_passed_in_keeps_what_was_fitted_on_it(sdm, tabular):
@@ -648,7 +416,7 @@ def test_a_model_that_will_not_load_says_so_with_its_cause(sdm, monkeypatch):
     with SDMClient.in_process() as client:
         error = refused(lambda: client.predict(request, model=KumoTabular()))
 
-    assert (error.code, error.status_code) == ('MODEL_NOT_READY', 503)
+    assert error.code == 'MODEL_NOT_READY'
     assert isinstance(error.__cause__, OSError)
 
 

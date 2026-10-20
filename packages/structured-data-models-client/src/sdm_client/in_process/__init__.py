@@ -9,6 +9,6 @@ public API itself. Needs the ``in-process`` extra, which brings
 structured-data-models and PyTorch.
 """
 
-from sdm_client.in_process.transport import InProcessTransport
+from sdm_client.in_process.backend import InProcessBackend
 
-__all__ = ['InProcessTransport']
+__all__ = ['InProcessBackend']

@@ -4,47 +4,34 @@
 
 r"""A client's requests, answered by structured-data-models in this process.
 
-The client sends what it would send a NIM and reads back what a NIM answers,
-so everything that works against a NIM works here, sessions included. The
-model is fitted the way the hosted deployments fit it, so the same request is
-answered the same way wherever it runs, and refused the same way too. A payload
-written by hand and passed to the transport directly is not held to every rule
-a NIM applies.
+The client prepares a request here exactly as it does for a NIM, and this
+backend runs the model on it directly, with no HTTP in between. The context is
+fitted the way the hosted deployments fit it, so a request is answered alike
+wherever it runs. A request the model cannot answer as asked is refused with
+a :class:`~sdm_client.errors.StructuredDataError` whose code says why, from
+the codes a NIM uses, and no HTTP status, since nothing was sent.
 """
 
 from __future__ import annotations
 
 import contextlib
 import copy
-import json
 import sys
 import threading
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sdm_api import TFM_MODEL_VALUES
-
-from sdm_client.core.transport import _check_encodable
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.in_process.answers import (
-    QUANTILE_LEVELS,
-    classified,
-    regressed,
-    row_ids,
-)
+from sdm_client.in_process.answers import QUANTILE_LEVELS, classified, regressed
 from sdm_client.in_process.columns import Context
-from sdm_client.in_process.contract import (
-    SESSION,
-    SESSION_PREDICTION,
-    check_columns,
-    check_contract,
-)
-from sdm_client.in_process.inference import read_inference
-from sdm_client.in_process.refusal import in_session, refusal
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
+
+if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
+    from sdm_client.base import ModelAdapter
+    from sdm_client.result import PredictionResult
 
 #: How the hosted deployments fit a context.
 _SEED = 42
@@ -62,8 +49,9 @@ class _Session:
     fitted: Any
 
 
-class InProcessTransport:
-    r"""Answers the contract's routes with structured-data-models models.
+class InProcessBackend:
+    r"""Runs ``kumo-tabular`` and ``kumo-relational`` with
+    structured-data-models.
 
     Not part of the public API surface; :meth:`SDMClient.in_process` builds
     one.
@@ -72,7 +60,7 @@ class InProcessTransport:
         models: Loaded ``sdm.models.KumoTabular`` or
             ``sdm.models.KumoRelational`` models, at most one of each. With
             none, each is loaded from its published weights on first use.
-        device: Where to load models this transport loads itself. Defaults to
+        device: Where to load models this backend loads itself. Defaults to
             CUDA when available, else the CPU.
     """
 
@@ -107,7 +95,7 @@ class InProcessTransport:
         return 'in-process'
 
     def close(self) -> None:
-        r"""Release every session and the models this transport loaded."""
+        r"""Release every session and the models this backend loaded."""
         with self._lock:
             self._sessions.clear()
             self._models.clear()
@@ -118,7 +106,7 @@ class InProcessTransport:
         return True
 
     def list_models(self) -> list[str]:
-        r"""The models this transport answers for."""
+        r"""The models this backend answers for."""
         self._require_open()
         return [
             model_id
@@ -126,43 +114,34 @@ class InProcessTransport:
             if self._loads or model_id in self._models
         ]
 
-    def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
-        payload = _schema_by_name(_received(payload))
-        with self._answering():
-            check_contract(payload)
-            payload['inference'] = read_inference(payload.get('inference'))
-            check_columns(payload, payload['schema'], ('context', 'predict'))
-            served, model = self._serving(payload.get('model'))
+    def predict(
+        self,
+        adapter: ModelAdapter,
+        payload: dict[str, Any],
+        outputs: tuple[str, ...],
+    ) -> PredictionResult:
+        with self._running():
+            served, model = self._serving(payload['model'])
             task = payload['task']
-            fields = _fields(served, task['kind'], payload.get('output'))
-            _check_trained_for(served, model, task['kind'])
+            fields = _fields(served, model, task['kind'], payload)
             context = served.context(payload)
             query = served.query(context, payload, payload['schema'])
-            output = _run(_fit(model, context), query)
-            return _response(
-                served,
-                task,
-                payload['schema'],
-                context,
-                payload,
-                output,
-                fields,
+            answer = _run(_fit(model, context), query)
+            items = _items(served, task, context, payload, answer, fields)
+            return adapter.answered(
+                items, outputs, payload, model=served.model_id
             )
 
-    def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def create_session(
+        self, adapter: ModelAdapter, payload: dict[str, Any]
+    ) -> str:
         r"""Fit the context once, to be scored against until released."""
-        payload = _schema_by_name(_received(payload))
-        with self._answering():
-            check_contract(payload, SESSION)
-            with in_session('SESSION_CREATE_VALIDATION_FAILED'):
-                check_columns(payload, payload['schema'], ('context',))
-            served, model = self._serving(payload.get('model'))
-            _outputs(served, payload['task']['kind'])
-            _check_trained_for(served, model, payload['task']['kind'])
-            with in_session('SESSION_CREATE_VALIDATION_FAILED'):
-                context = served.context(payload)
-            session_id = f'sess_{uuid.uuid4().hex}'
+        with self._running():
+            served, model = self._serving(payload['model'])
+            _check_task(served, model, payload['task']['kind'])
+            context = served.context(payload)
             fitted = _fit(model, context)
+            session_id = uuid.uuid4().hex
             self._sessions[session_id] = _Session(
                 served=served,
                 task=payload['task'],
@@ -170,42 +149,35 @@ class InProcessTransport:
                 context=context.fitted(),
                 fitted=fitted,
             )
-            return {'session_id': session_id}
+            return session_id
 
     def session_predict(
-        self, session_id: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        payload = _received(payload)
-        with self._answering():
-            check_contract(payload, SESSION_PREDICTION)
-            inference = read_inference(payload.get('inference'))
+        self,
+        adapter: ModelAdapter,
+        session_id: str,
+        payload: dict[str, Any],
+        outputs: tuple[str, ...],
+        pinned: Mapping[str, Any],
+    ) -> PredictionResult:
+        with self._running():
             session = self._sessions.get(session_id)
             if session is None:
-                raise refusal(
-                    'SESSION_NOT_FOUND',
-                    f"no session '{session_id}'.",
+                raise StructuredDataError(
+                    f'no session {session_id!r} is open in this process',
+                    code='SESSION_NOT_FOUND',
                 )
-            task = session.task
-            fields = _fields(
-                session.served, task['kind'], payload.get('output')
+            served, task = session.served, session.task
+            fields = _fields(served, session.fitted, task['kind'], payload)
+            served.check_inference(
+                payload.get('inference') or {}, task, settled=True
             )
-            with in_session('SESSION_PREDICT_SCHEMA_MISMATCH'):
-                check_columns(
-                    {**payload, 'task': task}, session.schema, ('predict',)
-                )
-                session.served.check_inference(inference, task, settled=True)
-                query = session.served.query(
-                    session.context, payload, session.schema
-                )
-            output = _run(session.fitted, query)
-            return _response(
-                session.served,
-                task,
-                session.schema,
-                session.context,
-                payload,
-                output,
-                fields,
+            query = served.query(session.context, payload, session.schema)
+            answer = _run(session.fitted, query)
+            items = _items(
+                served, task, session.context, payload, answer, fields
+            )
+            return adapter.answered(
+                items, outputs, {**pinned, **payload}, model=served.model_id
             )
 
     def delete_session(self, session_id: str) -> None:
@@ -214,26 +186,20 @@ class InProcessTransport:
             self._require_open()
             self._sessions.pop(session_id, None)
 
-    def _serving(self, model_id: Any) -> tuple[Tabular | Relational, Any]:
+    def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
 
         Called holding the lock, so a model is loaded once.
         """
-        if model_id not in TFM_MODEL_VALUES:
-            named = ' or '.join(repr(value) for value in TFM_MODEL_VALUES)
-            raise refusal(
-                'VALIDATION_FAILED',
-                f'Request validation failed. model: Input should be {named}',
-            )
         served = _SERVED[model_id]
         model = self._models.get(model_id)
         if model is None and self._loads:
             model = self._models[model_id] = _loaded(served, self._device)
         if model is None:
-            raise refusal(
-                'INVALID_SCHEMA',
-                f'model {model_id!r} is not served here; available: '
-                f'{self.list_models()}',
+            raise StructuredDataError(
+                f'{model_id} is not served by this client, which was opened '
+                f'with {self.list_models()} only',
+                code='INVALID_SCHEMA',
             )
         if model.training:
             raise StructuredDataError(
@@ -244,9 +210,9 @@ class InProcessTransport:
         return served, model
 
     @contextlib.contextmanager
-    def _answering(self) -> Iterator[None]:
-        r"""Answer one call at a time, reporting a failure the way a NIM
-        does: an internal error, here with the original as its cause."""
+    def _running(self) -> Iterator[None]:
+        r"""Run one call at a time, reporting a failure the client did not
+        foresee as one of its own errors, with the original as its cause."""
         with self._lock:
             self._require_open()
             try:
@@ -254,8 +220,9 @@ class InProcessTransport:
             except StructuredDataError:
                 raise
             except Exception as error:
-                raise refusal(
-                    'INTERNAL_ERROR', f'{type(error).__name__}: {error}'
+                raise StructuredDataError(
+                    f'the model failed: {type(error).__name__}: {error}',
+                    code='INTERNAL_ERROR',
                 ) from error
 
     def _require_open(self) -> None:
@@ -295,7 +262,7 @@ def _served_by(model: Any) -> Tabular | Relational:
     raise StructuredDataError(
         f'in_process() takes the KumoTabular and KumoRelational models of '
         f'structured-data-models, and got a {type(model).__name__}; the '
-        f'contract names no other model',
+        f'client asks no other model',
         code='INVALID_CONFIGURATION',
     )
 
@@ -316,88 +283,53 @@ def _loaded(served: Tabular | Relational, device: Any) -> Any:
     try:
         return served.load(device)
     except Exception as error:
-        raise refusal(
-            'MODEL_NOT_READY',
+        raise StructuredDataError(
             f'{served.model_id} could not be loaded: '
             f'{type(error).__name__}: {error}',
+            code='MODEL_NOT_READY',
         ) from error
 
 
-def _received(payload: dict[str, Any]) -> dict[str, Any]:
-    r"""The payload as a NIM would read it: through JSON.
-
-    Encoding it refuses what an HTTP call refuses, and decoding it hands the
-    model a copy, so nothing done here reaches the request it came from.
-    """
-    _check_encodable(payload)
-    try:
-        return json.loads(json.dumps(payload, allow_nan=False))
-    except (TypeError, ValueError) as error:
-        raise StructuredDataError(
-            f'this request carries a value that cannot be sent as JSON: '
-            f'{error}',
-            code='INVALID_REQUEST',
-        ) from error
-
-
-def _schema_by_name(payload: dict[str, Any]) -> dict[str, Any]:
-    r"""The payload with a schema sent as ``schema_`` read as its schema.
-
-    A NIM's request model takes the field by that name too, when ``schema``
-    itself is absent.
-    """
-    if 'schema' not in payload and 'schema_' in payload:
-        payload['schema'] = payload.pop('schema_')
-    return payload
-
-
-def _outputs(served: Tabular | Relational, kind: str) -> tuple[str, ...]:
-    r"""What this model produces for this task, which it must serve."""
-    available = served.outputs.get(kind)
-    if available is None:
-        raise refusal(
-            'UNSUPPORTED_TASK',
-            f"task '{kind}' not supported by model '{served.model_id}'; "
-            f'supported: {list(served.outputs)}.',
-        )
-    return available
-
-
-def _check_trained_for(
-    served: Tabular | Relational, model: Any, kind: str
-) -> None:
-    r"""Refuse a task the model was loaded without.
+def _check_task(served: Tabular | Relational, model: Any, kind: str) -> None:
+    r"""Refuse a task this model does not answer, or was loaded without.
 
     A model can be loaded for classification or regression alone, which a
-    NIM's never is, so this is asked of the model rather than of its kind.
+    NIM's never is, so that is asked of the model rather than of its kind.
     """
+    if kind not in served.outputs:
+        raise StructuredDataError(
+            f'{served.model_id} does not answer {kind!r}; it answers '
+            f'{sorted(served.outputs)}',
+            code='UNSUPPORTED_TASK',
+        )
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)
     if needed not in loaded:
-        raise refusal(
-            'UNSUPPORTED_TASK',
+        raise StructuredDataError(
             f'this {served.model_id} model was loaded for {loaded} only, so '
             f'it cannot answer {kind!r}; load it for both, which is the '
             f'default',
+            code='UNSUPPORTED_TASK',
         )
 
 
 def _fields(
     served: Tabular | Relational,
+    model: Any,
     kind: str,
-    output: Mapping[str, Any] | None,
+    payload: Mapping[str, Any],
 ) -> list[str]:
     r"""The fields asked for, refused where this model does not produce
     them for this task."""
-    available = _outputs(served, kind)
-    fields = list((output or {}).get('fields') or ['prediction'])
-    unsupported = [field for field in fields if field not in available]
+    _check_task(served, model, kind)
+    output = payload.get('output') or {}
+    fields = list(output.get('fields') or ['prediction'])
+    unsupported = [name for name in fields if name not in served.outputs[kind]]
     if unsupported:
-        raise refusal(
-            'UNSUPPORTED_OUTPUT',
-            f'output(s) {unsupported} not supported by model '
-            f"'{served.model_id}' for task '{kind}'; supported: "
-            f'{list(available)}.',
+        raise StructuredDataError(
+            f'{served.model_id} does not produce {unsupported} for {kind!r}; '
+            f'it produces {list(served.outputs[kind])}',
+            code='UNSUPPORTED_OUTPUT',
         )
     return fields
 
@@ -447,41 +379,24 @@ def _autocast(device: Any) -> Any:
     return torch.autocast(device_type='cuda', dtype=dtype)
 
 
-def _response(
+def _items(
     served: Tabular | Relational,
     task: Mapping[str, Any],
-    schema: Mapping[str, Any],
     context: Context,
     payload: Mapping[str, Any],
-    output: Any,
+    answer: Any,
     fields: list[str],
-) -> dict[str, Any]:
-    instance = schema['instance_table']
-    ids = row_ids(
-        payload['predict']['instance_table'], instance.get('primary_key')
-    )
-    kind = task['kind']
-    if kind == 'regression':
-        spec = payload.get('output') or {}
-        statistic = spec.get('prediction_statistic') or 'mean'
-        if statistic not in ('mean', 'median'):
-            raise refusal(
-                'UNSUPPORTED_OUTPUT',
-                'prediction_statistic must be mean or median',
-            )
-        levels = spec.get('quantile_levels') or QUANTILE_LEVELS
-        answers = regressed(output, ids, fields, statistic, levels)
-        output_type = statistic
-    else:
-        answers = classified(
-            output, context.encoded, context.labels, ids, fields
+) -> list[Any]:
+    r"""One answer per scored row, under the id the request gave that row."""
+    ids = served.row_ids(payload['predict']['instance_table'])
+    if task['kind'] != 'regression':
+        return classified(answer, context.encoded, context.labels, ids, fields)
+    output = payload.get('output') or {}
+    statistic = output.get('prediction_statistic') or 'mean'
+    if statistic not in ('mean', 'median'):
+        raise StructuredDataError(
+            f'prediction_statistic is {statistic!r}; it is mean or median',
+            code='UNSUPPORTED_OUTPUT',
         )
-        output_type = (
-            'probabilities' if 'probabilities' in fields else 'prediction'
-        )
-    return {
-        'id': f'pred_{uuid.uuid4().hex[:12]}',
-        'model': served.model_id,
-        'predictions': answers,
-        'metadata': {'task_kind': kind, 'output_type': output_type},
-    }
+    levels = output.get('quantile_levels') or QUANTILE_LEVELS
+    return regressed(answer, ids, fields, statistic, levels)

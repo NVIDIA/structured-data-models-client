@@ -27,6 +27,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import KumoRelational, PredictiveQuery, Relationship, Schema
+from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
 
 RNG = np.random.default_rng(7)
@@ -174,7 +175,7 @@ def test_a_step_that_fails_keeps_the_steps_already_paid_for():
 
     request = built(FORECAST, indices=[1, 2])
     client = SDMClient(url='http://localhost:8000')
-    client._transport = FailsOnTheThirdCall()
+    client._backend = NimBackend(FailsOnTheThirdCall())
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         with pytest.raises(RuntimeError) as failed:

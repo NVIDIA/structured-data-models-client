@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from sdm_client.errors import StructuredDataError
 from sdm_client.in_process.columns import (
     Context,
     Shape,
@@ -16,13 +17,12 @@ from sdm_client.in_process.columns import (
     labelled,
     stype_of,
 )
-from sdm_client.in_process.refusal import refusal
 
 _READS = frozenset({'numerical', 'categorical'})
 
 
 class Tabular:
-    r"""Reads a ``kumo-tabular`` request into the model, as its NIM does."""
+    r"""Reads a ``kumo-tabular`` request into the model."""
 
     model_id = 'kumo-tabular'
     outputs = {
@@ -43,23 +43,9 @@ class Tabular:
         return isinstance(model, KumoTabular)
 
     def context(self, payload: Mapping[str, Any]) -> Context:
-        schema = payload['schema']
-        related = schema.get('related_tables') or any(
-            (payload.get(split) or {}).get('related_tables')
-            for split in ('context', 'predict')
-        )
-        for present, what in (
-            (schema.get('relationships'), 'relationships'),
-            (related, 'related tables'),
-        ):
-            if present:
-                raise refusal(
-                    'UNSUPPORTED_FEATURE',
-                    f'{what} are not supported by model {self.model_id!r}.',
-                )
         task = payload['task']
         self.check_inference(payload.get('inference') or {}, task)
-        spec = schema['instance_table']
+        spec = payload['schema']['instance_table']
         table = payload['context']['instance_table']
         target = task['target']['column_name']
         keys = key_columns(spec)
@@ -72,9 +58,10 @@ class Tabular:
             name for name, stype in stypes.items() if stype not in _READS
         )
         if unread:
-            raise refusal(
-                'UNSUPPORTED_DTYPE',
-                f'Kumo Tabular does not support these feature columns: {unread}',
+            raise StructuredDataError(
+                f'{self.model_id} reads numerical and categorical columns, '
+                f'not {unread}',
+                code='UNSUPPORTED_DTYPE',
             )
         instance = Shape.of(spec, stypes)
         y, encoded, labels = labelled(table, task, task['kind'] != 'regression')
@@ -92,24 +79,25 @@ class Tabular:
         task: Mapping[str, Any],
         settled: bool = False,
     ) -> None:
-        r"""Refuse an inference option this model's NIM refuses."""
+        r"""Refuse an inference option this model does not act on."""
         remaining = dict(options)
         if remaining.pop('inference_config', {}):
-            raise refusal(
-                'INVALID_REQUEST',
+            raise StructuredDataError(
                 'inference_config is reserved for API compatibility and must '
                 'be omitted or empty',
+                code='INVALID_REQUEST',
             )
         if remaining.pop('use_prediction_time', False):
-            raise refusal(
-                'INVALID_REQUEST',
+            raise StructuredDataError(
                 f"inference option 'use_prediction_time' is not supported by "
                 f'{self.model_id}; only the neutral value False is accepted',
+                code='INVALID_REQUEST',
             )
         unknown = sorted(set(remaining) - {'run_mode'})
         if unknown:
-            raise refusal(
-                'INVALID_REQUEST', f'unsupported inference options: {unknown}'
+            raise StructuredDataError(
+                f'unsupported inference options: {unknown}',
+                code='INVALID_REQUEST',
             )
 
     @staticmethod
@@ -121,3 +109,9 @@ class Tabular:
         r"""The rows to score, read as the context was."""
         table = payload['predict']['instance_table']
         return context.instance.tensor(table, 'predict instance table'), None
+
+    @staticmethod
+    def row_ids(table: Mapping[str, Any]) -> list[str | None]:
+        r"""No id: each answer is matched to its row by position, and the
+        client puts the row's key on it."""
+        return [None] * len(table['rows'])

@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Collection, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client.in_process.refusal import refusal
+from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -80,9 +80,9 @@ def _array(cells: list[Any], dtype: str, column: str) -> pa.Array:
         arrow_type = getattr(pa, _ARROW_TYPES[dtype])()
         return pa.array([read_cell(cell, dtype) for cell in cells], arrow_type)
     except (KeyError, pa.ArrowException, TypeError, ValueError) as error:
-        raise refusal(
-            'VALIDATION_FAILED',
+        raise StructuredDataError(
             f'column {column!r} cannot be read as {dtype}',
+            code='VALIDATION_FAILED',
         ) from error
 
 
@@ -92,9 +92,9 @@ def _whole(cells: list[Any], dtype: str, column: str) -> list[Any]:
         value = read_cell(cell, dtype)
         if isinstance(value, float):
             if not value.is_integer():
-                raise refusal(
-                    'VALIDATION_FAILED',
+                raise StructuredDataError(
                     f'identifier column {column!r} holds a fractional value',
+                    code='VALIDATION_FAILED',
                 )
             value = int(value)
         whole.append(value)

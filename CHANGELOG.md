@@ -12,9 +12,11 @@ these packages. All five distributions share one version and one entry.
 - `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
   Python process with structured-data-models, through the same calls as a NIM:
   predictions, fitted sessions, rankings and forecasts. It loads each model
-  from its published weights on first use, or uses one passed in. The context
-  is fitted as the NIM fits it, and a request the NIM refuses is refused with
-  the same `NimRequestError`. Install it with the `in-process` extra.
+  from its published weights on first use, or uses one passed in. The request
+  is prepared as it is for a NIM and the model run on it directly, the context
+  fitted as the NIM fits it. A request the model cannot answer is refused with
+  a `StructuredDataError` whose code says why. Install it with the
+  `in-process` extra.
 - The relational engine publishes wheels for macOS (Apple silicon and Intel)
   and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
   x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`

@@ -176,10 +176,14 @@ with SDMClient.in_process(relational) as client:
     result = client.predict(request, model=KumoRelational())
 ```
 
-It answers as the NIM does. The context is fitted with the NIM's seed and
-settings, `fit()` holds its session in memory, and a request the NIM refuses
-is refused with the same `NimRequestError`. On a GPU it computes as the NIM
-does, and on the same GPU it gives the NIM's answers exactly. Two things
+It answers as the NIM does. The request is prepared exactly as it is for a
+NIM, and the model is run on it directly, with no HTTP in between. The context
+is fitted with the NIM's seed and settings, and `fit()` holds its session in
+memory. A request the model cannot answer is refused with a
+`StructuredDataError` whose `code` says why, from the codes a NIM uses, such
+as `UNSUPPORTED_OUTPUT`. It is not a `NimRequestError` and has no HTTP status,
+since nothing was sent. On a GPU it computes as the NIM does, and on the same
+GPU it gives the NIM's answers exactly. Two things
 differ by design. On a CPU it computes at full precision and draws its random
 numbers there, so its answers can differ from a GPU-hosted NIM's by more than
 rounding: in one comparison a class probability moved by 0.16. And the limits

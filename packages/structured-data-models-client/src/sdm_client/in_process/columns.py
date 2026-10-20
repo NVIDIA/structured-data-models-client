@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from sdm_client.errors import StructuredDataError
-from sdm_client.in_process.refusal import refusal
 from sdm_client.in_process.tables import to_arrow, values
 
 _DECLARED = {
@@ -43,19 +42,19 @@ def stype_of(name: str, column: Mapping[str, Any]) -> str:
     if declared is not None:
         stype = _DECLARED.get(str(declared).lower())
         if stype is None:
-            raise refusal(
-                'UNSUPPORTED_DTYPE',
+            raise StructuredDataError(
                 f'column {name!r} declares semantic type {declared!r}, which '
                 f'SDM does not read',
+                code='UNSUPPORTED_DTYPE',
             )
         return stype
     dtype = column.get('dtype')
     stype = _FROM_DTYPE.get(str(dtype))
     if stype is None:
-        raise refusal(
-            'UNSUPPORTED_DTYPE',
+        raise StructuredDataError(
             f'column {name!r} has no unambiguous SDM semantic type for dtype '
             f'{dtype!r}',
+            code='UNSUPPORTED_DTYPE',
         )
     return stype
 
@@ -99,10 +98,10 @@ class Shape:
 
         absent = [name for name in self.columns if name not in table['columns']]
         if absent:
-            raise refusal(
-                'SESSION_PREDICT_SCHEMA_MISMATCH',
-                f'{where} omits column(s) {absent} that the context was '
-                f'compiled with',
+            raise StructuredDataError(
+                f'{where} leaves out column(s) {absent}, which the context '
+                f'carries',
+                code='INVALID_SCHEMA',
             )
         arrow = to_arrow(table, self.columns, self.dtypes, self.keys)
         try:
@@ -110,8 +109,8 @@ class Shape:
                 arrow, stypes=self.stypes, device='cpu'
             )
         except (TypeError, ValueError) as error:
-            raise refusal(
-                'VALIDATION_FAILED', 'table cannot be represented by SDM'
+            raise StructuredDataError(
+                'table cannot be represented by SDM', code='VALIDATION_FAILED'
             ) from error
 
 
@@ -152,10 +151,15 @@ def labelled(
 
     target = task['target']
     column = target['column_name']
+    if not table['rows']:
+        raise StructuredDataError(
+            'the context carries no rows, so there is nothing to learn from',
+            code='VALIDATION_FAILED',
+        )
     if any(label is None for label in values(table, column)):
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             f'context target {column!r} contains null labels',
+            code='TASK_SCHEMA_MISMATCH',
         )
     stype = 'categorical' if classifies else 'numerical'
     try:
@@ -164,9 +168,9 @@ def labelled(
         )
         y = TableTensor.from_arrow(arrow, stypes={column: stype}, device='cpu')
     except (StructuredDataError, TypeError, ValueError) as error:
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             'context labels cannot be represented by SDM',
+            code='TASK_SCHEMA_MISMATCH',
         ) from error
     if not classifies:
         return y, (), ()
@@ -183,44 +187,44 @@ def labelled(
 def _check_classes(
     kind: str, declared: Sequence[Any] | None, encoded: tuple[Any, ...]
 ) -> None:
-    r"""Refuse classes the task contradicts, as the NIM does.
+    r"""Refuse classes the task contradicts.
 
     Asked of the context that arrived: a holdout can take every row of a
     class out of it after the client has counted them.
     """
     count = len(encoded)
     if kind == 'binary_classification' and count != 2:
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             f'binary_classification needs exactly two classes, the context '
             f'carries {count}',
+            code='TASK_SCHEMA_MISMATCH',
         )
     if kind == 'multiclass_classification' and count < 2:
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             f'multiclass_classification needs at least two classes, the '
             f'context carries {count}',
+            code='TASK_SCHEMA_MISMATCH',
         )
     if declared is None:
         return
     text = _text_of(encoded)
     named = [text(label) for label in declared]
     if not named:
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             'the task declares an empty class list, which no label can satisfy',
+            code='TASK_SCHEMA_MISMATCH',
         )
     if len(set(named)) != len(named):
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             f'declared classes repeat a label: {sorted(named)}',
+            code='TASK_SCHEMA_MISMATCH',
         )
     present = {text(label) for label in encoded}
     if set(named) != present:
-        raise refusal(
-            'TASK_SCHEMA_MISMATCH',
+        raise StructuredDataError(
             f'declared classes {sorted(set(named))} do not match the labels '
             f'present in the context {sorted(present)}',
+            code='TASK_SCHEMA_MISMATCH',
         )
 
 

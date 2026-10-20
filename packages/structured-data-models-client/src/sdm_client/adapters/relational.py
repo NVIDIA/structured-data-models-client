@@ -23,10 +23,14 @@ import dataclasses
 import re
 import uuid
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
-from sdm_api.generated.tfm_api import PredictionResponse, ResponseContractError
+from sdm_api.generated.tfm_api import (
+    PredictionItem,
+    PredictionResponse,
+    ResponseContractError,
+)
 
 from sdm_client.base import ModelSpec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -249,22 +253,33 @@ class RelationalAdapter:
                 code='INVALID_RESPONSE',
             ) from error
 
-        explanation = next(
-            (
-                item.explanation
-                for item in parsed.predictions
-                if item.explanation
-            ),
-            None,
-        )
-        return PredictionResult(
+        return self.answered(
+            parsed.predictions,
+            outputs,
+            payload,
             model=parsed.model,
             request_id=parsed.id,
-            items=as_declared_target(
-                _named_entities(parsed.predictions, payload),
-                payload,
-            ),
             metadata=parsed.metadata,
+        )
+
+    def answered(
+        self,
+        items: Sequence[PredictionItem],
+        outputs: tuple[str, ...],
+        payload: dict[str, Any] | None,
+        *,
+        model: str,
+        request_id: str = '',
+        metadata: Mapping[str, Any] | None = None,
+    ) -> PredictionResult:
+        explanation = next(
+            (item.explanation for item in items if item.explanation), None
+        )
+        return PredictionResult(
+            model=model,
+            request_id=request_id,
+            items=as_declared_target(_named_entities(items, payload), payload),
+            metadata=dict(metadata or {}),
             outputs=outputs,
             explanation=explanation,
         )
@@ -720,7 +735,7 @@ def _columns_with_stype(payload: Mapping[str, Any], stype: str) -> list[str]:
 
 
 def _named_entities(
-    items: tuple[Any, ...], payload: dict[str, Any] | None
+    items: Sequence[Any], payload: dict[str, Any] | None
 ) -> list[Any]:
     """Put the caller's entity back on each row, and check it belongs there.
 
