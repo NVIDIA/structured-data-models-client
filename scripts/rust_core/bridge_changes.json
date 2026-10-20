@@ -216,7 +216,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_store": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.21: a column's data type after an edit is the core's, decided by its role in the schema (sdm_schema::assemble::read_exact_numbers); the host stores the dtype the core answers, as _rust/schema.py's build does, and decides nothing of it (T2.14a brought it under the freeze unchanged)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::column": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
