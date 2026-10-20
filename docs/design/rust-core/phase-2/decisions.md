@@ -133,3 +133,11 @@ Sources: the owner's answers on 2026-10-20 (UTC), before the owner's night, to t
 | KO2-81 | Question 5: `main`'s two new commits come into Phase 2 | "5. Sure, you can bring these commits in, should be minor" | approved by owner 2026-10-20 |
 | KO2-82 | Question 6: the overnight standing delegation (KO2-70) is renewed for tonight | "6. Yes" | approved by owner 2026-10-20 |
 | KO2-83 | Question 7: allow fewer repeats of an identical DeprecationWarning (`s0.boundary.escapes` on SQLite and Postgres, 2 against the reference's 5) | "7. Sure" | approved by owner 2026-10-20 |
+
+## The owner's reference answer (2026-10-20)
+
+Sources: the owner's answer on 2026-10-20 (UTC) to the orchestrator's question 1, whether the orchestrator merges `origin/main` into `rust-core-reference` and pushes it for T2.0i, after answer 5 of the overnight questions (KO2-81).
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-84 | Reference: `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1`, origin/main f2ad8d61 merged into rust-core-reference for Phase 2's second update; the orchestrator made the merge and pushed the branch, and T2.0i re-records the reference and every file citing it at this commit | "5. Sure, you can bring these commits in, should be minor"; "1. Yes, you do it. Just be careful, and do it on latest main. These changes should be minor" | approved by owner 2026-10-20 |
