@@ -90,8 +90,7 @@ def check_columns(
     rows = table.get('rows')
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         raise StructuredDataError(
-            f'{where} carries no rows; a table is its columns and the rows '
-            f'under them',
+            f'{where} does not carry its rows as a list of rows',
             code='VALIDATION_FAILED',
         )
     odd = next(
