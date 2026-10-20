@@ -206,7 +206,6 @@
   "py:sample.num-neighbors.minus-one@sqlite",
   "py:sample.num-neighbors.minus-one@postgres",
   "rust:sample.num-neighbors.minus-one",
-  "rust:sample.num-neighbors.minus-one@sqlite",
   "py:sample.parent-table.relbench-stack",
   "py:sample.parent-table.relbench-stack@sqlite",
   "py:sample.parent-table.relbench-stack@postgres",
