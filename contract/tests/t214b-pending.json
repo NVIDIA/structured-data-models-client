@@ -12,8 +12,6 @@
   "pg-values:moved:key_set_json",
   "stype:decimal.stype-past-float-precision",
   "stype:decimal.stype-past-float-precision@postgres",
-  "stype:rust-unit",
-  "stype:rust:decimal.stype-past-float-precision",
   "wording:fx4:infinity.timestamp.negative",
   "wording:fx4:infinity.timestamp.positive",
   "wording:fx4:infinity.timestamptz.negative",

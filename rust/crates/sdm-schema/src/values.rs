@@ -15,6 +15,7 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, RecordBatch};
 use arrow_schema::{DataType, TimeUnit};
+use sdm_contract::scalar::decimal_to_f64;
 use sdm_contract::{CoreError, Scalar, Unit};
 
 use crate::not_yet;
@@ -37,10 +38,11 @@ pub enum Floats {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Value {
     Bool(bool),
-    /// Any integer, a decimal's unscaled value (one column has one scale),
-    /// or a temporal count (one column has one unit).
+    /// Any integer, the unscaled value of a decimal of scale 0 or less (one
+    /// column has one scale), or a temporal count (one column has one unit).
     Int(i128),
-    /// A float's bits, as [`Floats`] reads them.
+    /// A float's bits, as [`Floats`] reads them; a decimal of scale > 0
+    /// as the float64 the reference's cast gives it.
     Float(u64),
     Text(String),
 }
@@ -86,6 +88,28 @@ pub(crate) fn column(
             DataType::Timestamp(TimeUnit::Nanosecond, _) => ints!(TimestampNanosecondType),
             DataType::Time64(TimeUnit::Microsecond) => ints!(Time64MicrosecondType),
             DataType::Time64(TimeUnit::Nanosecond) => ints!(Time64NanosecondType),
+            // A decimal of scale > 0 as the float64 the reference's cast
+            // gives it (`_sanitize`'s `pa.float64()`, Arrow's
+            // `Decimal128::ToDouble`), which inference counts: values that
+            // differ only past float64's precision are one value there
+            // (T2.14b). Of scale 0 or less, its unscaled integer, as the
+            // reference reads it as int64 or keeps it exact. Only what
+            // inference counts reads this; materialize and predict keep
+            // exact decimals (P2B-1).
+            DataType::Decimal128(_, scale) if *scale > 0 => {
+                let a = array.as_primitive::<Decimal128Type>();
+                for i in 0..n {
+                    let value = decimal_to_f64(a.value(i), *scale);
+                    out.push(float(
+                        array.is_null(i),
+                        false,
+                        value == 0.0,
+                        value.to_bits(),
+                        0.0_f64.to_bits(),
+                        floats,
+                    ));
+                }
+            }
             DataType::Decimal128(_, _) => {
                 let a = array.as_primitive::<Decimal128Type>();
                 for i in 0..n {
