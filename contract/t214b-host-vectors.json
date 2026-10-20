@@ -313,6 +313,77 @@
     "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
     "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
    ]
+  },
+  "negative-zero": {
+   "rankings": [
+    [
+     {
+      "candidate": 1,
+      "score": 0.4
+     },
+     {
+      "candidate": 0.0,
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 1,
+      "score": 0.9
+     },
+     {
+      "candidate": 0.0,
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "decimal-scales": {
+   "rankings": [
+    [
+     {
+      "candidate": 2,
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "Decimal",
+       "text": "1.0"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 2,
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "Decimal",
+       "text": "1.0"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "missing-twice": {
+   "refusal": {
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "details": {},
+    "message": "[INVALID_REQUEST] a candidate names a row, and a missing value names none"
+   },
+   "asked": []
   }
  }
 }

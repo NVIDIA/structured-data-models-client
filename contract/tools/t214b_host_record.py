@@ -28,8 +28,12 @@ the shop base and the ranking tables of ``rank.top-k`` (:data:`SETUP`):
   code, details and message, which name the step or the candidate;
 - ``repeats``: a ranking given candidates that repeat by Python's equality
   (:data:`CANDIDATES`: ``1``, ``1.0``, ``True``, ``Decimal('1')`` and
-  ``np.int64(1)`` all one key of ``dict.fromkeys``): the candidate each
-  call asks about, in order, and the result's rankings, or the refusal.
+  ``np.int64(1)`` all one key of ``dict.fromkeys``, as are ``0.0`` and
+  ``-0.0``, and two scales of one decimal; and NumPy's one NaN given
+  twice; not a value ``dict.fromkeys`` cannot hash, which the reference
+  fails on unnamed and the core refuses by name, register P2D-1): the
+  candidate each call asks about, in order, and the result's rankings, or
+  the refusal.
 
 :func:`observe` is imported by ``contract/tests/test_t214b_host.py``, so
 ``python-core`` is observed by the same code, with the core routes forced.
@@ -96,6 +100,9 @@ CANDIDATES = {
     'decimal-first': lambda: [_decimal('1'), 1, 2],
     'numpy-first': lambda: [_numpy(1), 1, 2],
     'float-first': lambda: [1.0, 1, 2],
+    'negative-zero': lambda: [0.0, -0.0, 1],
+    'decimal-scales': lambda: [_decimal('1.0'), _decimal('1.00'), 2],
+    'missing-twice': lambda: [_numpy_nan(), _numpy_nan(), 1],
 }
 
 
@@ -109,6 +116,14 @@ def _numpy(value: int) -> Any:
     import numpy as np
 
     return np.int64(value)
+
+
+def _numpy_nan() -> Any:
+    r"""NumPy's one NaN object, which ``dict.fromkeys`` holds equal to
+    itself by identity."""
+    import numpy as np
+
+    return np.nan
 
 
 def _module(name: str, path: Path) -> ModuleType:
