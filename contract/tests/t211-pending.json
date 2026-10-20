@@ -201,7 +201,12 @@
   "unseeded-rust:sample.unseeded",
   "unseeded-rust:sample.unseeded.chain",
   "unseeded-rust:sample.unseeded@sqlite",
-  "unseeded-rust:sample.unseeded.chain@sqlite"
+  "unseeded-rust:sample.unseeded.chain@sqlite",
+  "py:sample.num-neighbors.minus-one",
+  "py:sample.num-neighbors.minus-one@sqlite",
+  "py:sample.num-neighbors.minus-one@postgres",
+  "rust:sample.num-neighbors.minus-one",
+  "rust:sample.num-neighbors.minus-one@sqlite"
  ],
  "authored": [
   "py:sample.anchor-entity",
@@ -438,6 +443,11 @@
   "unseeded-rust:sample.unseeded",
   "unseeded-rust:sample.unseeded.chain",
   "unseeded-rust:sample.unseeded@sqlite",
-  "unseeded-rust:sample.unseeded.chain@sqlite"
+  "unseeded-rust:sample.unseeded.chain@sqlite",
+  "py:sample.num-neighbors.minus-one",
+  "py:sample.num-neighbors.minus-one@sqlite",
+  "py:sample.num-neighbors.minus-one@postgres",
+  "rust:sample.num-neighbors.minus-one",
+  "rust:sample.num-neighbors.minus-one@sqlite"
  ]
 }

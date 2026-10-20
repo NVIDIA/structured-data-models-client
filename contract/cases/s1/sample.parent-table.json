@@ -28,7 +28,7 @@
     "int64/primary-key",
     "int64/foreign-key",
     "timestamp-us/time-column",
-    "float64/target"
+    "int32/target"
   ],
   "input": {
     "base": "shop",

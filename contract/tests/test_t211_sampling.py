@@ -20,7 +20,7 @@ option with values the reference takes and values it refuses:
 
 - ``num_hops`` (1 over users, orders and lines, 3 over shipments too;
   0, 7, 1.5, True and
-  '2' refused), ``num_neighbors`` ([4], [2, 2], [0], with num_hops; [], 5
+  '2' refused), ``num_neighbors`` ([4], [2, 2], [0], [-1], with num_hops; [], 5
   and seven hops refused), ``max_pq_iterations`` (1 over a sparse label;
   0 and 'x' refused), ``use_prediction_time`` (True, False),
   ``return_embeddings`` and ``response_field`` for embeddings (an endpoint
@@ -94,6 +94,17 @@ def key(case_id: str, database: str) -> str:
 
 
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
+#: Where the reference fails by a bug of its own, the code it records, and
+#: the line the core is held to instead: num_neighbors=[-1] fails
+#: INTERNAL_ERROR on Postgres alone, and the core answers there as the
+#: reference answers on SQLite (the orchestrator, 2026-10-20; a register
+#: entry for the implementer).
+REFERENCE_FAILS = {
+    'sample.num-neighbors.minus-one@postgres': (
+        'INTERNAL_ERROR',
+        'sample.num-neighbors.minus-one@sqlite',
+    ),
+}
 
 
 def held(name: str, check: Any) -> None:
@@ -239,6 +250,15 @@ def test_python_ref_s_line_is_at_its_case_file_and_ends_as_expected(
     assert line['identity']['runner'] == 'python-ref'
     assert line['identity']['inputs']['case'] == digest
     expect = case['expect']
+    if case_key in REFERENCE_FAILS:
+        code, _ = REFERENCE_FAILS[case_key]
+        assert _outcome(line) == (
+            'refusal',
+            'materialize',
+            'StructuredDataError',
+            code,
+        )
+        return
     assert _outcome(line) == (
         expect['outcome'],
         expect['stage'],
@@ -303,10 +323,12 @@ def test_the_reference_s_requests_show_each_option_s_effect(
                 per_user.get(row['instance_id']['number'], 0) + 1
             )
         assert per_user and max(per_user.values()) == most, case_id
-    assert (
-        'orders'
-        not in sent('sample.num-neighbors.zero')['predict']['related_tables']
-    )
+    for case_id in (
+        'sample.num-neighbors.zero',
+        'sample.num-neighbors.minus-one',
+    ):
+        if case_id + on not in REFERENCE_FAILS:
+            assert 'orders' not in sent(case_id)['predict']['related_tables']
     assert sent('sample.use-prediction-time')['inference'][
         'use_prediction_time'
     ]
@@ -495,7 +517,9 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = reference_lines()[case_key]
+        want = reference_lines()[
+            REFERENCE_FAILS.get(case_key, (None, case_key))[1]
+        ]
         assert _outcome(line) == _outcome(want), (
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )

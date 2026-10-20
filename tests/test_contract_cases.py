@@ -539,6 +539,7 @@ T211_SAMPLING = (
     'sample.num-neighbors-2-2',
     'sample.num-neighbors-4',
     'sample.num-neighbors.empty',
+    'sample.num-neighbors.minus-one',
     'sample.num-neighbors.number',
     'sample.num-neighbors.over-num-hops',
     'sample.num-neighbors.seven-hops',
