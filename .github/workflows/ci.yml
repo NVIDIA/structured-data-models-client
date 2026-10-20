@@ -910,7 +910,10 @@ jobs:
 
   engine:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 90, not 60: its pytest step alone takes 40 minutes or more, and the job
+    # reached its 60-minute limit on three runs (T2.11); the real cut is the
+    # planned CI speed-up package.
+    timeout-minutes: 90
     needs: [landing, native-wheel]
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a

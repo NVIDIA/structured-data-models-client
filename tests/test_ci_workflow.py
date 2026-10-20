@@ -531,6 +531,7 @@ TIMEOUT_CEILINGS = {
     'rust-test': 120,
     'test': 90,
     'contract-python-ref-pandas3': 90,
+    'engine': 90,
 }
 TIMEOUT_CEILING = 60
 
