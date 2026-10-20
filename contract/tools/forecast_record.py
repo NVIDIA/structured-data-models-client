@@ -24,7 +24,8 @@ what python-core gives (``python_core``) under a later candidate, whose
 commit it keeps beside them (``python_core_candidate``), and each one's
 ``rust_host`` as :data:`RUST_HOST` says now: a vector a later package
 changed on the core by design (T2.8's ``count-filtered-3``, whose
-``target_filter`` refusal it lifts).
+``target_filter`` refusal it lifts, and T2.13b's ``sum-entity-filter-3``,
+whose ``entity_filter`` refusal it lifts).
 
 ``candidate`` runs each vector through this checkout, forced onto the core
 (``python-core``) and on the default routes (``python-old``), and keeps
@@ -176,8 +177,8 @@ VECTORS: list[dict[str, Any]] = [
 RUST_HOST = {
     # count-filtered-3 (a target with WHERE) is the reference's on both core
     # hosts from T2.8, which lifts target_filter for a ranking's questions;
-    # an entity filter waits for T2.13.
-    'sum-entity-filter-3': 'python-core',
+    # sum-entity-filter-3 (an entity filter) from T2.13b, which lifts
+    # entity_filter.
     'refuse.top-k': 'none',
 }
 

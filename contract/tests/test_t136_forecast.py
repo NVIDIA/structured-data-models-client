@@ -51,7 +51,9 @@ From T2.8, which lifts ``target_filter``: ``count-filtered-3`` (a target
 with ``WHERE``) is answered as the reference answers it on both core hosts;
 its ``python_core`` is recorded again under T2.8's candidate (the
 recorder's ``recandidate``, ``python_core_candidate``), and it is no longer
-among the refusals worded as before.
+among the refusals worded as before. From T2.13b, which lifts
+``entity_filter``: ``sum-entity-filter-3`` (an entity filter) likewise,
+its ``python_core`` recorded again under T2.13b's candidate.
 
 ``sdm-testkit``'s ``tests/t136_forecast.rs`` holds ``rust-host`` to the same
 vectors. The implementer changes nothing of this file, the vectors or the
@@ -160,8 +162,9 @@ def _requests_but_their_bytes(answer: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 #: The vectors whose python-core is recorded again under a later candidate
-#: (``python_core_candidate``): T2.8 lifts ``target_filter``.
-RECANDIDATED = {'count-filtered-3'}
+#: (``python_core_candidate``): T2.8 lifts ``target_filter``, T2.13b
+#: ``entity_filter``.
+RECANDIDATED = {'count-filtered-3', 'sum-entity-filter-3'}
 
 
 def _held_before_and_now(
@@ -258,10 +261,6 @@ OUTRAN_OLD = (
     "named above is that step's rather than the one written; ask for fewer "
     'than 2 steps if the data does not reach that far.'
 )
-FILTER_CORE = (
-    '[UNSUPPORTED_REQUEST] the request is valid, and not one the core '
-    'supports yet. This is forecast step 1 of 3.'
-)
 
 
 @pytest.mark.parametrize(
@@ -275,7 +274,6 @@ FILTER_CORE = (
         ('refuse.zero-steps', False, ZERO),
         ('refuse.step-outruns-data', True, OUTRAN_CORE),
         ('refuse.step-outruns-data', False, OUTRAN_OLD),
-        ('sum-entity-filter-3', True, FILTER_CORE),
     ],
 )
 def test_a_forecast_refusal_is_worded_as_before(
