@@ -186,6 +186,18 @@ _UNREAD_OPTIONS = (
     'client forwards are {forwarded!r}, and the endpoint decides for itself '
     'whether it serves the value given for one'
 )
+_NO_CONTEXT = 'Failed to collect any context examples.'
+_NO_ENTITY_AT_ANCHOR = (
+    ' No row of {entity_table!r} existed at the anchor: it is {anchor!t}, '
+    'and the earliest {column!r} is {earliest!t}. Context examples only ask '
+    'about an entity that existed by its anchor. If {column!r} does not '
+    'record when each entity began, set the time column of {entity_table!r} '
+    'to None'
+)
+_HOLDS = (
+    'it is {{anchor!t}}, and {{tables!j}} {holds} data from {{min_time!t}} '
+    'to {{max_time!t}}'
+)
 WORDED: dict[tuple[str, ...], str] = {
     ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
     ('INVALID_REQUEST', 'payload', 'smaller_calls'): _ASK_IN_SMALLER_CALLS,
@@ -300,6 +312,44 @@ WORDED: dict[tuple[str, ...], str] = {
         _LAG_IS + '; text, None or a collection is not one'
     ),
     ('VALUE_OUT_OF_RANGE', 'lag_timesteps'): _LAG_RANGE,
+    # T2.13b: a context no example was collected for, with the reason the
+    # core found, in the reference sampler's words
+    # (`_diagnose_empty_sample`).
+    ('INVALID_REQUEST', 'anchor_time', 'too_restrictive'): (
+        _NO_CONTEXT + ' Is your predictive query too restrictive?'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'no_entity_at_anchor'): (
+        _NO_CONTEXT + _NO_ENTITY_AT_ANCHOR + '.'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'no_entity_at_anchor_later'): (
+        _NO_CONTEXT
+        + _NO_ENTITY_AT_ANCHOR
+        + ', or pass an anchor_time after {earliest!t}.'
+    ),
+    **{
+        ('INVALID_REQUEST', 'anchor_time', f'no_entity_passed{many}'): (
+            _NO_CONTEXT
+            + ' The anchor time is not the reason: '
+            + _HOLDS.format(holds=holds)
+            + ", which leaves room after it for the query's whole window. "
+            'No entity passed {condition!r}, so there was nothing to sample: '
+            'check that the values it compares against occur in the data, '
+            'including their case.'
+        )
+        for many, holds in (('', 'holds'), ('_several', 'hold'))
+    },
+    **{
+        ('INVALID_REQUEST', 'anchor_time', f'anchor_too_late{many}'): (
+            _NO_CONTEXT
+            + ' The anchor time is most likely the reason: '
+            + _HOLDS.format(holds=holds)
+            + '. Context examples come from before the anchor and each needs '
+            "the query's full window of data after it, so an anchor at or "
+            'near the end of the range leaves none to draw from. Pass an '
+            'earlier anchor_time, or shorten the window the query asks about.'
+        )
+        for many, holds in (('', 'holds'), ('_several', 'hold'))
+    },
 }
 
 
@@ -329,6 +379,14 @@ def _worded(code: str, details: dict[str, Any]) -> str | None:
     # A part's kind is the core's `part_kind`: `kind` is the error's own.
     if said == 'batched_part' and details.get('part_kind') == 'ranking':
         said = 'batched_part_ranking'
+    # A context left empty: the earliest time's remedy where the core found
+    # one, and the tables' verb by their count.
+    if said == 'no_entity_at_anchor' and details.get('later'):
+        said = 'no_entity_at_anchor_later'
+    if said in {'no_entity_passed', 'anchor_too_late'} and (
+        len(details.get('tables') or ()) > 1
+    ):
+        said = f'{said}_several'
     return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
 
 
@@ -678,6 +736,18 @@ SAID: dict[str, dict[str | None, str]] = {
         )
         for many, them in (('one', 'it'), ('several', 'them'))
     },
+    # T2.13b: an entity filter chooses the labelled examples and not the
+    # entities scored, which the client says before it gathers
+    # (`_warn_the_filter_chose_only_the_examples`), in its words.
+    'FILTER_CHOSE_EXAMPLES': {
+        None: (
+            'the entity filter {condition!r} selects the labelled examples '
+            'the model learns from, and does not narrow the {entities} rows '
+            'named for scoring. Those are scored as given, whether or not '
+            'they satisfy it. Pass only indices that satisfy the condition '
+            'if that is what you meant.'
+        )
+    },
     'CONTEXT_ANSWERS': {
         variant: (
             '{examples} of the rows sampled as context are the rows being '
@@ -973,8 +1043,10 @@ def error_from_core(
     template = _worded(code, details)
     if template is not None:
         # Fields its template cannot fill give the code's sentence.
-        with contextlib.suppress(KeyError, IndexError, TypeError, ValueError):
-            sentence = template.format(**details)
+        with contextlib.suppress(
+            KeyError, IndexError, TypeError, ValueError, AttributeError
+        ):
+            sentence = _Words().format(template, **details)
     return _instance(cls, sentence, code, details)
 
 

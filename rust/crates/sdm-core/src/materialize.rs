@@ -104,6 +104,9 @@ use crate::run::{ArrowData, Asker, Attachment, internal};
 
 /// The warning that indices the sampler's reads would use are missing.
 pub const MISSING_INDICES: &str = "MISSING_INDICES";
+/// The notice that an entity filter chooses the labelled examples the
+/// model learns from, and not the entities scored (T2.13b).
+pub const FILTER_CHOSE_EXAMPLES: &str = "FILTER_CHOSE_EXAMPLES";
 /// The warning that the context reaches back before the data.
 pub const CONTEXT_BEFORE_DATA: &str = "CONTEXT_BEFORE_DATA";
 /// The warning that the anchor time is after the data.
@@ -143,6 +146,7 @@ pub const WARNINGS: &[(&str, &[&str])] = &[
     (COLUMNS_UNREAD, &["one", "several"]),
     (CONTEXT_ANSWERS, &["windowed", "static"]),
     (crate::subgraph::NULL_KEYS_LEFT_OUT, &[]),
+    (FILTER_CHOSE_EXAMPLES, &[]),
 ];
 /// The notice that the default run mode gathered as many context examples
 /// as it takes (the client's `_warn_of_a_context_the_default_mode_capped`).
@@ -460,6 +464,25 @@ struct Asked {
     /// none for a static target.
     range: Option<sdm_contract::pql::Window>,
     task: Task,
+    /// The conditions that choose the examples, each over the entity's row
+    /// and its windowed aggregations: the entity filter (`WHERE`), then
+    /// the assumption (`ASSUMING`), and-ed into the examples' mask as the
+    /// reference's executor and-s them (`execute`, T2.13b).
+    choosing: Vec<Shape>,
+}
+
+impl Asked {
+    /// The windowed aggregations the labels read, in the order the
+    /// reference's sampler meets them (`_get_query_time_offset_dict`): the
+    /// target's, then the entity filter's, then the assumption's.
+    fn every_windowed(&self) -> Vec<&Windowed> {
+        let mut windows = Vec::new();
+        self.target.windowed(&mut windows);
+        for shape in &self.choosing {
+            shape.windowed(&mut windows);
+        }
+        windows
+    }
 }
 
 fn column_of(node: &PqlNode) -> Option<&ColumnRef> {
@@ -481,10 +504,24 @@ fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
     if query.problem_type.is_some() || query.num_forecasts != 1 || query.top_k.is_some() {
         return Err(not_yet("problem_type"));
     }
-    if query.assuming.is_some() {
-        return Err(not_yet("assuming"));
-    }
-    let entity = column_of(&query.entity).ok_or_else(|| not_yet("entity_filter"))?;
+    // The entity column, or the column a filter chooses the examples of
+    // (`execute_filter` over the entity's row and its aggregations).
+    let (entity, filter) = match &query.entity.kind {
+        NodeKind::Filter { target, condition } => (
+            column_of(target).ok_or_else(|| unvalidated("an entity filter of no column"))?,
+            Some(condition.as_ref()),
+        ),
+        _ => (
+            column_of(&query.entity).ok_or_else(|| unvalidated("an entity that is no column"))?,
+            None,
+        ),
+    };
+    let operand = |node: &PqlNode| shape(node, &entity.table);
+    let choosing = filter
+        .into_iter()
+        .chain(query.assuming.as_ref())
+        .map(|condition| condition_shape(condition, &operand))
+        .collect::<Result<Vec<_>, _>>()?;
     let target = shape(&query.target, &entity.table)?;
     let task = match &target {
         Shape::Condition { .. } | Shape::Not(_) | Shape::Both { .. } => Task::Binary,
@@ -509,6 +546,7 @@ fn asked(query: &ValidatedQuery) -> Result<Asked, CoreError> {
         target,
         range,
         task,
+        choosing,
     })
 }
 
@@ -2642,6 +2680,22 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             "query",
         ));
     };
+    // An entity filter chooses the labelled examples, never the entities
+    // scored, which the client says before it gathers
+    // (`_warn_the_filter_chose_only_the_examples`), as a code and the
+    // filter's condition and the entities' count the host words.
+    if let Some(condition) = &validation.entity_filter {
+        asker.warn(CoreWarning {
+            code: FILTER_CHOSE_EXAMPLES.into(),
+            message: "the entity filter chooses the labelled examples, not the entities scored"
+                .into(),
+            fields: [
+                ("condition".to_owned(), Detail::text(condition.as_str())),
+                ("entities".to_owned(), count(indices.len())),
+            ]
+            .into(),
+        });
+    }
     // What the sampler needs of its provider, refused before anything is
     // fetched.
     let nulls = sampling_capabilities(asker)?;
@@ -2687,6 +2741,11 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // A temporal query's aggregated tables, each with the foreign key by
     // which it refers to the entity table and the window its rows are read
     // over (`_get_query_time_offset_dict`).
+    // The labels read every table the target, the entity filter and the
+    // assumption aggregate, each over the windows of them all pooled; the
+    // lags and the anchor's bounds the target's alone
+    // (`to_autoregressive_query`, `get_all_target_aggregations`).
+    let labelled_fetches = fetches(&graph, &asked.entity_table, &asked.every_windowed())?;
     let mut windows = Vec::new();
     asked.target.windowed(&mut windows);
     let fetches = fetches(&graph, &asked.entity_table, &windows)?;
@@ -2786,6 +2845,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         entity_columns.insert(time.clone());
     }
     asked.target.entity_columns(&mut entity_columns);
+    for shape in &asked.choosing {
+        shape.entity_columns(&mut entity_columns);
+    }
     let mut filters = Vec::new();
     if entity.column(&key).is_none_or(|c| c.nullable) {
         filters.push(Filter::NotNull {
@@ -2890,7 +2952,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // is left out once labelled, below (T2.12).
     let nan_key = nan_rows(&entity_key);
     if asker.reads_nan_as_missing()
-        && !fetches.is_empty()
+        && !labelled_fetches.is_empty()
         && examples.index.iter().any(|i| nan_key.contains(i))
     {
         return Err(invalid(
@@ -2903,16 +2965,27 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // Their labels, as the reference's executor computes them over the
     // rows read for them (decision E19).
     let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
-    let target = Labelling {
+    let labelling = Labelling {
         asker,
         times: &read_times,
         sampled: &sampled,
         entity_rows: &entity_rows,
         entity_key: &entity_key,
         examples: &examples,
+    };
+    let fetched = labelling.read(&labelled_fetches).await?;
+    let target = labelling.build(&asked.target, &fetched, true)?;
+    // The examples the entity filter and the assumption choose: each
+    // condition's truth over the examples, and-ed (`execute`'s `mask`).
+    let mut chosen: Option<Vec<bool>> = None;
+    for shape in &asked.choosing {
+        let holds = labels::truth(&labelling.build(shape, &fetched, false)?)?.values;
+        chosen = Some(match chosen {
+            None => holds,
+            Some(before) => before.iter().zip(&holds).map(|(&a, &b)| a && b).collect(),
+        });
     }
-    .target(&asked.target, &fetches)
-    .await?;
+    drop(fetched);
     // A classification keeps a decimal column's distinct values apart as
     // classes; any other task reads them as numbers (T2.0c, round 1).
     let mut labelled = if matches!(asked.task, Task::Multiclass) {
@@ -2921,6 +2994,18 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         labels::label(&target)?
     };
     null_compared(&asked.target, &labelled.mask)?;
+    // The examples the entity filter or the assumption leaves out keep no
+    // label (`out[mask[_mask]]`, `mask & _mask`).
+    if let Some(chosen) = &chosen {
+        let keep: Vec<bool> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .map(|row| chosen[row])
+            .collect();
+        for (row, holds) in chosen.iter().enumerate() {
+            labelled.mask[row] &= *holds;
+        }
+        labelled.labels = labelled.labels.kept(&keep);
+    }
     // An example of an entity whose key is NaN is left out of the context
     // once labelled, as the reference leaves it out (T2.12).
     if !nan_key.is_empty() {
@@ -2939,7 +3024,24 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .collect();
     let gathered = labelled_rows.len().min(context_examples);
     if gathered == 0 {
-        return Err(invalid("no context example was collected", "anchor_time"));
+        let ends: Vec<Offset> = windows.iter().map(|w| w.end).collect();
+        let mut aggregated: Vec<&Table> = Vec::new();
+        for fetch in &fetches {
+            if !aggregated.iter().any(|t| t.name == fetch.table.name) {
+                aggregated.push(fetch.table);
+            }
+        }
+        aggregated.sort_by(|a, b| a.name.cmp(&b.name));
+        return Err(empty_sample(
+            &mut memo,
+            &read_times,
+            entity,
+            &aggregated,
+            &ends,
+            (!anchor_entity).then_some(context_anchor),
+            validation.entity_filter.as_deref(),
+        )
+        .await);
     }
     if kept.len() >= trials && gathered < context_examples / 2 {
         // The reference warns of it once in a process: given on every run
@@ -3558,6 +3660,101 @@ fn null_compared(target: &Shape, mask: &[bool]) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// The refusal of a context no example was collected for, with the reason
+/// the reference's sampler finds for it (`_diagnose_empty_sample`), as a
+/// `reason` and the facts it names, which the host words: `anchor` is the
+/// context's anchor asked, none for an anchor at each entity's own time;
+/// `aggregated` the tables the target aggregates, by name, and `ends` the
+/// ends of its aggregations' windows; `condition` the entity filter's.
+///
+/// - `no_entity_at_anchor`: the entity table's earliest time is after the
+///   anchor (`entity_table`, `column`, `anchor`, `earliest`, and `later`
+///   where an anchor after it leaves the target's window room in the data);
+/// - `no_entity_passed`: the data leaves room after the anchor for the
+///   target's whole window, and an entity filter chose no example
+///   (`anchor`, `tables`, `min_time`, `max_time`, `condition`);
+/// - `anchor_too_late`: the data leaves no such room (the same facts but
+///   the condition);
+/// - `too_restrictive`: anything else, as the reference's generic reason.
+///
+/// A time bound that cannot be read gives the reason without it, as the
+/// reference's diagnosis falls back when its own reads fail.
+async fn empty_sample(
+    memo: &mut Memo<'_>,
+    times: &Times,
+    entity: &Table,
+    aggregated: &[&Table],
+    ends: &[Offset],
+    anchor: Option<i64>,
+    condition: Option<&str>,
+) -> CoreError {
+    let refused = |reason: &str| {
+        invalid("no context example was collected", "anchor_time")
+            .with_field("reason", Detail::text(reason))
+    };
+    let Some(anchor) = anchor else {
+        return refused("too_restrictive");
+    };
+    let at = |value: i64| {
+        Detail::Scalar(Scalar::Timestamp {
+            unit: Unit::Ns,
+            zone: None,
+            value,
+        })
+    };
+    // Whether `from` plus the latest of the ends is not after `max`
+    // (`_window_fits_after`).
+    let fits = |from: i64, max: i64| {
+        let Some(first) = ends.first() else {
+            return false;
+        };
+        let end = ends[1..]
+            .iter()
+            .fold(*first, |end, other| pooled(end, *other, false));
+        reaches(end, from).is_ok_and(|reached| reached <= i128::from(max))
+    };
+    let bounds = if aggregated.is_empty() {
+        None
+    } else {
+        time_bounds(memo, times, aggregated).await.ok()
+    };
+    if let Some(column) = &entity.time_column {
+        let earliest = time_bounds(memo, times, &[entity])
+            .await
+            .ok()
+            .map(|b| b.min)
+            .filter(|&min| min != TIME_MAX && min > anchor);
+        if let Some(earliest) = earliest {
+            let later = bounds.as_ref().is_some_and(|b| fits(earliest, b.max));
+            return refused("no_entity_at_anchor")
+                .with_field("entity_table", Detail::text(entity.name.as_str()))
+                .with_field("column", Detail::text(column.as_str()))
+                .with_field("anchor", at(anchor))
+                .with_field("earliest", at(earliest))
+                .with_field("later", Detail::Scalar(Scalar::Bool(later)));
+        }
+    }
+    let Some(bounds) = bounds else {
+        return refused("too_restrictive");
+    };
+    let facts = |error: CoreError| {
+        error
+            .with_field("anchor", at(anchor))
+            .with_field("tables", names(aggregated.iter().map(|t| t.name.as_str())))
+            .with_field("min_time", at(bounds.min))
+            .with_field("max_time", at(bounds.max))
+    };
+    if fits(anchor, bounds.max) {
+        return match condition {
+            Some(condition) => {
+                facts(refused("no_entity_passed")).with_field("condition", Detail::text(condition))
+            }
+            None => refused("too_restrictive"),
+        };
+    }
+    facts(refused("anchor_too_late"))
+}
+
 /// One aggregated table's read of the rows the target's aggregations of it
 /// take (`_by_time`): the foreign key by which it refers to the entity
 /// table, the window its rows are read over from each example's anchor,
@@ -3718,13 +3915,10 @@ struct Fetched {
 }
 
 impl Labelling<'_> {
-    /// The target `shape` names, over the examples: each table in `fetches`
-    /// read first, in order, then the target put together from the rows.
-    async fn target(
-        &self,
-        shape: &Shape,
-        fetches: &[Fetch<'_>],
-    ) -> Result<labels::Target, CoreError> {
+    /// Each table in `fetches` read for the examples, in order, by name,
+    /// which [`Labelling::build`] puts a target or a condition together
+    /// from.
+    async fn read(&self, fetches: &[Fetch<'_>]) -> Result<BTreeMap<String, Fetched>, CoreError> {
         let keys = take(self.entity_key, &self.examples.index)?;
         let anchors = &self.examples.anchors;
         let mut fetched = BTreeMap::new();
@@ -3742,7 +3936,7 @@ impl Labelling<'_> {
             .await?;
             fetched.insert(fetch.table.name.clone(), rows);
         }
-        self.build(shape, &fetched, true)
+        Ok(fetched)
     }
 
     /// `shape` over the examples, from the rows read; `whole` where it is

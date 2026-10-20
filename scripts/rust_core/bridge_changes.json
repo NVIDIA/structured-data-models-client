@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning"
+      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning; T2.13b: FILTER_CHOSE_EXAMPLES added to SAID, the client's words for the notice that an entity filter chooses the labelled examples and not the entities scored (_warn_the_filter_chose_only_the_examples), and WORDED gains the words of a context no example was collected for, by the reason the core found (_diagnose_empty_sample's); whether to warn, and why a context is empty, are sdm-core materialize's (FILTER_CHOSE_EXAMPLES, empty_sample); the host only words them"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -258,10 +258,10 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_worded": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: the template of a context left empty chosen by the facts the core gives (later, the count of tables), as most_entities_parts is; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: a refusal's template filled by _Words, the conversions SAID's warnings use (a timestamp shown as the reference shows it, names listed), so a refusal names times and tables as the reference's does; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"

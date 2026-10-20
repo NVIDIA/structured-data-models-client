@@ -73,6 +73,11 @@ pub struct Validation {
     /// A ranking's plan, when it has no errors: what each candidate's
     /// question is written from ([`per_candidate`], T2.8).
     pub ranking: Option<RankingPlan>,
+    /// The entity filter's condition, when the query has no errors and
+    /// filters its entity, written as the reference writes it
+    /// (`str(query.entity_ast.condition)`), which its notices and its
+    /// refusal of a sample left empty quote (T2.13b).
+    pub entity_filter: Option<String>,
 }
 
 impl Validation {
@@ -84,6 +89,7 @@ impl Validation {
             warnings,
             steps: None,
             ranking: None,
+            entity_filter: None,
         }
     }
 
@@ -277,6 +283,7 @@ fn resolve_here(
             warnings,
             steps,
             ranking: per_candidate(&validated),
+            entity_filter: entity_filter(&validated),
         });
     }
     let later = found.split_off(found.iter().take_while(|d| is_error(d)).count());
@@ -418,6 +425,15 @@ fn per_candidate(validated: &parser::ValidatedQuery) -> Option<RankingPlan> {
             })
         });
     Some(RankingPlan { top_k, ranked })
+}
+
+/// The entity filter's condition as the reference writes it
+/// (`str(query.entity_ast.condition)`), when the entity is filtered.
+fn entity_filter(validated: &parser::ValidatedQuery) -> Option<String> {
+    match &validated.query.entity_ast.borrow().kind {
+        Kind::Filter { condition, .. } => Some(ast::to_string(condition)),
+        _ => None,
+    }
 }
 
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {

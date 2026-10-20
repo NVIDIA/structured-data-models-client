@@ -522,24 +522,6 @@ fn without_the_capability_no_invalid_request_is_given() {
     assert!(!err.fields.contains_key("max_seed"));
 }
 
-/// The error `run` ends with, answering the catalog requests it asks
-/// first: the index check comes before the task is read, as the
-/// reference builds its sampler before its task table.
-fn refusal(run: &mut Run) -> CoreError {
-    loop {
-        match run.next() {
-            Err(err) => return err,
-            Ok(Step::Fetch { requests }) => {
-                for asked in requests {
-                    let answer = catalog(&asked.request).expect("a catalog request");
-                    run.submit_fetch(asked.id, answer).unwrap();
-                }
-            }
-            Ok(other) => panic!("{other:?}"),
-        }
-    }
-}
-
 fn rule(err: &CoreError) -> String {
     assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{err:?}");
     assert_eq!(err.fields["operation"], Detail::text("materialize"));
@@ -551,13 +533,15 @@ fn rule(err: &CoreError) -> String {
 
 #[test]
 fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
-    // An entity filter; the target's rules are lifted (T2.10).
-    let query =
-        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'";
-    let mut run = materialize(host(), &shop(), query, None).unwrap();
-    let err = refusal(&mut run);
-    assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{query}: {err:?}");
-    assert_eq!(rule(&err), "entity_filter", "{query}");
+    // An entity filter and an assumption are lifted (T2.13b): the run
+    // reaches its first read.
+    for query in [
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'",
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING COUNT(orders.*, 0, 7, days) > 1",
+    ] {
+        let mut run = materialize(host(), &shop(), query, None).unwrap();
+        assert!(matches!(run.next(), Ok(Step::Fetch { .. })), "{query}");
+    }
     // A table the entity table refers to is sampled from T2.11: the run
     // reaches its first read.
     let mut parent = shop();
