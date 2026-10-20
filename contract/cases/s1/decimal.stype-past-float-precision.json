@@ -1,0 +1,53 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.stype-past-float-precision",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "seam": "decimal",
+  "cells": [
+    "decimal128/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE orders AS SELECT *, (order_id * 0.000000000000000001 + 1.25)::DECIMAL(38, 18) AS d FROM orders"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-03-01"
+    }
+  },
+  "until": "from_source",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "from_source",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: orders.d, 80 values distinct as decimals and all 1.25 as float64, is float64 and categorical"
+  },
+  "why": "A scaled DECIMAL column whose values differ only past float64's precision: the reference casts a decimal of scale > 0 to float64 before counting distinct values (one value, so categorical); the core counts the exact decimals (80 of 80, so numerical). The decimal stype fix riding along in T2.14b",
+  "source": "T2.14b's test author, the reference at 6298913c (the stype probe of T2.13b's differential run)"
+}

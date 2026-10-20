@@ -1,5 +1,30 @@
 {
- "about": "T2.14b's acceptance tests (with T2.14d's Postgres value rules and the decimal stype fix riding along) that failed when the test author wrote them, before the implementation. Each key names its test file's family by prefix: pickle:<test> (contract/tests/test_t214b_pickles.py), host:<test> (contract/tests/test_t214b_host_facts.py), stype:<case key> (contract/tests/test_t214b_decimal_stype.py), wording:<key> (contract/tests/test_t214b_wording.py), pg-values:<rule> (packages/structured-data-models-client/tests_test_ops/test_t214d_postgres_values.py). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [],
- "authored": []
+ "about": "T2.14b's acceptance tests (with T2.14d's Postgres value rules and the decimal stype fix riding along) that failed when the test author wrote them, before the implementation. Each key names its test file's family by prefix: host:<name> (contract/tests/test_t214b_host.py and sdm-testkit tests/t214b_host.rs), stype:<case key> (contract/tests/test_t214b_decimal_stype.py, sdm-schema tests/t214b_decimal_stype.rs and sdm-testkit tests/t214b_host.rs), wording:<key> (contract/tests/test_t214b_wording.py), pg-values:<rule> (packages/structured-data-models-client/tests_test_ops/test_t214d_postgres_values.py). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": [
+  "host:facts-from-the-core",
+  "host:no-re-encoding",
+  "host:response-bytes",
+  "host:state-version-named",
+  "stype:decimal.stype-past-float-precision",
+  "stype:decimal.stype-past-float-precision@postgres",
+  "stype:rust-unit",
+  "stype:rust:decimal.stype-past-float-precision"
+ ],
+ "authored": [
+  "host:facts-from-the-core",
+  "host:no-re-encoding",
+  "host:py:rank.repeated-candidates",
+  "host:py:rank.repeated-candidates@postgres",
+  "host:py:rank.repeated-candidates@sqlite",
+  "host:response-bytes",
+  "host:rust:rank.repeated-candidates",
+  "host:rust:rank.repeated-candidates@sqlite",
+  "host:state-version-named",
+  "stype:decimal.stype-past-float-precision",
+  "stype:decimal.stype-past-float-precision@postgres",
+  "stype:decimal.stype-past-float-precision@sqlite",
+  "stype:rust-unit",
+  "stype:rust:decimal.stype-past-float-precision",
+  "stype:rust:decimal.stype-past-float-precision@sqlite"
+ ]
 }

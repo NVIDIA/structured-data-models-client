@@ -574,6 +574,16 @@ T211_SAMPLING = (
     'sample.use-prediction-time.false',
 )
 
+#: T2.14b's S1 cases (the test author's), none in the inventory: a
+#: ranking's candidates given with repeats, kept as the reference's
+#: dict.fromkeys keeps them (MID2 P2-2), and a scaled decimal whose values
+#: differ only past float64's precision, categorical as the reference
+#: counts it (the decimal stype fix riding along).
+T214B_HOST = (
+    'rank.repeated-candidates',
+    'decimal.stype-past-float-precision',
+)
+
 
 def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     None
@@ -604,7 +614,9 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # T2.9 the forecasting cases, each carrying its call as far as the
     # reference goes, and T2.10 its target cases, each an acceptance case;
     # T2.21 its exact-key cases, each carrying its call through predict.
-    # reference goes; T2.11 the sampling options' cases likewise.
+    # reference goes; T2.11 the sampling options' cases likewise; T2.14b a
+    # ranking's repeated candidates and a scaled decimal's stype, each an
+    # acceptance case.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -620,8 +632,14 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T210_TARGETS,
         *T221_EXACT_KEYS,
         *T211_SAMPLING,
+        *T214B_HOST,
     }
-    for case_id in (*T28C_MULTICALL, *T213_OPTIONS, *T210_TARGETS):
+    for case_id in (
+        *T28C_MULTICALL,
+        *T213_OPTIONS,
+        *T210_TARGETS,
+        *T214B_HOST,
+    ):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
     for case_id in (
