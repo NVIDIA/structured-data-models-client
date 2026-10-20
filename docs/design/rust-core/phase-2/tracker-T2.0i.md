@@ -28,11 +28,13 @@ Neither commit changes what the client does on Linux.
 The recorder recorded python-ref at `43e55f4f` for every case on all three databases at `1d85bce3` (`T2.0i tests: python-ref at 43e55f4f`, taken unedited); all 652 lines equal their `6298913c` lines under `ratchet.semantic`, so no answer changed and nothing is registered.
 The environment digest is unchanged.
 `contract/reference/43e55f4f58924384c3cb52f67c8ed2e73ba45fa1.jsonl` replaces the `6298913c` file, and `contract/reference-env.txt` and every vector file and test citing the old commit name the new one.
-T2.10 moved T2.18's 9 deferred filter-role lines into the reference before T2.0i; with the other cases the chain adds (T2.10's, T2.21's, T2.11's), the recorder records them at `43e55f4f` too, so the new file carries every case and database line the old one did.
+T2.10 moved T2.18's 9 deferred filter-role lines into the reference before T2.0i; with the other cases the chain adds (T2.10's, T2.21's, T2.11's), the recorder recorded them at `43e55f4f` too (below), so the new file carries every case and database line the old one did.
 `tests/test_contract_reference.py` holds the environment file's reference to the `43e55f4f` prefix.
 No `bridge_changes.json` entry: neither commit touches a frozen file.
 
-### Open
+### The chain
 
-- The recorder's lines at `43e55f4f` for T2.11's new cases; the 57 the chain added through T2.21 (T2.10's and T2.21's cases, T2.18's deferred lines among them) are recorded, each equal to its `6298913c` line under `ratchet.semantic`.
-- Packages after T2.0i record their new reference lines at `43e55f4f` directly.
+T2.0i lands at the end of the landing chain T2.1u, T2.14a, T2.21, T2.11, stacked on T2.11's head `d5afc6d5`.
+The chain added 207 reference lines after `1d85bce3` and changed none: T2.10's and T2.21's cases (57, T2.18's deferred filter-role lines among them) and T2.11's sampling cases (150, its 50 cases on three databases).
+The recorder recorded all of them at `43e55f4f`, each equal to its `6298913c` line under `ratchet.semantic`, so the new file carries all 859 lines the old one did.
+Packages after T2.0i record their new reference lines at `43e55f4f` directly.
