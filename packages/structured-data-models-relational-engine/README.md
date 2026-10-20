@@ -28,8 +28,9 @@ pip install "structured-data-models-relational-engine[explain]"     # natural-la
 pip install "structured-data-models-relational-engine[relbench]"    # Graph.from_relbench() dataset loading
 ```
 
-Release wheels are built for CPython 3.10, 3.11, 3.12 and 3.13
-(`manylinux_2_28` x86-64 and aarch64); no source distribution is published.
+Release wheels are built for CPython 3.10 through 3.14 on `manylinux_2_28`
+x86-64 and aarch64, macOS 11 and newer for arm64 and x86-64, and 64-bit
+Windows; no source distribution is published.
 
 Application code should import the client's neutral surface, not this package
 directly:
