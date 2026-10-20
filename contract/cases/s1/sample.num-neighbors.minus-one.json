@@ -1,7 +1,7 @@
 {
   "format": "sdm-case/1",
   "id": "sample.num-neighbors.minus-one",
-  "status": "acceptance",
+  "status": "diagnostic",
   "slice": "S1",
   "paths": [
     "schema.from-source/all-tables/duckdb",
@@ -89,6 +89,7 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "num_neighbors=[-1]: the reference reaches no neighbour on DuckDB (orders left out with a warning), every neighbour on SQLite (its LIMIT -1 is no limit) and fails INTERNAL_ERROR on Postgres; the expectation is its DuckDB outcome, and the core refuses a negative neighbour count by name, INVALID_REQUEST naming num_neighbors, on all three, a difference register entry P2I-4 carries (KO2-82)",
-  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+  "why": "num_neighbors=[-1]: the reference reaches no neighbour on DuckDB (orders left out with a warning), every neighbour on SQLite (its LIMIT -1 is no limit) and fails INTERNAL_ERROR on Postgres; the expectation is its DuckDB outcome. Diagnostic, compared and reported but gating nothing: the core refuses a negative neighbour count by name, INVALID_REQUEST naming num_neighbors, on all three databases, an owner-approved refusal (P2I-4, KO2-82) where the reference answers inconsistently across databases, and the comparator holds an acceptance case refused earlier than the reference to the reference's predict; T2.11's acceptance tests check the refusal on both hosts and all three databases",
+  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c",
+  "register": "P2I-4"
 }

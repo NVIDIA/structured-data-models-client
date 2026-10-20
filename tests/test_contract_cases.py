@@ -505,6 +505,13 @@ T210_TARGETS = (
 #: anchor_time='entity' and an entity table with a parent, each carrying
 #: its call as far as the reference goes. The unseeded cases are judged by
 #: properties (KO2-76) and kept in contract/tests/t211-unseeded/.
+#: T2.11's diagnostic case, by the register entry carrying the core's
+#: refusal where the reference answers, inconsistently across databases
+#: (P2I-4, KO2-82): compared and reported, gating nothing, since the
+#: comparator holds an acceptance case refused earlier than the reference
+#: to the reference's later stage; T2.11's acceptance tests check the
+#: refusal.
+T211_DIAGNOSTIC = {'sample.num-neighbors.minus-one': 'P2I-4'}
 T211_SAMPLING = (
     'sample.anchor-entity',
     'sample.anchor-entity.context-entity',
@@ -615,8 +622,12 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T221_EXACT_KEYS,
         *T211_SAMPLING,
     ):
-        assert committed[case_id]['status'] == 'acceptance', case_id
+        assert committed[case_id]['status'] == (
+            'diagnostic' if case_id in T211_DIAGNOSTIC else 'acceptance'
+        ), case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
+    for case_id, entry in T211_DIAGNOSTIC.items():
+        assert committed[case_id].get('register') == entry, case_id
     # Seeded: a core whose links or composite key are not its input's.
     case = copy.deepcopy(committed['rule.key-name-form'])
     case['core']['describe_source']['source']['relationships'] = []

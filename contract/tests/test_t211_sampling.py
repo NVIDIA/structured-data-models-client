@@ -226,7 +226,14 @@ def test_each_case_is_small_and_runs_on_all_three_databases(
     an S1 acceptance case through predict on the shop base, on DuckDB,
     SQLite and Postgres, asking about a few entities."""
     case, _ = cases()[case_id]
-    assert case['status'] == 'acceptance' and case['slice'] == 'S1'
+    # The one decided case is diagnostic (DECIDED): its register entry's
+    # refusal is checked here, not by the gate.
+    assert case['status'] == (
+        'diagnostic' if case_id in DECIDED else 'acceptance'
+    )
+    assert case['slice'] == 'S1'
+    if case_id in DECIDED:
+        assert case['register'] == DECIDED[case_id][0]
     assert case['until'] == 'predict'
     assert case['input']['base'] == 'shop'
     assert runner().case_databases(case) == DATABASES
