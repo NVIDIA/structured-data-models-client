@@ -7085,6 +7085,50 @@ entries:
   - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: python-core, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
   - {case: rule.composite-key-given@sqlite, cell: ref-pandas3, runner: rust-host, old: 'refusal INVALID_REQUEST', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: "the SQLite line: refused at materialize as the reference refuses it, without the reference's read of the folded key"}
 
+- id: P2E-15
+  title: A string constant's invalid escape warns as often as the query is read, twice on the core route where the reference warns five times
+  kind: change
+  old_behavior: >-
+    The query PREDICT users.country = 'caf\u00e9\t\'\\\/' FOR EACH
+    users.user_id holds the escape \/, which Python's string decoding warns
+    of (DeprecationWarning "invalid escape sequence '\/'", raised by
+    predictive_query's Constant.typed_value). The reference reads the
+    constant twice while it validates the query and three more times while
+    its engine labels the examples: on SQLite five DeprecationWarnings
+    (with the sampler's UserWarning between them and the SDMWarning last),
+    on Postgres five as well.
+  new_behavior: >-
+    The core route reads the constant only while the client validates the
+    query, so the same DeprecationWarning, with the same message from the
+    same line, is raised twice; the core labels the examples from its own
+    reading of the constant (T2.10). The outcome, the payload and every
+    other warning are the reference's.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a SQLite or
+    Postgres source of a query whose string constant holds an escape
+    Python deprecates (on DuckDB the case's materialize takes the old
+    route and warns as the reference does).
+  cases: [s0.boundary.escapes@sqlite, s0.boundary.escapes@postgres]
+  refs: [T2.10, P2B-16, P2C-7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Proposed by T2.10's implementer at the orchestrator's decision
+    (register it rather than repeat a deprecation warning), for the
+    reviewers. Measured on SQLite through the public calls on both routes:
+    every DeprecationWarning is "invalid escape sequence '\/'" from
+    predictive_query's constant.py line 134, five on the reference and two
+    on the core route; nothing else differs. On Postgres the committed
+    reference line holds five and CI's python-core observation two (round
+    1's review). Seen once P2B-16 and P2C-7
+    were retired, the core no longer refusing the case's condition.
+  case_outcomes:
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'success at materialize', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
+  - {case: s0.boundary.escapes@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: python-core, old: 'success at materialize', new: 'success at materialize', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
+  - {case: s0.boundary.escapes@postgres, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'success', summary: 'T2.10: the invalid-escape DeprecationWarning raised twice, where the reference re-reads the constant and raises it five times'}
+
 - id: P2E-16
   title: A logical target joins each example's own conditions where an average, minimum or maximum has no value for an earlier example
   kind: change
