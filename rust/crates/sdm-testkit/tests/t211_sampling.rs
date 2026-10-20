@@ -221,7 +221,13 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
         .iter()
         .map(|o| o.as_str().unwrap())
         .collect();
+    // A decided case is refused at materialize (its register entry's
+    // answer), so the operations after it do not run.
+    let decided = DECIDED.contains(&id);
     for operation in operations(id) {
+        if decided && operation == "predict" {
+            continue;
+        }
         if !ran.contains(operation.as_str()) {
             return Some(format!("its core operation {operation} did not run"));
         }

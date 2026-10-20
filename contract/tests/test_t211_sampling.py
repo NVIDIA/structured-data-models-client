@@ -547,7 +547,12 @@ def test_python_core_answers_each_case_as_the_reference_does(
         case, _ = cases()[case_key.split('@')[0]]
         identity = line['identity']
         assert identity['native_loaded'] and line['core'] is not None
-        missing = sorted(set(case['core']) - set(identity['operations']))
+        # A decided case is refused at materialize (its register entry's
+        # answer), so predict does not run.
+        named = set(case['core']) - (
+            {'predict'} if case['id'] in DECIDED else set()
+        )
+        missing = sorted(named - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         if case['id'] in DECIDED:
             # The register's answer, not the reference's: the named
