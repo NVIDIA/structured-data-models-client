@@ -118,6 +118,19 @@ entry counts only when its ``decision_ref`` names a row of this harness's
 does; an entry not approved so, or a field that is not such a path,
 excuses nothing.
 
+Fewer DeprecationWarnings (T2.1s, KO2-83, approved by the owner on
+2026-10-20): for a line (the bare case ID on DuckDB, ``<case>@sqlite`` or
+``<case>@postgres``) that an entry approved by the owner lists among its
+``cases``, the entry's ``decision_ref`` naming KO2-83 in this harness's
+(the checkpoint's) decisions, approved by the owner there, the
+``warnings`` rule lets python-core and rust-host record fewer
+``DeprecationWarning``s than the reference (or python-old), never more;
+every other class must match exactly, in count and relative order. The
+observations record each warning's class only, so the rule works on
+classes; the entry carries, in text, the evidence that the repeats share
+one message and source line. Past the reference's stop nothing changes,
+and a line no such entry lists is compared as before.
+
 Past the reference's stop (E112): for a case and runner whose effective
 expectation is an approved entry's move (``--expect``'s ``@moved``) of the
 reference's refusal to a later stage, or to a success, the rules against
@@ -273,6 +286,10 @@ _MORE_EXACT_FIELD = re.compile(
     r'(public\.schema|public\.result|public\.payloads|core\.predicted\.body'
     r'|core\.predicted\.calls)(/[^/]+)+'
 )
+#: The decision row under which an owner-approved entry's lines may show
+#: fewer DeprecationWarnings than the reference (KO2-83), and the class.
+FEWER_DEPRECATIONS = 'KO2-83'
+REPEATED_WARNING = 'DeprecationWarning'
 #: What stands for a value ``more_exact`` leaves out, on both sides.
 _MORE_EXACT = 'left out: more exact than the reference'
 #: How :func:`more_exact` marks a field of an item that also excuses a
@@ -346,6 +363,9 @@ class Report:
         #: The fields left out as more exact than the reference, by case
         #: and runner (:func:`more_exact`).
         self.more_exact: dict[tuple[str, str], tuple[str, ...]] = {}
+        #: The lines whose core runners may show fewer DeprecationWarnings
+        #: than the reference (:func:`fewer_deprecations`, KO2-83).
+        self.fewer: frozenset[str] = frozenset()
         #: The public calls whose statements an entry says differ from the
         #: reference's, by case and runner (:func:`statements_differ`).
         self.statements_differ: dict[tuple[str, str], tuple[str, ...]] = {}
@@ -1431,6 +1451,18 @@ def _host_fields(
                 f'{where}: host.warnings: python-old alone shows the '
                 f"runtime's DeprecationWarnings ({RUNTIME_DEPRECATIONS})"
             )
+        elif (
+            stop is None
+            and who in MORE_EXACT_RUNNERS
+            and case['id'] in report.fewer
+            and _fewer_deprecations(
+                observation['host']['warnings'], reference['host']['warnings']
+            )
+        ):
+            report.note(
+                f'{where}: host.warnings: fewer DeprecationWarnings than '
+                f'{against} ({FEWER_DEPRECATIONS})'
+            )
         else:
             report.fail(f'{where}: host.warnings: differ', 'warnings')
     if stop is not None and stop != 'predict':
@@ -1497,6 +1529,26 @@ def _runtime_only(
         elif not _runtime(each):
             return False
     return held or at == len(mine)
+
+
+def _fewer_deprecations(mine: Any, theirs: Any) -> bool:
+    r"""Whether ``mine`` holds no more ``DeprecationWarning``s than
+    ``theirs`` and every other class exactly as ``theirs`` does, in count
+    and relative order (KO2-83); anything but two lists of class names
+    says no."""
+    if not (
+        isinstance(mine, list)
+        and isinstance(theirs, list)
+        and all(isinstance(x, str) for x in mine + theirs)
+    ):
+        return False
+
+    def others(shown: list[str]) -> list[str]:
+        return [x for x in shown if x != REPEATED_WARNING]
+
+    return mine.count(REPEATED_WARNING) <= theirs.count(
+        REPEATED_WARNING
+    ) and others(mine) == others(theirs)
 
 
 def _runtime(warning: tuple[str, str | None]) -> bool:
@@ -1678,6 +1730,36 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
                 if who in MORE_EXACT_RUNNERS:
                     found[case, who] = found.get((case, who), ()) + kept
     return found
+
+
+def fewer_deprecations(register: Path) -> frozenset[str]:
+    r"""The lines (each a key of ``cases``) of every entry of ``register``
+    approved by the owner whose ``decision_ref`` names
+    ``FEWER_DEPRECATIONS`` (KO2-83), a row of this harness's (the
+    checkpoint's) decisions the owner approved, so a candidate cannot
+    invent the approval; anything else, and a file it cannot read, names
+    nothing."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
+        return frozenset()
+    if FEWER_DEPRECATIONS not in _owner_rows():
+        return frozenset()
+    entries = loaded.get('entries') if isinstance(loaded, dict) else None
+    found: set[str] = set()
+    for entry in entries if isinstance(entries, list) else []:
+        if (
+            isinstance(entry, dict)
+            and entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and isinstance(entry.get('decision_ref'), dict)
+            and entry['decision_ref'].get('row') == FEWER_DEPRECATIONS
+            and isinstance(entry.get('cases'), list)
+        ):
+            found.update(x for x in entry['cases'] if isinstance(x, str))
+    return frozenset(found)
 
 
 def core_only_columns(register: Path) -> dict[str, dict[str, frozenset[str]]]:
@@ -2804,6 +2886,7 @@ def compare(
     report = Report(policy['rules'], check.excluded(policy))
     report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
     report.more_exact = more_exact(improvements or register_file)
+    report.fewer = fewer_deprecations(improvements or register_file)
     report.statements_differ = statements_differ(improvements or register_file)
     report.core_only = core_only_columns(improvements or register_file)
     if set(policy['rules']) != set(RULES):
