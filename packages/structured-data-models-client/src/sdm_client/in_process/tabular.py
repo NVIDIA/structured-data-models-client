@@ -108,8 +108,18 @@ class Tabular:
         payload: Mapping[str, Any],
         schema: Mapping[str, Any],
     ) -> tuple[Any, Any]:
-        r"""The rows to score, read as the context was."""
+        r"""The rows to score, read as the context was, each carrying the
+        key its answer is given back under."""
         table = payload['predict']['instance_table']
+        absent = sorted(
+            key_columns(schema['instance_table']) - set(table['columns'])
+        )
+        if absent:
+            raise StructuredDataError(
+                f'the rows to score leave out key column(s) {absent}, which '
+                f'name the row each answer is about',
+                code='INVALID_SCHEMA',
+            )
         return context.instance.tensor(table, 'predict instance table'), None
 
     @staticmethod

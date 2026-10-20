@@ -290,8 +290,8 @@ class TabularAdapter:
             'metadata': {'request_id': _request_id()},
         }
         if request.inference:
-            envelope['inference'] = json_ready(
-                typed_inference(request.inference)
+            envelope['inference'] = typed_inference(
+                json_ready(request.inference)
             )
         return envelope
 

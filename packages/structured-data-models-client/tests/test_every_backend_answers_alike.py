@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import warnings
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -236,6 +237,7 @@ def test_a_key_of_several_columns_answers_under_its_values(client_for):
     ('inference', 'code'),
     [
         ({'use_prediction_time': 'no'}, None),
+        ({'use_prediction_time': np.bool_(False)}, None),
         ({'use_prediction_time': None}, 'INVALID_REQUEST'),
         ({'run_mode': 7}, 'INVALID_REQUEST'),
         ({'inference_config': None}, 'INVALID_REQUEST'),
@@ -283,6 +285,22 @@ def _a_table_named_like_the_scored_rows() -> dict[str, pd.DataFrame]:
         columns={'item_id': 'instance_table_id'}
     )
     return tables
+
+
+def _scored_without_its_key() -> Request:
+    frame = people()[['person_id', 'age', 'visits', 'churn']].assign(
+        tenant=['a', 'b'] * 30
+    )
+    schema = Schema.from_data(
+        {'instance': frame}, primary_keys={'instance': ['tenant', 'person_id']}
+    )
+    return Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:][['age', 'visits']],
+        target='churn',
+        task='classification',
+        schema=schema,
+    )
 
 
 def _text_schema() -> Schema:
@@ -363,6 +381,13 @@ def _text_schema() -> Schema:
                     COUNT, _a_table_named_like_the_scored_rows()
                 ).materialize(indices=[0, 1]),
                 model=KumoRelational(),
+            ),
+            'INVALID_SCHEMA',
+        ),
+        (
+            'kumo-tabular',
+            lambda client: client.predict(
+                _scored_without_its_key(), model=KumoTabular()
             ),
             'INVALID_SCHEMA',
         ),
