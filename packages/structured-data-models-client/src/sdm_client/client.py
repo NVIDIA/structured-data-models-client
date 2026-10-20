@@ -2,7 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""One connection to one NIM, serving every model it can reach.
+r"""One connection to one NIM, serving every model it can reach, or to the
+models run in this process.
 
 The model is an argument:
 
@@ -81,7 +82,9 @@ class FittedModel:
     against it is a second call. That is what ``fit`` and ``predict`` are here.
 
     Close it when done, or use it as a context manager. A session holds memory
-    on the endpoint until it is released or expires.
+    on the endpoint until it is released or expires. For a client opened with
+    :meth:`SDMClient.in_process`, the endpoint is this process: the context is
+    fitted and held here, and released when the session or the client closes.
 
     ``pinned`` is what the session pinned, minus the context itself. Reading an
     answer needs the task and the schema, where the key an id stands for is
@@ -432,7 +435,9 @@ class SDMClient:
 
         Read from ``/v1/models``, not from this client's own list. The previous
         generation reported its own registry here, which meant it claimed a
-        model the endpoint did not serve.
+        model the endpoint did not serve. A client opened with
+        :meth:`in_process` lists the models it was given, or both when it
+        loads its own.
         """
         return self._backend.list_models()
 
@@ -649,7 +654,9 @@ class SDMClient:
 
         The pinned half is model, task, schema and context; later calls send
         only the rows to score. Use this when asking several questions of the
-        same context, which is what makes uploading it once worthwhile.
+        same context, which is what makes uploading it once worthwhile. A
+        client opened with :meth:`in_process` uploads nothing: it fits the
+        context once, here, and keeps it until the session closes.
 
         `holdout` names every row the session will go on to score. The context
         is chosen once, here, and `request` only excludes the rows *it* names,

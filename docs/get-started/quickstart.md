@@ -179,8 +179,8 @@ with SDMClient.in_process(relational) as client:
 It answers as the NIM does. The request is prepared exactly as it is for a NIM,
 and the model is run on it directly, with no HTTP in between. The context is
 fitted with the NIM's seed and settings, and `fit()` holds its session in
-memory. On a GPU it computes as the NIM does, and on the same GPU it gives the
-NIM's answers exactly.
+memory. On a GPU it computes as the NIM does, and with the published weights on
+the same GPU it gives the NIM's answers exactly.
 
 A request the model cannot answer is refused with a `StructuredDataError` whose
 `code` says why, from the codes a NIM uses, such as `UNSUPPORTED_OUTPUT`. It is
