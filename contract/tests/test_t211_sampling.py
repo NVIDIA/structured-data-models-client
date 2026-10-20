@@ -32,8 +32,10 @@ option with values the reference takes and values it refuses:
   static question, the context anchored likewise; a context timestamp, a
   windowed question and no time column refused);
 - ``parent_table``: an entity table that links to a parent (orders, a
-  windowed and a static question), and over two DECIMAL(20,0) keys one
-  integer apart that one float64 holds (2**53 and 2**53 + 1), each account
+  windowed and a static question; RelBench's rel-stack votes per post and
+  rel-avito clicks per ad, the questions of ``contract/tools/relbench.py``
+  that reach it, in their shape and a few dozen rows), and over two
+  DECIMAL(20,0) keys one integer apart that one float64 holds (2**53 and 2**53 + 1), each account
   reaching its own owner (KO2-35).
 
 The core refuses every one of these options today, by name
@@ -187,7 +189,20 @@ def test_every_option_has_a_value_taken_and_a_value_refused() -> None:
         else:
             assert outcomes == {'success', 'refusal'}, option
     parents = [c for c in CASE_IDS if c.startswith('sample.parent-table')]
-    assert len(parents) == 3
+    assert len(parents) == 5
+    # The RelBench questions that reach parent_table (contract/tools/
+    # relbench.py), in their shape: the entity table links to a parent.
+    for case_id in (
+        'sample.parent-table.relbench-stack',
+        'sample.parent-table.relbench-avito',
+    ):
+        case, _ = cases()[case_id]
+        entity = case['input']['pql'].rsplit(' FOR EACH ', 1)[1].split('.')[0]
+        links = case['input']['from_source']['relationships']
+        assert any(
+            link['source_table'] == entity and link['target_table'] != entity
+            for link in links
+        ), case_id
 
 
 @pytest.mark.parametrize('case_id', CASE_IDS)

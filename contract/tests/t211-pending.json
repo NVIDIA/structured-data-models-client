@@ -206,7 +206,17 @@
   "py:sample.num-neighbors.minus-one@sqlite",
   "py:sample.num-neighbors.minus-one@postgres",
   "rust:sample.num-neighbors.minus-one",
-  "rust:sample.num-neighbors.minus-one@sqlite"
+  "rust:sample.num-neighbors.minus-one@sqlite",
+  "py:sample.parent-table.relbench-stack",
+  "py:sample.parent-table.relbench-stack@sqlite",
+  "py:sample.parent-table.relbench-stack@postgres",
+  "rust:sample.parent-table.relbench-stack",
+  "rust:sample.parent-table.relbench-stack@sqlite",
+  "py:sample.parent-table.relbench-avito",
+  "py:sample.parent-table.relbench-avito@sqlite",
+  "py:sample.parent-table.relbench-avito@postgres",
+  "rust:sample.parent-table.relbench-avito",
+  "rust:sample.parent-table.relbench-avito@sqlite"
  ],
  "authored": [
   "py:sample.anchor-entity",
@@ -448,6 +458,16 @@
   "py:sample.num-neighbors.minus-one@sqlite",
   "py:sample.num-neighbors.minus-one@postgres",
   "rust:sample.num-neighbors.minus-one",
-  "rust:sample.num-neighbors.minus-one@sqlite"
+  "rust:sample.num-neighbors.minus-one@sqlite",
+  "py:sample.parent-table.relbench-stack",
+  "py:sample.parent-table.relbench-stack@sqlite",
+  "py:sample.parent-table.relbench-stack@postgres",
+  "rust:sample.parent-table.relbench-stack",
+  "rust:sample.parent-table.relbench-stack@sqlite",
+  "py:sample.parent-table.relbench-avito",
+  "py:sample.parent-table.relbench-avito@sqlite",
+  "py:sample.parent-table.relbench-avito@postgres",
+  "rust:sample.parent-table.relbench-avito",
+  "rust:sample.parent-table.relbench-avito@sqlite"
  ]
 }

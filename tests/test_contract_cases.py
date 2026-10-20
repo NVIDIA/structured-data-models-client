@@ -546,6 +546,8 @@ T211_SAMPLING = (
     'sample.num-neighbors.zero',
     'sample.parent-table',
     'sample.parent-table.decimal-keys',
+    'sample.parent-table.relbench-avito',
+    'sample.parent-table.relbench-stack',
     'sample.parent-table.static',
     'sample.return-embeddings',
     'sample.seed-7',
