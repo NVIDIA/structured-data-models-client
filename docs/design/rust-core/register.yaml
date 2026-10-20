@@ -6677,6 +6677,30 @@ entries:
     - 'public.payloads/*/2/predict/instance_table/rows/*/3'
     - 'public.payloads/*/2/predict/instance_table/rows/*/4'
     null_on_one_side: true
+  - case: lag.condition-per-call
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.calls/*/context/instance_table/rows/*/4'
+    - 'core.predicted.calls/*/context/instance_table/rows/*/5'
+    - 'core.predicted.calls/*/predict/instance_table/rows/*/3'
+    - 'core.predicted.calls/*/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@sqlite
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.calls/*/context/instance_table/rows/*/4'
+    - 'core.predicted.calls/*/context/instance_table/rows/*/5'
+    - 'core.predicted.calls/*/predict/instance_table/rows/*/3'
+    - 'core.predicted.calls/*/predict/instance_table/rows/*/4'
+    null_on_one_side: true
+  - case: lag.condition-per-call@postgres
+    runners: [rust-host]
+    fields:
+    - 'core.predicted.calls/*/context/instance_table/rows/*/4'
+    - 'core.predicted.calls/*/context/instance_table/rows/*/5'
+    - 'core.predicted.calls/*/predict/instance_table/rows/*/3'
+    - 'core.predicted.calls/*/predict/instance_table/rows/*/4'
+    null_on_one_side: true
   status: approved
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-70}
@@ -6696,8 +6720,8 @@ entries:
     it replays python-core's fetches but writes its own payload), and
     lag.condition-per-call (a condition's lag asked one entity a call,
     whose columns keep their type in every call, fix 3; python-core's lag
-    cells listed; rust-host's are printed under core.predicted.calls, a
-    path more_exact does not take).
+    cells listed, and rust-host's under core.predicted.calls, the path of a
+    request asked in several calls, which more_exact takes from T2.1r).
     Fixed in T2.9 fix 1.
 
 # --- lane D entries (P2D-1..19) ---
