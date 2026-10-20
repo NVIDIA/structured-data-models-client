@@ -576,20 +576,15 @@ fn an_answer_that_is_not_this_request_s_is_an_invalid_response_naming_the_field(
 #[test]
 fn an_answer_the_result_does_not_carry_yet_is_refused_by_name() {
     let base = r#"{"id":"r1","model":"m","metadata":{},"predictions":[ITEM,{"id":"3","row_index":1,"prediction":1.0}]}"#;
-    for (item, wanted, field) in [(
-        r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.5":1.0}}"#,
-        "response_field",
-        Some("quantiles"),
-    )] {
-        let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
-        let error = step.unwrap_err();
-        assert_eq!(error.code, ErrorCode::UnsupportedRequest, "{item}");
-        assert_eq!(rule(&error), Some(&text(wanted)), "{item}");
-        assert_eq!(error.fields["operation"], text("predict"));
-        if let Some(field) = field {
-            assert_eq!(error.fields["field"], text(field), "{item}");
-        }
-    }
+    // Quantiles alone are not carried yet: an item's explanation and
+    // metadata are from T2.13, its scores and rankings from T2.8.
+    let item = r#"{"id":"2","row_index":0,"prediction":1.0,"quantiles":{"0.5":1.0}}"#;
+    let (_, step) = answered(200, base.replace("ITEM", item).as_bytes());
+    let error = step.unwrap_err();
+    assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+    assert_eq!(rule(&error), Some(&text("response_field")));
+    assert_eq!(error.fields["operation"], text("predict"));
+    assert_eq!(error.fields["field"], text("quantiles"));
     // An item's scores and rankings are laid out (T2.8), read as the
     // bindings read them: a scores field not a list, or a ranking no dict
     // makes, is the endpoint's fault.
