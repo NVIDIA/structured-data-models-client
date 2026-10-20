@@ -26,9 +26,9 @@ It holds the file, as ``--root``'s tree has it, to:
   whose case part is a corpus case, but for a case it records as
   ``removed``;
 - each ``decision_ref`` a row of the decisions file it names;
-- each ``more_exact`` item's case a line's key (``X``, ``X@sqlite`` or
-  ``X@postgres``, T2.1d) that is one of its entry's ``cases``, or whose
-  case part is (T2.0g);
+- each ``more_exact`` and ``fewer_deprecations`` item's case a line's
+  key (``X``, ``X@sqlite`` or ``X@postgres``, T2.1d) that is one of its
+  entry's ``cases``, or whose case part is (T2.0g, T2.1s);
 - a ``case_outcomes`` row's ``statements_differ`` the one call refused,
   on a move from the old outcome's refusal there to a success or from a
   success to the new outcome's refusal there (T2.1e), on a row keeping
@@ -300,15 +300,17 @@ def problems(
             found += _outcome_problems(
                 entry, outcome, corpus, accepted, refused
             )
-        for item in entry.get('more_exact', []):
-            # A line's key: the case, or the case and its database (T2.1d).
-            if (
-                item['case'] not in entry['cases']
-                and item['case'].partition('@')[0] not in entry['cases']
-            ):
-                found.append(
-                    f'{where}: more_exact: {item["case"]} is not one of its cases'
-                )
+        for key in ('more_exact', 'fewer_deprecations'):
+            for item in entry.get(key, []):
+                # A line's key: the case, or the case and its database
+                # (T2.1d).
+                if (
+                    item['case'] not in entry['cases']
+                    and item['case'].partition('@')[0] not in entry['cases']
+                ):
+                    found.append(
+                        f'{where}: {key}: {item["case"]} is not one of its cases'
+                    )
     return found
 
 
