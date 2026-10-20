@@ -1106,5 +1106,169 @@
         "error": "no_classes"
       }
     }
+  ],
+  "embeddings_description": "The rule of an endpoint told to answer embeddings (serve(embeddings=True), Rust answer_told; T2.11's cases): each request answered as call number call, from zero, both endpoints exactly. A call whose output.fields names embeddings is given one on each item, beside what the rule answers, for row i of call k with d = (3k + 5i) mod 9 + 1: [d / 10, (10 - d) / 10, k, i], each a float; any other request is the rule's.",
+  "embeddings": [
+    {
+      "name": "a regression call asking for its prediction and embeddings, call 0",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\", \"embeddings\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0,
+            "embeddings": [
+              0.1,
+              0.9,
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for embeddings only, call 2",
+      "call": 2,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"embeddings\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "12",
+            "row_index": 0,
+            "prediction": "false",
+            "embeddings": [
+              0.7,
+              0.3,
+              2.0,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a regression call asking for embeddings over three rows, call 1",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\", \"embeddings\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0,
+            "embeddings": [
+              0.4,
+              0.6,
+              1.0,
+              0.0
+            ]
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": 1.0,
+            "embeddings": [
+              0.9,
+              0.1,
+              1.0,
+              1.0
+            ]
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": 1.0,
+            "embeddings": [
+              0.5,
+              0.5,
+              1.0,
+              2.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a binary call asking for probabilities and embeddings is given the embeddings alone",
+      "call": 0,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"binary_classification\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"bool\", \"classes\": [\"false\", \"true\"]}}, \"output\": {\"fields\": [\"prediction\", \"probabilities\", \"embeddings\"]}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": "false",
+            "embeddings": [
+              0.1,
+              0.9,
+              0.0,
+              0.0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a regression call asking for its prediction only is the rule's",
+      "call": 1,
+      "method": "POST",
+      "path": "/v1/predictions",
+      "body": "{\"model\": \"kumo-relational\", \"task\": {\"kind\": \"regression\", \"target\": {\"column_name\": \"TARGET\", \"dtype\": \"float32\"}}, \"output\": {\"fields\": [\"prediction\"], \"prediction_statistic\": \"median\"}, \"predict\": {\"instance_table\": {\"format\": \"arrays\", \"columns\": [\"instance_id\", \"__kumo_entity_ref_0\"], \"rows\": [[10, 0], [11, 1], [12, 2]]}}}",
+      "status": 200,
+      "answer": {
+        "object": "prediction.response",
+        "id": "r1",
+        "model": "kumo-relational",
+        "metadata": {},
+        "predictions": [
+          {
+            "id": "10",
+            "row_index": 0,
+            "prediction": 1.0
+          },
+          {
+            "id": "11",
+            "row_index": 1,
+            "prediction": 1.0
+          },
+          {
+            "id": "12",
+            "row_index": 2,
+            "prediction": 1.0
+          }
+        ]
+      }
+    }
   ]
 }

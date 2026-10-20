@@ -39,6 +39,12 @@
 //! metadata, each item of every call answered by the rule carries
 //! `"metadata": {"call": k, "row_index": i, "source": "scripted"}`.
 //!
+//! Told to answer embeddings ([`answer_told`]; T2.11's cases, as a model
+//! answers the vector it holds of each entity), a call whose
+//! `output.fields` names `embeddings` is answered with one on each item:
+//! for row `i` of call `k`, with `d` as above, `[d / 10, (10 - d) / 10, k,
+//! i]`, each a float.
+//!
 //! Calls are numbered from zero in the order received, and an endpoint
 //! told to fail a call answers that one `500` with `{"error":
 //! "scripted_failure", "call": <its number>}` and every other call by the
@@ -170,8 +176,9 @@ pub fn answer_call(
 }
 
 /// What an endpoint is told to answer beside the rule's prediction (a
-/// case's `input.probabilities`, `input.quantiles`, `input.explanation`
-/// and `input.item_metadata`); the default is none of them.
+/// case's `input.probabilities`, `input.quantiles`, `input.explanation`,
+/// `input.item_metadata` and `input.embeddings`); the default is none of
+/// them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Told {
     /// A classification asking for probabilities is given them.
@@ -182,6 +189,8 @@ pub struct Told {
     pub explanation: bool,
     /// Each item answered carries its metadata.
     pub item_metadata: bool,
+    /// A call asking for embeddings is given one on each item (T2.11).
+    pub embeddings: bool,
 }
 
 /// The rule: the status and JSON body answering one request.
@@ -304,6 +313,8 @@ fn predictions(body: &[u8], call: u64, told: Told) -> Result<Vec<Value>, &'stati
     // Whether the endpoint answers an explanation and this call asks for
     // one.
     let explains = told.explanation && asks("explanation");
+    // Whether the endpoint answers embeddings and this call asks for them.
+    let embeds = told.embeddings && asks("embeddings");
     // The rows again, each cell its text as written, so an id is answered
     // as its token; the body is JSON, so this reading cannot fail.
     let rows = raw_rows(body).ok_or("not_json")?;
@@ -330,6 +341,9 @@ fn predictions(body: &[u8], call: u64, told: Told) -> Result<Vec<Value>, &'stati
         }
         if explains {
             item["explanation"] = explained(call, index);
+        }
+        if embeds {
+            item["embeddings"] = embedded(call, index);
         }
         if told.item_metadata {
             item["metadata"] = json!({"call": call, "row_index": index, "source": "scripted"});
@@ -363,6 +377,18 @@ fn quantiles(call: u64, index: usize) -> Value {
     let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
     let d = f64::from(u32::try_from(d).unwrap_or(1));
     json!({"0.1": d - 1.0, "0.5": d, "0.9": d + 1.0})
+}
+
+/// Row `index` of call `call`'s embedding, as an endpoint told to answer
+/// embeddings gives it.
+fn embedded(call: u64, index: usize) -> Value {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = f64::from(u32::try_from(d).unwrap_or(1));
+    // A call's number and a row's index as the floats JSON writes them.
+    #[allow(clippy::cast_precision_loss)]
+    let (k, i) = (call as f64, index as f64);
+    json!([d / 10.0, (10.0 - d) / 10.0, k, i])
 }
 
 /// Row `index` of call `call`'s explanation, as an endpoint told to answer

@@ -367,3 +367,64 @@ def test_a_stand_in_rule_of_the_earlier_keywords_still_stands_in() -> None:
         endpoint.answer = original
     assert (status, answer) == (200, {'stood_in': True})
     assert seen == [{'call': 0}, {'call': 1}]
+
+
+embeddings_vectors = document['embeddings']
+
+
+@pytest.mark.parametrize(
+    'vector', embeddings_vectors, ids=[v['name'] for v in embeddings_vectors]
+)
+def test_an_endpoint_told_to_answer_embeddings_answers_each_vector(
+    vector: dict[str, Any],
+) -> None:
+    # T2.11: the rule as call number ``call``, and served.
+    status, answer = endpoint.answer(
+        vector['method'],
+        vector['path'],
+        vector['body'].encode(),
+        call=vector['call'],
+        embeddings=True,
+    )
+    assert status == vector['status']
+    assert json.loads(json.dumps(answer)) == vector['answer']
+    status, answer, _ = _served(vector, embeddings=True)
+    assert status == vector['status']
+    assert answer == vector['answer']
+
+
+def test_the_embeddings_vectors_are_not_vacuous() -> None:
+    given = [
+        v
+        for v in embeddings_vectors
+        if 'embeddings' in v['answer']['predictions'][0]
+    ]
+    assert any(v['call'] > 0 for v in given)
+    assert any(len(v['answer']['predictions']) > 1 for v in given)
+    assert len(given) < len(embeddings_vectors)
+    # Each row's embedding is its own.
+    many = next(v for v in given if len(v['answer']['predictions']) > 1)
+    embedded = [i['embeddings'] for i in many['answer']['predictions']]
+    assert len({json.dumps(e) for e in embedded}) == len(embedded)
+    # Without being told to, or told everything else, the endpoint answers
+    # none.
+    for vector in given:
+        for told in (
+            {},
+            {
+                'probabilities': True,
+                'quantiles': True,
+                'explanation': True,
+                'item_metadata': True,
+            },
+        ):
+            _, answer = endpoint.answer(
+                vector['method'],
+                vector['path'],
+                vector['body'].encode(),
+                call=vector['call'],
+                **told,
+            )
+            assert all('embeddings' not in i for i in answer['predictions'])
+        _, answer, _ = _served(vector)
+        assert all('embeddings' not in i for i in answer['predictions'])

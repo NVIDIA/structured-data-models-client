@@ -210,7 +210,13 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
             str(index) for index in call['indices']
         ]:
             problems.append("materialize's indices are not the call's")
-        wanted = _anchor(call['anchor_time']) if 'anchor_time' in call else None
+        # An anchor at each entity's own time (T2.11's literal 'entity') is
+        # no time the call gives: the core is passed none.
+        wanted = (
+            _anchor(call['anchor_time'])
+            if call.get('anchor_time', 'entity') != 'entity'
+            else None
+        )
         if materialize['anchor_time'] != wanted:
             problems.append("materialize's anchor time is not the call's")
     if core.get('predict', {'model': 'kumo-relational'}) != {

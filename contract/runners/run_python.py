@@ -2606,20 +2606,39 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
     if spec.get('indices_as') == 'decimal':
         indices = [Decimal(value) for value in indices]
     arguments: dict[str, Any] = {'indices': list(indices)}
-    if 'anchor_time' in spec:
-        arguments['anchor_time'] = pd.Timestamp(spec['anchor_time'])
+    # An anchor time is a timestamp, or the literal 'entity' (each entity
+    # at its own time; T2.11's cases), as the public call takes it.
+    for key in ('anchor_time', 'context_anchor_time'):
+        if key in spec:
+            arguments[key] = (
+                'entity' if spec[key] == 'entity' else pd.Timestamp(spec[key])
+            )
     if 'inference_config' in spec:
         arguments['inference_config'] = copy.deepcopy(spec['inference_config'])
     if 'candidates' in spec:
         arguments['candidates'] = list(spec['candidates'])
     if 'top_k' in spec:
         arguments['top_k'] = spec['top_k']
-    for key in ('rows_per_call', 'lag_timesteps'):
+    for key in ('rows_per_call', 'lag_timesteps', *SAMPLING_OPTIONS):
         if key in spec:
-            # As written (T2.8c's and T2.9's cases): a value the reference
-            # refuses is the case's input.
-            arguments[key] = spec[key]
+            # As written (T2.8c's, T2.9's and T2.11's cases): a value the
+            # reference refuses is the case's input, and a null is None
+            # (random_seed=None, an unseeded sample).
+            arguments[key] = copy.deepcopy(spec[key])
     return arguments
+
+
+#: The sampling options a case passes to materialize as written, any JSON
+#: value, null as None (T2.11).
+SAMPLING_OPTIONS = (
+    'random_seed',
+    'num_hops',
+    'num_neighbors',
+    'max_pq_iterations',
+    'use_prediction_time',
+    'return_embeddings',
+    'exclude_cols_dict',
+)
 
 
 def _from_source_arguments(spec: dict[str, Any]) -> dict[str, Any]:
@@ -2842,13 +2861,15 @@ def _call(
         # answering a classification with its probabilities (T2.8's ranking
         # cases), a regression with its quantiles (T2.9's forecast cases),
         # a call asking for an explanation with one and each item with its
-        # metadata (T2.13's cases) where the case says so.
+        # metadata (T2.13's cases), and a call asking for embeddings with
+        # one on each item (T2.11's cases) where the case says so.
         serve(
             fail_call=given.get('fail_call'),
             probabilities=given.get('probabilities', False),
             quantiles=given.get('quantiles', False),
             explanation=given.get('explanation', False),
             item_metadata=given.get('item_metadata', False),
+            embeddings=given.get('embeddings', False),
         ) as (url, received),
         warnings.catch_warnings(record=True) as shown,
     ):

@@ -2087,6 +2087,11 @@ fn predict(
                     quantiles: case.input.quantiles.unwrap_or(false),
                     explanation: case.input.explanation.unwrap_or(false),
                     item_metadata: case.input.item_metadata.unwrap_or(false),
+                    // Not read from the case yet: the gate builds this host
+                    // with the checkpoint's case.rs, which has no
+                    // `embeddings` until T2.1t lands; T2.11 wires it to the
+                    // case's `input.embeddings` then.
+                    embeddings: false,
                 };
                 let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
                 let (status, answered) =

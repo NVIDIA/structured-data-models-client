@@ -418,3 +418,47 @@ fn answer_as_asked_is_answer_told_without_the_new_fields() {
         }
     }
 }
+
+/// T2.11: an endpoint told to answer embeddings answers each of the file's
+/// `embeddings` vectors, as call number `call`, as the Python endpoint
+/// does; untold, or told everything else, it answers none.
+#[test]
+fn the_rule_answers_each_embeddings_vector() {
+    let told = Told {
+        embeddings: true,
+        ..Told::default()
+    };
+    let answers = answered_told("embeddings", told);
+    // Not vacuous: embeddings given on a call past the first and over
+    // several rows, and a call asking for none answered by the rule.
+    assert!(answers.len() >= 5, "{}", answers.len());
+    let given = |v: &Value| carries(&v["answer"], "embeddings");
+    assert!(answers.iter().any(|(_, v, ..)| given(v) && v["call"] != 0));
+    assert!(answers.iter().any(|(_, v, ..)| {
+        given(v) && v["answer"]["predictions"].as_array().unwrap().len() > 1
+    }));
+    assert!(answers.iter().any(|(_, v, ..)| !given(v)));
+    for (name, vector, status, answered) in &answers {
+        assert_eq!(
+            u64::from(*status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, &vector["answer"], "{name}");
+    }
+    let everything_else = Told {
+        probabilities: true,
+        quantiles: true,
+        explanation: true,
+        item_metadata: true,
+        ..Told::default()
+    };
+    for told in [Told::default(), everything_else] {
+        for (name, _, _, answered) in answered_told("embeddings", told) {
+            assert!(
+                !carries(&answered, "embeddings"),
+                "{name}: embeddings where none were to be given"
+            );
+        }
+    }
+}
