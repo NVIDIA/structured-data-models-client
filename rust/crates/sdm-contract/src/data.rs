@@ -47,6 +47,13 @@ pub const BIG_INTEGER_MARKED: &str = "true";
 /// and holds every later fetch of it to the type described.
 pub const EXACT_NUMBER_MARKER: &str = "sdm:exact_number";
 pub const EXACT_NUMBER_MARKED: &str = "true";
+/// The field metadata key a host provider sets on a column of numbers it
+/// hands over as their exact decimal text because their declaration is
+/// past the digits an Arrow decimal holds (a Postgres `numeric` declared
+/// with more than 76): its value is the declared scale, in decimal digits.
+/// The data layer reads such a column by its declaration, as the reference
+/// reads it (`DataLayer::conform`), and the core never sees the mark.
+pub const DECLARED_SCALE_MARKER: &str = "sdm:declared_scale";
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
 /// catalog's `type`, kept in the described schema for a marked big-integer
@@ -792,7 +799,12 @@ pub enum ProviderChoice {
 /// PostgreSQL dialect may bind the keys as JSON text that a common table
 /// expression of that name unpacks, as the reference's PostgreSQL sampler
 /// does. `relation` names what the text reads, not an instruction to
-/// register an Arrow relation.
+/// register an Arrow relation. Where the dialect binds keys as text
+/// (`DataLayer::bound_keys`, Postgres's), the attachment holds each column
+/// the dialect spells otherwise than Arrow's text of its values (a time
+/// without a zone, binary) as that spelling, a `utf8` column of the same
+/// name, which `keys.columns` still types as the statement reads it; the
+/// provider binds each cell as Arrow's text of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "param", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SqlParam {
@@ -876,6 +888,40 @@ pub trait DataLayer: Send + Sync {
     fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
         let _ = provider;
         None
+    }
+
+    /// The run's provider's answer to a fetch, admitted, read as the
+    /// reference reads its source's values where the provider hands over
+    /// the driver's own (T2.14d, MID2 P2-3): a dialect's value rules, such
+    /// as Postgres's text of a JSON value and its reading of a `numeric`
+    /// past the digits an Arrow decimal holds (each `float_text`, the text
+    /// the reference's language gives a double, where it writes one).
+    /// `None`, the default and a host provider's: the answer as it is. A
+    /// value the rule cannot read is refused by name, never guessed.
+    fn conform(
+        &self,
+        provider: &ProviderChoice,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        let _ = (provider, schema, batches, float_text);
+        Ok(None)
+    }
+
+    /// A key set the run's provider binds, as the provider binds it, where
+    /// its dialect binds keys as text (T2.14d): each column the reference
+    /// spells otherwise than Arrow's text of its values as that spelling,
+    /// so the provider binds Arrow's text of each cell. `None`, the default
+    /// and a host provider's: the key set as the core made it.
+    fn bound_keys(
+        &self,
+        provider: &ProviderChoice,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        let _ = (provider, schema, batches);
+        Ok(None)
     }
 
     /// Whether the run's provider compares a window's bounds with the

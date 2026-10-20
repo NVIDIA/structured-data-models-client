@@ -4704,7 +4704,7 @@
       ]
     },
     "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation.",
+      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. Where the dialect binds keys as text\n(`DataLayer::bound_keys`, Postgres's), the attachment holds each column\nthe dialect spells otherwise than Arrow's text of its values (a time\nwithout a zone, binary) as that spelling, a `utf8` column of the same\nname, which `keys.columns` still types as the statement reads it; the\nprovider binds each cell as Arrow's text of it.",
       "oneOf": [
         {
           "type": "object",

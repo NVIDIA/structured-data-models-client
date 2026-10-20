@@ -276,25 +276,25 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the docstring and constants say the value rules are the core's (DECLARED_SCALE_MARKER added; _INT64 bounds gone with _Numeric)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__call__": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the key set bound through _bound_text, its spelling moved into sdm-data's Postgres value rules"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__init__": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_Numeric.__init__": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): how a numeric past 76 digits is read (a double, an int64, its digits past int64, a NaN missing) is sdm-data's Postgres value rule (pg_values::conform, by the declared scale the provider marks); the provider hands over each value's exact text"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_Numeric.field": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the field of a numeric past 76 digits is chosen by sdm-data's Postgres value rule from its declared scale (pg_values::conform); the provider marks the declaration (_numeric_field)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_after_read": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the conversions after the read (json_text, _interval) are gone from the provider; the JSON rule is sdm-data's (pg_values::conform)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_array": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a JSON column's cells written as the JSON text of the value the driver read; what the reference makes of it is sdm-data's Postgres value rule (pg_values::conform)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_table": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -303,7 +303,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_cell": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a numeric no Arrow decimal holds is no longer read as an integer here; its exact text goes to the core (pg_values::conform)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_element_type": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -312,10 +312,10 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_interval": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the interval built with months 0 is gone; the provider hands pyarrow the driver's timedelta as a MonthDayNano and the core refuses the column by name as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_isoformat": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a seed time as pandas' Timestamp.isoformat writes it is sdm-data's Postgres value rule (pg_values::bound_keys)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_own_transaction": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -324,25 +324,34 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_result": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): no conversion after the read and no NaN rule for a whole numeric's column; each column's field from _field, the value rules sdm-data's (pg_values::conform)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_scalar_type": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a numeric no Arrow decimal holds is the field _numeric_field marks, its reading sdm-data's Postgres value rule"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_tags": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::json_text": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a JSON value's text as the reference writes it (Python's str of a scalar, compact ASCII JSON of an object or array) is sdm-data's Postgres value rule (pg_values::conform); the provider hands over the JSON text of the value the driver read"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::key_set_json": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the key set's spelling past Arrow's text (a time without a zone as pandas' isoformat, binary as \\x and hex) is sdm-data's Postgres value rule (pg_values::bound_keys), applied by the core before the host takes the key set; the provider writes Arrow's text of each cell (_bound_text)"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send_body": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_context_anchor": {
       "moved": "T2.11: context_anchor_time written for the core as anchor_time is (a ts scalar), the literal 'entity' and none as they are, any other value as the text 'unreadable', which the core refuses where the engine refuses it (sdm-request options); no type check here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_bound_text": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the moved key_set_json's host half: the key set's rows as a JSON array of Arrow's text of each cell, the cells the reference spells otherwise already that text from the core (pg_values::bound_keys)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_field": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a result column's field, by its Postgres type and tags, the numeric rules (_Numeric) moved into sdm-data's Postgres value rules"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_numeric_field": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the host half of the moved numeric rule: a numeric no Arrow decimal holds handed over as exact text, its declaration marked (sdm:exact_number, or sdm:declared_scale past 76 digits), read by sdm-data's Postgres value rule"
     }
   }
 }

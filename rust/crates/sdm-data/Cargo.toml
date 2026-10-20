@@ -14,13 +14,11 @@ publish.workspace = true
 
 [dependencies]
 arrow-array.workspace = true
+arrow-schema.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 # The request as the contract writes it, which names a key set's table
 # (sqlite.rs, `seeds_for`); already shipped through sdm-contract.
 serde_json.workspace = true
-
-[dev-dependencies]
-arrow-schema.workspace = true
 
 [lints]
 workspace = true
