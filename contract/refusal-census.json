@@ -23,22 +23,6 @@
       "why": "LIST_DISTINCT of a foreign key, which the query validator lets through as a temporal link prediction, Phase 4's (T2.10); every other aggregation outside SUM, COUNT, AVG, MIN and MAX the validator refuses first on both routes"
     },
     {
-      "site": "rule:assuming",
-      "why": "an ASSUMING clause",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING COUNT(orders.*, 0, 7, days) > 1",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
       "site": "rule:column_type",
       "why": "a struct column",
       "input": {
@@ -91,22 +75,6 @@
         }
       },
       "until": "from_source"
-    },
-    {
-      "site": "rule:entity_filter",
-      "why": "FOR EACH with an entity filter",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.age > 20",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
     },
     {
       "site": "rule:entity_key",
