@@ -72,7 +72,8 @@ git tag v1.2.0 && git push origin v1.2.0
 
 That starts the release. `.github/workflows/publish.yml` builds the four
 pure-Python distributions plus the engine's wheel matrix through `cibuildwheel`
-(cp310 to cp313, manylinux_2_28 x86-64 and aarch64, each smoke-tested, as set in
+(cp310 to cp314 on manylinux_2_28 x86-64 and aarch64, macOS arm64 and x86-64,
+and Windows AMD64, one runner each and every wheel smoke-tested, as set in
 the engine's `[tool.cibuildwheel]`), and then refuses to
 continue unless **all five** are present and agree with the tag. That check is
 not ceremony: `structured-data-models-client[relational]` pins the engine by exact version, so a

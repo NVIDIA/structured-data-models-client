@@ -1,7 +1,23 @@
-# NVIDIA Structured Data Models Client
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/logo_light.svg">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo_dark.svg">
+  <img src="docs/images/logo_light.svg" alt="Structured Data Models" width="125">
+</picture>
+</p>
 
-Ask a predictive question of one table, or of a whole relational schema, and
-get an answer without training a model for each dataset.
+<h1 align="center">NVIDIA Structured Data Models Client
+
+[![PyPI](https://img.shields.io/pypi/v/structured-data-models-client?style=flat&color=76B900)](https://pypi.org/project/structured-data-models-client)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-brightgreen.svg?style=flat&color=76B900)](https://www.python.org/downloads)
+[![License: Apache 2.0](https://img.shields.io/badge/license-apache%202.0-brightgreen.svg?style=flat&color=76B900)](LICENSE)
+[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat&color=76B900)](CONTRIBUTING.md)
+[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat&color=76B900)](docs/index.md)
+
+</h1>
+
+**Ask a predictive question of one table, or of a whole relational schema, and
+get an answer without training a model for each dataset.**
 
 ```bash
 pip install 'structured-data-models-client[relational]'
@@ -77,12 +93,13 @@ differs on Databricks.
 Python 3.10 through 3.14. The client, the language and the connectors are pure
 Python and install anywhere.
 
-The relational engine is a native build. It publishes `manylinux_2_28` wheels
-for x86-64 and aarch64 on **CPython 3.10 through 3.13** and **no source
-distribution**, so `[relational]` resolves on a Linux with glibc 2.28 or newer
-and nowhere else: not on musl, not on an older glibc, and not on macOS or
-Windows, where pip has nothing to fall back to. `kumo-tabular` works on any
-laptop.
+The relational engine is a native build, so it ships wheels rather than a
+source distribution: `manylinux_2_28` for x86-64 and aarch64, macOS 11 or newer
+for Apple silicon and Intel, and 64-bit Windows, each on **CPython 3.10 through
+3.14**. `[relational]` resolves on all of those and nowhere else. There is **no
+source distribution**, so anywhere without a matching wheel pip has nothing to
+fall back to: musl, an older glibc, a 32-bit interpreter, or a Python newer
+than the engine has built for yet.
 
 ## Packages
 

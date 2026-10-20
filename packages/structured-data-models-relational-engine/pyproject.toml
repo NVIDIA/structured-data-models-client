@@ -16,9 +16,9 @@ readme="README.md"
 # must fail resolution rather than fail to find a distribution. The bound and
 # the classifiers below name the same interpreters and move together.
 #
-# The wheel jobs build the Linux matrix these classifiers name, from
+# The wheel jobs build the matrix these classifiers name, from
 # `[tool.cibuildwheel]` below. The bound states what the extension supports.
-requires-python=">=3.10,<3.14"
+requires-python=">=3.10,<3.15"
 keywords=[
     "deep-learning",
     "graph-neural-networks",
@@ -34,6 +34,7 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Typing :: Typed",
@@ -122,7 +123,7 @@ editable.verbose=false
 # PIP_FIND_LINKS. uv reads no PIP_* variable, and the uv the manylinux images
 # shipped had no environment form of --find-links at all, so under `build[uv]`
 # the smoke test could never resolve structured-data-models-api.
-build = "cp310-* cp311-* cp312-* cp313-*"
+build = "cp310-* cp311-* cp312-* cp313-* cp314-*"
 # musllinux is not a libc this project has ever built or tested against, and
 # leaving it on would silently double the Linux wheel count.
 skip = "*-musllinux_*"
@@ -141,7 +142,21 @@ manylinux-aarch64-image = "manylinux_2_28"
 # only as wheels on disk. cibuildwheel copies the directory it is run from into
 # the container as /project, and every workflow runs it from the repository
 # root, so this is `_sibling_wheels/` at that root.
+# Only Linux builds in a container, so only Linux has a path that is the same
+# on every machine; macOS and Windows are given the checkout's absolute path by
+# their workflows instead.
 environment = { PIP_FIND_LINKS = "/project/_sibling_wheels" }
+
+[tool.cibuildwheel.macos]
+# The workflows narrow this to one arch per runner, so every wheel is built and
+# smoke-tested natively rather than cross-compiled from the other arch.
+archs = ["arm64", "x86_64"]
+# Match CMAKE_OSX_DEPLOYMENT_TARGET above. cibuildwheel's default for x86_64 is
+# 10.9, and delocate refuses a wheel tagged older than the binary inside it.
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0" }
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
 
 [tool.pytest.ini_options]
 xfail_strict = true
