@@ -53,6 +53,14 @@ The test author moved the eight cases that need them (`filter.entity-column`, `f
 - `rust:explain.forecast` holds each row's step explanation to the reference's (the test author's change, by the orchestrator's decision); the whole `by_forecast_step` explanation is held on python-core, where the Python user reads it. Recording a result's explanation and item metadata in both runners, so the gate compares them across hosts, is carried as a judging item for before the slice gate.
 - The implementer's own tests: `test_the_query_long_tail.py` (22, against the old route), the option vectors in `options.rs`, the `dict()` vectors in `response.rs`, U1's in `pql.rs`.
 
+### CI on round 1
+
+- CI on the round 1 candidate (0f3d324e, run 39347517073) was red for three reasons the brief did not list, found by round 1's review:
+  - the refusal census still probed the five rules this package lifts (`entity_ids`, `evaluate`, `explain`, `inference_config_text`, `target_transform_null`), so `tests/test_t21a_refusal_census.py` failed; their probes are dropped from `contract/refusal-census.json`, as T2.12 dropped its own;
+  - `test_the_query_long_tail.py` failed in the jobs that do not install the relational engine, where the old route it compares against raises `MissingExtraError`; it now skips there, as its sibling files do (`pytest.importorskip('sdm_relational_engine.relationallib')`);
+  - coverage rule 6 failed on nine cases claiming `float64/target`: the coverage script finds a query's target only in the `PREDICT ... FOR EACH` form, so not behind `EVALUATE` or `EXPLAIN` nor with `FOR t.c = 1` or `IN (...)`, and `date.day-first-then-packed` never reaches its target, a COUNT; the test author drops that claim from the nine (their commit on `rust-core-phase-2-topic-t213-tests-r1`).
+- Beside them, compare and cross-host differ on `date.day-first-then-packed` alone, the comparator gap T2.1r closes.
+
 ### Deviations and questions
 
 - `sdm-wire`'s `tests/json.rs::a_wide_object_reads_in_n_log_n` failed once under the machine's load (a timing ratio past 24) and passed on rerun; not this package's code.
