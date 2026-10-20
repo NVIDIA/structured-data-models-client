@@ -257,12 +257,16 @@ def test_an_inference_option_is_read_as_the_type_it_is(
     assert refused.value.code == code
 
 
-def test_a_question_longer_than_its_logged_copy_is_answered(client_for):
+def test_a_long_question_is_sent_within_the_contract_and_answered(client_for):
+    from sdm_client.adapters.relational import RelationalAdapter
+
     query = f'{COUNT} WHERE ' + ' OR '.join(
         f'users.age > {i}' for i in range(60)
     )
-    assert len(query) > 1024
     request = PredictiveQuery(query, graph()).materialize(indices=[0, 1])
+    sent = RelationalAdapter().prediction_plan(request, ('prediction',))
+    assert len(query) > 1024
+    assert all(len(p['metadata']['source_query']) <= 1024 for p in sent)
     with client_for('kumo-relational') as client:
         answer = client.predict(request, model=KumoRelational())
 
