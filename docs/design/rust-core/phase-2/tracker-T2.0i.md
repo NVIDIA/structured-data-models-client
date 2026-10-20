@@ -34,5 +34,5 @@ No `bridge_changes.json` entry: neither commit touches a frozen file.
 
 ### Open
 
-- The recorder's lines at `43e55f4f` for the cases the chain added (57 lines at T2.21, plus T2.11's).
+- The recorder's lines at `43e55f4f` for T2.11's new cases; the 57 the chain added through T2.21 (T2.10's and T2.21's cases, T2.18's deferred lines among them) are recorded, each equal to its `6298913c` line under `ratchet.semantic`.
 - Packages after T2.0i record their new reference lines at `43e55f4f` directly.
