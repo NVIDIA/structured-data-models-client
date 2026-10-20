@@ -134,7 +134,7 @@
       "refused": "metadata"
     }
   ],
-  "boundaries_recorded_by": "packages/structured-data-models-client/tests/t128b_predict_result_record.py from the reference at 6298913c3b66da9459bb605d0127f8493adaa1fc",
+  "boundaries_recorded_by": "packages/structured-data-models-client/tests/t128b_predict_result_record.py from the reference at 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
   "boundaries_description": "T1.28b's boundary-vector matrix: each a whole answer (status and body text) to the call base.regression's request makes on the reference, and the reference's public outcome of SDMClient.predict given it (the result, or the refusal: class, code, HTTP status, the endpoint's own message and details). A vector naming a divergence may end otherwise on the core only once that register entry is approved.",
   "boundaries": [
     {

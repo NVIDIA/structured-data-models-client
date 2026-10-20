@@ -1,6 +1,6 @@
 {
  "format": "sdm-pql-validator-options/1",
- "source": "rust-core-reference at 6298913c3b66da9459bb605d0127f8493adaa1fc: the inputs of the first attempt's custom_profiles.json (archive/rust-core-attempt-1, rust/crates/pql/tests), answered again by the reference, recorded by record_quirks.py",
+ "source": "rust-core-reference at 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1: the inputs of the first attempt's custom_profiles.json (archive/rust-core-attempt-1, rust/crates/pql/tests), answered again by the reference, recorded by record_quirks.py",
  "schema": {
   "tables": {
    "users": {

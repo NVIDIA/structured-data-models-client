@@ -2,7 +2,7 @@
  "format": "sdm-t213-option-vectors/1",
  "about": "What T2.13's cases (the query and option long tail: an entity filter, named entities, ASSUMING, EVALUATE, EXPLAIN, a null target transform, inference options given as text, an answer carrying an explanation or item metadata, and a day-first date literal before a refused one) give beside their observation lines, by case key, recorded from the reference's public calls: the rows each call scores, the result through to_pandas(), the result's explanation, each item's metadata, the warnings the exits name, and a refusal's message and details. contract/tests/test_t213_options.py holds python-core to them, observed by the same code (observe).",
  "recorded_by": "contract/tools/option_record.py",
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "vectors": {
   "assuming.binary": {
    "case": "55f4a6d58597f41a7e9f4ada03c6b89e1c015f9080daf76f19984ae9194c2686",

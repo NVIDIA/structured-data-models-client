@@ -2,7 +2,7 @@
  "format": "sdm-t210-target-vectors/1",
  "about": "The reference's labels for T2.10's PQL targets (contract/tools/target_record.py SCENARIOS, one target under one of the core's rules aggregation, open_window, condition, logical_target, target_filter and static_target, over the shop base, on DuckDB, SQLite and Postgres), by <scenario>@<database>: the outcome, each request's task and its context's and predicted rows' instance tables (the labels in TARGET), the rows each call scores and the result through to_pandas(). contract/tests/test_t210_targets.py holds python-core to them, observed by the same code (observe).",
  "recorded_by": "contract/tools/target_record.py",
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "vectors": {
   "aggregation.list-distinct.users@duckdb": {
    "rule": "aggregation",

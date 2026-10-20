@@ -23,7 +23,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = (
-    ROOT / 'contract/reference/6298913c3b66da9459bb605d0127f8493adaa1fc.jsonl'
+    ROOT / 'contract/reference/43e55f4f58924384c3cb52f67c8ed2e73ba45fa1.jsonl'
 )
 LINE = 's0.accept.sum-window@postgres'
 

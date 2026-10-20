@@ -24804,5 +24804,5 @@
    ]
   }
  ],
- "readings": "rust-core-reference at 6298913c3b66da9459bb605d0127f8493adaa1fc: each date constant of an accepted case's tree carries the reference's reading of it, recorded by record_readings.py beside this file"
+ "readings": "rust-core-reference at 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1: each date constant of an accepted case's tree carries the reference's reading of it, recorded by record_readings.py beside this file"
 }

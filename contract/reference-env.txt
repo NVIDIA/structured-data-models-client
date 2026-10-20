@@ -20,7 +20,7 @@
 # the environment and by the egg-info in their source trees, and listed
 # once (T1.36), so the digest does not depend on whether the egg-info is
 # there.
-reference: 6298913c3b66da9459bb605d0127f8493adaa1fc
+reference: 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1
 platform: linux-x86_64
 python: 3.12.13
 environment: 85ec83f2c13b98c99ce51d0283e82774e8c5411d1903b51d6d1468e58409f0e6

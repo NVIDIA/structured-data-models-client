@@ -1,7 +1,7 @@
 {
  "format": "sdm-composite-key-vectors/1",
  "recorded_by": "contract/tools/schema_rules_record.py composite",
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "cell": "ref-pandas3",
  "environment": {
   "python": "3.12.13",

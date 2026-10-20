@@ -1,6 +1,6 @@
 {
  "format": "sdm-pql-journey/2",
- "source": "rust-core-reference at 6298913c3b66da9459bb605d0127f8493adaa1fc: PQL validation of each Phase 1b inventory query against its Schema.from_source schema, recorded by record_journey.py beside this file",
+ "source": "rust-core-reference at 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1: PQL validation of each Phase 1b inventory query against its Schema.from_source schema, recorded by record_journey.py beside this file",
  "cases": [
   {
    "id": "base.regression",
