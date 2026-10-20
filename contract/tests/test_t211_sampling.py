@@ -102,8 +102,15 @@ KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 #: neighbour on SQLite (its LIMIT -1) and fails INTERNAL_ERROR on
 #: Postgres, so the core refuses a negative neighbour count by name,
 #: INVALID_REQUEST naming num_neighbors, on all three (KO2-82; register
-#: entry P2I-4, the implementer's). Each is held to its case's expect.
-DECIDED = {'sample.num-neighbors.minus-one': 'KO2-82'}
+#: entry P2I-4, the implementer's). The case's expect stays the
+#: reference's DuckDB outcome, as every case's does; the core is held to
+#: the register's answer: by case, its result, stage and code.
+DECIDED = {
+    'sample.num-neighbors.minus-one': (
+        'P2I-4',
+        ('refusal', 'materialize', 'INVALID_REQUEST'),
+    ),
+}
 DECIDED_REFERENCE = {
     'sample.num-neighbors.minus-one': ('success', None, None),
     'sample.num-neighbors.minus-one@sqlite': ('success', None, None),
@@ -272,18 +279,14 @@ def test_python_ref_s_line_is_at_its_case_file_and_ends_as_expected(
     assert line['identity']['inputs']['case'] == digest
     expect = case['expect']
     if case_key in DECIDED_REFERENCE:
-        # The reference's answer, recorded as it is; the case expects the
-        # decision's (DECIDED).
+        # The reference's answer on each database, recorded as it is; the
+        # case expects its DuckDB one, and the core is held to the
+        # register's (DECIDED).
         result, error, code = DECIDED_REFERENCE[case_key]
         outcome = _outcome(line)
         assert (outcome[0], outcome[2], outcome[3]) == (result, error, code)
-        assert outcome != (
-            expect['outcome'],
-            expect['stage'],
-            expect.get('error'),
-            expect.get('code'),
-        )
-        return
+        if '@' in case_key:
+            return
     assert _outcome(line) == (
         expect['outcome'],
         expect['stage'],
@@ -547,16 +550,13 @@ def test_python_core_answers_each_case_as_the_reference_does(
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
         if case['id'] in DECIDED:
-            # The decision's answer, not the reference's: the case's
-            # expected refusal (its result, stage and code), no request
-            # sent.
-            expect = case['expect']
+            # The register's answer, not the reference's: the named
+            # refusal (its result, stage and code), no request sent.
+            entry, wanted = DECIDED[case['id']]
             outcome = _outcome(line)
-            assert (outcome[0], outcome[1], outcome[3]) == (
-                expect['outcome'],
-                expect['stage'],
-                expect['code'],
-            ), f'{case_key}: {outcome} where {DECIDED[case["id"]]} has {expect}'
+            assert (outcome[0], outcome[1], outcome[3]) == wanted, (
+                f'{case_key}: {outcome} where {entry} has {wanted}'
+            )
             assert line['public']['payloads'] == [], case_key
             return
         want = reference_lines()[case_key]

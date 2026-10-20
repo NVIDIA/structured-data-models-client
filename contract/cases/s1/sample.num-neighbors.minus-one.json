@@ -80,15 +80,15 @@
         "zone": null
       },
       "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
     }
   },
   "expect": {
-    "outcome": "refusal",
-    "stage": "materialize",
-    "error": "StructuredDataError",
-    "code": "INVALID_REQUEST",
-    "message": "num_neighbors holds a negative neighbour count"
+    "outcome": "success",
+    "stage": "predict"
   },
-  "why": "num_neighbors=[-1]: the reference disagrees across databases (DuckDB reaches no neighbour, SQLite every one, as its LIMIT -1 is no limit, Postgres fails INTERNAL_ERROR), so the core refuses a negative neighbour count by name, INVALID_REQUEST naming num_neighbors, on all three (KO2-82; register entry P2I-4)",
+  "why": "num_neighbors=[-1]: the reference reaches no neighbour on DuckDB (orders left out with a warning), every neighbour on SQLite (its LIMIT -1 is no limit) and fails INTERNAL_ERROR on Postgres; the expectation is its DuckDB outcome, and the core refuses a negative neighbour count by name, INVALID_REQUEST naming num_neighbors, on all three, a difference register entry P2I-4 carries (KO2-82)",
   "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
 }

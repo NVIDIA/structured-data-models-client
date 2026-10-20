@@ -275,11 +275,11 @@ fn problem(id: &str, line: &Value, wanted: &Value) -> Option<String> {
 /// database, refused by name, INVALID_REQUEST (KO2-82; register P2I-4).
 const DECIDED: [&str; 1] = ["sample.num-neighbors.minus-one"];
 
-/// A decided case's expected outcome, as its case file's `expect` says it,
-/// in the shape of an observation's.
-fn decided(id: &str) -> Value {
-    let expect = &read_json(&root().join(format!("contract/cases/s1/{id}.json")))["expect"];
-    serde_json::json!({"outcome": {"result": expect["outcome"], "code": expect["code"]}})
+/// A decided case's answer as the register carries it (P2I-4: refused at
+/// materialize, INVALID_REQUEST), in the shape of an observation's; its
+/// case's `expect` stays the reference's DuckDB outcome.
+fn decided(_id: &str) -> Value {
+    serde_json::json!({"outcome": {"result": "refusal", "code": "INVALID_REQUEST"}})
 }
 
 /// Each T2.11 case on `database` through rust-host, held to python-ref's
