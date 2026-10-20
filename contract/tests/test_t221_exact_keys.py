@@ -594,9 +594,11 @@ def test_python_core_answers_each_case_as_the_reference_does(
     r"""Exit "cases in the corpus on all three databases": python-core runs
     the case on the database on the core route (the native module loaded,
     each of the case's core operations run), and its outcome and each
-    request the scripted endpoint received are python-ref's, and so are the
-    schema the user sees and the prediction returned (the comparator's
-    ``schema``, ``result`` and ``payload`` rules), but at a field an
+    request the scripted endpoint received are python-ref's, and, in the
+    reference's cell (``ref-pandas3``, where python-ref was recorded, as the
+    gate holds them), so are the schema the user sees and the prediction
+    returned (the comparator's ``schema``, ``result`` and ``payload``
+    rules), but at a field an
     approved register entry lists for the case and python-core under
     ``more_exact`` (as the gate's comparator excuses it)."""
     database = case_key.partition('@')[2] or 'duckdb'
@@ -618,7 +620,13 @@ def test_python_core_answers_each_case_as_the_reference_does(
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )
         fields = excused(case_key)
-        for part in ('schema', 'result'):
+        # The schema and result rules hold python-core to python-ref in the
+        # reference's cell alone, as the gate does (H1: in another cell
+        # python-ref's dtypes are another pandas's, and the gate holds
+        # python-core to python-old there instead).
+        cell = line['identity'].get('cell')
+        held_here = cell in (None, compare().REFERENCE_CELL)
+        for part in ('schema', 'result') if held_here else ():
             found = public_differs(line, want, part, fields)
             assert found is None, (
                 f'{case_key}: the public {part} differs at {found}, a field '
