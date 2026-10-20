@@ -9,7 +9,7 @@
     "client.predict/regression/duckdb"
   ],
   "routes": [
-    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/tables/duckdb",
     "schema.from-source/catalog-keys/duckdb",
     "query.materialize/indices-binary/duckdb",
     "query.materialize/indices-multiclass/duckdb",

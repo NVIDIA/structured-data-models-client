@@ -98,8 +98,9 @@ def key(case_id: str, database: str) -> str:
 KEYS_ALL = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 #: Where the reference fails by a bug of its own, the code it records, and
 #: the line the core is held to instead: num_neighbors=[-1] fails
-#: INTERNAL_ERROR on Postgres alone, and the core answers there as the
-#: reference answers on SQLite but for its draw (the orchestrator,
+#: INTERNAL_ERROR on Postgres alone (DuckDB reaches no neighbour, SQLite
+#: every one), and the core answers there as the reference answers on
+#: SQLite but for its draw (the orchestrator,
 #: 2026-10-20; a register entry for the implementer).
 REFERENCE_FAILS = {
     'sample.num-neighbors.minus-one@postgres': (
@@ -338,12 +339,16 @@ def test_the_reference_s_requests_show_each_option_s_effect(
                 per_user.get(row['instance_id']['number'], 0) + 1
             )
         assert per_user and max(per_user.values()) == most, case_id
-    for case_id in (
-        'sample.num-neighbors.zero',
-        'sample.num-neighbors.minus-one',
-    ):
-        if case_id + on not in REFERENCE_FAILS:
-            assert 'orders' not in sent(case_id)['predict']['related_tables']
+    assert (
+        'orders'
+        not in sent('sample.num-neighbors.zero')['predict']['related_tables']
+    )
+    # num_neighbors=[-1]: no neighbour on DuckDB, every neighbour on SQLite
+    # (its LIMIT -1), a failure on Postgres (REFERENCE_FAILS).
+    minus_one = 'sample.num-neighbors.minus-one'
+    if minus_one + on not in REFERENCE_FAILS:
+        reached = 'orders' in sent(minus_one)['predict']['related_tables']
+        assert reached == (database == 'sqlite')
     assert sent('sample.use-prediction-time')['inference'][
         'use_prediction_time'
     ]

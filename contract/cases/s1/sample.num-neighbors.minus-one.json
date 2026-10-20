@@ -89,6 +89,6 @@
     "outcome": "success",
     "stage": "predict"
   },
-  "why": "num_neighbors=[-1]: the reference takes a negative count on DuckDB and SQLite and reaches no neighbour, so orders is left out with a warning; on Postgres it fails INTERNAL_ERROR, its own bug, and the core answers there as on the other two (the orchestrator, 2026-10-20; a register entry)",
+  "why": "num_neighbors=[-1]: the reference takes a negative count on DuckDB, reaching no neighbour (orders left out with a warning), and on SQLite, reaching every neighbour (LIMIT -1 is no limit there); on Postgres it fails INTERNAL_ERROR, its own bug, and the core answers there as on SQLite but for its draw (the orchestrator, 2026-10-20; a register entry)",
   "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
 }
