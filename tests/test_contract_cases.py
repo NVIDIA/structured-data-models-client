@@ -478,6 +478,7 @@ T29_FORECASTING = (
     'lag.binary-2',
     'lag.static-2',
     'lag.static-negative',
+    'lag.not-filtered-2',
     'forecast.quantiles',
     'forecast.quantiles-and-prediction',
     'forecast.quantiles-unanswered',

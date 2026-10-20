@@ -102,7 +102,8 @@ NUM_FORECASTS = (
 )
 #: ``lag_timesteps``: on a two-step forecast, the values the reference
 #: takes (0, 1, 2) and refuses (-1, 1.5, 2.0, true, "2"), and beside a
-#: forecast (a regression, a binary classification, a static target).
+#: forecast (a regression, a binary classification, a static target, and
+#: T2.13b's negated condition over a filtered count).
 LAG_TIMESTEPS = (
     'forecast.lag-0',
     'forecast.lag-1',
@@ -116,6 +117,7 @@ LAG_TIMESTEPS = (
     'lag.binary-2',
     'lag.static-2',
     'lag.static-negative',
+    'lag.not-filtered-2',
 )
 #: Quantiles asked for (``outputs``), answered or not.
 QUANTILES = (
@@ -154,6 +156,7 @@ LAGS = {
     'lag.regression-2': 2,
     'lag.binary-2': 2,
     'lag.static-2': 0,
+    'lag.not-filtered-2': 2,
     LAG_ALIGNED: 2,
     LAG_DTYPE: 2,
 }

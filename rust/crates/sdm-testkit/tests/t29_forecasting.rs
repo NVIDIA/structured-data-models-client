@@ -81,7 +81,7 @@ const NUM_FORECASTS: [&str; 10] = [
     "forecast.count-months",
 ];
 
-const LAG_TIMESTEPS: [&str; 12] = [
+const LAG_TIMESTEPS: [&str; 13] = [
     "forecast.lag-0",
     "forecast.lag-1",
     "forecast.lag-2",
@@ -94,6 +94,7 @@ const LAG_TIMESTEPS: [&str; 12] = [
     "lag.binary-2",
     "lag.static-2",
     "lag.static-negative",
+    "lag.not-filtered-2",
 ];
 
 const QUANTILES: [&str; 4] = [
