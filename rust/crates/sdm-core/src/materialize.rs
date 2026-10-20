@@ -1353,14 +1353,24 @@ fn static_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, Cor
 
 /// A condition's column at `rows` of `array` (an entity's static column,
 /// or a column of the rows a filter tests), as the executor reads it: as
-/// [`static_column`] reads a target, and a time too, which the reads have
-/// made a zone-less timestamp ([`Times::read`]), in nanoseconds.
+/// [`static_column`] reads a target; a time too, which the reads have
+/// made a zone-less timestamp ([`Times::read`]), in nanoseconds; and an
+/// unsigned 64-bit column whole, past int64 too, which a condition
+/// compares without the target's signed reading (T2.10 fix 2).
 fn condition_column(array: &ArrayRef, rows: &[usize]) -> Result<labels::Column, CoreError> {
-    if let DataType::Timestamp(_, None) = array.data_type() {
-        let all = times_ns(array, "")?;
-        return Ok(labels::Column::Time(rows.iter().map(|&r| all[r]).collect()));
+    match array.data_type() {
+        DataType::Timestamp(_, None) => {
+            let all = times_ns(array, "")?;
+            Ok(labels::Column::Time(rows.iter().map(|&r| all[r]).collect()))
+        }
+        DataType::UInt64 => Ok(labels::Column::UInt(
+            take(array, rows)?
+                .as_primitive::<UInt64Type>()
+                .iter()
+                .collect(),
+        )),
+        _ => static_column(array, rows),
     }
-    static_column(array, rows)
 }
 
 /// The rows `rows` of `array`, in that order.
@@ -3822,6 +3832,51 @@ fn big_integers(table: &Table, batch: RecordBatch) -> Result<(RecordBatch, bool)
 mod tests {
     use super::*;
     use sdm_contract::pql::TimeUnit;
+
+    /// A filter over an unsigned 64-bit key whose values pass int64
+    /// (`9223372036854775808::UBIGINT + order_id`): `order_id > 0` and
+    /// `order_id != NULL` keep every row with a value, as the reference's
+    /// executor and the filter before T2.10 keep them, never refused as a
+    /// target's type (T2.10 fix 2, round 2's finding).
+    #[test]
+    fn a_filter_tests_an_unsigned_key_past_int64() {
+        let past = 1_u64 << 63;
+        let keys: ArrayRef = Arc::new(arrow_array::UInt64Array::from(vec![
+            Some(past),
+            None,
+            Some(u64::MAX),
+            Some(5),
+        ]));
+        let rows = RecordBatch::try_from_iter([("order_id", keys)]).unwrap();
+        let filter = |op, constant| Shape::Condition {
+            target: Box::new(Shape::Column("order_id".to_owned())),
+            test: Test::Compare(op, constant),
+        };
+        let kept = |shape: &Shape| {
+            labels::truth(&row_condition(shape, &rows).unwrap())
+                .unwrap()
+                .values
+        };
+        let compared = filter(labels::RelOp::Gt, Some(labels::Constant::Int(0)));
+        assert_eq!(kept(&compared), [true, false, true, true]);
+        let past_int64 = filter(
+            labels::RelOp::Ge,
+            Some(labels::Constant::Int(i128::from(past))),
+        );
+        assert_eq!(kept(&past_int64), [true, false, true, false]);
+        let present = filter(labels::RelOp::Ne, None);
+        assert_eq!(kept(&present), [true, false, true, true]);
+        let float = filter(labels::RelOp::Lt, Some(labels::Constant::Float(1e19)));
+        assert_eq!(kept(&float), [true, false, false, true]);
+        let member = Shape::Condition {
+            target: Box::new(Shape::Column("order_id".to_owned())),
+            test: Test::In(vec![
+                labels::Constant::Int(i128::from(u64::MAX)),
+                labels::Constant::Int(5),
+            ]),
+        };
+        assert_eq!(kept(&member), [false, false, true, true]);
+    }
 
     /// A count over the last 30 days, compared as `op 0`.
     fn counted(op: labels::RelOp) -> Shape {

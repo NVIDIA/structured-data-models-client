@@ -732,6 +732,11 @@ pub enum Column {
     /// A time column's values, nanoseconds since the epoch with no zone:
     /// only compared in a condition, never a target.
     Time(Vec<Option<i64>>),
+    /// An unsigned 64-bit column's values, past int64 too: only tested in
+    /// a condition (a target's static column is read as [`Column::Int`]),
+    /// against an integer exactly and against a float at float64, as
+    /// the executor compares a uint64 column.
+    UInt(Vec<Option<u64>>),
 }
 
 impl Column {
@@ -745,6 +750,7 @@ impl Column {
             Column::Text(v) => v.iter().map(Option::is_some).collect(),
             Column::Decimal { values, .. } => values.iter().map(Option::is_some).collect(),
             Column::Time(v) => v.iter().map(Option::is_some).collect(),
+            Column::UInt(v) => v.iter().map(Option::is_some).collect(),
         }
     }
 }
@@ -1001,6 +1007,18 @@ fn column_compare(column: &Column, op: RelOp, constant: &Constant) -> Result<Vec
             .iter()
             .map(|x| x.is_some_and(|x| apply(x as f64, op, *f)))
             .collect(),
+        (Column::UInt(v), Constant::Int(c)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(i128::from(x), op, *c)))
+            .collect(),
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "an unsigned value widened to compare with a float, as the executor does"
+        )]
+        (Column::UInt(v), Constant::Float(f)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(x as f64, op, *f)))
+            .collect(),
         (Column::Decimal { values, scale, .. }, Constant::Int(_) | Constant::Float(_)) => values
             .iter()
             .map(|x| {
@@ -1099,6 +1117,22 @@ fn column_member(column: &Column, values: &[Constant], top: bool) -> Result<Vec<
                 _ => None,
             })?,
         ),
+        // An integer as written, exactly; a float as [`int_member`] reads it.
+        Column::UInt(v) => {
+            let set: Vec<i128> = values
+                .iter()
+                .map(|c| match c {
+                    Constant::Int(i) => Ok(Some(*i)),
+                    c => int_member(c, top).map(|m| m.map(i128::from)),
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect();
+            v.iter()
+                .map(|x| x.is_some_and(|x| set.contains(&i128::from(x))))
+                .collect()
+        }
     })
 }
 
@@ -1207,7 +1241,7 @@ fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
                 }
                 Column::Decimal { values, scale, .. } => decimal_target(values, *scale, classes),
                 // A time is no target the reference's task table takes.
-                Column::Time(_) => return Err(not_yet("target_type")),
+                Column::Time(_) | Column::UInt(_) => return Err(not_yet("target_type")),
             };
             Ok(Labelled { mask, labels })
         }
