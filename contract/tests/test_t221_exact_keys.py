@@ -570,6 +570,23 @@ def payload_differs(
     return bool(mine != theirs)
 
 
+def public_differs(
+    line: dict[str, Any],
+    want: dict[str, Any],
+    part: str,
+    fields: tuple[str, ...],
+) -> str | None:
+    r"""Where python-core's public ``part`` (``schema``, the schema the user
+    sees, or ``result``, the prediction it returns) first differs from
+    python-ref's, as a path, the value at each field of ``fields``
+    (:func:`excused`) left out on both sides: the gate's comparator's own
+    ``schema`` and ``result`` rules (``compare._path_of``); none where they
+    agree."""
+    return compare()._path_of(
+        line['public'][part], want['public'][part], f'public.{part}', fields
+    )
+
+
 @pytest.mark.parametrize('case_key', CASE_KEYS)
 def test_python_core_answers_each_case_as_the_reference_does(
     case_key: str,
@@ -577,9 +594,11 @@ def test_python_core_answers_each_case_as_the_reference_does(
     r"""Exit "cases in the corpus on all three databases": python-core runs
     the case on the database on the core route (the native module loaded,
     each of the case's core operations run), and its outcome and each
-    request the scripted endpoint received are python-ref's, but at a
-    field an approved register entry lists for the case and python-core
-    under ``more_exact`` (as the gate's comparator excuses it)."""
+    request the scripted endpoint received are python-ref's, and so are the
+    schema the user sees and the prediction returned (the comparator's
+    ``schema``, ``result`` and ``payload`` rules), but at a field an
+    approved register entry lists for the case and python-core under
+    ``more_exact`` (as the gate's comparator excuses it)."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
         return
@@ -598,7 +617,15 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert _outcome(line) == _outcome(want), (
             f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
         )
-        assert not payload_differs(line, want, excused(case_key)), (
+        fields = excused(case_key)
+        for part in ('schema', 'result'):
+            found = public_differs(line, want, part, fields)
+            assert found is None, (
+                f'{case_key}: the public {part} differs at {found}, a field '
+                'no approved register entry lists for python-core under '
+                'more_exact'
+            )
+        assert not payload_differs(line, want, fields), (
             f'{case_key}: the payload differs, at a field no approved '
             'register entry lists for python-core under more_exact'
         )
@@ -639,3 +666,38 @@ def test_a_registered_field_excuses_that_field_alone() -> None:
     assert payload_differs(
         line('int64', 1), want, (field.replace('users', 'orders'),)
     )
+
+
+def test_a_registered_field_excuses_that_schema_or_result_field_alone() -> None:
+    r"""Control: :func:`public_differs` leaves out only the fields given, as
+    the comparator does, in the public schema and result alike."""
+    schema = 'public.schema/tables/0/columns/0/dtype'
+    result = 'public.result/columns/0/dtype'
+
+    def line(dtype: str, other: str) -> dict[str, Any]:
+        return {
+            'public': {
+                'schema': {
+                    'tables': [
+                        {
+                            'name': 'users',
+                            'columns': [{'name': 'user_id', 'dtype': dtype}],
+                            'primary_key': other,
+                        }
+                    ]
+                },
+                'result': {
+                    'columns': [{'name': 'ENTITY', 'dtype': dtype}],
+                    'digest': other,
+                },
+            }
+        }
+
+    want = line('string', 'a')
+    for part, field in (('schema', schema), ('result', result)):
+        assert public_differs(line('string', 'a'), want, part, ()) is None
+        assert public_differs(line('int64', 'a'), want, part, ()) is not None
+        assert public_differs(line('int64', 'a'), want, part, (field,)) is None
+        assert (
+            public_differs(line('int64', 'b'), want, part, (field,)) is not None
+        )
