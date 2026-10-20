@@ -474,8 +474,17 @@ where = f'{name}, half {half}'
 keys = {'steps', 'checks', 'reference', 'every', 'inventory', 'cases'}
 if not isinstance(spec, dict):
     fail(f'{where}: not a half (a mapping of {", ".join(sorted(keys))})')
-if set(spec) & GONE_KEYS:
-    fail(f'{where}: the key {listed(set(spec) & GONE_KEYS)} {GONE_WHY}')
+# Every removed step (in steps or a check) and key the half names, named
+# in one refusal.
+named = {x for x in spec.get('steps') or [] if isinstance(x, str)} \
+    if isinstance(spec.get('steps'), list) else set()
+if isinstance(spec.get('checks'), dict):
+    for steps in spec['checks'].values():
+        if isinstance(steps, list):
+            named |= {x for x in steps if isinstance(x, str)}
+gone = sorted(named & GONE) + sorted(f'{x} key' for x in set(spec) & GONE_KEYS)
+if gone:
+    fail(f'{where}: {", ".join(gone)}: {GONE_WHY}')
 if set(spec) - keys:
     fail(f'{where}: unknown key {listed(set(spec) - keys)} (a half holds {listed(keys)})')
 if 'inventory' in spec and 'cases' in spec:
@@ -492,8 +501,6 @@ own = spec.get('steps', ['inventory'] if locks else [])
 if not isinstance(own, list) or not all(isinstance(x, str) for x in own) \
         or len(set(own)) != len(own):
     fail(f'{where}: steps are a list of step names, each once')
-if set(own) & GONE:
-    fail(f'{where}: the step {listed(set(own) & GONE)} {GONE_WHY}')
 if set(own) - OWN:
     fail(f'{where}: unknown step {listed(set(own) - OWN)} (steps are some of {listed(OWN)})')
 run = STEPS | set(own)
@@ -502,9 +509,6 @@ if not isinstance(checks, dict) or not checks:
     fail(f'{where}: no checks')
 lines = [f'steps {" ".join(own)}']
 for number, steps in checks.items():
-    if isinstance(steps, list) and set(x for x in steps if isinstance(x, str)) & GONE:
-        fail(f'{where}: check {number!r}: the step '
-             f'{listed(set(x for x in steps if isinstance(x, str)) & GONE)} {GONE_WHY}')
     if not isinstance(number, str) or not number.isdigit() or not isinstance(steps, list) \
             or not steps or not all(isinstance(x, str) and x in run for x in steps):
         fail(f'{where}: check {number!r} is not a number and steps the half runs')
