@@ -180,7 +180,8 @@ columns taken out of the core side wherever they appear, and the links
 and key they make: the public schema's columns, its primary key and time
 column naming one and its links with one at either end; each payload
 table's columns and its rows' cells, its schema's column and key, and its
-relationships naming one; and each statement result's columns, types and
+relationships naming one, in every call's body where predict made several
+(T2.1s); and each statement result's columns, types and
 Arrow fields of that name where the reference's result lacks them (the
 reference reads a column it then leaves out). The reference's from_source warning that it
 leaves a column out, one ``SDMWarning`` per table the entry names, the
@@ -1994,7 +1995,9 @@ def without_core_only(
     observation: dict[str, Any], named: dict[str, frozenset[str]]
 ) -> dict[str, Any]:
     r"""A core runner's observation with the columns only the core keeps
-    taken out, as the reference never had them (T2.1f)."""
+    taken out, as the reference never had them (T2.1f): from its public
+    schema and payloads, the core's predicted body and each of several
+    calls' bodies (T2.1s), and its statements' results."""
     if not named:
         return observation
     found = copy.deepcopy(observation)
@@ -2007,6 +2010,12 @@ def without_core_only(
     predicted = (found.get('core') or {}).get('predicted')
     if isinstance(predicted, dict) and predicted.get('body') is not None:
         predicted['body'] = _without_in_payload(predicted['body'], named)
+    if isinstance(predicted, dict) and isinstance(predicted.get('calls'), list):
+        # Every call's body where predict made several (T2.1g), each as the
+        # single call's is (T2.1s).
+        predicted['calls'] = [
+            _without_in_payload(body, named) for body in predicted['calls']
+        ]
     capture = (found.get('driver') or {}).get('capture')
     if isinstance(capture, dict):
         capture['statements'] = [
