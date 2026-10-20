@@ -31,8 +31,11 @@ It holds the file, as ``--root``'s tree has it, to:
   case part is (T2.0g);
 - a ``case_outcomes`` row's ``statements_differ`` the one call refused,
   on a move from the old outcome's refusal there to a success or from a
-  success to the new outcome's refusal there (T2.1e), or on a row keeping
-  the old outcome's refusal there, its code the same (KO2-68);
+  success to the new outcome's refusal there (T2.1e), on a row keeping
+  the old outcome's refusal there, its code the same (KO2-68), or on a
+  move of the old outcome's refusal to the new outcome's at an earlier
+  call, its own code, that call named (T2.1r), which only the owner
+  approves;
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;
   and no entry accepting ``INTERNAL_ERROR``, the code a contained panic
@@ -75,6 +78,8 @@ OUTCOME = re.compile(
 )
 #: The code a contained panic answers with; no entry accepts it.
 PANIC = 'INTERNAL_ERROR'
+#: The public calls, in the order a case makes them (compare.py's).
+STAGES = ('from_source', 'materialize', 'predict')
 #: The decision rows that approve only until a package lands (T2.1a's
 #: temporary-approval rule; Phase 2 design, T2.1a's row), named here and
 #: nowhere else in the harness: the locked run's ratchet step
@@ -276,6 +281,58 @@ def problems(
     return found
 
 
+def _statements_differ_form(
+    old: dict[str, str | None] | None,
+    new: dict[str, str | None] | None,
+    calls: Any,
+) -> str | None:
+    r"""How a ``case_outcomes`` row's ``statements_differ`` names the one
+    call refused: ``same``, on a move between the old outcome's refusal
+    there and a success either way (T2.1e), or on a row keeping that
+    refusal, its code the same (KO2-68); ``earlier``, on a move of the old
+    outcome's refusal to the new outcome's at an earlier call, with its
+    own code (T2.1r), the reference's later calls never made; None
+    otherwise."""
+    if old is None or new is None or not isinstance(calls, list):
+        return None
+    if len(calls) != 1:
+        return None
+    call = calls[0]
+    if (
+        (
+            old['result'] == 'refusal'
+            and new['result'] == 'success'
+            and old['stage'] in (None, call)
+        )
+        or (
+            old['result'] == 'success'
+            and new['result'] == 'refusal'
+            and new['stage'] in (None, call)
+        )
+        or (
+            old['result'] == new['result'] == 'refusal'
+            and old['code'] == new['code']
+            and old['stage'] in (None, call)
+            and new['stage'] in (None, call)
+        )
+    ):
+        return 'same'
+    if (
+        old['result'] == new['result'] == 'refusal'
+        and call in STAGES[:-1]
+        and new['stage'] in (None, call)
+        and (
+            old['stage'] is None
+            or (
+                old['stage'] in STAGES
+                and STAGES.index(old['stage']) > STAGES.index(call)
+            )
+        )
+    ):
+        return 'earlier'
+    return None
+
+
 def _outcome_problems(
     entry: dict[str, Any],
     outcome: dict[str, Any],
@@ -293,38 +350,28 @@ def _outcome_problems(
     if new is not None and new['code'] == PANIC:
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
     calls = outcome.get('statements_differ')
-    if calls is not None and not (
-        old is not None
-        and new is not None
-        and len(calls) == 1
-        and (
-            (
-                old['result'] == 'refusal'
-                and new['result'] == 'success'
-                and old['stage'] in (None, calls[0])
-            )
-            or (
-                old['result'] == 'success'
-                and new['result'] == 'refusal'
-                and new['stage'] in (None, calls[0])
-            )
-            or (
-                old['result'] == new['result'] == 'refusal'
-                and old['code'] == new['code']
-                and old['stage'] in (None, calls[0])
-                and new['stage'] in (None, calls[0])
-            )
-        )
-    ):
+    form = _statements_differ_form(old, new, calls)
+    if calls is not None and form is None:
         # The call whose statements differ is the one refused: the
         # reference's, on a move from that refusal to an answer, or the
         # runner's, on a move from the reference's answer to that refusal
         # (rust-host's outcome names no stage; T2.1e), or both's, on a row
-        # keeping the reference's refusal there (KO2-68).
+        # keeping the reference's refusal there (KO2-68), or the runner's,
+        # on a move of the reference's refusal to an earlier call (T2.1r).
         found.append(
             f'{where}: statements_differ names other than the one call '
-            'refused, on a move between that refusal and a success or on '
-            'a row keeping that refusal'
+            'refused, on a move between that refusal and a success, on '
+            'a row keeping that refusal or on a move of a refusal to an '
+            'earlier call'
+        )
+    if (
+        form == 'earlier'
+        and entry['status'] == 'approved'
+        and entry['approved_by'] != 'owner'
+    ):
+        found.append(
+            f"{where}: statements_differ moves the reference's refusal to "
+            'an earlier call, so only the owner approves it'
         )
     refuses = new is not None and new['result'] == 'refusal'
     newly = refuses and (

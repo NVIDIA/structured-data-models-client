@@ -137,7 +137,13 @@ names, the reference's statements of that call are its only ones held,
 their ``sql.count`` and ``sql.result`` and the line's ``warnings``
 reported as diagnostic; where the row keeps the reference's refusal at
 that call, its code the same (KO2-68), that call's ``sql.count`` and
-``sql.result`` are reported as diagnostic, nothing else. A SQLite or
+``sql.result`` are reported as diagnostic, nothing else; where the row
+moves the reference's refusal to the runner's at an earlier call, with
+its own code (T2.1r), the line is held to the calls up to that one on
+every database, as below: that call's ``sql.count`` and ``sql.result``
+and the line's ``warnings`` reported as diagnostic, and the reference's
+later calls (their operations, statements, ``result`` and ``payload``)
+no expectation of its own. A SQLite or
 Postgres line is held, by the ``route``, ``inputs`` and core-consistency
 rules, to the case's core operations of the calls before the one it stops
 at (its effective expectation's refusal, else the reference line's), and
@@ -2587,6 +2593,38 @@ def statements_refused(
     return stage if stage in calls else None
 
 
+def statements_earlier(
+    report: Report,
+    key: str,
+    who: str,
+    wanted: dict[str, Any] | None,
+    reference: dict[str, Any] | None,
+) -> str | None:
+    r"""The call ``who`` refuses at on the line ``key``, with its own code,
+    before the call the reference refused at, when the owner-approved
+    entry's row moving the refusal there names that call under
+    ``statements_differ`` (T2.1r): the line is compared up to that call,
+    its statements there and its warnings reported as diagnostic, and the
+    reference's later calls, never made, are no expectation of its own;
+    None otherwise. A move to a later call, and a row naming another
+    call, never are."""
+    theirs = (reference or {}).get('outcome') or {}
+    if (
+        wanted is None
+        or wanted.get('result') != 'refusal'
+        or theirs.get('result') != 'refusal'
+        or theirs.get('stage') not in STAGES
+    ):
+        return None
+    calls = report.statements_differ.get((key, who), ())
+    stage = wanted.get('stage') or (calls[0] if len(calls) == 1 else None)
+    if stage not in calls or stage not in STAGES:
+        return None
+    if STAGES.index(stage) >= STAGES.index(theirs['stage']):
+        return None
+    return str(stage)
+
+
 def statements_kept(
     report: Report,
     key: str,
@@ -2889,12 +2927,17 @@ def compare(
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
             wanted = effective.get(case['id'], {}).get(who)
-            # Off DuckDB the line is held to the calls it makes (T2.1e).
-            held = (
-                case
-                if on_duckdb
-                else core_held(case, observation, line_stop(wanted, ref))
-            )
+            # An approved move of the reference's refusal to an earlier
+            # call (T2.1r) holds the line to the calls up to that one, on
+            # every database; off DuckDB the line is held to the calls it
+            # makes (T2.1e).
+            earlier = statements_earlier(report, case['id'], who, wanted, ref)
+            if earlier is not None:
+                held = core_held(case, observation, earlier)
+            elif on_duckdb:
+                held = case
+            else:
+                held = core_held(case, observation, line_stop(wanted, ref))
             _core_consistent(report, held, who, observation, database)
             stop = past_stop(
                 who,
@@ -2902,7 +2945,7 @@ def compare(
                 who in effective.get(MOVED, {}).get(case['id'], []),
                 ref,
             )
-            stops[who] = stop
+            stops[who] = earlier or stop
             if wanted is not None:
                 _effective(
                     report, case, who, observation['outcome'], wanted, ref
@@ -2930,8 +2973,11 @@ def compare(
             if named and who in MORE_EXACT_RUNNERS and ref is not None:
                 seen = without_core_only(observation, named)
                 against = without_left_out_warning(ref, named, observation)
-            _core_payload(report, case, who, seen, against, stop)
-            refused = statements_refused(report, case['id'], who, wanted, ref)
+            _core_payload(report, case, who, seen, against, earlier or stop)
+            refused = (
+                statements_refused(report, case['id'], who, wanted, ref)
+                or earlier
+            )
             kept = statements_kept(report, case['id'], who, wanted, ref)
             if against is not None:
                 cell = observation['identity'].get('cell')
@@ -2940,13 +2986,17 @@ def compare(
                     # fields against the reference are reported; python-core
                     # against python-old gates them (below).
                     since = len(report.failures)
-                    _host_fields(report, case, who, seen, against, stop=stop)
+                    _host_fields(
+                        report, case, who, seen, against, stop=earlier or stop
+                    )
                     report.reported(
                         since, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
                     since = len(report.failures)
-                    _host_fields(report, case, who, seen, against, stop=stop)
+                    _host_fields(
+                        report, case, who, seen, against, stop=earlier or stop
+                    )
                     if refused is not None:
                         # The warnings of a call refused by the approval.
                         report.demote(
