@@ -21,6 +21,12 @@ mod goldens;
 /// carries on Postgres, in order.
 const GOLDENS: goldens::Goldens = &[
     (
+        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"precision":38,"scale":0,"type":"decimal128"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "WITH \"__sdm_seeds__\" AS (\n  SELECT (r.value->>0)::numeric AS \"key\", (r.value->>1)::bigint AS \"batch\"\n  FROM jsonb_array_elements($1::jsonb) AS r(value)\n)\nSELECT l.b AS \"__kumo_batch__\", l.c0 AS \"user_id\", l.c1 AS \"age\", l.c2 AS \"country\", l.r AS \"__kumo_row__\", l.m AS \"__kumo_matches__\"\nFROM (\n  SELECT s.\"batch\" AS b, t.\"user_id\" AS c0, t.\"age\" AS c1, t.\"country\" AS c2,\n         ROW_NUMBER() OVER (PARTITION BY s.\"batch\"\n           ORDER BY t.\"user_id\") AS r,\n         COUNT(*) OVER (PARTITION BY s.\"batch\") AS m\n  FROM \"__sdm_seeds__\" s\n  JOIN \"users\" t\n    ON t.\"user_id\" = s.\"key\"\n) AS l\nWHERE l.r = 1\nORDER BY l.b",
+        ],
+    ),
+    (
         r##"{"part": "columns", "request": "describe", "tables": [{"source": ["adventureworks_customers"]}]}"##,
         &[
             "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = current_schema() AND c.table_name = 'adventureworks_customers'\n  AND rel.oid = (SELECT c.oid FROM pg_catalog.pg_class c\n         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace\n         WHERE n.nspname = current_schema() AND c.relname = 'adventureworks_customers'\n           AND c.oid = to_regclass('\"adventureworks_customers\"'))\nORDER BY c.ordinal_position",

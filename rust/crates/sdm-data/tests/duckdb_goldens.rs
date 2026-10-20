@@ -22,6 +22,12 @@ mod goldens;
 /// carries on DuckDB, in order.
 const GOLDENS: goldens::Goldens = &[
     (
+        r##"{"columns":["user_id","age","country"],"key":["user_id"],"request":"lookup","seeds":{"attachment":2,"columns":[{"metadata":{"sdm:key_unique":"true"},"name":"key","nullable":true,"type":{"precision":38,"scale":0,"type":"decimal128"}},{"name":"batch","nullable":false,"type":{"type":"int64"}}]},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", COUNT(*) OVER (PARTITION BY s.\"batch\") AS \"__kumo_matches__\", t.\"user_id\", t.\"age\", t.\"country\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t\n  ON t.\"user_id\" = s.\"key\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n) = 1",
+        ],
+    ),
+    (
         r##"{"part": "columns", "request": "describe", "tables": [{"source": ["adventureworks_customers"]}]}"##,
         &["PRAGMA table_info(\"adventureworks_customers\")"],
     ),
