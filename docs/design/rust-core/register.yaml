@@ -7330,3 +7330,63 @@ entries:
     and SQLite's references read it; P2E-4 (proposed for the owner)
     supersedes this entry and names its two regression vectors with
     refusal UNNAMED -> success.
+
+# --- lane J entries (P2J-1..19) ---
+
+- id: P2J-1
+  title: A NumPy unsigned 64-bit context size crashes the old route under NumPy 1, where the core takes it
+  kind: change
+  old_behavior: >-
+    Under NumPy 1 (1.23.5 on DBR 14.3 and 15.4 and serverless 1 and 2;
+    1.26.4 on 16.4 and serverless 3), PredictiveQuery.materialize with
+    num_context_samples given as a numpy.uint64 fails on the reference's
+    route with an unnamed TypeError ("cannot do positional indexing on
+    RangeIndex with these indexers [4.0] of type float64"): NumPy 1 turns
+    the unsigned count into a float when the reference narrows the
+    context. Under NumPy 2 the reference takes it.
+  new_behavior: >-
+    The core takes the same count under either NumPy and materializes as
+    with the plain integer.
+  affected_inputs: >-
+    PredictiveQuery.materialize with num_context_samples a numpy.uint64, on
+    a runtime with NumPy 1, on the default route.
+  cases: []
+  refs: [CI7]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer, an answer in place of a crash (E66(b)). Found by
+    CI7's runtime cells (runtime-install (dbr14.3), (dbr15.4) and
+    (dbr16.4)); pinned on both routes by the client's
+    tests/test_the_materialize_route.py
+    (test_a_numpy_context_size_reaches_the_core[uint64]), which holds the
+    core's count first and the old route's TypeError under NumPy 1.
+
+- id: P2J-2
+  title: The old route's code for a text date of the year 0001 depends on pandas' major version
+  kind: change
+  old_behavior: >-
+    The reference's materialize of a text time column holding dates of the
+    year 0001 fails with INTERNAL_ERROR under pandas 3, as DT-14 records,
+    and with INVALID_REQUEST under pandas 2 (2.2.3 and 2.3.3, the versions
+    the DBR 14.3, 15.4, 17.3 and serverless 5 and 6 cells install).
+  new_behavior: >-
+    The core refuses such a value with VALUE_OUT_OF_RANGE under either
+    pandas, as DT-14 approves; only the old route's code moves with pandas.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a SQL source whose text time column
+    holds a date of the year 0001, on the default route, with pandas 2.
+  cases: []
+  refs: [CI7, DT-14]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer. DT-14's refusal is unchanged; this records that the
+    reference's own code for it is INVALID_REQUEST on pandas 2, which
+    DT-14's old_behavior, measured on pandas 3, does not say. Found by
+    CI7's runtime cells; pinned by the client's
+    tests/test_the_materialize_route.py
+    (test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code[text
+    0001]), which holds the core's VALUE_OUT_OF_RANGE on every pandas.

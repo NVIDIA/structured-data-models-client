@@ -2063,10 +2063,13 @@ def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
     for entry in job['strategy']['matrix']['include']:
         pins = dict(p.split('==') for p in entry['preinstalled'].split())
         # 16.4's own pandas 1.5.3 has no wheel and no build on Python 3.12:
-        # left out rather than stood in for, so the line installs one.
-        wanted = {'numpy', 'pyarrow', 'PyYAML'}
+        # left out rather than stood in for, so the line installs one; 14.3's
+        # release notes list no PyYAML.
+        wanted = {'numpy', 'pyarrow'}
         if entry['runtime'] != 'dbr16.4':
             wanted.add('pandas')
+        if entry['runtime'] != 'dbr14.3':
+            wanted.add('PyYAML')
         assert set(pins) == wanted, entry
     # The floor the step holds pandas to is the client's own (KO2-37).
     project = (
