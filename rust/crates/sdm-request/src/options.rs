@@ -454,10 +454,13 @@ fn boolean_text(text: &str) -> Option<bool> {
 
 /// A whole number given as text, read as the engine's validation
 /// (pydantic's lax mode) reads it: white space around it dropped (Unicode's,
-/// as `str::trim` drops it), then an optional sign and ASCII digits, which
-/// may be followed by a point and one or more zeros; `None` for any other
-/// text, and `Err` with the sign for a value past `i128`, which no option
-/// takes.
+/// as `str::trim` drops it), then an optional sign and ASCII digits, a
+/// single underscore allowed between two digits (`0_3`, none leading,
+/// trailing, doubled or after the sign), which may be followed by a point
+/// and one or more zeros, with no underscore among them (`0_1.0` is 1,
+/// `3.0_0` no number); `None` for any other text, and `Err` with the sign
+/// for a value past `i128`, which no option takes. Each answer was probed
+/// on the reference's pydantic 2.13.5 (T2.13 fix 2).
 fn whole_text(text: &str) -> Option<Result<i128, bool>> {
     let text = text.trim();
     let (whole, fraction) = match text.split_once('.') {
@@ -472,9 +475,14 @@ fn whole_text(text: &str) -> Option<Result<i128, bool>> {
         Some(b'+') => (false, &whole[1..]),
         _ => (false, whole),
     };
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    // Digits, each underscore between two of them.
+    let grouped = digits
+        .split('_')
+        .all(|group| !group.is_empty() && group.bytes().all(|b| b.is_ascii_digit()));
+    if digits.is_empty() || !grouped {
         return None;
     }
+    let digits: String = digits.chars().filter(|c| *c != '_').collect();
     let digits = digits.trim_start_matches('0');
     if digits.is_empty() {
         return Some(Ok(0));
@@ -720,6 +728,59 @@ mod tests {
         assert_eq!(o.target_transforms, vec![Some("quantile".to_owned()), None]);
     }
 
+    /// A whole number's underscores as pydantic 2.13.5's lax `int` reads
+    /// them, each answer probed on the reference (T2.13 fix 2): one between
+    /// two digits of the whole part, none leading, trailing, doubled, after
+    /// the sign or in the fraction; a grouped number past 4 is out of range,
+    /// a misplaced underscore no number.
+    #[test]
+    fn a_whole_number_s_underscores_are_read_as_the_engine_reads_them() {
+        let refused = |text: &str| {
+            let given = Value::Object(vec![("num_estimators".into(), Value::Text(text.into()))]);
+            let error = options(Kind::Regression, Some(&given)).unwrap_err();
+            assert_eq!(
+                error.fields["key"],
+                Detail::text("num_estimators"),
+                "{text:?}"
+            );
+            error.fields["reason"].clone()
+        };
+        for text in [
+            "1_0",
+            "1_000",
+            "-0_3",
+            "-1_0",
+            "3_0.0",
+            "1_0.0",
+            "9_223_372_036_854_775_808",
+        ] {
+            assert_eq!(refused(text), Detail::text("out_of_range"), "{text:?}");
+        }
+        for text in [
+            "_3",
+            "3_",
+            "3__0",
+            "1__",
+            "+_3",
+            "-_3",
+            "3_.0",
+            "3._0",
+            "3.0_",
+            "3.0_0",
+            "3.000_0",
+            "0_1.0_0",
+            "_",
+            "__",
+            "3_\u{663}",
+        ] {
+            assert_eq!(
+                refused(text),
+                Detail::text("not_a_whole_number"),
+                "{text:?}"
+            );
+        }
+    }
+
     /// Text read as pydantic 2.13's lax mode reads it into the engine's
     /// config classes, each answer probed on the reference (T2.13).
     #[test]
@@ -819,6 +880,15 @@ mod tests {
             ("3.0\n", 3),
             ("\n3.0", 3),
             (leading.as_str(), 1),
+            // An underscore between two digits (T2.13 fix 2).
+            ("0_3", 3),
+            ("0_1.0", 1),
+            ("+0_3", 3),
+            (" 0_3 ", 3),
+            ("0_0_3", 3),
+            ("00_3", 3),
+            ("0_3.00", 3),
+            ("+0_0_0_3", 3),
         ] {
             assert_eq!(estimators(text).unwrap(), wanted, "{text:?}");
         }
