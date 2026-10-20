@@ -33,8 +33,8 @@ results the register's notes record. Each claim and what holds it:
   corpus reaches the sort is a matter of which anchors its cases name:
   running every case of the Phase 1b inventory and of ``contract/cases``
   on the default route calls ``sample_target`` with timestamps, but for
-  T2.11's ``anchor_entity`` cases, whose users have distinct signup times,
-  so the sort meets no tie; the control shows the spy sees ``'entity'``
+  T2.11's ``anchor_entity`` cases, whose users have distinct signup times
+  (or none), so the sort meets no tie; the control shows the spy sees ``'entity'``
   when a public call passes it.
 """
 
@@ -295,8 +295,9 @@ def test_ord1_no_case_reaches_the_tie_sort(
     # neither has an entity time column for the sort to read either.
     assert any(kind == 'static' for _, kind, _, _ in calls)
     # From T2.11 the anchor_entity cases name the entity anchor on purpose,
-    # and reach the sort; each gives its users distinct signup times, so
-    # the sort meets no tie and ORD-1's instability cannot show.
+    # and reach the sort; each gives its users distinct signup times (the
+    # null-time cases one null, which count() leaves out), so the sort
+    # meets no tie and ORD-1's instability cannot show.
     entity = {
         case_id
         for case_id, _, train, test in calls
