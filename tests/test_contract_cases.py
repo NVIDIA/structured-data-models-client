@@ -352,6 +352,26 @@ T28C_MULTICALL = (
 )
 
 
+#: T2.14b's wording cases (KO2-32's G15, M4 and FX-1, and the carried
+#: notes on the generic refusal and a one-class binary target), none in
+#: the inventory: refusals and warnings the core route words otherwise
+#: than the reference, each an acceptance case carrying its call as far as
+#: the reference goes.
+T214B_WORDING = (
+    'wording.anchor-after-data',
+    'wording.binary-one-class',
+    'wording.float32-classification',
+    'wording.float32-regression',
+    'wording.key-missing-table',
+    'wording.key-none',
+    'wording.key-number',
+    'wording.rank-text-candidate',
+    'wording.time-key',
+    'wording.time-missing-column',
+    'wording.time-number',
+)
+
+
 #: T2.13's S1 cases, the query and option long tail, none in the
 #: inventory: an entity filter (a ranking's among them), named entities,
 #: ASSUMING, EVALUATE, EXPLAIN, a null target transform and inference
@@ -635,8 +655,8 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # reference goes, and T2.10 its target cases, each an acceptance case;
     # T2.21 its exact-key cases, each carrying its call through predict.
     # reference goes; T2.11 the sampling options' cases likewise; T2.14b a
-    # ranking's repeated candidates and a scaled decimal's stype, each an
-    # acceptance case.
+    # ranking's repeated candidates, a scaled decimal's stype and its
+    # wording cases, each an acceptance case.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -648,6 +668,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T212_RULES,
         *T28_RANKING,
         *T213_OPTIONS,
+        *T214B_WORDING,
         *T29_FORECASTING,
         *T210_TARGETS,
         *T221_EXACT_KEYS,
@@ -657,6 +678,7 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     for case_id in (
         *T28C_MULTICALL,
         *T213_OPTIONS,
+        *T214B_WORDING,
         *T210_TARGETS,
         *T214B_HOST,
     ):

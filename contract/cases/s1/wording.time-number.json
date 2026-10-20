@@ -1,0 +1,55 @@
+{
+  "format": "sdm-case/1",
+  "id": "wording.time-number",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "time_columns": {
+        "orders": 5
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {
+          "orders": "unreadable"
+        }
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "G15: a time column given as a number is refused naming the table and the columns it has",
+  "source": "T2.14b's test author, the reference at 6298913c"
+}
