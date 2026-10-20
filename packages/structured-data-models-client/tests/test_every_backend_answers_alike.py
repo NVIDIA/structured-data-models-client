@@ -207,6 +207,18 @@ def test_a_key_wider_than_a_double_comes_back_exactly(client_for):
     )
 
 
+def test_a_question_longer_than_its_logged_copy_is_answered(client_for):
+    query = f'{COUNT} WHERE ' + ' OR '.join(
+        f'users.age > {i}' for i in range(60)
+    )
+    assert len(query) > 1024
+    request = PredictiveQuery(query, graph()).materialize(indices=[0, 1])
+    with client_for('kumo-relational') as client:
+        answer = client.predict(request, model=KumoRelational())
+
+    assert [item.id for item in answer.items] == [0, 1]
+
+
 def _a_table_named_like_the_scored_rows() -> dict[str, pd.DataFrame]:
     r"""``instance_table`` is the wire's own name for the rows scored."""
     tables = graph()

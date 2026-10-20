@@ -31,6 +31,13 @@ these packages. All five distributions share one version and one entry.
   release no longer builds aarch64 under QEMU, which also takes a privileged
   container image out of the release path.
 
+### Fixed
+
+- A predictive query longer than 1,024 characters is answered. A relational
+  request carries the query in `metadata.source_query` for logging, which the
+  contract caps at 1,024 characters, so a NIM refused a longer one with
+  `VALIDATION_FAILED`. The logged copy is now cut to fit.
+
 ## 1.0.0 - 2026-10-15
 
 First public release. The five distributions are versioned and published

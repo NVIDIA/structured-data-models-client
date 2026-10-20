@@ -71,6 +71,10 @@ _SENDS_ROWS_TO_SCORE = frozenset({'predict'})
 
 _SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
 
+#: The longest ``metadata.source_query`` the contract allows. It is kept for
+#: logging only, so a longer query is cut to fit rather than refused.
+_SOURCE_QUERY_MAX = 1024
+
 
 def _request_id() -> str:
     return f'sdm-{uuid.uuid4().hex[:12]}'
@@ -134,6 +138,11 @@ class RelationalAdapter:
                 **(payload.get('metadata') or {}),
                 'request_id': _request_id(),
             }
+            source_query = envelope['metadata'].get('source_query')
+            if isinstance(source_query, str):
+                envelope['metadata']['source_query'] = source_query[
+                    :_SOURCE_QUERY_MAX
+                ]
             inference = self._inference(envelope.get('inference'), request)
             if inference is None:
                 envelope.pop('inference', None)
