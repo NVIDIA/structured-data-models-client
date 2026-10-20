@@ -2981,12 +2981,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                 fetched.insert(fetch.table.name.clone(), rows);
             }
             keep_stored_times(&mut memo, &read_times);
-            // The target the lags label, as `to_autoregressive_query` makes
-            // it: a NOT around the whole target dropped.
-            let shape = match &asked.target {
-                Shape::Not(inner) => inner.as_ref().clone(),
-                shape => shape.clone(),
-            };
+            let shape = autoregressive(&asked.target);
             let lagged = lag_anchors.len();
             Some(crate::lag::Lag {
                 steps,
@@ -3556,6 +3551,19 @@ impl Labelling<'_> {
     }
 }
 
+/// The target the lags label, as `to_autoregressive_query` makes it: a
+/// `NOT` around the whole target dropped, so a negated condition's lags
+/// are the condition's own; a `NOT` inside the target kept. (Its other
+/// step, dropping a comparison of an aggregation, never applies: the
+/// reference's comparison holds the aggregation's join, not the
+/// aggregation.)
+fn autoregressive(target: &Shape) -> Shape {
+    match target {
+        Shape::Not(inner) => inner.as_ref().clone(),
+        shape => shape.clone(),
+    }
+}
+
 /// A temporal target `shape` over `examples` examples anchored at
 /// `anchors`, from each aggregated table's rows read for them (`fetched`):
 /// each aggregation over its own window from the example's anchor, its
@@ -3814,6 +3822,50 @@ fn big_integers(table: &Table, batch: RecordBatch) -> Result<(RecordBatch, bool)
 mod tests {
     use super::*;
     use sdm_contract::pql::TimeUnit;
+
+    /// A count over the last 30 days, compared as `op 0`.
+    fn counted(op: labels::RelOp) -> Shape {
+        Shape::Condition {
+            target: Box::new(Shape::Aggregated(Windowed {
+                aggregation: labels::Aggregation::Count,
+                table: "orders".to_owned(),
+                column: None,
+                filter: None,
+                start: Offset::of(0, TimeUnit::Days),
+                end: Offset::of(30, TimeUnit::Days),
+            })),
+            test: Test::Compare(op, Some(labels::Constant::Int(0))),
+        }
+    }
+
+    /// The lags of `NOT (COUNT(...) > 0)` are those of `COUNT(...) > 0`, as
+    /// the reference's `to_autoregressive_query` drops the whole target's
+    /// `NOT` (T2.10, measured against the reference: the lagged columns of
+    /// the two queries are the same); a `NOT` inside the target stays.
+    #[test]
+    fn the_lags_of_a_negated_target_are_its_condition_s() {
+        let negated = Shape::Not(Box::new(counted(labels::RelOp::Gt)));
+        assert!(matches!(
+            autoregressive(&negated),
+            Shape::Condition {
+                test: Test::Compare(labels::RelOp::Gt, _),
+                ..
+            }
+        ));
+        let inside = Shape::Both {
+            op: labels::BoolOp::And,
+            left: Box::new(negated),
+            right: Box::new(counted(labels::RelOp::Ge)),
+        };
+        match autoregressive(&inside) {
+            Shape::Both { left, .. } => assert!(matches!(*left, Shape::Not(_))),
+            other => panic!("not kept whole: {other:?}"),
+        }
+        assert!(matches!(
+            autoregressive(&counted(labels::RelOp::Gt)),
+            Shape::Condition { .. }
+        ));
+    }
 
     /// The pools the reference's `min_date_offset` and `max_date_offset`
     /// give, read from it at 6298913c: one offset where it bounds the other

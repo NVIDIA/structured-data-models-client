@@ -494,6 +494,19 @@ mod tests {
         assert_eq!(kept[0].rows(&[1]).values, LagValues::Bool(vec![None]));
     }
 
+    /// A table aggregated over a shorter window than the whole target's
+    /// (`COUNT(..., 0, 30, days) > 0 AND SUM(..., 0, 60, days) > 3`): the
+    /// anchors move back by the target's end, 60 days a step, and that
+    /// table's rows are read from there to its own end times the steps
+    /// (`time_offset_dict`'s `(start, lag_timesteps * end)`).
+    #[test]
+    fn each_table_is_read_over_its_own_window_from_the_target_s_moved_anchor() {
+        let moved = shifted(2, days(60), &[200 * DAY]).unwrap();
+        assert_eq!(moved, [80 * DAY]);
+        let (starts, ends) = reach(2, days(0), days(30), &moved).unwrap();
+        assert_eq!((starts, ends), (vec![80 * DAY], vec![140 * DAY]));
+    }
+
     /// A month's window is moved by the calendar, as pandas moves it: from
     /// 31 March, two months back is 31 January, and the step after it ends
     /// on the last of February.
