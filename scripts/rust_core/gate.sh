@@ -121,11 +121,11 @@
 #                                added to it (base.adventureworks) are
 #                                acceptance cases.
 #                   census, coverage-s1, l3, l7, ci
-#                                (2a; T2.0f) each fails by name until the
-#                                package that lands its tool wires it here;
-#                                a half with l7 gives its limits (KO2-29)
-#                                and one with ci its job-name patterns per
-#                                check holding ci, their shapes read here;
+#                                no step: they left the locked gate as
+#                                end-of-phase reports and land.py's
+#                                exact-SHA rule (KO2-76, T2.1s), so a half
+#                                naming one, or the limits or ci key they
+#                                read, is a usage error naming it;
 #                   main         (2a; T2.0f, locked check 7) the fetched
 #                                origin/main is an ancestor of the
 #                                candidate and of the reference commit
@@ -434,74 +434,20 @@ import yaml
 root, half = sys.argv[1:]
 COMMON = ['runners', 'observations', 'ratchet', 'compare', 'coverage', 'l1']
 STEPS = set(COMMON) | {'l0'}
-# A half's own steps: Phase 1's, and Phase 2's (T2.0f), each of the latter
-# failing the locked run by name until its tool lands, but main.
-OWN = {'seeded', 'wheel-smoke', 'inventory', 'census', 'coverage-s1', 'l3', 'l7', 'ci', 'main'}
+# A half's own steps: Phase 1's, and Phase 2's main (T2.0f).
+OWN = {'seeded', 'wheel-smoke', 'inventory', 'main'}
+# The steps and keys that left the locked gate (KO2-76, T2.1s): the census,
+# coverage, L3, L7 and ci are end-of-phase reports and land.py's exact-SHA
+# rule, so a half naming one is refused by name.
+GONE = {'census', 'coverage-s1', 'l3', 'l7', 'ci'}
+GONE_KEYS = {'limits', 'ci'}
+GONE_WHY = 'left the locked gate under KO2-76 (an end-of-phase report or land.py\'s exact-SHA rule)'
 CASE = re.compile(r'[a-z0-9][a-z0-9._-]*')
-# The L7 limits (design, KO2-29): statements equal to the reference's, the
-# ratios and the overhead positive numbers, the floor a number of
-# milliseconds, the native size's baseline a commit.
-RATIOS = ('cpu-median-ratio', 'cpu-max-ratio', 'import-time-ratio', 'native-size-ratio',
-          'boundary-overhead-fraction')
-LIMITS = {'statements', 'native-size-baseline', 'boundary-overhead-floor-ms', *RATIOS}
 def fail(why):
     sys.exit(f'gate.sh: {why}')
-def shown(value):
-    # A scalar as written; anything else by its kind, never its repr, which
-    # a value nested thousands deep would recurse past the limit on.
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return repr(value)
-    return f'a {type(value).__name__}'
 def listed(names):
     names = sorted(map(str, names))
     return ', '.join(names[:10]) + (f' and {len(names) - 10} more' if len(names) > 10 else '')
-def is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value == value \
-        and value not in (float('inf'), float('-inf'))
-def limits_problem(limits):
-    if not isinstance(limits, dict):
-        return 'limits is a mapping of the L7 limits'
-    if set(limits) - LIMITS:
-        return f'limits: unknown {listed(set(limits) - LIMITS)} (the limits are {listed(LIMITS)})'
-    if LIMITS - set(limits):
-        return f'limits: {listed(LIMITS - set(limits))} missing'
-    if limits['statements'] != 'equal':
-        return 'limits: statements is equal (the reference\'s count), not ' \
-            f'{shown(limits["statements"])}'
-    for name in RATIOS:
-        if not is_number(limits[name]) or limits[name] <= 0:
-            return f'limits: {name} is a positive number, not {shown(limits[name])}'
-    if not is_number(limits['boundary-overhead-floor-ms']) or limits['boundary-overhead-floor-ms'] < 0:
-        return 'limits: boundary-overhead-floor-ms is a number of milliseconds, not ' \
-            f'{shown(limits["boundary-overhead-floor-ms"])}'
-    baseline = limits['native-size-baseline']
-    if not isinstance(baseline, str) or not re.fullmatch(r'[0-9a-f]{7,40}', baseline):
-        return f'limits: native-size-baseline is a commit SHA (quoted), not {shown(baseline)}'
-    return None
-def ci_problem(patterns, checks):
-    # Per check run in CI, the job-name patterns whose jobs must all have
-    # concluded success: each a non-empty list of non-empty names, for a
-    # check of the half that holds the ci step, and every such check given.
-    if not isinstance(patterns, dict) or not patterns:
-        return 'ci maps check numbers to job-name patterns'
-    for check, given in patterns.items():
-        if not isinstance(check, str) or check not in checks:
-            return f'ci: patterns for check {shown(check) if not isinstance(check, str) else check}, ' \
-                'which the half does not have'
-        if 'ci' not in checks[check]:
-            return f'ci: patterns for check {check}, which holds no ci step'
-        if not isinstance(given, list) or not given:
-            return f'ci: check {check}\'s patterns are a non-empty list'
-        for pattern in given:
-            if not isinstance(pattern, str) or not pattern.strip() or pattern != pattern.strip() \
-                    or not pattern.isprintable():
-                return f'ci: check {check}: {shown(pattern)} is not a job-name pattern'
-        if len(set(given)) != len(given):
-            return f'ci: check {check} lists a pattern twice'
-    bare = [n for n, steps in checks.items() if 'ci' in steps and n not in patterns]
-    if bare:
-        return f'ci: no patterns for check {listed(bare)}, which holds the ci step'
-    return None
 found = {}
 for path in sorted(glob.glob(os.path.join(root, 'docs/design/rust-core/phase-*/locked-set.yaml'))):
     name = os.path.relpath(path, root)
@@ -525,9 +471,11 @@ if half not in found:
     fail(f'--locked takes a half a locked set names ({named}), not {half}')
 name, spec = found[half]
 where = f'{name}, half {half}'
-keys = {'steps', 'checks', 'reference', 'every', 'inventory', 'cases', 'limits', 'ci'}
+keys = {'steps', 'checks', 'reference', 'every', 'inventory', 'cases'}
 if not isinstance(spec, dict):
     fail(f'{where}: not a half (a mapping of {", ".join(sorted(keys))})')
+if set(spec) & GONE_KEYS:
+    fail(f'{where}: the key {listed(set(spec) & GONE_KEYS)} {GONE_WHY}')
 if set(spec) - keys:
     fail(f'{where}: unknown key {listed(set(spec) - keys)} (a half holds {listed(keys)})')
 if 'inventory' in spec and 'cases' in spec:
@@ -544,6 +492,8 @@ own = spec.get('steps', ['inventory'] if locks else [])
 if not isinstance(own, list) or not all(isinstance(x, str) for x in own) \
         or len(set(own)) != len(own):
     fail(f'{where}: steps are a list of step names, each once')
+if set(own) & GONE:
+    fail(f'{where}: the step {listed(set(own) & GONE)} {GONE_WHY}')
 if set(own) - OWN:
     fail(f'{where}: unknown step {listed(set(own) - OWN)} (steps are some of {listed(OWN)})')
 run = STEPS | set(own)
@@ -552,6 +502,9 @@ if not isinstance(checks, dict) or not checks:
     fail(f'{where}: no checks')
 lines = [f'steps {" ".join(own)}']
 for number, steps in checks.items():
+    if isinstance(steps, list) and set(x for x in steps if isinstance(x, str)) & GONE:
+        fail(f'{where}: check {number!r}: the step '
+             f'{listed(set(x for x in steps if isinstance(x, str)) & GONE)} {GONE_WHY}')
     if not isinstance(number, str) or not number.isdigit() or not isinstance(steps, list) \
             or not steps or not all(isinstance(x, str) and x in run for x in steps):
         fail(f'{where}: check {number!r} is not a number and steps the half runs')
@@ -582,15 +535,6 @@ if 'inventory' in spec:
               f'inventory-also {" ".join(inventory["also"])}']
 elif 'cases' in spec:
     lines += ['inventory-count 0', f'inventory-also {" ".join(spec["cases"])}']
-# Phase 2's keys (T2.0f), each with the step that reads it: the L7 limits
-# with l7, the CI job patterns with ci; read here for their shapes alone.
-for key, step in (('limits', 'l7'), ('ci', 'ci')):
-    if (key in spec) != (step in own):
-        fail(f'{where}: the {step} step and the {key} key go together')
-why = ('limits' in spec and limits_problem(spec['limits'])) or \
-    ('ci' in spec and ci_problem(spec['ci'], checks))
-if why:
-    fail(f'{where}: {why}')
 print('\n'.join(lines))
 EOF
   ) || exit 2
@@ -871,10 +815,6 @@ EOF
 }
 # Phase 2's steps (T2.0f) whose tools other packages land: each fails the
 # locked run by name until its package wires it here.
-not_landed() {
-  echo "the $1 step's tool has not landed ($2): the step fails until it does"
-  return 1
-}
 # The main step (locked check 7): the fetched origin/main, never a local
 # main, is an ancestor of the candidate and of the reference commit the
 # candidate's contract/reference-env.txt names, so the phase branch and

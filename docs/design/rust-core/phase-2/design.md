@@ -240,7 +240,7 @@ The rest is judged outside the gate (KO2-76):
 - check 9, the held-out run, once, after the locked gate, through `phase_end.sh`'s held-out step (`heldout_run.sh`, then `heldout.py counts`), its verdict in the packet beside the gate's evidence file.
 
 The L7 report is judged against KO2-29's limits, with Phase 1's merged wheel at `91a00319` as the native-size baseline.
-Neither the limits nor the job names are keys of the file any more, since T2.0f's reader takes the `limits` key only with the `l7` step and the `ci` key only with the `ci` step.
+Neither the limits nor the job names are keys of the file any more: `gate.sh`'s reader refuses by name the steps `census`, `coverage-s1`, `l3`, `l7` and `ci` and the keys `limits` and `ci` (T2.1s).
 CI5 keeps the job names when it splits or shards: a shard appends `, shard <n>` inside the parentheses, and its split `rust-host` job joins check 5 only if the owner approves that change to the locked checks.
 Unseeded SQLite sampling (KO2-23) is judged by properties: the row count, every row exists in the data, and the same rows when seeded.
 
