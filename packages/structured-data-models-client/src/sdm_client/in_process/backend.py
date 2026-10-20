@@ -152,8 +152,8 @@ class InProcessBackend:
             session_id = uuid.uuid4().hex
             self._sessions[session_id] = _Session(
                 served=served,
-                task=payload['task'],
-                schema=payload['schema'],
+                task=copy.deepcopy(payload['task']),
+                schema=copy.deepcopy(payload['schema']),
                 context=context.fitted(),
                 fitted=fitted,
             )

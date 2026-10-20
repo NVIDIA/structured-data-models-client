@@ -14,6 +14,7 @@ from sdm_client.errors import StructuredDataError
 from sdm_client.in_process.columns import (
     Context,
     Shape,
+    check_supplied,
     key_columns,
     labelled,
     stype_of,
@@ -49,6 +50,7 @@ class Tabular:
         self.check_inference(payload.get('inference') or {}, task)
         spec = payload['schema']['instance_table']
         table = payload['context']['instance_table']
+        check_supplied(table, spec, 'the context')
         target = task['target']['column_name']
         keys = key_columns(spec)
         stypes = {

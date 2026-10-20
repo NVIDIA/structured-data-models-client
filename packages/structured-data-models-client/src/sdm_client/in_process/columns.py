@@ -67,6 +67,23 @@ def key_columns(schema: Mapping[str, Any]) -> frozenset[str]:
     return frozenset(key or ())
 
 
+def check_supplied(
+    table: Mapping[str, Any], schema: Mapping[str, Any], where: str
+) -> None:
+    r"""Refuse a context table that leaves out a column its schema declares.
+
+    The model is fitted on the columns the context carries, so one left out
+    would be answered without, though the request says it is there.
+    """
+    missing = sorted(set(schema.get('columns') or {}) - set(table['columns']))
+    if missing:
+        raise StructuredDataError(
+            f'{where} leaves out column(s) {missing}, which its schema '
+            f'declares',
+            code='INVALID_SCHEMA',
+        )
+
+
 @dataclass(frozen=True)
 class Shape:
     r"""Which columns of a table the model reads, and as what.

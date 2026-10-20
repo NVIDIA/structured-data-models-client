@@ -22,6 +22,7 @@ from sdm_client.errors import StructuredDataError
 from sdm_client.in_process.columns import (
     Context,
     Shape,
+    check_supplied,
     key_columns,
     labelled,
     stype_of,
@@ -105,6 +106,7 @@ class Relational:
         _check_target(task)
         split = payload['context']
         table = split['instance_table']
+        check_supplied(table, spec, 'the context')
         joins = _joins(edges, links)
         shapes = _shapes(split, schema, joins, edges, links)
         instance = Shape.of(
@@ -371,6 +373,7 @@ def _shapes(
                 f'not declare it',
                 code='INVALID_SCHEMA',
             )
+        check_supplied(table, table_schema, f'context table {name!r}')
         keys = joins.get(name, frozenset()) | key_columns(table_schema)
         shapes[name] = Shape.of(
             table_schema, _related_stypes(table_schema, table, keys), keys

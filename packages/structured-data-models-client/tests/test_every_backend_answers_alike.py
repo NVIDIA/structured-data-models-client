@@ -19,6 +19,7 @@ a session answers, and the code a refusal carries.
 
 from __future__ import annotations
 
+import copy
 import os
 import warnings
 
@@ -399,5 +400,87 @@ def test_a_request_the_model_cannot_answer_is_refused_with_the_same_code(
     with client_for(model) as client:
         with pytest.raises(StructuredDataError) as refused:
             ask(client)
+
+    assert refused.value.code == code
+
+
+def hand_built(change) -> Request:
+    r"""A gathered request with its payload changed, as one passed to
+    ``Request.materialized`` by hand may be."""
+    gathered = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
+    payload = copy.deepcopy(gathered.payloads[0])
+    change(payload)
+    return Request.materialized(
+        payloads=(payload,),
+        schema=gathered.schema,
+        query=gathered.query,
+        indices=gathered.indices,
+    )
+
+
+GHOST = {'format': 'arrays', 'columns': ['k'], 'rows': []}
+
+
+def _without(table: dict, column: str) -> None:
+    position = table['columns'].index(column)
+    del table['columns'][position]
+    for row in table['rows']:
+        del row[position]
+
+
+@pytest.mark.parametrize(
+    ('change', 'code'),
+    [
+        (
+            lambda p: p['task'].update(entity_table_names=['orders']),
+            'TASK_SCHEMA_MISMATCH',
+        ),
+        (lambda p: p['task'].update(top_k=3), 'UNSUPPORTED_FEATURE'),
+        (
+            lambda p: p['task'].update(anchor_time_column='nowhere'),
+            'TASK_SCHEMA_MISMATCH',
+        ),
+        (
+            lambda p: p['task']['target'].update(dtype='timestamp[us]'),
+            'TASK_SCHEMA_MISMATCH',
+        ),
+        (
+            lambda p: p['predict']['related_tables'].pop('orders'),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: p['predict']['related_tables'].update(ghost=GHOST),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: [
+                p[half]['related_tables'].update(ghost=GHOST)
+                for half in ('context', 'predict')
+            ],
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: _without(p['predict']['related_tables']['orders'], 'ts'),
+            'INVALID_SCHEMA',
+        ),
+        (
+            lambda p: [
+                _without(p[half]['related_tables']['users'], 'age')
+                for half in ('context', 'predict')
+            ],
+            'INVALID_SCHEMA',
+        ),
+    ],
+)
+def test_a_request_built_by_hand_is_refused_where_it_states_another_question(
+    client_for, change, code
+):
+    """The model scores the table its rows link to, from a timestamp the
+    instance table declares, over the tables the context carries. A request
+    saying otherwise is refused rather than answered as something else."""
+    request = hand_built(change)
+    with client_for('kumo-relational') as client:
+        with pytest.raises(StructuredDataError) as refused:
+            client.predict(request, model=KumoRelational())
 
     assert refused.value.code == code

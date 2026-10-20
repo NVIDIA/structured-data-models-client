@@ -205,77 +205,17 @@ def test_a_ranking_and_a_forecast_are_asked_as_the_questions_it_serves(
         assert sorted(set(answer['forecast_step'])) == [1, 2, 3]
 
 
-def hand_built(change) -> Request:
-    r"""A gathered request with its payload changed, as one passed to
-    ``Request.materialized`` by hand may be."""
-    gathered = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
-    payload = copy.deepcopy(gathered.payloads[0])
-    change(payload)
-    return Request.materialized(
-        payloads=(payload,),
-        schema=gathered.schema,
-        query=gathered.query,
-        indices=gathered.indices,
-    )
-
-
-GHOST = {'format': 'arrays', 'columns': ['k'], 'rows': []}
-
-
-def _without(table: dict, column: str) -> None:
-    position = table['columns'].index(column)
-    del table['columns'][position]
-    for row in table['rows']:
-        del row[position]
-
-
-@pytest.mark.parametrize(
-    ('change', 'code'),
-    [
-        (
-            lambda p: p['task'].update(entity_table_names=['orders']),
-            'TASK_SCHEMA_MISMATCH',
-        ),
-        (lambda p: p['task'].update(top_k=3), 'UNSUPPORTED_FEATURE'),
-        (
-            lambda p: p['task'].update(anchor_time_column='nowhere'),
-            'TASK_SCHEMA_MISMATCH',
-        ),
-        (
-            lambda p: p['task']['target'].update(dtype='timestamp[us]'),
-            'TASK_SCHEMA_MISMATCH',
-        ),
-        (
-            lambda p: p['predict']['related_tables'].pop('orders'),
-            'INVALID_SCHEMA',
-        ),
-        (
-            lambda p: p['predict']['related_tables'].update(ghost=GHOST),
-            'INVALID_SCHEMA',
-        ),
-        (
-            lambda p: [
-                p[half]['related_tables'].update(ghost=GHOST)
-                for half in ('context', 'predict')
-            ],
-            'INVALID_SCHEMA',
-        ),
-        (
-            lambda p: _without(p['predict']['related_tables']['orders'], 'ts'),
-            'INVALID_SCHEMA',
-        ),
-    ],
-)
-def test_a_request_built_by_hand_is_refused_where_it_states_another_question(
-    relational, change, code
-):
-    """The model scores the table its rows link to, from a timestamp the
-    instance table declares, over the tables the context carries. A request
-    saying otherwise is refused rather than answered as something else."""
-    request = hand_built(change)
+def test_a_session_keeps_the_question_it_pinned(relational):
+    """A request changed after it was pinned leaves the session's own copy
+    alone, as a NIM's is: the session still scores as the regression it
+    pinned."""
+    request = PredictiveQuery(COUNT, graph()).materialize(indices=[0, 1])
     with SDMClient.in_process(relational) as client:
-        error = refused(lambda: client.predict(request, model=KumoRelational()))
-    assert error.code == code
+        with client.fit(request, model=KumoRelational()) as fitted:
+            request.payloads[0]['task']['kind'] = 'classification'
+            answer = fitted.predict(request).to_pandas()
+
+    assert answer['id'].tolist() == [0, 1]
 
 
 def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(
