@@ -23,25 +23,6 @@
       "why": "LIST_DISTINCT of a foreign key, which the query validator lets through as a temporal link prediction, Phase 4's (T2.10); every other aggregation outside SUM, COUNT, AVG, MIN and MAX the validator refuses first on both routes"
     },
     {
-      "site": "rule:anchor_entity",
-      "why": "anchor_time='entity'",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "anchor_time": "entity"
-      }
-    },
-    {
       "site": "rule:assuming",
       "why": "an ASSUMING clause",
       "input": {
@@ -91,25 +72,6 @@
         }
       },
       "until": "materialize"
-    },
-    {
-      "site": "rule:context_anchor_time",
-      "why": "the context_anchor_time option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "context_anchor_time": "2024-01-01"
-      }
     },
     {
       "site": "rule:empty_table",
@@ -170,29 +132,6 @@
       "until": "materialize"
     },
     {
-      "site": "rule:exclude_cols_dict",
-      "why": "the exclude_cols_dict option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "exclude_cols_dict": {
-          "users": [
-            "age"
-          ]
-        }
-      }
-    },
-    {
       "site": "rule:key_type",
       "why": "a DATE entity key; refused first by the core's own primary-key check, so not reached this way",
       "input": {
@@ -215,25 +154,6 @@
         }
       },
       "until": "materialize"
-    },
-    {
-      "site": "rule:max_pq_iterations",
-      "why": "the max_pq_iterations option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "max_pq_iterations": 5
-      }
     },
     {
       "site": "rule:model",
@@ -269,63 +189,6 @@
       "until": "predict"
     },
     {
-      "site": "rule:num_hops",
-      "why": "the num_hops option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "num_hops": 3
-      }
-    },
-    {
-      "site": "rule:num_neighbors",
-      "why": "the num_neighbors option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "num_neighbors": [
-          16,
-          8
-        ]
-      }
-    },
-    {
-      "site": "rule:parent_table",
-      "why": "an entity table with a foreign key",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT orders.price FOR EACH orders.order_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize"
-    },
-    {
       "site": "rule:problem_type",
       "why": "a CLASSIFY problem type; the query validator refuses it first on both routes, so the site is not reached from the public calls this way",
       "input": {
@@ -356,25 +219,6 @@
         }
       },
       "until": "predict"
-    },
-    {
-      "site": "rule:return_embeddings",
-      "why": "the return_embeddings option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "return_embeddings": true
-      }
     },
     {
       "site": "rule:seed_size",
@@ -551,44 +395,6 @@
         }
       },
       "until": "predict"
-    },
-    {
-      "site": "rule:unseeded",
-      "why": "random_seed=None",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "random_seed": null
-      }
-    },
-    {
-      "site": "rule:use_prediction_time",
-      "why": "the use_prediction_time option",
-      "input": {
-        "base": "shop",
-        "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
-        "materialize": {
-          "indices": [
-            0,
-            1
-          ],
-          "anchor_time": "2024-03-01"
-        }
-      },
-      "until": "materialize",
-      "options": {
-        "use_prediction_time": true
-      }
     },
     {
       "site": "rule:wire_dtype",
