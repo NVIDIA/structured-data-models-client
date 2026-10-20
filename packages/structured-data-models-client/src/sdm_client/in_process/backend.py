@@ -114,12 +114,13 @@ class InProcessBackend:
 
     def list_models(self) -> list[str]:
         r"""The models this backend answers for."""
-        self._require_open()
-        return [
-            model_id
-            for model_id in _SERVED
-            if self._loads or model_id in self._models
-        ]
+        with self._state:
+            self._require_open()
+            return [
+                model_id
+                for model_id in _SERVED
+                if self._loads or model_id in self._models
+            ]
 
     def predict(
         self,
@@ -157,7 +158,7 @@ class InProcessBackend:
         r"""Fit the context once, to be scored against until released."""
         with self._running():
             served, model = self._serving(payload['model'])
-            _check_task(served, model, payload['task']['kind'])
+            _fields(served, model, payload['task']['kind'], payload)
             context = served.context(payload)
             fitted = _fit(model, context)
             session_id = uuid.uuid4().hex

@@ -1682,6 +1682,10 @@ class TestInterpreterSupportIsStated:
         ('-relational-engine', False),
         ('-nim', True),
         ('-serving', True),
+        ('-client-nim', True),
+        ('-api-internal', True),
+        ('-relational-engine-nim', True),
+        ('-client_nim', True),
     ],
 )
 def test_only_a_published_distribution_may_be_named(suffix, refused):

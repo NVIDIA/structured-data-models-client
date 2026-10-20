@@ -632,3 +632,14 @@ def test_closing_beats_a_call_that_was_already_running(relational, monkeypatch):
         release.set()
     assert failed, 'the call carried on against a closed client'
     assert backend._sessions == {}
+
+
+def test_a_table_carrying_no_rows_is_refused(relational):
+    """A hand-built payload need not carry rows at all, and a table without
+    them was read as empty until something downstream fell over."""
+    request = tampered(
+        lambda p: p['context']['related_tables']['users'].pop('rows')
+    )
+    with SDMClient.in_process(relational) as client:
+        error = refused(lambda: client.predict(request, model=KumoRelational()))
+    assert error.code == 'VALIDATION_FAILED'
