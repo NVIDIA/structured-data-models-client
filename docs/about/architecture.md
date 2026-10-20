@@ -674,7 +674,7 @@ serve.
 
 | Call | Answer |
 |---|---|
-| `client.models()` | Read from the endpoint's `/v1/models`. Endpoint truth. |
+| `client.models()` | Read from the endpoint's `/v1/models`. Endpoint truth. In process, the models the client can run. |
 | `client.capabilities(model)` | Local: what this client can build and send. Tagged `source="sdk"`. |
 
 `/v1/models` is a NIM runtime route and is **not** one of the contract's four

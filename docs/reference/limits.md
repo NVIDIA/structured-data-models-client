@@ -187,7 +187,8 @@ not read from the endpoint.
 `models()` *is* read from the endpoint, so it is the endpoint's own answer. The
 route it uses is supplied by the NIM runtime rather than by the Universal TFM
 contract, so an endpoint that does not serve it gives a clear error rather than
-a wrong answer.
+a wrong answer. A client opened with `SDMClient.in_process()` has no endpoint,
+and lists the models it can run.
 
 There is more than one build of `kumo-relational`. The client declares the
 broader build with six task kinds and seven output fields. A narrower build
