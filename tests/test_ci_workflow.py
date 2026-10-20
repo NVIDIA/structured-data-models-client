@@ -2066,21 +2066,29 @@ def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
 
 
 #: A pip and a python for the install step, run as CI runs it: python
-#: answers the interpreter tag and the NumPy version held in a file; pip
-#: records each call and, by FAULT, moves NumPy on install (an install
-#: that moves the runtime's NumPy), fails the install (a resolution
-#: failure) or fails pip check.
+#: answers the interpreter tag and the NumPy version held in a file, and
+#: runs the check of the installed wheels' records as passing unless
+#: FAULT is swapped (the line replaced a candidate wheel); pip records
+#: each call and, by FAULT, moves NumPy on install (an install that moves
+#: the runtime's NumPy), fails the install (a resolution failure) or
+#: fails pip check.
 FAKE_PYTHON = """#!/usr/bin/env bash
 case "$*" in
   *version_info*) echo cp312 ;;
   *numpy*) cat "$STATE/numpy" ;;
+  -\\ *)
+    cat > /dev/null
+    echo "python $*" >> "$STATE/calls"
+    [ "$FAULT" = swapped ] && { echo 'no longer the candidate wheel' >&2; exit 1; }
+    exit 0 ;;
   *) exit 2 ;;
 esac
 """
 FAKE_PIP = """#!/usr/bin/env bash
-echo "pip $* | ${PIP_CONSTRAINT:-}" >> "$STATE/calls"
+echo "pip $*" >> "$STATE/calls"
 case "$1" in
   install)
+    [ "$2" = --quiet ] && [ "$3" = --no-deps ] && exit 0
     [ "$FAULT" = resolution ] && { echo 'ResolutionImpossible' >&2; exit 1; }
     [ "$FAULT" = moves ] && echo 2.1.3 > "$STATE/numpy"
     exit 0 ;;
@@ -2120,15 +2128,12 @@ def _run_install(
     ):
         (work / directory).mkdir(parents=True, exist_ok=True)
         (work / directory / name).write_bytes(b'')
-    temp = tmp_path / 'runner-temp'
-    temp.mkdir()
     run = str(_install_step()['run']).replace('/tmp/runtime', str(runtime))
     done = subprocess.run(
         ['bash', '-e', '-c', run],
         cwd=work,
         env={
             'PATH': os.environ['PATH'],
-            'RUNNER_TEMP': str(temp),
             'STATE': str(state),
             'FAULT': fault,
         },
@@ -2137,31 +2142,32 @@ def _run_install(
         check=False,
     )
     calls = (state / 'calls').read_text().splitlines()
-    constraint = (temp / 'candidate.txt').read_text()
-    return done, calls, constraint
+    return done, calls
 
 
 def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
     tmp_path: Path,
 ) -> None:
-    done, calls, constraint = _run_install(tmp_path, 'none')
+    done, calls = _run_install(tmp_path, 'none')
     assert done.returncode == 0, done.stderr
-    work = tmp_path / 'work'
-    assert constraint.splitlines() == [
-        f'structured-data-models-api @ file://{work}/dist/'
-        'structured_data_models_api-1.0.0-py3-none-any.whl',
-        f'structured-data-models-client @ file://{work}/dist/{X86}',
-        f'structured-data-models-relational-engine @ file://{work}/engine/'
-        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
-        'manylinux_2_28_x86_64.whl',
-    ]
-    install = (
+    candidate = ' '.join(
+        [
+            'dist/structured_data_models_api-1.0.0-py3-none-any.whl',
+            f'dist/{X86}',
+            'engine/structured_data_models_relational_engine-1.0.0-cp312-'
+            'cp312-manylinux_2_28_x86_64.whl',
+        ]
+    )
+    assert calls == [
+        # The candidate's wheels first, the interpreter's engine alone.
+        f'pip install --quiet --no-deps {candidate}',
         'pip install --only-binary=:all: '
         'structured-data-models-client[relational,databricks,databricks-serving] '
-        f'numpy==1.23.5 | {tmp_path}/runner-temp/candidate.txt'
-    )
-    assert calls[0] == install
-    assert calls[1].startswith('pip check ')
+        'numpy==1.23.5',
+        'pip check',
+        f'python - {candidate}',
+        'pip freeze --all',
+    ]
 
 
 @pytest.mark.parametrize(
@@ -2172,11 +2178,12 @@ def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
         # Seeded: a resolution failure.
         ('resolution', 'ResolutionImpossible'),
         ('check', 'has requirement'),
+        ('swapped', 'no longer the candidate wheel'),
     ],
 )
 def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(
     tmp_path: Path, fault: str, says: str
 ) -> None:
-    done, _, _ = _run_install(tmp_path, fault)
+    done, _ = _run_install(tmp_path, fault)
     assert done.returncode != 0
     assert says in done.stderr, done.stderr
