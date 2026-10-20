@@ -7,8 +7,8 @@
 
 The wheel carries `sdm_client._native`, built from `rust/bindings/sdm-py`
 with its production features, and with it every crate that build links:
-the crates `cargo tree` reaches from sdm-py over normal edges for the
-shipped target, proc macros and build scripts left out because nothing of
+the crates `cargo tree` reaches from sdm-py over normal edges for each
+shipped target (x86_64 and aarch64 Linux, decision KO2-40), proc macros and build scripts left out because nothing of
 them is linked, and the workspace's own crates left out because they are
 this repository's. For each, the file reproduces the licence, copyright and
 notice files the crate ships, which is what its licence asks of a binary
@@ -36,8 +36,8 @@ RUST = REPO / 'rust'
 NOTICES = (
     REPO / 'packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt'
 )
-#: The one target the wheel ships for (design, "Packaging").
-TARGET = 'x86_64-unknown-linux-gnu'
+#: The targets the wheel ships for (design, "Packaging"; KO2-40).
+TARGETS = ('x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu')
 #: The files a crate ships its terms in, at its root.
 TERMS = re.compile(
     r'^(?:licen[cs]e|copying|copyright|notice|unlicense)(?:[-_.].*)?$',
@@ -54,11 +54,12 @@ HEADER = f"""\
 Third-party Rust code in structured-data-models-client
 
 The client wheel carries the Rust core, the module sdm_client._native, built
-from rust/bindings/sdm-py with its production features for the target
-{TARGET}. These are the crates linked into it, other than this
-repository's own, each with the licence, copyright and notice files it ships,
-and then the Rust standard library. Written by scripts/rust_core/rust_notices.py
-from rust/Cargo.lock; regenerate it with --write rather than editing it.
+from rust/bindings/sdm-py with its production features for the targets
+{TARGETS[0]} and {TARGETS[1]}. These are the crates
+linked into either build, other than this repository's own, each with the
+licence, copyright and notice files it ships, and then the Rust standard
+library. Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
+regenerate it with --write rather than editing it.
 """
 
 STD = """\
@@ -84,20 +85,13 @@ def _cargo(*arguments: str) -> str:
 
 
 def _linked() -> list[tuple[str, str]]:
-    """The third-party crates the shipped build links, as (name, version)."""
+    """The third-party crates the shipped builds link, for any of
+    :data:`TARGETS`, as (name, version)."""
+    arguments = ['-e', 'normal,no-proc-macro', '--prefix', 'none']
+    for target in TARGETS:
+        arguments += ['--target', target]
     tree = _cargo(
-        'tree',
-        '--locked',
-        '-p',
-        'sdm-py',
-        '-e',
-        'normal,no-proc-macro',
-        '--target',
-        TARGET,
-        '--prefix',
-        'none',
-        '--format',
-        '{p}',
+        'tree', '--locked', '-p', 'sdm-py', *arguments, '--format', '{p}'
     )
     crates = set()
     for line in tree.splitlines():

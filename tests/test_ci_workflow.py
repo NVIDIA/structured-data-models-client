@@ -559,6 +559,10 @@ def test_each_image_is_named_once_and_pinned_by_digest() -> None:
     text = CI.read_text(encoding='utf-8')
     for key in ('POSTGRES_IMAGE', 'MANYLINUX'):
         assert text.count(env[key]) == 1, key
+    # The aarch64 build's image, named in that job alone (KO2-40).
+    aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
+    assert DIGEST.search(aarch64) and 'manylinux2014_aarch64:' in aarch64
+    assert text.count(aarch64) == 1
     jobs = workflow['jobs']
     landing = jobs['landing']['outputs']['postgres-image']
     assert landing == '${{ env.POSTGRES_IMAGE }}'
@@ -579,7 +583,13 @@ def test_each_image_is_named_once_and_pinned_by_digest() -> None:
 
 def test_every_image_ci_runs_is_pulled_with_retries_first() -> None:
     jobs = _workflow()['jobs']
-    for name in ('native-wheel', 'native-test-ops', 'wheel-smoke'):
+    for name in (
+        'native-wheel',
+        'native-test-ops',
+        'native-wheel-aarch64',
+        'wheel-smoke',
+        'wheel-smoke-aarch64',
+    ):
         runs = [str(s.get('run', '')) for s in jobs[name]['steps']]
         pulls = [i for i, r in enumerate(runs) if 'pull_image.sh' in r]
         runs_image = [
@@ -897,7 +907,8 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
         for image in images:
             assert DIGEST.search(image), image
         env = workflow['env']
-        named = {env['POSTGRES_IMAGE'], env['MANYLINUX']}
+        aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
+        named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64}
         assert set(images) == named, set(images) ^ named
         for name, job in workflow['jobs'].items():
             assert 'container' not in job, name
@@ -906,8 +917,12 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
                     '${{ needs.landing.outputs.postgres-image }}'
                 ), name
         # wheel-smoke's images, as wheel_smoke.py names them, by lane.
-        lanes = workflow['jobs']['wheel-smoke']['strategy']['matrix']['lane']
-        assert lanes
+        lanes = [
+            lane
+            for name in ('wheel-smoke', 'wheel-smoke-aarch64')
+            for lane in workflow['jobs'][name]['strategy']['matrix']['lane']
+        ]
+        assert len(lanes) == 4, lanes
         for lane in lanes:
             done = subprocess.run(
                 [
@@ -1834,3 +1849,334 @@ def test_t20_a_name_the_expression_lets_through_fails_the_phase_check_by_name(
     assert (
         f'{ref} is under rust-core-phase- but is no phase branch' in done.stdout
     )
+
+
+# --- CI7: aarch64 wheels and the Databricks runtime cells (KO2-38, KO2-40) ---
+
+LOCKED_SET = ROOT / 'docs/design/rust-core/phase-2/locked-set.yaml'
+INSTALL_GUIDE = ROOT / 'docs/get-started/installation.md'
+NATIVE_WHEEL = ROOT / 'scripts/rust_core/native_wheel.py'
+WHEEL_NAME = 'structured_data_models_client-1.0.0-cp310-abi3-{}.whl'
+
+
+def _job_names(job_id: str, job: dict[str, Any]) -> list[str]:
+    r"""The names a job's runs take: its ``name`` with each matrix entry's
+    values put in (a matrix of lists or of ``include`` entries)."""
+    name = str(job.get('name', job_id))
+    matrix = (job.get('strategy') or {}).get('matrix') or {}
+    entries: list[dict[str, Any]] = list(matrix.get('include') or [])
+    for key, values in matrix.items():
+        if key != 'include':
+            entries = [{key: value} for value in values]
+    names = []
+    for entry in entries or [{}]:
+        named = name
+        for key, value in entry.items():
+            named = named.replace(f'${{{{ matrix.{key} }}}}', str(value))
+        names.append(named)
+    return names
+
+
+def test_ci7_check_10_s_patterns_each_name_a_job_of_the_workflow() -> None:
+    r"""Locked check 10's CI patterns, as the locked-set file holds them,
+    each match a job this workflow runs, the six runtime cells and the
+    aarch64 smoke lanes among them, so the gate's ``ci`` step can resolve
+    them on a run."""
+    import fnmatch
+
+    half = yaml.safe_load(LOCKED_SET.read_text())['halves']['2a']
+    names = [
+        name
+        for job_id, job in _workflow()['jobs'].items()
+        for name in _job_names(job_id, job)
+    ]
+    for pattern in half['ci']['10']:
+        assert fnmatch.filter(names, pattern), pattern
+    runtimes = sorted(n for n in names if n.startswith('runtime-install ('))
+    assert runtimes == sorted(
+        p.replace('*', '')
+        for p in half['ci']['10']
+        if p.startswith('runtime-install (')
+    )
+    assert len(runtimes) == 6
+    assert {
+        'wheel-smoke (aarch64-floor)',
+        'wheel-smoke (aarch64-newest)',
+        'native-wheel (aarch64, shipped)',
+        'native-wheel (aarch64, test-ops)',
+    } <= set(names)
+
+
+def test_ci7_the_aarch64_jobs_run_natively_on_arm() -> None:
+    jobs = _workflow()['jobs']
+    for name in ('native-wheel-aarch64', 'wheel-smoke-aarch64'):
+        assert jobs[name]['runs-on'] == 'ubuntu-24.04-arm', name
+    build = jobs['native-wheel-aarch64']
+    entries = build['strategy']['matrix']['include']
+    assert {e['args'] for e in entries} == {
+        '--out native',
+        '--out native --test-ops',
+    }
+    assert build['env']['NATIVE_ARGS'] == '${{ matrix.args }}'
+    # The same steps as native-wheel's (YAML anchors), so one build script.
+    native = jobs['native-wheel']['steps']
+    for step in native[3:5]:
+        assert step in build['steps'], step['name']
+    smoke = jobs['wheel-smoke-aarch64']
+    assert set(smoke['needs']) == {'native-wheel', 'native-wheel-aarch64'}
+
+
+def test_ci7_rustup_init_is_checked_for_each_architecture() -> None:
+    r"""The build script fetches rustup-init for the machine's
+    architecture and checks it against that architecture's published
+    SHA-256, and refuses an architecture it holds no checksum for."""
+    run = next(
+        str(s['run'])
+        for s in _workflow()['jobs']['native-wheel']['steps']
+        if s.get('name') == 'Build the wheel in manylinux2014'
+    )
+    assert (
+        'x86_64) sum=4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10'
+        in run
+    )
+    assert (
+        'aarch64) sum=9732d6c5e2a098d3521fca8145d826ae0aaa067ef2385ead08e6feac88fa5792'
+        in run
+    )
+    assert '$arch-unknown-linux-gnu/rustup-init' in run
+    assert 'sha256sum -c -' in run and '*) echo' in run
+
+
+def _check_set(
+    tmp_path: Path, *wheels: tuple[str, str]
+) -> subprocess.CompletedProcess[str]:
+    dirs = []
+    for directory, name in wheels:
+        (tmp_path / directory).mkdir(exist_ok=True)
+        (tmp_path / directory / name).write_bytes(b'')
+        if directory not in dirs:
+            dirs.append(directory)
+    return subprocess.run(
+        [sys.executable, str(NATIVE_WHEEL), '--check-set', *dirs],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+X86 = WHEEL_NAME.format('manylinux_2_17_x86_64.manylinux2014_x86_64')
+ARM = WHEEL_NAME.format('manylinux_2_17_aarch64.manylinux2014_aarch64')
+
+
+def test_ci7_the_wheel_set_holds_one_wheel_per_architecture(
+    tmp_path: Path,
+) -> None:
+    done = _check_set(tmp_path, ('native-x86_64', X86), ('native', ARM))
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split() == [ARM, X86]
+
+
+@pytest.mark.parametrize(
+    ('wheels', 'why'),
+    [
+        # Seeded: a wheel set missing one architecture.
+        ((('native-x86_64', X86),), "no wheel for ['aarch64']"),
+        ((('native', ARM),), "no wheel for ['x86_64']"),
+        (
+            (('native-x86_64', X86), ('native', X86)),
+            "no wheel for ['aarch64']",
+        ),
+        (
+            (
+                ('native-x86_64', X86),
+                ('native', ARM),
+                ('native', ARM.replace('1.0.0', '1.0.1')),
+            ),
+            'more than one wheel',
+        ),
+        (
+            (('native-x86_64', X86), ('native', ARM.replace('1.0.0', '1.0.1'))),
+            'disagree',
+        ),
+        (
+            (
+                ('native-x86_64', X86),
+                ('native', WHEEL_NAME.format('manylinux_2_28_aarch64')),
+            ),
+            'platform tag',
+        ),
+    ],
+)
+def test_ci7_a_wheel_set_short_of_an_architecture_fails(
+    tmp_path: Path, wheels: tuple[tuple[str, str], ...], why: str
+) -> None:
+    done = _check_set(tmp_path, *wheels)
+    assert done.returncode != 0
+    assert why in done.stderr, done.stderr
+
+
+def test_ci7_the_aarch64_smoke_checks_the_wheel_set_before_the_lane() -> None:
+    steps = _workflow()['jobs']['wheel-smoke-aarch64']['steps']
+    runs = [str(s.get('run', '')) for s in steps]
+    check = next(i for i, r in enumerate(runs) if '--check-set' in r)
+    lane = next(i for i, r in enumerate(runs) if 'wheel_smoke.py --lane' in r)
+    assert check < lane
+    downloads = {
+        s['with']['name']: s['with']['path']
+        for s in steps
+        if str(s.get('uses', '')).startswith('actions/download-artifact')
+    }
+    assert downloads == {
+        'native-wheel': 'native-x86_64',
+        'native-wheel-aarch64': 'native',
+        'native-wheel-test-ops-aarch64': 'native-test-ops',
+    }
+    assert runs[check].split('--check-set', 1)[1].split() == [
+        'native-x86_64',
+        'native',
+    ]
+
+
+def _install_step() -> dict[str, Any]:
+    steps = _workflow()['jobs']['runtime-install']['steps']
+    return next(s for s in steps if s.get('id') == 'install')
+
+
+def test_ci7_the_runtime_cells_run_the_documented_install_line() -> None:
+    r"""The install step runs the guide's ``%pip install`` line as the
+    guide writes it, but for the notebook's ``%``, and makes
+    ``keep_numpy`` from the runtime's NumPy as the guide does."""
+    guide = INSTALL_GUIDE.read_text(encoding='utf-8')
+    (line,) = [
+        ln.strip()
+        for ln in guide.splitlines()
+        if ln.strip().startswith('%pip install')
+    ]
+    assert "keep_numpy = f'numpy=={numpy.__version__}'" in guide
+    run = str(_install_step()['run'])
+    commands = [ln.strip() for ln in run.splitlines()]
+    assert line.removeprefix('%') in commands, line
+    assert '$keep_numpy' in line
+    job = _workflow()['jobs']['runtime-install']
+    assert set(job['needs']) == {'build', 'engine-wheels'}
+    for entry in job['strategy']['matrix']['include']:
+        pins = dict(p.split('==') for p in entry['preinstalled'].split())
+        assert set(pins) == {'numpy', 'pandas', 'pyarrow', 'PyYAML'}, entry
+
+
+#: A pip and a python for the install step, run as CI runs it: python
+#: answers the interpreter tag and the NumPy version held in a file; pip
+#: records each call and, by FAULT, moves NumPy on install (an install
+#: that moves the runtime's NumPy), fails the install (a resolution
+#: failure) or fails pip check.
+FAKE_PYTHON = """#!/usr/bin/env bash
+case "$*" in
+  *version_info*) echo cp312 ;;
+  *numpy*) cat "$STATE/numpy" ;;
+  *) exit 2 ;;
+esac
+"""
+FAKE_PIP = """#!/usr/bin/env bash
+echo "pip $* | ${PIP_CONSTRAINT:-}" >> "$STATE/calls"
+case "$1" in
+  install)
+    [ "$FAULT" = resolution ] && { echo 'ResolutionImpossible' >&2; exit 1; }
+    [ "$FAULT" = moves ] && echo 2.1.3 > "$STATE/numpy"
+    exit 0 ;;
+  check) [ "$FAULT" = check ] && { echo 'x has requirement y' >&2; exit 1; }; exit 0 ;;
+  *) exit 0 ;;
+esac
+"""
+
+
+def _run_install(
+    tmp_path: Path, fault: str
+) -> tuple[subprocess.CompletedProcess[str], list[str], str]:
+    state = tmp_path / 'state'
+    state.mkdir()
+    (state / 'numpy').write_text('1.23.5\n')
+    runtime = tmp_path / 'runtime'
+    (runtime / 'bin').mkdir(parents=True)
+    for name, text in (('python', FAKE_PYTHON), ('pip', FAKE_PIP)):
+        tool = runtime / 'bin' / name
+        tool.write_text(text)
+        tool.chmod(tool.stat().st_mode | stat.S_IXUSR)
+    (runtime / 'bin' / 'activate').write_text(
+        f'PATH="{runtime / "bin"}:$PATH"\n'
+    )
+    work = tmp_path / 'work'
+    for directory, name in (
+        ('dist', X86),
+        ('dist', 'structured_data_models_api-1.0.0-py3-none-any.whl'),
+        (
+            'engine',
+            'structured_data_models_relational_engine-1.0.0-cp312-cp312-manylinux_2_28_x86_64.whl',
+        ),
+        (
+            'engine',
+            'structured_data_models_relational_engine-1.0.0-cp311-cp311-manylinux_2_28_x86_64.whl',
+        ),
+    ):
+        (work / directory).mkdir(parents=True, exist_ok=True)
+        (work / directory / name).write_bytes(b'')
+    temp = tmp_path / 'runner-temp'
+    temp.mkdir()
+    run = str(_install_step()['run']).replace('/tmp/runtime', str(runtime))
+    done = subprocess.run(
+        ['bash', '-e', '-c', run],
+        cwd=work,
+        env={
+            'PATH': os.environ['PATH'],
+            'RUNNER_TEMP': str(temp),
+            'STATE': str(state),
+            'FAULT': fault,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    calls = (state / 'calls').read_text().splitlines()
+    constraint = (temp / 'candidate.txt').read_text()
+    return done, calls, constraint
+
+
+def test_ci7_the_install_keeps_numpy_and_takes_the_candidate_s_wheels(
+    tmp_path: Path,
+) -> None:
+    done, calls, constraint = _run_install(tmp_path, 'none')
+    assert done.returncode == 0, done.stderr
+    work = tmp_path / 'work'
+    assert constraint.splitlines() == [
+        f'structured-data-models-api @ file://{work}/dist/'
+        'structured_data_models_api-1.0.0-py3-none-any.whl',
+        f'structured-data-models-client @ file://{work}/dist/{X86}',
+        f'structured-data-models-relational-engine @ file://{work}/engine/'
+        'structured_data_models_relational_engine-1.0.0-cp312-cp312-'
+        'manylinux_2_28_x86_64.whl',
+    ]
+    install = (
+        'pip install --only-binary=:all: '
+        'structured-data-models-client[relational,databricks,databricks-serving] '
+        f'numpy==1.23.5 | {tmp_path}/runner-temp/candidate.txt'
+    )
+    assert calls[0] == install
+    assert calls[1].startswith('pip check ')
+
+
+@pytest.mark.parametrize(
+    ('fault', 'says'),
+    [
+        # Seeded: an install that moves the runtime's NumPy.
+        ('moves', "moved the runtime's NumPy: numpy==1.23.5, now numpy==2.1.3"),
+        # Seeded: a resolution failure.
+        ('resolution', 'ResolutionImpossible'),
+        ('check', 'has requirement'),
+    ],
+)
+def test_ci7_a_runtime_cell_fails_on_each_seeded_fault(
+    tmp_path: Path, fault: str, says: str
+) -> None:
+    done, _, _ = _run_install(tmp_path, fault)
+    assert done.returncode != 0
+    assert says in done.stderr, done.stderr

@@ -554,11 +554,17 @@ jobs:
             -v "$HOME/.cargo/registry:/tmp/home/.cargo/registry" \
             -v "$HOME/.cargo/git:/tmp/home/.cargo/git" \
             "$MANYLINUX" bash -euo pipefail -c '
-              # rustup-init 1.29.0, checked against its published SHA-256.
+              # rustup-init 1.29.0 for the architecture the image runs on,
+              # checked against its published SHA-256.
+              arch=$(uname -m)
+              case "$arch" in
+                x86_64) sum=4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10 ;;
+                aarch64) sum=9732d6c5e2a098d3521fca8145d826ae0aaa067ef2385ead08e6feac88fa5792 ;;
+                *) echo "no rustup-init checksum for $arch" >&2; exit 1 ;;
+              esac
               curl --proto "=https" --tlsv1.2 -sSf -o /tmp/home/rustup-init \
-                https://static.rust-lang.org/rustup/archive/1.29.0/x86_64-unknown-linux-gnu/rustup-init
-              echo "4acc9acc76d5079515b46346a485974457b5a79893cfb01112423c89aeb5aa10  /tmp/home/rustup-init" \
-                | sha256sum -c -
+                "https://static.rust-lang.org/rustup/archive/1.29.0/$arch-unknown-linux-gnu/rustup-init"
+              echo "$sum  /tmp/home/rustup-init" | sha256sum -c -
               chmod +x /tmp/home/rustup-init
               /tmp/home/rustup-init -y --profile minimal --default-toolchain none --no-modify-path
               export PATH="$CARGO_HOME/bin:$PATH"
@@ -628,6 +634,48 @@ jobs:
           name: native-wheel-test-ops
           path: native-test-ops/
 
+  # The client wheel for aarch64 Linux (decision KO2-40), built natively on
+  # an Arm runner by native-wheel's own steps, in PyPA's
+  # manylinux2014_aarch64 image pinned by digest, which MANYLINUX names
+  # here for this job alone: the shipped build, beside native-wheel's
+  # x86_64 one, and the test-ops build, which only wheel-smoke's aarch64
+  # lanes install. native_wheel.py holds each to its architecture's
+  # manylinux2014 tag.
+  native-wheel-aarch64:
+    name: native-wheel (aarch64, ${{ matrix.build }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    needs: landing
+    if: needs.landing.outputs.skip != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build: shipped
+            args: --out native
+            artifact: native-wheel-aarch64
+          - build: test-ops
+            args: --out native --test-ops
+            artifact: native-wheel-test-ops-aarch64
+    env:
+      MANYLINUX: quay.io/pypa/manylinux2014_aarch64:2026.09.14-1@sha256:d4c40df238d6ec0ee91213f4797ad26f05d7d82947bcb61c40d1fdc13d0e16d5
+      NATIVE_ARGS: ${{ matrix.args }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: ${{ matrix.build }}
+          save-if: ${{ env.SAVE_CACHES == 'true' }}
+      - *manylinux-pull
+      - *manylinux-build
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.artifact }}
+          path: native/
+
   # The binding's tests on the wheel that ships, at the E16 floor: the file
   # any build passes.
   binding:
@@ -687,6 +735,52 @@ jobs:
       # and, from ghcr.io, logged in (E131): the two lanes start together,
       # and a registry that refuses a pull for its rate often takes it a
       # minute later. The run below then finds it pulled.
+      - name: Pull the lane's image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/rust_core/pull_image.sh "$(python3 scripts/rust_core/wheel_smoke.py image ${{ matrix.lane }})"
+      - name: The lane's clean container
+        run: |
+          python3 scripts/rust_core/wheel_smoke.py --lane ${{ matrix.lane }} --container \
+            --wheel "$(ls native/*.whl)" --test-ops-wheel "$(ls native-test-ops/*.whl)" \
+            --out wheel-smoke
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheel-smoke-${{ matrix.lane }}
+          path: wheel-smoke/
+
+  # The same two lanes on an Arm runner with the aarch64 wheels (decision
+  # KO2-40): wheel_smoke.py's aarch64 lanes are the floor and the newest,
+  # whose images are multi-architecture, and also require the interpreter
+  # to run on aarch64. First, the shipped wheel set: one manylinux2014
+  # wheel for each architecture, of one distribution and version, so a set
+  # missing an architecture fails here.
+  wheel-smoke-aarch64:
+    name: wheel-smoke (${{ matrix.lane }})
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    needs: [native-wheel, native-wheel-aarch64]
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: [aarch64-floor, aarch64-newest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native-x86_64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-aarch64
+          path: native
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel-test-ops-aarch64
+          path: native-test-ops
+      - name: The shipped wheel set
+        run: python3 scripts/rust_core/native_wheel.py --check-set native-x86_64 native
       - name: Pull the lane's image
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1734,6 +1828,104 @@ jobs:
           EOF
       - working-directory: /tmp
         run: |
+          python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
+            -m 'not live_nim and not live_warehouse' -p no:cacheprovider
+
+  # The install on each promised Databricks runtime's own packages
+  # (decisions KO2-37, KO2-38). Six cells cover the ten runtimes, a classic
+  # LTS runtime and the serverless environment that ships its set (14.3 and
+  # serverless 1, 15.4 and 2, 16.4 and 3, 17.3 and 4, then serverless 5 and
+  # 6). Each preinstalls the runtime's Python (its minor version), NumPy,
+  # pandas, pyarrow and PyYAML, as its release notes list them, then runs
+  # the install line docs/get-started/installation.md gives, verbatim but
+  # for the notebook's %, with keep_numpy made as the guide makes it; the
+  # candidate's wheels stand in for the published ones of the same version
+  # through PIP_CONSTRAINT, so the line itself is unchanged. The install
+  # must leave the runtime's NumPy as it was, and pip check must pass; then
+  # the binding's and the client's tests run in that environment. Offline:
+  # no Databricks workspace, and only x86_64 (the live job matrix, both
+  # architectures, re-runs on the epic before it merges, KO2-38).
+  runtime-install:
+    name: runtime-install (${{ matrix.runtime }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [build, engine-wheels]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runtime: dbr14.3
+            python: '3.10'
+            preinstalled: numpy==1.23.5 pandas==1.4.4 pyarrow==8.0.0 PyYAML==6.0
+          - runtime: dbr15.4
+            python: '3.11'
+            preinstalled: numpy==1.23.5 pandas==1.5.3 pyarrow==14.0.1 PyYAML==6.0
+          - runtime: dbr16.4
+            python: '3.12'
+            preinstalled: numpy==1.26.4 pandas==1.5.3 pyarrow==15.0.2 PyYAML==6.0.1
+          - runtime: dbr17.3
+            python: '3.12'
+            preinstalled: numpy==2.1.3 pandas==2.2.3 pyarrow==19.0.1 PyYAML==6.0.2
+          - runtime: serverless5
+            python: '3.12'
+            preinstalled: numpy==2.1.3 pandas==2.2.3 pyarrow==21.0.0 PyYAML==6.0.2
+          - runtime: serverless6
+            python: '3.12'
+            preinstalled: numpy==2.3.4 pandas==2.3.3 pyarrow==21.0.0 PyYAML==6.0.2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: dist
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: engine-wheels-x86_64
+          path: engine
+      # pandas 1.5.3 has no wheel for Python 3.12, where Databricks built its
+      # own for 16.4, so pip builds it here from its source distribution.
+      - name: The runtime's own packages
+        env:
+          PREINSTALLED: ${{ matrix.preinstalled }}
+        run: |
+          python -m venv /tmp/runtime
+          /tmp/runtime/bin/pip install --quiet $PREINSTALLED
+          /tmp/runtime/bin/pip freeze --all
+      - name: The documented install line, the runtime's NumPy kept, and pip check
+        id: install
+        run: |
+          . /tmp/runtime/bin/activate
+          tag=$(python -c 'import sys; print(f"cp{sys.version_info[0]}{sys.version_info[1]}")')
+          for wheel in dist/*.whl engine/*-"$tag"-*.whl; do
+            name=$(basename "$wheel" | cut -d- -f1 | tr _ -)
+            echo "$name @ file://$PWD/$wheel"
+          done > "$RUNNER_TEMP/candidate.txt"
+          cat "$RUNNER_TEMP/candidate.txt"
+          export PIP_CONSTRAINT="$RUNNER_TEMP/candidate.txt"
+          keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          pip install --only-binary=:all: "structured-data-models-client[relational,databricks,databricks-serving]" $keep_numpy
+          now="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          if [ "$now" != "$keep_numpy" ]; then
+            echo "the install moved the runtime's NumPy: $keep_numpy, now $now" >&2
+            exit 1
+          fi
+          pip check
+          pip freeze --all
+      - name: The binding's and the client's tests in the runtime
+        run: |
+          . /tmp/runtime/bin/activate
+          # What the client's tests read their tables through, as
+          # installed-wheel has it, on the candidate's wheels, NumPy kept.
+          export PIP_CONSTRAINT="$RUNNER_TEMP/candidate.txt"
+          keep_numpy="numpy==$(python -c 'import numpy; print(numpy.__version__)')"
+          pip install --quiet --only-binary=:all: pytest requests-mock \
+            "structured-data-models-client[sqlite,duckdb]" $keep_numpy
+          python -m pytest rust/bindings/sdm-py/tests/test_binding.py -q \
+            -p no:cacheprovider --native-build production
+          cd /tmp
           python -m pytest "$GITHUB_WORKSPACE/packages/structured-data-models-client/tests" -q \
             -m 'not live_nim and not live_warehouse' -p no:cacheprovider
 

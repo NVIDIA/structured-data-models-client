@@ -1,11 +1,12 @@
 Third-party Rust code in structured-data-models-client
 
 The client wheel carries the Rust core, the module sdm_client._native, built
-from rust/bindings/sdm-py with its production features for the target
-x86_64-unknown-linux-gnu. These are the crates linked into it, other than this
-repository's own, each with the licence, copyright and notice files it ships,
-and then the Rust standard library. Written by scripts/rust_core/rust_notices.py
-from rust/Cargo.lock; regenerate it with --write rather than editing it.
+from rust/bindings/sdm-py with its production features for the targets
+x86_64-unknown-linux-gnu and aarch64-unknown-linux-gnu. These are the crates
+linked into either build, other than this repository's own, each with the
+licence, copyright and notice files it ships, and then the Rust standard
+library. Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
+regenerate it with --write rather than editing it.
 
 Crates
 ======
