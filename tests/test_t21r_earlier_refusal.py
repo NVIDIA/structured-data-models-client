@@ -270,3 +270,69 @@ def test_compare_still_gates_without_the_owner_s_row_on_that_call(
     assert any(
         rule == 'sql.result' and 'from_source' in text for rule, text in earlier
     ), earlier
+
+
+def _cell_warnings(tmp: Path, opted_in: bool) -> list[str]:
+    r"""``compare()``'s gating ``warnings`` failures on the DuckDB line in
+    a cell other than the reference's (dbr17-pandas2), where python-core,
+    refused at materialize, shows none of the warnings python-old shows
+    (two UserWarnings, as T2.10's list-distinct line), its register's
+    owner row naming materialize under ``statements_differ`` or naming no
+    call."""
+    c = _compare()
+    key = CASE
+    reference = _reference(key)
+    reference['host']['warnings'] = ['UserWarning', 'UserWarning']
+    mine = _refused_early(reference, key)
+    mine['identity']['cell'] = 'dbr17-pandas2'
+    mine['host']['warnings'] = []
+    old = copy.deepcopy(reference)
+    old['identity']['runner'] = 'python-old'
+    old['identity']['cell'] = 'dbr17-pandas2'
+    (tmp / 'ref.jsonl').write_text(json.dumps(reference) + '\n')
+    (tmp / 'core.jsonl').write_text(json.dumps(mine) + '\n')
+    (tmp / 'old.jsonl').write_text(json.dumps(old) + '\n')
+    expect = {key: {'python-core': REFUSAL}, c.MOVED: {key: ['python-core']}}
+    (tmp / 'expect.json').write_text(json.dumps(expect))
+    row = _row(case=key)
+    if not opted_in:
+        del row['statements_differ']
+    register = {
+        'format': 'sdm-register/2',
+        'entries': [
+            {
+                **_entry('owner'),
+                'decision_ref': {
+                    'file': 'docs/design/rust-core/phase-2/decisions.md',
+                    'row': 'KO2-75',
+                },
+                'case_outcomes': [row],
+            }
+        ],
+    }
+    (tmp / 'register.yaml').write_text(json.dumps(register))
+    report = c.compare(
+        [ROOT / 'contract/cases'],
+        tmp / 'ref.jsonl',
+        [tmp / 'core.jsonl', tmp / 'old.jsonl'],
+        expect_file=tmp / 'expect.json',
+        register_file=tmp / 'register.yaml',
+        database='duckdb',
+    )
+    return [
+        text
+        for rule, text in report.failures
+        if rule == 'warnings' and text.startswith(f'{key}: ')
+    ]
+
+
+def test_an_earlier_refusal_s_warnings_against_python_old_are_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Exit: in a cell other than the reference's (H1, python-core against
+    python-old, as the dbr17-pandas2 and floor-pandas2.2 DuckDB jobs), the
+    warnings of the call refused under the owner's row are reported, not
+    gating; without the row they still gate."""
+    monkeypatch.setattr(_compare(), '_complete', lambda *_: True)
+    assert _cell_warnings(tmp_path, opted_in=False)
+    assert _cell_warnings(tmp_path, opted_in=True) == []
