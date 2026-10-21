@@ -249,13 +249,14 @@ It is not in `contract/protected-paths.txt`.
 
 ### T2.16
 
-The final package: the phase-end docs (KO2-90 and KO2-92 for check 2's kept rules, KO2-91 for the lean plan, the tracker's true statuses, this file, the "Carried into Phase 3" rows), the evidence pack, and two fixes.
+The final package: the phase-end docs (KO2-90 and KO2-92 for check 2's kept rules, KO2-91 for the lean plan, the tracker's true statuses, this file, the "Carried into Phase 3" rows), the evidence pack, and the fixes below.
 - **An answer's text encoding** (the whole-phase review part 2, a regression since T2.14b): since T2.14b the HTTP transport hands the core the answer's bytes, and `sdm_wire::json::read_answer` refused UTF-8 with a byte order mark, UTF-16 and UTF-32, which the reference's `json.loads` reads.
   `read_answer` now decodes the bytes first as `json.detect_encoding` does (`answer_text`), in the core, so a Java host reads alike.
-  The Databricks transport encodes the served answer's text with `surrogatepass`, so a raw lone surrogate reaches the core and is refused by name.
-  Register P1B-24 is widened to raw lone surrogates (the orchestrator's decision under KO2-88; on Databricks this refuses an answer the reference accepts).
+  The Databricks transport encodes the served answer's text with `surrogatepass`, so a raw lone surrogate reaches the core rather than failing in the transport.
+  A lone surrogate in an answer, in any of these forms or escaped as `\ud800`, is read as U+FFFD and the prediction returns, where the reference keeps the lone surrogate in its string: the owner's answer (KO2-93), which replaced a first version that refused such an answer; register P1B-24 is rewritten to it.
 - **DuckDB below 2.0**: DuckDB 2.0 came out during the phase end and broke CI's `engine` and `installed-wheel` jobs, so the connectors' `duckdb` extra is capped `duckdb>=1.5.0,<2` (uv.lock's specifier with it), the orchestrator's decision under KO2-88; supporting 2.0 is carried as P2-T2.16-12.
-  CI's `installed-wheel` job installed the published connectors of the same version from the index instead of the candidate's (`--find-links` alone), so it now installs the candidate's own wheels first without their dependencies, as `runtime-install` does.
+  CI's `installed-wheel` job installed the published connectors of the same version from the index instead of the candidate's (`--find-links` alone), so it now installs the candidate's own wheels first without their dependencies, as `runtime-install` does; the `sbom` job and the build's trial install do the same (the owner's KO2-95), and `tests/test_ci_workflow.py` catches any job that names one of our distributions before installing the candidate's wheels.
+  `contract-python (ref-pandas3, duckdb)`'s timeout went from 90 to 120 minutes, after one run on T2.16 ran past 90 (P2-T2.16-14).
 - **`scripts/rust_core/cells.sh`** installs the connectors with the `sqlite` and `postgres` extras, as `ci.yml`'s "Install the cell" step does, with one test.
 Its gaps found at the phase end are in the next section.
 

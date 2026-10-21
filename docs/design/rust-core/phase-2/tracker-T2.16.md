@@ -9,7 +9,8 @@ Lane q, on the phase head f133c4b8 (`Land T2.14c`); the reports first ran on be5
 - The tracker's true package statuses and the stop-rule counters from the log; six per-package statuses the owner's answers had settled.
 - [as-built.md](as-built.md); the "Carried into Phase 3" rows in migration-plan.md section 8.
 - The evidence pack, [evidence/README.md](evidence/README.md).
-- An answer's text encoding (the whole-phase review part 2's finding, a regression since T2.14b): the core reads UTF-8 with a mark, UTF-16 and UTF-32 as Python's reader decodes bytes; register P1B-24 widened to raw lone surrogates (the orchestrator's decision under KO2-88).
+- An answer's text encoding (the whole-phase review part 2's finding, a regression since T2.14b): the core reads UTF-8 with a mark, UTF-16 and UTF-32 as Python's reader decodes bytes; a lone surrogate in any form read as U+FFFD and the prediction returned (the owner's KO2-93, after a first version refused it under KO2-88); register P1B-24 rewritten.
+- The owner's answers on the ten overnight decisions (KO2-93 to KO2-95): CI's `sbom` and trial-install jobs test our own wheels; the three refusals kept until Phase 4 are explicit Phase 4 exits; `contract-python (ref-pandas3, duckdb)`'s timeout raised to 120.
 - DuckDB capped below 2.0 in the connectors' `duckdb` extra (2.0 broke CI's `engine` and `installed-wheel` jobs on aa44c1d9; the orchestrator's decision under KO2-88; P2-T2.16-12 carries 2.0's support); CI's `installed-wheel` job installs the candidate's own wheels first, since `--find-links` alone let pip take the published connectors of the same version.
 - `scripts/rust_core/cells.sh` installs the connectors' SQLite and Postgres drivers, as CI's cells do, with one test (`tests/test_cells_drivers.py`).
 
