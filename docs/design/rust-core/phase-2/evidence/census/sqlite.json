@@ -1,0 +1,833 @@
+{
+  "commit": {
+    "clean": true,
+    "sha": "be55838a14da280e628f4d7c40f0e04f553303c8"
+  },
+  "database": "sqlite",
+  "departs": [],
+  "format": "sdm-refusal-census-run/1",
+  "hits": [],
+  "probes": [
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "materialize"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:aggregation"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rule:column_type"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:condition_value"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": null,
+          "detail_keys": [],
+          "error": "RuntimeError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "from_source"
+        },
+        "reference": {
+          "code": null,
+          "detail_keys": [],
+          "error": "RuntimeError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "from_source"
+        }
+      },
+      "site": "rule:empty_table"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:entity_key"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "materialize"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:key_type"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "rule:model"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:null_order"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:problem_type"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:response_field"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "materialize"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:seed_size"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:target_stype"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:target_type"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:text_time"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:text_time_order"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:text_time_rules"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": null,
+          "detail_keys": [],
+          "error": "RuntimeError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "from_source"
+        },
+        "reference": {
+          "code": null,
+          "detail_keys": [],
+          "error": "RuntimeError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "from_source"
+        }
+      },
+      "site": "rule:text_time_zones"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:text_times"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:time_type"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rule:wire_dtype"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::unsupported_type#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-host/src/admission.rs::admitted_type::admission::unsupported#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-host/src/admission.rs::admitted_field::admission::unsupported#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#2"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "model",
+            "unsupported"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [
+            "window_outran_the_data"
+          ],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [
+            "window_outran_the_data"
+          ],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "classes",
+            "limit",
+            "model"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "classes",
+            "limit",
+            "model"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "classes_in_context",
+            "model",
+            "target"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        },
+        "reference": {
+          "code": "UNSUPPORTED_REQUEST",
+          "detail_keys": [
+            "classes_in_context",
+            "model",
+            "target"
+          ],
+          "error": "UnsupportedRequestError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "predict"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "predict"
+        }
+      },
+      "site": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "result": "success",
+          "stage": "from_source"
+        },
+        "reference": {
+          "result": "success",
+          "stage": "from_source"
+        }
+      },
+      "site": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2"
+    },
+    {
+      "departs": false,
+      "outcomes": {
+        "python-core": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        },
+        "reference": {
+          "code": "INVALID_REQUEST",
+          "detail_keys": [],
+          "error": "StructuredDataError",
+          "field": null,
+          "operation": null,
+          "result": "refusal",
+          "rule": null,
+          "stage": "materialize"
+        }
+      },
+      "site": "rule:open_window"
+    }
+  ],
+  "reachability": "unmeasured: a probe names the site it was written for, and an outcome does not show which site produced it",
+  "real_data": "not run: the public calls over the real datasets run at each lane's first landing (design, choice 10)",
+  "reference": {
+    "clean": true,
+    "sha": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+  },
+  "sites": 41,
+  "unmeasured": [
+    "duckdb",
+    "postgres"
+  ]
+}
