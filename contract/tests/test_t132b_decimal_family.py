@@ -218,8 +218,9 @@ def runs(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 # --- admission and the cases' expectations ------------------------------------
 
 
-def test_the_family_is_its_thirteen_cases() -> None:
-    # T1.32b's three and T2.0c's ten exact-decimal cases (KO2-50).
+def test_the_family_is_its_fourteen_cases() -> None:
+    # T1.32b's three, T2.0c's ten exact-decimal cases (KO2-50) and T2.14b's
+    # scaled decimal read as the reference counts it.
     assert sorted(IDS) == [
         'decimal.class-target-38-18',
         'decimal.compare-finer-eq',
@@ -231,6 +232,7 @@ def test_the_family_is_its_thirteen_cases() -> None:
         'decimal.feature-38-0-wide',
         'decimal.feature-inexact-38-18',
         'decimal.key-wide',
+        'decimal.stype-past-float-precision',
         'decimal.sum-10-2',
         'decimal.target-38-18',
         'decimal.target-regression-collide',
@@ -262,10 +264,13 @@ def test_each_case_is_admitted(
                 f'the case carries {operation} to the core (the reference '
                 f'answers at {stage})'
             )
-        # The entities the core is handed are the public call's.
-        assert len(core['materialize']['indices']) == len(
-            loaded['input']['materialize']['indices']
-        )
+        # The entities the core is handed are the public call's, where the
+        # case goes as far as materialize (T2.14b's stype case ends at
+        # from_source).
+        if stage != 'from_source':
+            assert len(core['materialize']['indices']) == len(
+                loaded['input']['materialize']['indices']
+            )
 
     gated(request, check)
 

@@ -87,7 +87,8 @@ fn family_cases() -> (Vec<Case>, bases::Bases) {
         .filter(|c| FAMILY.iter().any(|p| c.id.starts_with(p)))
         .collect();
     cases.sort_by(|a, b| a.id.cmp(&b.id));
-    // T1.32b's three cases and T2.0c's ten (exact decimals, KO2-50).
+    // T1.32b's three cases, T2.0c's ten (exact decimals, KO2-50) and
+    // T2.14b's scaled decimal read as the reference counts it.
     assert_eq!(
         cases.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
         [
@@ -101,11 +102,12 @@ fn family_cases() -> (Vec<Case>, bases::Bases) {
             "decimal.feature-38-0-wide",
             "decimal.feature-inexact-38-18",
             "decimal.key-wide",
+            "decimal.stype-past-float-precision",
             "decimal.sum-10-2",
             "decimal.target-38-18",
             "decimal.target-regression-collide",
         ],
-        "the family's thirteen cases"
+        "the family's fourteen cases"
     );
     (cases, bases::load(&contract.join("bases.yaml")).unwrap())
 }
@@ -475,6 +477,9 @@ fn rust_host_answers_each_case_as_python_ref() {
                 // place of materialize): the refusal INVALID_REQUEST, as
                 // the route maps it.
                 Answer::Validated(false) => ("refusal", Some("INVALID_REQUEST".to_owned())),
+                // A case that ends at from_source (T2.14b's stype case):
+                // its description is its answer.
+                Answer::Described(_) if case.until == case::Until::FromSource => ("success", None),
                 other => {
                     problems.push(format!("{}: no answer of predict: {other:?}", case.id));
                     continue;

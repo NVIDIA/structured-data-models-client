@@ -987,6 +987,8 @@ CASE_COLUMNS: dict[str, list[list[str]]] = {
         ['instance_table', 'TARGET'],
         ['users', 't'],
     ],
+    # T2.14b's: a scaled decimal read as the reference counts it.
+    'decimal.stype-past-float-precision': [['orders', 'd']],
 }
 
 
