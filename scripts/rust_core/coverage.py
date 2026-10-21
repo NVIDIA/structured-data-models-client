@@ -520,8 +520,15 @@ _SAMPLE = re.compile(r'SELECT .+ FROM "((?:[^"]|"")+)" LIMIT [0-9]+', re.S)
 _CONSTRAINTS = re.compile(
     r"FROM duckdb_constraints\(\)\s+WHERE table_name = '((?:[^']|'')+)'"
 )
-#: A PQL query's first column reference before ``FOR EACH``: its target.
-_TARGET = re.compile(r'\s*PREDICT\s+(.*?)\s+FOR\s+EACH\s', re.S | re.IGNORECASE)
+#: A PQL query's first column reference before its ``FOR``: its target,
+#: with or without an ``EVALUATE`` or ``EXPLAIN`` before ``PREDICT``, for
+#: each entity (``FOR EACH t.c``) or for the ones it names (``FOR t.c = 1``,
+#: ``FOR t.c IN (...)``; T2.16a).
+_TARGET = re.compile(
+    r'\s*(?:(?:EVALUATE|EXPLAIN)\s+)?PREDICT\s+(.*?)\s+FOR\s+'
+    r'(?:EACH\s|[A-Za-z_][A-Za-z0-9_]*\.)',
+    re.S | re.IGNORECASE,
+)
 _COLUMN = re.compile(r'([A-Za-z_][A-Za-z0-9_]*)\.(\*|[A-Za-z_][A-Za-z0-9_]*)')
 ROLES = ('primary-key', 'foreign-key', 'time-column', 'feature', 'target')
 
