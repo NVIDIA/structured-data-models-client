@@ -68,7 +68,8 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
   `decimal_to_f64` moved from `sdm-engine`'s `labels.rs` into `sdm-contract`'s `scalar.rs`; `sdm-schema`'s inference reads a `Decimal128` of scale above 0 as that double, so stype counting, key scoring and distinct examples count what the reference's cast counts.
   Materialize and predict keep exact decimals (P2B-1).
 - **Ledger.**
-  The rows moved (P2-4's facts, step numbering and ranking split; P2-3; the answer re-encoding; P2-2's repeats returned to the host at fix 7) are deleted from the ledger above, their bridge entries declared `moved` naming T2.14b in `scripts/rust_core/bridge_changes.json`, and `bridge_freeze.json` rewritten with `--write`.
+  The rows moved (P2-4's facts, step numbering and ranking split; P2-3; the answer re-encoding) are deleted from the ledger above; P2-2's repeats returned to the host at fix 7 and stay in it, host-held.
+  The moved rows' bridge entries are declared `moved` naming T2.14b in `scripts/rust_core/bridge_changes.json`, and `bridge_freeze.json` is rewritten with `--write`.
 
 ### Deviations
 
