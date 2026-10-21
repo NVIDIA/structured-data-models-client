@@ -1315,12 +1315,12 @@ def judging_rules(tools: Tools, base: str, *where: str) -> judging.Rules | None:
     return judging.patterns(done.stdout)
 
 
-def phase_product(
-    tools: Tools, remote: str, base: str, rules: judging.Rules, *where: str
+def phase_first_landing(
+    tools: Tools, remote: str, base: str, *where: str
 ) -> str | None:
-    """The first landing of the phase (up to ``base``) that changed a
-    product path, as ``<sha> <subject>``, or None. The phase starts at its
-    merge base with the epic branch as the remote holds it."""
+    """The phase's first landing (up to ``base``), as ``<sha> <subject>``,
+    or None while the phase holds none. The phase starts at its merge base
+    with the epic branch as the remote holds it."""
     if tools.attempt(
         'git', *where, 'fetch', '--quiet', remote, f'refs/heads/{EPIC}'
     ).returncode == 0:
@@ -1334,12 +1334,7 @@ def phase_product(
     )
     for line in out.splitlines():
         sha, _, subject = line.partition('\0')
-        if not LANDING_SUBJECT.match(subject):
-            continue
-        landed_on = trailers_of(tools, sha, *where).get('Base-SHA', '')
-        if not re.fullmatch(r'[0-9a-f]{40}', landed_on):
-            continue
-        if judging.product(rules, changed_paths(tools, landed_on, sha, *where)):
+        if LANDING_SUBJECT.match(subject):
             return f'{sha[:12]} {subject}'
     return None
 
@@ -1350,11 +1345,12 @@ def judging_problem(
     package: str,
     train: bool,
     first: bool,
-    product_before: str | None,
+    earlier: str | None,
 ) -> str | None:
     """Why a package changing ``paths`` may not land where it is (T3.0,
     item 1), or None. ``first``: it is the first package of its stack, on
-    the phase head; ``product_before``: a product landing before it."""
+    the phase head; ``earlier``: a landing of the phase before it, so it is
+    not the phase's first package."""
     if rules is None:
         return None
     found = judging.judging(rules, paths)
@@ -1380,14 +1376,15 @@ def judging_problem(
                 + '; move those into a product package'
             )
         return None
-    if not found or product_before is None:
+    if not found or earlier is None:
         return None
     return (
         f'{package} changes judging paths ('
         + ', '.join(found[:8])
         + (' ...' if len(found) > 8 else '')
-        + f') after the phase\'s first product landing ({product_before}). '
-        'Judging changes found mid-phase ride one tooling train: move them '
+        + f') and is not the phase\'s first package ({earlier} landed '
+        'before it). Judging changes found mid-phase ride one tooling train: '
+        'move them '
         'into the train package and land it at the front of the next stack '
         'with `land.py --stack --train --candidate <train> ...`, then stack '
         'this package on it'
@@ -1421,11 +1418,23 @@ def rule_problems(
     return found
 
 
+#: Where each CI job looks, by its name's start, for a failed job whose
+#: log names no file the stack changed: the stack's commits under these
+#: paths are implicated instead.
+JOB_AREAS = (
+    (r'(rust-|native-|binding|wheel-smoke|build|engine-wheels|installed-wheel)', 'rust/**'),
+    (r'(contract-python|cross-host|l4-goldens|l5-conversion)', 'contract/**\nrust/**\npackages/**'),
+    (r'(test|engine|typecheck|runtime-install)', 'packages/**\ntests/**'),
+    (r'(lint|hygiene)', '**'),
+)
+
+
 def implicated(
     tools: Tools, run: dict[str, object], base: str, top: str
 ) -> list[tuple[str, list[tuple[str, str]]]]:
     """For each failed job of ``run``, the commits of ``base..top`` that
-    touch a path its log names, as (job, [(sha, subject)])."""
+    touch a path its log names, else a path in the job's area
+    (:data:`JOB_AREAS`), as (job, [(sha, subject)])."""
     repo = ('--repo', tools.repo) if tools.repo else ()
     run_id = str(run.get('databaseId'))
     jobs = json.loads(
@@ -1461,6 +1470,18 @@ def implicated(
                 for path in files
             )
         ]
+        if not hit:
+            name = str(job.get('name'))
+            area = next(
+                (judging.patterns(paths) for start, paths in JOB_AREAS
+                 if re.match(start, name)),
+                [],
+            )
+            hit = [
+                (sha, subject)
+                for sha, subject, files in commits
+                if any(judging.matches(area, path) for path in files)
+            ]
         report.append((str(job.get('name')), hit))
     return report
 
@@ -1550,16 +1571,13 @@ def land(
             f'the head of {args.phase_branch} has no {judging.FILE}, so no '
             'train: land without --train'
         )
-    product_before = None
+    earlier = None
     if rules is not None and judging.judging(rules, paths) and not args.train:
-        product_before = phase_product(tools, args.remote, base, rules)
-        for link in chain:
-            if product_before is None and judging.product(
-                rules, changed_paths(tools, link.below, link.sha)
-            ):
-                product_before = f'{link.sha[:12]} Land {link.package}'
+        earlier = phase_first_landing(tools, args.remote, base) or next(
+            (f'{link.sha[:12]} Land {link.package}' for link in chain), None
+        )
     why = judging_problem(
-        paths, rules, package, args.train, tail == base, product_before
+        paths, rules, package, args.train, tail == base, earlier
     )
     if why:
         raise Refusal(why)
@@ -1804,20 +1822,19 @@ def stack_land(
             f'covers ({limit}); land a prefix (--tip a lower landing)'
         )
     rules = judging_rules(tools, base)
-    product_before = (
-        phase_product(tools, args.remote, base, rules) if rules else None
+    earlier = (
+        phase_first_landing(tools, args.remote, base) if rules else None
     )
     refused: list[str] = []
     for n, link in enumerate(chain):
         paths = changed_paths(tools, link.below, link.sha)
         why = judging_problem(
-            paths, rules, link.package, link.train, n == 0, product_before
+            paths, rules, link.package, link.train, n == 0, earlier
         )
         if why:
             refused.append(why)
         refused.extend(rule_problems(tools, link.below, link.sha, rules))
-        if rules and product_before is None and judging.product(rules, paths):
-            product_before = f'{link.sha[:12]} Land {link.package}'
+        earlier = earlier or f'{link.sha[:12]} Land {link.package}'
     if refused:
         raise Refusal('the stack breaks a landing rule:\n- ' + '\n- '.join(refused))
     tested = tested_commit(tools, tip)
@@ -1842,7 +1859,10 @@ def stack_land(
         first_bad: int | None = None
         for job, hits in report:
             if not hits:
-                out(f'IMPLICATED {job}: no stack commit by path; read `gh run view {newest.get("databaseId")} --log-failed`')
+                out(
+                    f'IMPLICATED {job}: no stack commit by path or area; read '
+                    f'`gh run view {newest.get("databaseId")} --log-failed`'
+                )
             for sha, subject in hits:
                 out(f'IMPLICATED {job}: {sha[:12]} {subject}')
                 for n, link in enumerate(chain):
