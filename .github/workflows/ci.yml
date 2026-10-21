@@ -32,23 +32,26 @@ permissions:
   # (E131).
   actions: read
 
-# A newer push cancels a topic branch's run in progress. On the phase
-# branch and the lane branches a run in progress is not cancelled (E43): a
-# candidate's run on its lane is the evidence its landing stands on (E131),
-# so the next push there must not cancel it. A run still queued there can
-# be: GitHub keeps one pending run per group, and a newer push supersedes
-# it. land.py refuses a candidate whose newest run was cancelled, and
-# land.py verify asks for a rerun rather than a revert. Every phase alike
-# (T2.0), with no phase named: an expression has no pattern match, so a
-# phase branch is a name under rust-core-phase- that ends in a digit and
-# holds no digit followed by "-" (the prefix holds no digit, and every
-# branch under a phase, rust-core-phase-N-<name>, holds one), and a lane
-# is one holding "-lane-". The phase check's condition reads the phase
-# branch alike, and fails by name on a name this lets through that is no
-# phase branch (a letter before its last digit, or a leading zero).
+# A newer push cancels the run in progress on the same branch, a topic's
+# or a lane's (T3.0): a lane carries one package at a time (lane.py), so
+# its newer push is that package's newer candidate, and the run of the
+# commit it replaced is evidence for nothing; Phase 2 left 4,208 minutes
+# of runs superseded this way running. On the phase branch a run in
+# progress is not cancelled: each push there lands one package, and the
+# phase check must judge every one. A run still queued there can be:
+# GitHub keeps one pending run per group, and a newer push supersedes it.
+# land.py refuses a candidate whose newest run was cancelled, and land.py
+# verify asks for a rerun rather than a revert. Every phase alike (T2.0),
+# with no phase named: an expression has no pattern match, so a phase
+# branch is a name under rust-core-phase- that ends in a digit and holds
+# no digit followed by "-" (the prefix holds no digit, and every branch
+# under a phase, rust-core-phase-N-<name>, holds one). The phase check's
+# condition reads the phase branch alike, and fails by name on a name this
+# lets through that is no phase branch (a letter before its last digit, or
+# a leading zero).
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !((startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) || (startsWith(github.ref_name, 'rust-core-phase-') && contains(github.ref_name, '-lane-'))) }}
+  cancel-in-progress: ${{ !(startsWith(github.ref_name, 'rust-core-phase-') && (endsWith(github.ref_name, '0') || endsWith(github.ref_name, '1') || endsWith(github.ref_name, '2') || endsWith(github.ref_name, '3') || endsWith(github.ref_name, '4') || endsWith(github.ref_name, '5') || endsWith(github.ref_name, '6') || endsWith(github.ref_name, '7') || endsWith(github.ref_name, '8') || endsWith(github.ref_name, '9')) && !(contains(github.ref_name, '0-') || contains(github.ref_name, '1-') || contains(github.ref_name, '2-') || contains(github.ref_name, '3-') || contains(github.ref_name, '4-') || contains(github.ref_name, '5-') || contains(github.ref_name, '6-') || contains(github.ref_name, '7-') || contains(github.ref_name, '8-') || contains(github.ref_name, '9-'))) }}
 
 env:
   # Whether this run saves its caches: the Rust builds and the DuckDB
@@ -105,6 +108,14 @@ jobs:
     outputs:
       skip: ${{ steps.landing.outputs.skip }}
       postgres-image: ${{ env.POSTGRES_IMAGE }}
+      # The run's plan (T3.0), from the step below: the phase head the
+      # candidate was pushed on, which every judging job reads as
+      # SDM_PUSH_BASE; whether the tooling jobs run; and the Pythons the
+      # client matrix runs on.
+      base: ${{ steps.plan.outputs.base }}
+      tooling: ${{ steps.plan.outputs.tooling }}
+      full: ${{ steps.plan.outputs.full }}
+      pythons: ${{ steps.plan.outputs.pythons }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -153,6 +164,43 @@ jobs:
           esac
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
           echo "every other job left out: $skip; $why"
+      # The run's plan (T3.0), decided once, as the run starts, so a job
+      # that starts an hour later decides alike. On a push to a branch under
+      # a phase branch:
+      # - base: the phase head now (ratchet.py push-base), the base every
+      #   comparison of this run takes, so a landing while it runs, its own
+      #   candidate's included, cannot make one a self-comparison; a rerun
+      #   of failed jobs keeps it, and a rerun of every job after the
+      #   candidate landed takes the head it landed on;
+      # - tooling: whether the tests of the checking tools (the
+      #   gate_tooling marker) run, which they do when the change touches a
+      #   judging path or such a test (tooling_tests.py must-run);
+      # - full: false on a test author's branch (<topic>-tests, or
+      #   <topic>-tests-<suffix>), whose tests fail by design until the
+      #   code exists: the client tests on one Python, and no wheels for
+      #   other platforms.
+      # Anywhere else every job runs, on every Python.
+      - id: plan
+        name: The run's base and the jobs it runs
+        if: steps.landing.outputs.skip != 'true'
+        run: |
+          base=''
+          tooling=true
+          why='not a push under a phase branch'
+          full=true
+          if [ "${GITHUB_EVENT_NAME:-}" = push ] &&
+            [[ "${GITHUB_REF_NAME:-}" =~ ^(rust-core-phase-(0|[1-9][0-9]*))-.+$ ]]; then
+            phase=${BASH_REMATCH[1]}
+            if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
+            git fetch --quiet origin "refs/heads/$phase:refs/remotes/origin/$phase" || exit 1
+            base=$(python3 scripts/rust_core/ratchet.py push-base) || exit 1
+            tooling=$(python3 scripts/rust_core/tooling_tests.py must-run --base "$base" 2> "$RUNNER_TEMP/why") || exit 1
+            why=$(cat "$RUNNER_TEMP/why")
+            if [[ "$GITHUB_REF_NAME" =~ -tests(-[^-]+)*$ ]]; then full=false; fi
+          fi
+          if [ "$full" = true ]; then pythons='["3.10", "3.11", "3.12", "3.13", "3.14"]'; else pythons='["3.12"]'; fi
+          { echo "base=$base"; echo "tooling=$tooling"; echo "full=$full"; echo "pythons=$pythons"; } >> "$GITHUB_OUTPUT"
+          echo "base: ${base:-none}; tooling jobs: $tooling ($why); full matrix: $full"
       # On the phase branch, every push, a landing's included, lands one
       # package as a fast-forward, its landing commit's Base-SHA the
       # previous tip: ratchet.py's --phase-push check, which the gate makes
@@ -210,6 +258,8 @@ jobs:
     defaults:
       run:
         working-directory: rust
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -228,14 +278,16 @@ jobs:
       - run: cargo clippy -p sdm-py --features test-ops --locked -- -D warnings
       # The L0 guards (T1.10c): the crate graph (l0_deps.py), with the
       # bridge freeze (bridge_freeze.py, E50), whose baseline ratchets
-      # against the merge base with origin/<the phase branch> (phases.py:
-      # the phase this branch is under, else the phase in progress), which
-      # the full checkout above fetches; and the vocabulary, SQL-fragment, skip and
+      # against the merge base with the phase head the run was pushed on
+      # (SDM_PUSH_BASE, T3.0), else with origin/<the phase branch>
+      # (phases.py: the phase this branch is under, else the phase in
+      # progress), which the full checkout above fetches; and the vocabulary, SQL-fragment, skip and
       # ignore, clippy-ban and step-variant scans (l0_scan.py). The bans
       # themselves are enforced by the clippy runs above, from
       # rust/clippy.toml.
       - name: L0 graph, bans and scans
         run: |
+          if [ -n "${SDM_PUSH_BASE:-}" ]; then export SDM_FREEZE_BASE=$SDM_PUSH_BASE; fi
           python3 scripts/rust_core/l0_deps.py
           python3 scripts/rust_core/l0_scan.py
         working-directory: .
@@ -329,6 +381,7 @@ jobs:
           --health-cmd pg_isready --health-interval 5s
           --health-timeout 5s --health-retries 10
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CARGO_PROFILE_DEV_DEBUG: line-tables-only
       CARGO_PROFILE_TEST_DEBUG: line-tables-only
       SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
@@ -654,7 +707,9 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     needs: landing
-    if: needs.landing.outputs.skip != 'true'
+    # Not on a test author's branch (the landing job's plan, T3.0), nor
+    # its smoke after it.
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -850,8 +905,10 @@ jobs:
     needs: [landing, native-wheel]
     strategy:
       fail-fast: false
+      # Every Python, but on a test author's branch (the landing job's
+      # plan, T3.0).
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: ${{ fromJSON(needs.landing.outputs.pythons || '["3.10", "3.11", "3.12", "3.13", "3.14"]') }}
     # A real server for the PostgreSQL reads and the PostgreSQL sampler, which
     # only a PostgreSQL can say it accepts. SDM_REQUIRE_POSTGRES turns a
     # missing DSN or driver into a failure, where a skip would read as a pass.
@@ -901,14 +958,15 @@ jobs:
             "$(ls native/*.whl)[test]" \
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       # In parallel, as contract/tests runs: each test file on one worker,
-      # so its module fixtures are built once. Serial, the gate's tooling
-      # tests in tests/ outgrew the job's hour. A test past 10 minutes
+      # so its module fixtures are built once. The gate's tooling tests
+      # (the gate_tooling marker) run once, in tooling (root), not on five
+      # Pythons and again in engine (T3.0). A test past 10 minutes
       # fails with its stack, and a worker that dies ends the run rather
       # than leaving xdist waiting on it.
       - run: |
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
-            -m 'not live_nim and not live_warehouse' \
+            -m 'not live_nim and not live_warehouse and not gate_tooling' \
             -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -994,7 +1052,8 @@ jobs:
       # the test job would prove nothing.
       # The contract cases and the runner's controls (contract/tests) run
       # in contract-python, from T1.18. In parallel, as in the test job.
-      - run: python -m pytest tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+      # The checking tools' own tests run in tooling (root) (T3.0).
+      - run: python -m pytest tests -q -m 'not gate_tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1020,8 +1079,9 @@ jobs:
     # one run on T2.16's ran past 90 (T2.1o first raised it from 60); the
     # cause is carried into Phase 3 (P2-T2.16-14).
     timeout-minutes: 120
-    needs: [native-wheel, native-test-ops]
+    needs: [landing, native-wheel, native-test-ops]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
     steps:
@@ -1078,8 +1138,9 @@ jobs:
       # runner's memory holds one at a time. A test past 10 minutes fails
       # with its stack, and a worker that dies ends the run rather than
       # leaving xdist waiting on it.
+      # The checking tools' own tests run in tooling (contract) (T3.0).
       - name: The runner's controls and the route tests
-        run: python -m pytest contract/tests -q -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+        run: python -m pytest contract/tests -q -m 'not gate_tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
       # Every cell gates, the floor's too (T1.18's own run alone reported
@@ -1142,6 +1203,74 @@ jobs:
           path: cross-host/python-core.jsonl
           if-no-files-found: error
 
+  # The checking tools' own tests (T3.0): every test carrying the
+  # gate_tooling marker, the ones that copy the checkout into a temporary
+  # repository and rerun the gate, the ratchet or the comparator over the
+  # corpus, minutes a test (scripts/rust_core/tooling_tests.py, which
+  # fails on such a test without the marker). They run here once, on CI's
+  # one Python, and only when the landing job's plan says the change can
+  # reach them: a judging path (scripts/rust_core/judging-paths.txt), this
+  # workflow, or such a test or a module one loads. Every other test of
+  # contract/tests runs in contract-python (ref-pandas3), every other test
+  # of the root suite in test and engine. One job per suite, each in the
+  # environment the suite ran in before: contract-python's cell, and
+  # engine's (the engine, the native wheel, a PostgreSQL server).
+  tooling-contract:
+    name: tooling (contract)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [landing, native-wheel, native-test-ops]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false'
+    env:
+      CELL: ref-pandas3
+      CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
+    steps:
+      - *contract-checkout
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - *contract-wheel
+      - *contract-install
+      - *contract-kit-wheel
+      - *contract-kit-python
+      - name: The checking tools' tests in contract/tests
+        run: python -m pytest contract/tests -q -m gate_tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+
+  tooling-root:
+    name: tooling (root)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [landing, native-wheel]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.tooling != 'false'
+    services:
+      postgres: *postgres-service
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      SDM_REQUIRE_POSTGRES: '1'
+    steps:
+      # Every branch, for the gate's real bootstrap on the real history
+      # (tests/test_t20_bootstrap.py).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-wheel
+          path: native
+      # engine's install, with the native wheel's test extra.
+      - run: |
+          pip install --upgrade pip 'ruff==0.16.*' pytest-timeout
+          pip install -e './packages/structured-data-models-api' -e './packages/structured-data-models-pql' \
+            -e './packages/structured-data-models-connectors[sqlite,duckdb,databricks,snowflake,postgres]' \
+            pyyaml jsonschema
+          pip install -e './packages/structured-data-models-relational-engine[test,explain]'
+          pip install "$(ls native/*.whl)[test]"
+      - name: The checking tools' tests in tests/
+        run: python -m pytest tests -q -m gate_tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+
   # The two core hosts on core fields (design, "Observations and
   # comparator"; T1.29): python-core's observations from
   # contract-python (ref-pandas3) and rust-host's from rust-test, compared
@@ -1163,6 +1292,8 @@ jobs:
     # are left out (E131), so it says so itself.
     needs: [landing, rust-test, contract-python-ref-pandas3]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -1210,8 +1341,9 @@ jobs:
     name: contract-python (dbr17-pandas2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
     steps:
@@ -1227,8 +1359,9 @@ jobs:
     name: contract-python (floor-pandas2.2, duckdb)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
     steps:
@@ -1263,8 +1396,9 @@ jobs:
     name: contract-python (ref-pandas3, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [native-wheel, native-test-ops]
+    needs: [landing, native-wheel, native-test-ops]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: sqlite
@@ -1351,6 +1485,7 @@ jobs:
     services:
       postgres: *postgres-service
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
       DATABASE: postgres
@@ -1400,8 +1535,9 @@ jobs:
     name: contract-python (dbr17-pandas2, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
       DATABASE: sqlite
@@ -1422,6 +1558,7 @@ jobs:
     services:
       postgres: *postgres-service
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: dbr17-pandas2
       CELL_PINS: pandas==2.2.3 pyarrow==19.0.1 numpy==2.1.3
       DATABASE: postgres
@@ -1442,8 +1579,9 @@ jobs:
     name: contract-python (floor-pandas2.2, sqlite)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: native-wheel
+    needs: [landing, native-wheel]
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: sqlite
@@ -1464,6 +1602,7 @@ jobs:
     services:
       postgres: *postgres-service
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       CELL: floor-pandas2.2
       CELL_PINS: pandas==2.2.2 pyarrow==14.0.1 numpy==1.23.5
       DATABASE: postgres
@@ -1501,6 +1640,7 @@ jobs:
     needs: [landing, rust-test, contract-python-ref-pandas3-sqlite]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       DATABASE: sqlite
     steps:
       - *contract-checkout
@@ -1562,6 +1702,7 @@ jobs:
     needs: [landing, rust-test, contract-python-ref-pandas3-postgres]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     env:
+      SDM_PUSH_BASE: ${{ needs.landing.outputs.base }}
       DATABASE: postgres
     steps:
       - *contract-checkout
@@ -1769,9 +1910,11 @@ jobs:
   engine-wheels:
     # Every job has a ceiling (tests/test_ci_workflow.py); main's job had
     # none. One engine build per interpreter, each platform and arch on its
-    # own runner.
+    # own runner. Not on a test author's branch (the landing job's plan,
+    # T3.0), nor the runtime cells after it.
     timeout-minutes: 60
-    needs: build
+    needs: [landing, build]
+    if: needs.landing.outputs.skip != 'true' && needs.landing.outputs.full != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -2065,3 +2208,40 @@ jobs:
         with:
           name: sbom
           path: dist/sbom.cyclonedx.json
+
+  # The timing guard (T3.0): every job's time in this run, recorded in the
+  # ci-timing artifact, and each job held to its time limit over its last
+  # three runs on the Rust core's branches: more than 80% of its
+  # timeout-minutes on two of them fails this job, naming the slow one,
+  # and writes a fix item the orchestrator's heartbeat pulls
+  # (scripts/rust_core/ci_timing.py pull); no issue is opened. It needs
+  # every other job, so it runs last, and it is continue-on-error: it
+  # marks itself red and never fails the run, so no candidate is refused
+  # for a time limit (no hard budgets, the owner's rule). An API that does
+  # not answer passes it. tests/test_ci_workflow.py holds it to needing
+  # every job.
+  timing-guard:
+    name: timing guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom]
+    if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Every job within its time limit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pip install pyyaml
+          python scripts/rust_core/ci_timing.py guard --run "$GITHUB_RUN_ID" --out ci-timing
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ci-timing
+          path: ci-timing
+          if-no-files-found: warn
+          retention-days: 30

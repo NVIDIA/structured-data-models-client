@@ -420,7 +420,8 @@ def _evaluate(condition: object, context: dict[str, str]) -> bool:
     ('ref', 'cancels'),
     [
         (PHASE2, False),
-        (LANE2, False),
+        # A lane's newer push supersedes its run (T3.0).
+        (LANE2, True),
         (f'{PHASE2}-t2.0', True),
         ('main', True),
     ],
@@ -428,8 +429,9 @@ def _evaluate(condition: object, context: dict[str, str]) -> bool:
 def test_a_phase_2_run_in_progress_is_kept_as_phase_1_s(
     ref: str, cancels: bool
 ) -> None:
-    r"""Exit 1, ``cancel-in-progress``: the phase branch's and its lanes'
-    runs are never cancelled (the evidence a landing stands on)."""
+    r"""Exit 1, ``cancel-in-progress``: the phase branch's runs are never
+    cancelled (each push there lands a package); a lane's, like a topic's,
+    is cancelled by the lane's newer push (T3.0)."""
     condition = WF._workflow()['concurrency']['cancel-in-progress']
     context = {
         'github.event_name': 'push',

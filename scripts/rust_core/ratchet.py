@@ -16,6 +16,7 @@ H19 and A6). ``gate.sh`` runs the checkpoint's copy of this file.
     ratchet.py effective [--repo DIR] (--base REV | --phase-push BEFORE)
         [--epic] [--epic-ref REF] --out FILE
     ratchet.py where [--repo DIR]
+    ratchet.py push-base [--repo DIR]
 
 ``checkpoint`` resolves the checkpoint of the candidate, ``--repo``'s
 ``HEAD``: ``git merge-base CANDIDATE BASE``, never read from evidence.
@@ -147,7 +148,8 @@ baselines, and so no expectations.
 it is in, from GitHub's environment, or nothing outside the phase branches
 and the epic branch (:func:`ci_base`): on a push to a phase branch
 (``rust-core-phase-N``, any N) ``--phase-push``, on a branch under one
-``--base origin/<that phase branch>``, and on a push to ``rust-core``
+``--base`` the phase head recorded when the run started (``push-base``,
+T3.0), else ``origin/<that phase branch>``, and on a push to ``rust-core``
 ``--base`` the merged phase's last landing and ``--epic``, so the epic
 branch is judged like a moved landing of that phase's head, with rule
 ``epic`` (T2.0). The landing is the second parent of a phase merge on the
@@ -2602,11 +2604,18 @@ def write_effective(repo: Path, checkpoint: str, out: Path) -> list[str]:
     return []
 
 
+#: The variable the landing job hands each judging job: the phase head the
+#: run's candidate was pushed on, as :func:`push_base` found it (T3.0).
+PUSH_BASE = 'SDM_PUSH_BASE'
+
+
 def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     r"""The gate's base for a CI run, from GitHub's environment: on a push
     to a phase branch (``rust-core-phase-N``, any N), ``--phase-push`` and
     the push's previous tip (from the event file); on a push to a lane or
-    another branch under one, ``--base`` that phase branch's remote tip; on
+    another branch under one, ``--base`` the phase head the landing job
+    recorded as the run started (:data:`PUSH_BASE`, :func:`push_base`;
+    T3.0), else that phase branch's remote tip; on
     a push to the epic branch, ``--base`` the merged phase's last landing
     ``repo``'s ``HEAD`` holds and ``--epic`` (:func:`epic_merge`; T2.0), so the epic
     branch is judged like a moved landing of that phase's head, and with
@@ -2637,6 +2646,16 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     phase = PHASES.phase_of(ref)
     if phase is None:
         return ''
+    if ref != phase:
+        recorded = environ.get(PUSH_BASE, '')
+        if re.fullmatch(r'[0-9a-f]{40}', recorded):
+            return f'--base {recorded}'
+        if recorded:
+            raise Unreadable(
+                f'{PUSH_BASE} is {recorded!r}, not the 40-hex SHA the '
+                'landing job records'
+            )
+        return f'--base origin/{phase}'
     if ref == phase:
         event = _json(
             Path(environ['GITHUB_EVENT_PATH']).read_text(encoding='utf-8'),
@@ -2649,6 +2668,54 @@ def ci_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
             raise Unreadable('the push event names no previous tip')
         return f'--phase-push {before}'
     return f'--base origin/{phase}'
+
+
+def push_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
+    r"""The phase head a CI run's candidate was pushed on (T3.0): what the
+    landing job records once, as the run starts, and hands every job that
+    judges as :data:`PUSH_BASE`, so ``where`` names the same base in every
+    job however late it starts. A landing made while the run goes on, the
+    candidate's own above all, then cannot turn a job into a
+    self-comparison.
+
+    On a push to a branch under a phase branch, the remote phase head
+    (``refs/remotes/origin/<phase>``, fetched by the caller), unless that
+    head already holds the candidate (a rerun of every job after the
+    candidate landed): then the ``Base-SHA`` of the oldest landing commit
+    above the candidate, the head it landed on. Elsewhere, on the phase
+    branch itself, and with no CI environment, nothing: ``where`` decides
+    as before."""
+    ref = environ.get('GITHUB_REF_NAME')
+    if ref is None or environ.get('GITHUB_EVENT_NAME') != 'push':
+        return ''
+    phase = PHASES.phase_of(ref)
+    if phase is None or ref == phase:
+        return ''
+    tip = git(
+        repo, 'rev-parse', f'refs/remotes/origin/{phase}^{{commit}}'
+    ).strip()
+    head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
+    if head == tip or git(repo, 'merge-base', head, tip).strip() != head:
+        return tip
+    out = git(
+        repo, 'log', '--reverse', '--ancestry-path', '--format=%H%x00%s',
+        f'{head}..{tip}',
+    )  # fmt: skip
+    for line in out.splitlines():
+        commit, _, title = line.partition('\0')
+        if not (LANDING.match(title) and is_landing(repo, commit)):
+            continue
+        recorded = git(
+            repo,
+            'rev-parse',
+            f'{trailers(repo, commit)["Base-SHA"]}^{{commit}}',
+        ).strip()
+        if (
+            recorded != head
+            and git(repo, 'merge-base', recorded, head).strip() == recorded
+        ):
+            return recorded
+    return tip
 
 
 def _checked_out(repo: Path) -> str | None:
@@ -2681,6 +2748,8 @@ def main(argv: list[str] | None = None) -> int:
     judge.add_argument('--locked', action='store_true')
     spot = commands.add_parser('where')
     spot.add_argument('--repo', type=Path, default=Path('.'))
+    pushed = commands.add_parser('push-base')
+    pushed.add_argument('--repo', type=Path, default=Path('.'))
     expect = commands.add_parser('effective')
     expect.add_argument('--repo', type=Path, default=Path('.'))
     among = expect.add_mutually_exclusive_group(required=True)
@@ -2699,6 +2768,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if arguments.command == 'where':
             print(ci_base(dict(os.environ), arguments.repo))
+            return 0
+        if arguments.command == 'push-base':
+            print(push_base(dict(os.environ), arguments.repo))
             return 0
         if arguments.command == 'checkpoint':
             found, problems = resolve(
