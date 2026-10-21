@@ -41,8 +41,10 @@ def _lane(tmp_path: Path) -> tuple[Path, dict[str, str]]:
         stub = bin_dir / tool
         stub.write_text(f'#!/usr/bin/env bash\necho "{tool} $*" >>"{log}"\n')
         stub.chmod(0o755)
+    # The caller's SDM_PHASE_BRANCH names another phase than this
+    # repository's; the branch checked out says which.
     env = {
-        **os.environ,
+        **{k: v for k, v in os.environ.items() if k != 'SDM_PHASE_BRANCH'},
         'PATH': f'{bin_dir}{os.pathsep}{os.environ["PATH"]}',
         'TMPDIR': str(tmp_path),
         'GIT_CONFIG_GLOBAL': os.devnull,
