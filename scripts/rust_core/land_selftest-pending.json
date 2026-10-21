@@ -2,6 +2,9 @@
  "about": "CI4's acceptance tests (decision 30, the owner's of 2026-10-14: ci.yml skips the empty landing commits, so land.py no longer requires a landing commit's own runs to be green; verify stands on the candidate's green exact-SHA push run, or a moved landing's Moved-from commit's, and --wait-for-landing-run is refused as obsolete) that failed when the independent test author wrote them, before the implementation, at e1e49e8a (scripts/rust_core/land_selftest.py, the 'CI4' cases; their interface in the comment above them). 'cases' holds self-test names. land_selftest.py's main holds each listed case to failing (strict): once one passes it fails, naming itself, until the implementer takes it out of 'pending'. The implementer changes nothing else: 'pending' stays within 'authored', which is the test author's. 'CI4 verify: fails, a run on the landing commit ran and failed' passed at e1e49e8a and is not pending. The same commit took out the cases decision 30 contradicts: the four 'waits:' cases (--wait-for-landing-run landing on the landing commit's own run; the lane's read-back after the push stays covered by the normal path's case) and 'verify: no run on the phase branch fails'; 'verify: both runs green' now asks for at least two 'ok' lines, so verify may also report the candidate's run. CI3's list is in git history (ee9029f6..30b545bf). Round 4, on cb46bc5a (Codex's P1: a moved landing verifies only on its own green run, the current checkpoint's judgement; the subagent's P3-2: evidence follows an empty Land candidate down, in land.py's CI check and in verify, and verify refuses a landing the remote phase branch lacks): the test author retired 'CI4 verify: a moved landing with no runs of its own passes on X's run' and '... whose own runs were skipped passes on X's run', gave the moved tree and X-red cases a green landing run so they fail only for their own fault, and added the round-4 cases; the five moved 'incomplete' cases failed at cb46bc5a and are pending. T3.0 (2026-10-22): its independent test author added the 'T3.0 stack' and 'T3.0 train' cases (land.py --stack, stack-land and --train, and the ratchet's phase check on a stack's push, against the implementer's interfaces as relayed), on real temporary repositories with gh faked; each failed when written, before the implementation, and is pending until land.py passes it.",
  "pending": {
   "cases": [
+   "T3.0 restack: a stack moved onto a newer phase head keeps its reviews, and lands on a new run on its top alone",
+   "T3.0 restack: a stack whose patch changes on the new head is refused",
+   "T3.0 rule: land.py refuses a product fix without its Rule: line, and stacks it with one",
    "T3.0 stack: a fifth package is refused by default, nothing made",
    "T3.0 stack: a red top names the implicated commit and the green prefix, which then lands on its own run",
    "T3.0 stack: four packages land on one green run on the top, a landing commit each, in order, in one push",
@@ -10,7 +13,8 @@
    "T3.0 train: a --train package changing a product file is refused",
    "T3.0 train: a --train package not first in its stack is refused",
    "T3.0 train: a judging-only package first in its stack lands as the train, with Train: yes, before the product package",
-   "T3.0 train: a judging-path change outside the train is refused, naming land.py --stack --train"
+   "T3.0 train: a judging-path change outside the train is refused, naming land.py --stack --train",
+   "T3.0 verify: a stacked landing stands on its stack top's green run, and fails when that run is red"
   ]
  },
  "authored": {
@@ -40,6 +44,9 @@
    "CI4 verify: fails, the candidate's only green run is a pull request's",
    "CI4 verify: fails, the landing commit changes a file",
    "CI4 verify: refuses a landing the phase branch on the remote lacks",
+   "T3.0 restack: a stack moved onto a newer phase head keeps its reviews, and lands on a new run on its top alone",
+   "T3.0 restack: a stack whose patch changes on the new head is refused",
+   "T3.0 rule: land.py refuses a product fix without its Rule: line, and stacks it with one",
    "T3.0 stack: a fifth package is refused by default, nothing made",
    "T3.0 stack: a red top names the implicated commit and the green prefix, which then lands on its own run",
    "T3.0 stack: four packages land on one green run on the top, a landing commit each, in order, in one push",
@@ -48,7 +55,8 @@
    "T3.0 train: a --train package changing a product file is refused",
    "T3.0 train: a --train package not first in its stack is refused",
    "T3.0 train: a judging-only package first in its stack lands as the train, with Train: yes, before the product package",
-   "T3.0 train: a judging-path change outside the train is refused, naming land.py --stack --train"
+   "T3.0 train: a judging-path change outside the train is refused, naming land.py --stack --train",
+   "T3.0 verify: a stacked landing stands on its stack top's green run, and fails when that run is red"
   ]
  }
 }

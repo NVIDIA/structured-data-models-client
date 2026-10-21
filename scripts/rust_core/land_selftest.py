@@ -2896,9 +2896,19 @@ def _(tmp: Path) -> tuple[bool, str]:
 #   landings is refused, naming stack-land.
 # - The train: ``scripts/rust_core/judging-paths.txt`` (protected-paths
 #   syntax). A package changing a judging path is refused, naming ``land.py
-#   --stack --train``, unless no earlier landing in the phase changed one.
-#   With ``--train`` every changed file is a judging path and the package is
+#   --stack --train``, once the phase is past its first package. With
+#   ``--train`` every changed file is a judging path and the package is
 #   first in its stack; its landing carries ``Train: yes``.
+# - ``land.py restack --tip SHA`` moves a stack onto a newer phase head,
+#   keeping its reviews when every patch is the same, and prints
+#   ``RESTACKED <new tip>``; only the new top needs a CI run.
+# - ``land.py verify`` of a stacked landing stands on the run of a later
+#   landing of the same stack (the same Stack-base) when its own candidate
+#   has none.
+# - A ``<ID> fix <n>:`` commit changing product code (any path that is no
+#   judging path and not under tests/, contract/tests/, docs/, scripts/ or
+#   .claude/) needs a ``Rule:`` line of at least three words, in the
+#   commit-msg hook and in every range land.py lands.
 #
 # They run git for real, in temporary repositories (``Repo``), with gh the
 # fake below. Each phase starts at a commit pushed to ``rust-core`` (the
@@ -2910,6 +2920,14 @@ T30_ROOT = Path(__file__).resolve().parents[2]
 #: The top's green run, and the prefix's.
 TOP_RUN = 9301
 PREFIX_RUN = 9302
+#: The phase's earlier landing in the train cases: a product change and a
+#: judging-path change, so the phase is past its first package however
+#: "the first package" is read (its first landing, or its first product
+#: landing).
+T30_EARLIER = {
+    'base.txt': 'base 2\n',
+    'scripts/rust_core/compare.py': '# the comparator, earlier\n',
+}
 #: A path no judging tool reads, and one every judging-path list names.
 PRODUCT_FILE = 'notes/p{k}.txt'
 JUDGING_FILE = 'scripts/rust_core/compare.py'
@@ -2945,8 +2963,10 @@ class StackGh:
 
     def __init__(self, runs: dict[str, list[dict[str, Any]]]) -> None:
         self.runs = runs
-        #: The failing jobs of each run, by id.
+        #: The failing jobs of each run, by id, and each run's failed log
+        #: (``gh run view ID --log-failed``).
         self.failing: dict[int, list[str]] = {}
+        self.logs: dict[int, str] = {}
 
     def by_id(self, run_id: int) -> dict[str, Any] | None:
         for runs in self.runs.values():
@@ -2965,6 +2985,8 @@ class StackGh:
         jobs = t30_jobs(
             run['databaseId'], self.failing.get(run['databaseId'], [])
         )
+        if '--log-failed' in args:
+            return land.Completed(0, self.logs.get(run['databaseId'], ''))
         if any('jobs' in a for a in args):
             return land.Completed(
                 0, json.dumps({**run, 'total_count': len(jobs), 'jobs': jobs})
@@ -3356,6 +3378,10 @@ def _(tmp: Path) -> tuple[bool, str]:
     s = t30_stacked(tmp, files={3: {RUST_FILE: 'pub fn demo() {}\n'}})
     s.green(4, conclusion='failure')
     s.gh.failing[TOP_RUN] = ['rust-test']
+    s.gh.logs[TOP_RUN] = (
+        'rust-test\tcargo test\t2026-10-22T01:02:03Z error[E0425]: cannot '
+        f'find value `x` in this scope\n --> {RUST_FILE}:1:16\n'
+    )
     code = s.stack_land(4)
     lines = s.lines
     implicated = [
@@ -3396,7 +3422,7 @@ def _(tmp: Path) -> tuple[bool, str]:
     'land.py --stack --train'
 )
 def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s = Stack(tmp, earlier=T30_EARLIER)
     s.build(1, {JUDGING_FILE: '# the comparator, changed\n'})
     s.green(1)
     code = s.call(s.land_args(1))
@@ -3415,7 +3441,7 @@ def _(tmp: Path) -> tuple[bool, str]:
     'train, with Train: yes, before the product package'
 )
 def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s = Stack(tmp, earlier=T30_EARLIER)
     s.build(1, {JUDGING_FILE: '# the comparator, changed\n'})
     if s.stack(1, '--train') != 0 or 1 not in s.landings:
         return t30_detail(s, False, '')
@@ -3436,7 +3462,7 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 @case('T3.0 train: a --train package not first in its stack is refused')
 def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s = Stack(tmp, earlier=T30_EARLIER)
     s.build(1)
     if s.stack(1) != 0 or 1 not in s.landings:
         return t30_detail(s, False, '')
@@ -3453,7 +3479,7 @@ def _(tmp: Path) -> tuple[bool, str]:
 
 @case('T3.0 train: a --train package changing a product file is refused')
 def _(tmp: Path) -> tuple[bool, str]:
-    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s = Stack(tmp, earlier=T30_EARLIER)
     s.build(
         1,
         {JUDGING_FILE: '# the comparator, changed\n', 'notes/p1.txt': 'p1\n'},
@@ -3466,6 +3492,143 @@ def _(tmp: Path) -> tuple[bool, str]:
         and s.r.git('rev-parse', 'HEAD') == s.candidates[1]
     )
     return t30_detail(s, ok, 'refused')
+
+
+def t30_moved_on(s: Stack, files: dict[str, str | None]) -> str:
+    """Another package lands on the phase branch while the stack waits:
+    its commit and its landing commit on the phase head, pushed."""
+    s.r.git('checkout', '-q', '--detach', s.h)
+    work = s.write_commit('T1.88: another lane', files)
+    head = s.landing('T1.88', 'another lane', s.h, work)
+    s.r.git('push', '-q', 'origin', f'{head}:refs/heads/{PHASE}')
+    s.r.git('fetch', '-q', 'origin')
+    return head
+
+
+@case(
+    'T3.0 restack: a stack moved onto a newer phase head keeps its reviews, '
+    'and lands on a new run on its top alone'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp, n=2)
+    s.green(2)
+    newer = t30_moved_on(s, {'notes/other.txt': 'another lane\n'})
+    code = s.call(['restack', '--tip', s.landings[2], '--phase-branch', PHASE])
+    moved = [
+        line.split()[1] for line in s.lines if line.startswith('RESTACKED ')
+    ]
+    if code != 0 or not moved:
+        return t30_detail(s, False, '')
+    tip = s.r.git('rev-parse', moved[0])
+    first = s.r.git('rev-parse', f'{tip}^')
+    lands = [
+        sha
+        for sha, _, subject in (
+            line.partition('\x00')
+            for line in s.r.git(
+                'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+                f'{newer}..{tip}',
+            ).splitlines()
+        )
+        if subject.startswith('Land ')
+    ]  # fmt: skip
+    problems = []
+    if len(lands) != 2:
+        problems.append(f'{len(lands)} landing commits on the new head')
+    previous = newer
+    for k, sha in enumerate(lands, start=1):
+        trailers, old = s.trailers(sha), s.trailers(s.landings[k])
+        if trailers.get('Reviewed-by') != old.get('Reviewed-by'):
+            problems.append(f'Land T1.9{k} lost its reviews: {trailers}')
+        if (
+            trailers.get('Base-SHA') != previous
+            or trailers.get('Stack-base') != newer
+        ):
+            problems.append(f'Land T1.9{k} trailers {trailers}')
+        previous = sha
+    # The old top's green run is no evidence for the moved stack.
+    code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
+    if code == 0 or s.remote_phase() != newer:
+        problems.append(f'landed on the old run: exit {code}')
+    s.gh.runs[first] = [ci_run(first, t30_topic(2), run_id=PREFIX_RUN)]
+    code = s.call(['stack-land', '--tip', tip, '--phase-branch', PHASE])
+    if code != 0 or s.remote_phase() != tip:
+        problems.append(f'not landed on the new top run: exit {code}')
+    if problems:
+        return False, '; '.join(problems) + ' | ' + s.text[-400:]
+    return True, 'moved with its reviews; landed on the new top run'
+
+
+@case('T3.0 restack: a stack whose patch changes on the new head is refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp, n=2)
+    newer = t30_moved_on(s, {'notes/p1.txt': 'another lane wrote it first\n'})
+    code = s.call(['restack', '--tip', s.landings[2], '--phase-branch', PHASE])
+    ok = (
+        code == 2
+        and 'REFUSED' in s.text
+        and 'RESTACKED' not in s.text
+        and s.remote_phase() == newer
+    )
+    return t30_detail(s, ok, 'refused, nothing moved')
+
+
+@case(
+    "T3.0 verify: a stacked landing stands on its stack top's green run, "
+    'and fails when that run is red'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp)
+    s.green(4)
+    if s.stack_land(4) != 0:
+        return t30_detail(s, False, '')
+    lower = s.landings[2]
+    code = s.call(['verify', lower, '--phase-branch', PHASE])
+    if code != 0 or f'VERIFIED {lower}' not in s.text:
+        return t30_detail(s, False, '')
+    s.green(4, run_id=TOP_RUN + 10, conclusion='failure')
+    code = s.call(['verify', lower, '--phase-branch', PHASE])
+    ok = code == 1 and 'VERIFIED' not in s.text
+    return t30_detail(s, ok, 'verified on the top run; red fails')
+
+
+def t30_fix(s: Stack, k: int, message: str) -> str:
+    """A fix commit of package k on its topic branch, changing its product
+    file, pushed."""
+    sha = s.write_commit(message, {PRODUCT_FILE.format(k=k): f'fixed {k}\n'})
+    s.r.git('push', '-q', 'origin', f'{sha}:refs/heads/{t30_topic(k)}')
+    s.candidates[k] = sha
+    return sha
+
+
+@case(
+    'T3.0 rule: land.py refuses a product fix without its Rule: line, and '
+    'stacks it with one'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp)
+    s.build(1)
+    t30_fix(s, 1, 'T1.91 fix 1: keep the order')
+    s.green(1)
+    code = s.stack(1)
+    why = s.text.partition('REFUSED:')[2]
+    if code != 2 or 'Rule:' not in why or 1 in s.landings:
+        return t30_detail(s, False, '')
+    plain = s.call(s.land_args(1))
+    if plain != 2 or 'Rule:' not in s.text or s.remote_phase() != s.h:
+        return t30_detail(s, False, '')
+    # The same fix with its rule, on a stack of its own, stacks.
+    (tmp / 'with-rule').mkdir()
+    s = Stack(tmp / 'with-rule')
+    s.build(1)
+    t30_fix(
+        s,
+        1,
+        'T1.91 fix 1: keep the order\n\nRule: the old client keeps the '
+        "caller's column order.",
+    )
+    code = s.stack(1)
+    return t30_detail(s, code == 0 and 1 in s.landings, 'refused, then stacked')
 
 
 # --- the pending list -----------------------------------------------------------
