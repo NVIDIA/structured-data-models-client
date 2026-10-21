@@ -50,7 +50,7 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 - **Facts from the core.**
   `_rust/materialize.py`'s `asked` reads the target's windowing and entity table from the core's `Materialized.query` for every query.
   A refused call's forecast step and ranking candidate are the core's `forecast_step` and `ranking_candidate`, put on the raised refusal by `_rust/run.py`'s `_of_the_part`; the host's call counter (`_forecast_step`, `_ranking_candidate`) is gone.
-  The candidate repeats are the core's (`sdm-request`'s `ranking::distinct`, Python's equality by key): the host passes each candidate as given and no longer writes `repeat`.
+  The candidate repeats stay the host's, by Python's own equality: the host groups the candidates (`dict.fromkeys` over every hashable candidate) and sends each repeat in the contract's existing `repeat` form, which the core reads (fix 7, replacing a new `first` field; a summary written before fix 7 said the host no longer wrote `repeat`, corrected at T2.16).
 - **State version.**
   An unknown `RequestState` version is refused by name: the core adds the version it reads (`reads`), and the host says both.
 - **Wording (KO2-32 and the carried notes).**
