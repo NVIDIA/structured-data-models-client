@@ -64,9 +64,9 @@ pub enum Unparsed {
     /// (`Reader::year` none): never a diagnostic about the query.
     Unplaced,
     /// A date literal with a run of five digits or more (D8), refused by
-    /// name, and where it is: never a diagnostic, never its text
-    /// (decision E79).
-    Packed(Option<ast::Location>),
+    /// name, and where it is: never a diagnostic; with the literal as the
+    /// caller wrote it (KO2-86, narrowing decision E79).
+    Packed(Option<ast::Location>, String),
 }
 
 /// `text` parsed for `mode`, date literals read with `reader`.
@@ -85,7 +85,7 @@ pub fn parse_held(text: &str, mode: Mode, reader: Reader, held: Option<Held>) ->
             ValidationError::new(failure.title, failure.message, failure.code, None),
         ))),
         Err(ParseError::Unplaced) => Err(Unparsed::Unplaced),
-        Err(ParseError::Packed(location)) => Err(Unparsed::Packed(location)),
+        Err(ParseError::Packed(location, literal)) => Err(Unparsed::Packed(location, literal)),
     };
     Parse { outcome, warnings }
 }

@@ -443,7 +443,9 @@ pub fn apply_keys_and_times(
     for (name, key) in primary_keys {
         let at = find(tables, name, "primary_keys")?;
         let key = match key {
-            ops::Given::Unreadable => return Err(key_not_names(name, "primary_keys")),
+            ops::Given::Unreadable | ops::Given::Spelled(_) => {
+                return Err(key_not_names(name, "primary_keys", key.spelled()));
+            }
             ops::Given::Value(None) => return Err(empty_key(name, "primary_keys")),
             ops::Given::Value(Some(key)) => key,
         };
@@ -511,9 +513,15 @@ pub fn apply_keys_and_times(
     for (name, column) in time_columns {
         let at = find(tables, name, "time_columns")?;
         let table = &mut tables[at];
+        let given = column;
         let column = match column {
-            ops::Given::Unreadable => {
-                return Err(time_column_not_a_name(name, "time_columns"));
+            ops::Given::Unreadable | ops::Given::Spelled(_) => {
+                return Err(time_column_not_a_name(
+                    name,
+                    "time_columns",
+                    given.spelled(),
+                    &columns_of(table),
+                ));
             }
             ops::Given::Value(None) => {
                 table.time_column = None;
@@ -570,19 +578,45 @@ pub(crate) fn no_table<'a>(
 
 /// A key the host could not write as a column or a sequence of them
 /// (`unreadable`), refused alike by `describe_source` and `edit_schema`,
-/// `field` each operation's own (decision E101).
-pub(crate) fn key_not_names(table: &str, field: &str) -> CoreError {
-    invalid("a primary key names a column or a sequence of them", field)
-        .with_field("table", Detail::text(table))
-        .with_field("rule", Detail::text("key_not_names"))
+/// `field` each operation's own (decision E101), naming the value as the
+/// host spelled it, where it did (`given`, KO2-86).
+pub(crate) fn key_not_names(table: &str, field: &str, spelled: Option<&str>) -> CoreError {
+    with_given(
+        invalid("a primary key names a column or a sequence of them", field)
+            .with_field("table", Detail::text(table))
+            .with_field("rule", Detail::text("key_not_names")),
+        spelled,
+    )
+}
+
+/// `refused`, naming the host's text of a value the caller gave (`given`),
+/// where the host gave one (KO2-86).
+pub(crate) fn with_given(refused: CoreError, spelled: Option<&str>) -> CoreError {
+    match spelled {
+        Some(text) => refused
+            .with_field("given", Detail::text(text))
+            .with_field("variant", Detail::text("given")),
+        None => refused,
+    }
 }
 
 /// A time column the host could not write as a name (`unreadable`),
-/// refused alike by `describe_source` and `edit_schema` (decision E101).
-pub(crate) fn time_column_not_a_name(table: &str, field: &str) -> CoreError {
-    invalid("a column named is not its table's", field)
+/// refused alike by `describe_source` and `edit_schema` (decision E101) as
+/// a column the table does not have: where the host spelled the value, it
+/// is named (`given`, KO2-86), with the table's columns.
+pub(crate) fn time_column_not_a_name<S: AsRef<str>>(
+    table: &str,
+    field: &str,
+    spelled: Option<&str>,
+    columns: &[S],
+) -> CoreError {
+    let refused = invalid("a column named is not its table's", field)
         .with_field("table", Detail::text(table))
-        .with_field("rule", Detail::text("time_column_not_a_name"))
+        .with_field("rule", Detail::text("time_column_not_a_name"));
+    match spelled {
+        Some(_) => with_given(refused, spelled).with_field("columns", sorted_names(columns)),
+        None => refused,
+    }
 }
 
 /// A key naming no column, refused alike by `describe_source` (an empty

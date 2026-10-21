@@ -250,7 +250,9 @@ fn resolve_here(
         Err(parser::Unparsed::Refused(response)) => {
             return Ok(Validation::refused(diagnostics(&response), warnings));
         }
-        Err(parser::Unparsed::Packed(location)) => return Err(halted(packed(location))),
+        Err(parser::Unparsed::Packed(location, literal)) => {
+            return Err(halted(packed(query, location, &literal)));
+        }
         Err(parser::Unparsed::Unplaced) => {
             return Err(halted(year.err().unwrap_or_else(|| {
                 internal("a two-digit year went unplaced with the current year known")
@@ -441,16 +443,21 @@ fn is_error(diagnostic: &PqlDiagnostic) -> bool {
 }
 
 /// The refusal of a date literal with a run of five digits or more (D8),
-/// by name and where it is, never its text (decision E79): the reference
-/// reads such a literal through `dateutil`, or refuses it.
-fn packed(location: Option<ast::Location>) -> CoreError {
+/// by name and where it is: the reference reads such a literal through
+/// `dateutil`, or refuses it. It names the literal and the query, as the
+/// caller wrote them (`literal`, `query`), as the reference's message does
+/// (KO2-86, narrowing decision E79: a value of the caller's own call).
+fn packed(query: &str, location: Option<ast::Location>, literal: &str) -> CoreError {
     let mut error = CoreError::new(
         ErrorKind::InvalidRequest,
         ErrorCode::InvalidRequest,
         "a date literal with a run of five digits or more is refused",
     )
     .with_field("operation", Detail::text("validate_query"))
-    .with_field("rule", Detail::text("date_literal_packed"));
+    .with_field("rule", Detail::text("date_literal_packed"))
+    .with_field("field", Detail::text("query"))
+    .with_field("query", Detail::text(query))
+    .with_field("literal", Detail::text(literal));
     if let Some(at) = location.and_then(parser::Span::at) {
         error = error
             .with_field("start_row", count(at.start_row))

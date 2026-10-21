@@ -109,7 +109,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py": {
       "<module>": {
-        "fingerprint": "c9b3f5d9a6f273af088202a69f14133c761fc24276ae3f2e7d724ac13be6e397"
+        "fingerprint": "fcc4b6be460a9822eb9bd5eec11b90a2ea3655c388b497ccedb1ebbc26824721"
       },
       "_bits32": {
         "fingerprint": "651ad3358dfd73bd50c1662ca763fff73f1390dfc842a0124d51bb5274cab1c1"
@@ -151,13 +151,13 @@
         "fingerprint": "860b0bbd6a6baa40a079e0d22da3f6f6b119f8f68f0f28a5a3cb95dbc0295af7"
       },
       "given_key": {
-        "fingerprint": "52ae08418c9fb8a12c281d3711547dc694eb8305745bd1b7dfca98e25b3e7da9"
+        "fingerprint": "3a7125b22ca64858c9013fb54cc4dcf77adb1d8cc69beb402c6868c50e19f9a2"
       },
       "given_name_or_none": {
         "fingerprint": "9ea730467e0bd9533b2989749a8e180d1742dbc725c78add16846c14485dfe50"
       },
       "given_text": {
-        "fingerprint": "ac78695e6468afc2180c960ba14129afdd5fe4c785c052f2b60eb95009914340"
+        "fingerprint": "a3a7639eabd1a23f1687a8c4ce0670a34cb8337ecc7c8f502445a145860bfe1b"
       },
       "integer": {
         "fingerprint": "198350401ee456e45dd3f435b293580c414a238db6bb3f32d04a5f2fb67756db"
@@ -174,16 +174,19 @@
       "seed": {
         "fingerprint": "05ecdfd9a5a924c7fd71ace2c887d4c97b7630b15513d612e2311974a4de64ac"
       },
+      "spelled": {
+        "fingerprint": "f3ea692b1fbc2496550eea2efb533879816ca69ec96677d2c43168b3bb0cd443"
+      },
       "timestamp": {
         "fingerprint": "129e192094d3a9ba6175be52caf67d2e5a331b19981e51498ad926e845092998"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py": {
       "<module>": {
-        "fingerprint": "54cb61f2dc3a538354f1cdde90974486fd0ff367400a420daa548f44380f481c"
+        "fingerprint": "54514ecb4794284c0a4e59925d3ec981e933cd457c0e77f2d69efbe7d7041572"
       },
       "_link": {
-        "fingerprint": "64f685501e9d96adcd883cdf500becc755c15c7ad53569031e6b7ad67cc967c7"
+        "fingerprint": "56ea136b1dc3177332c1d88aa75dc66b7839379caa6ec9cb34a81cd475c88c4e"
       },
       "_made": {
         "fingerprint": "4a7f482bdceeb9464d3d94de86aeb873c391e0be727c61c349c22fd022a74b9d"
@@ -209,7 +212,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "01ebd19272edc425dba81f14c551f8954df981a365acf4dbba7f120791fbb631"
+        "fingerprint": "13f6fd19cb9253af22ecf8ecc89f3c38040ba2d3dac82f6084c1a96a6202791b"
       },
       "_Words.convert_field": {
         "fingerprint": "eb6ac343d2114984bb9b64652349aea1b0c0de4ccde38f032ef0297837b857f7"

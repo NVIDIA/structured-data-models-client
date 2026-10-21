@@ -286,11 +286,37 @@ _SCHEMA_SAID = {
         'match. Give both columns the same kind of value'
     ),
 }
+#: The schema's refusals that name a value the caller gave, as the host
+#: spelled it (``given``, the core's variant ``given``; KO2-86).
+_SCHEMA_GIVEN = {
+    'key_not_names': (
+        'a primary key names a column or a sequence of them, got {given}'
+    ),
+    'time_column_not_a_name': (
+        'table {table!r} has no column {given}; it has {columns!r}'
+    ),
+    'column_not_a_name': (
+        'table {table!r} has no column {given}; it has {columns!r}'
+    ),
+    'not_a_semantic_type_spelled': (
+        '{given} is not a semantic type; use one of {stypes!r}'
+    ),
+    'not_a_relationship': (
+        'a relationship must be a Relationship, got {given}. Build one with '
+        'Relationship(source_table, source_column, target_table, '
+        'target_column)'
+    ),
+}
 WORDED: dict[tuple[str, ...], str] = {
     **{
         ('INVALID_REQUEST', field, rule): said
         for field in _SCHEMA_FIELDS
         for rule, said in _SCHEMA_SAID.items()
+    },
+    **{
+        ('INVALID_REQUEST', field, rule, 'given'): said
+        for field in _SCHEMA_FIELDS
+        for rule, said in _SCHEMA_GIVEN.items()
     },
     # A request whose kept state is of a version this client's core does
     # not read (H23, T2.14b).
@@ -534,7 +560,7 @@ WORDED: dict[tuple[str, ...], str] = {
         'without sending'
     ),
     ('INVALID_REQUEST', 'indices', 'not_in_table'): (
-        "Some of the primary keys asked for do not exist in the '{table}' table"
+        '"The primary keys {keys!r} do not exist in the \'{table}\' table"'
     ),
     ('INVALID_REQUEST', 'request', 'past_int64'): (
         "Column '{table}.{column}' row {row}: a value is outside the range "
@@ -556,6 +582,10 @@ WORDED: dict[tuple[str, ...], str] = {
         )
         for many, uses in (('name', 'uses a name'), ('names', 'use names'))
     },
+    ('INVALID_REQUEST', 'query', 'date_literal_packed'): (
+        '{query!r} is not a query a relational model can answer: {literal} '
+        'is not a valid instance of time'
+    ),
     ('INVALID_REQUEST', 'query', 'unresolved'): (
         '{query!r} is not a query a relational model can answer: {reasons!R}'
     ),

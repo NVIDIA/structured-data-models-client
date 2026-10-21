@@ -1,19 +1,7 @@
 {
  "about": "T2.14b's acceptance tests (with T2.14d's Postgres value rules and the decimal stype fix riding along) that failed when the test author wrote them, before the implementation. Each key names its test file's family by prefix: host:<name> (contract/tests/test_t214b_host.py and sdm-testkit tests/t214b_host.rs), stype:<case key> (contract/tests/test_t214b_decimal_stype.py, sdm-schema tests/t214b_decimal_stype.rs and sdm-testkit tests/t214b_host.rs), wording:<key> (contract/tests/test_t214b_wording.py), pg-values:<rule> (packages/structured-data-models-client/tests_test_ops/test_t214d_postgres_values.py). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
  "pending": [
-  "wording:named:date.day-first-then-packed",
-  "wording:named:date.day-first-then-packed@postgres",
-  "wording:named:date.day-first-then-packed@sqlite",
-  "wording:named:key.uint64-above-int64-max",
-  "wording:named:rank.entities-by-candidates.at",
-  "wording:named:rank.entities-by-candidates.at@postgres",
-  "wording:named:rank.entities-by-candidates.at@sqlite",
-  "wording:named:wording.key-number",
-  "wording:named:wording.key-number@postgres",
-  "wording:named:wording.key-number@sqlite",
-  "wording:named:wording.time-number",
-  "wording:named:wording.time-number@postgres",
-  "wording:named:wording.time-number@sqlite"
+  "wording:named:key.uint64-above-int64-max"
  ],
  "authored": [
   "host:facts-from-the-core",

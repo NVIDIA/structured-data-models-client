@@ -149,3 +149,11 @@ Sources: the owner's answer late on 2026-10-20 (UTC) to the orchestrator's quest
 | # | Decision | Reason | Status |
 |---|---|---|---|
 | KO2-85 | A (T2.13b): an entity filter or an ASSUMING clause over a windowed AVG, MIN or MAX where some example has no value is answered from each example's own values, standing alone or inside NOT, AND or OR, where the reference picks examples by shifted values or fails (IndexError as INTERNAL_ERROR in a filter, a broadcast error as INVALID_REQUEST in an assumption); P2E-16 (KO2-72) is widened to both clauses | "T2.13b: Yes, keep the new behavior and record these as known" | approved by owner 2026-10-20 |
+
+## The owner's T2.14b answer (2026-10-21)
+
+Sources: the owner's answer on 2026-10-21 to the orchestrator's question "Should errors name the value you passed in your own call?" (T2.14b's thirteen wording keys)
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-86 | Narrows H17 and E79 (and E101's `unreadable`): an error may name a value the caller passed in that same call, as the reference words it (keys and key-like values given, a query's date literal, option values such as `num_hops True` or a seed of `-1`); a value read from data (row contents, driver messages, panic text) stays out, as H17 says. A value no contract type holds may be given spelled (`Given::Spelled`, the host's text of it) for the core to name | "Echo own args (Recommended)" | approved by owner 2026-10-21 |

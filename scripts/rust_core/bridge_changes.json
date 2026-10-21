@@ -135,7 +135,7 @@
       "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::<module>": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: spelled and SPELLED_MOST, a value no contract type holds written as its repr for the core to name (KO2-86)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_bits32": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -177,13 +177,13 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_key": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: a key no contract type holds given spelled (its repr) rather than bare unreadable (KO2-86); what it means is the core's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_name_or_none": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_text": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: a value that is not text given spelled (its repr) rather than bare unreadable (KO2-86); what it means is the core's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::integer": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -204,10 +204,10 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::<module>": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: imports spelled in place of UNREADABLE (KO2-86)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_link": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: a relationship that is not one given spelled (its repr), which the core names in its refusal (KO2-86)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_made": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -355,6 +355,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_encoded": {
       "moved": "T2.14b: the answer re-encoding and the made-up too-deep body (Phase 1 ledger, design scope item 5) are gone: the transport hands the core the answer's bytes, which the core reads and refuses past its depth itself"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::spelled": {
+      "moved": "T2.14b: a value no contract type holds given as its repr (Given::Spelled), which the core names in its refusal as a value of the caller's own call (KO2-86, G15); the host decides nothing of it"
     }
   }
 }

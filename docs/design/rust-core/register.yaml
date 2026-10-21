@@ -5312,7 +5312,7 @@ entries:
     anchor time more than a day after the latest. No contract case reaches
     either warning.
   cases: [T1.25]
-  status: approved
+  status: rejected
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-1/decisions.md, row: E141}
   notes: >-
@@ -5326,6 +5326,10 @@ entries:
     orchestrator, recorded at T1.36 (E141); never the implementer's approval.
     The Phase 2 row is migration-plan.md's "host error and warning wording".
     Held by the client's tests/test_the_rust_host.py, which pins both texts.
+    Retired at T2.14b, its ID kept: the core now names the times in both
+    warnings and the host says them in the reference's words (M4,
+    KO2-32), so the difference it records is gone; the orchestrator's
+    decision at T2.14b's round 1 (a tightening).
 
 - id: P1B-76
   title: A BOOLEAN[] or STRUCT of BOOLEAN DuckDB hands over losslessly is refused by name where the reference fails unnamed

@@ -270,9 +270,10 @@ pub enum BuildError {
     /// it (`Reading::Unplaced`): no diagnostic, and never the literal.
     Unplaced,
     /// A date literal with a run of five digits or more (D8,
-    /// `Reading::Packed`), refused by name where it is (decision E79): no
-    /// diagnostic, and never the literal.
-    Packed(Option<Location>),
+    /// `Reading::Packed`), refused by name where it is: no diagnostic; the
+    /// literal as the caller wrote it, which the refusal may name (KO2-86,
+    /// narrowing decision E79).
+    Packed(Option<Location>, String),
 }
 
 impl BuildError {
@@ -280,7 +281,7 @@ impl BuildError {
         match self {
             BuildError::Syntax(m) | BuildError::Literal(m) => m,
             BuildError::Unplaced => "a two-digit year cannot be placed without the current year",
-            BuildError::Packed(_) => "a date literal with a run of five digits or more is refused",
+            BuildError::Packed(..) => "a date literal with a run of five digits or more is refused",
         }
     }
 }
@@ -340,7 +341,7 @@ pub fn constant(
                 Reading::Read { stamp, day_first } => (Some(stamp), day_first),
                 Reading::Refused => (None, None),
                 Reading::Unplaced => return Err(BuildError::Unplaced),
-                Reading::Packed => return Err(BuildError::Packed(location)),
+                Reading::Packed => return Err(BuildError::Packed(location, text.clone())),
             }
         }
         _ => (None, None),
