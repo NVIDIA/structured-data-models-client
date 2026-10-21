@@ -77,13 +77,18 @@ beside what the rules above answer.
 
 Numbers are read as the tokens the request wrote, never through a float,
 so an id past 2**53 is answered as it was asked.
+
+Every answer's JSON text is sent as UTF-8, unless the endpoint is told how
+to write it (T2.16's tests, as an endpoint may answer UTF-16 or with a byte
+order mark, which the reference's reader takes); the text is the rule's
+either way.
 """
 
 from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -333,6 +338,7 @@ class Received:
     explanation: bool = False
     item_metadata: bool = False
     embeddings: bool = False
+    encode: Callable[[str], bytes] = str.encode
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def take(self, method: str, path: str, body: bytes) -> int:
@@ -382,7 +388,7 @@ class _Handler(BaseHTTPRequestHandler):
                 **told,
             )
         )
-        out = json.dumps(reply).encode()
+        out = received.encode(json.dumps(reply))
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(out)))
@@ -403,6 +409,7 @@ def serve(
     explanation: bool = False,
     item_metadata: bool = False,
     embeddings: bool = False,
+    encode: Callable[[str], bytes] = str.encode,
 ) -> Iterator[tuple[str, Received]]:
     r"""The endpoint on a free localhost port: its base URL, and what it
     receives; the call numbered ``fail_call`` is failed, a classification
@@ -410,7 +417,8 @@ def serve(
     regression with its quantiles where ``quantiles`` does, a call asking
     for an explanation with one where ``explanation`` does, each item with
     its metadata where ``item_metadata`` does, and a call asking for
-    embeddings with one on each item where ``embeddings`` does."""
+    embeddings with one on each item where ``embeddings`` does; each
+    answer's JSON text written to bytes by ``encode``, UTF-8 unless told."""
     server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
     received = Received(
         fail_call=fail_call,
@@ -419,6 +427,7 @@ def serve(
         explanation=explanation,
         item_metadata=item_metadata,
         embeddings=embeddings,
+        encode=encode,
     )
     server.received = received  # type: ignore[attr-defined]
     thread = threading.Thread(
