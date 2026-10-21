@@ -184,3 +184,13 @@ Sources: the owner's answer on 2026-10-17 (UTC) to the orchestrator's lean-plan 
 | # | Decision | Reason | Status |
 |---|---|---|---|
 | KO2-91 | The lean plan: exact decimals (T2.17's scope, `d > 1.5` included) fixed inside T2.0c instead of excused; T2.0g only the one-line bridge-freeze fix; CI5 and CI6 dropped; T2.0b shrunk to the watchdog and temp-cleanup fixes; T2.0d folded into T2.1a; tooling fixes get a minimal test (one per fix) and no seeded-fault suites; product packages keep real tests but no extra harness machinery; two reviewers per round stay | "Yes just fix these and do them. No need for so much per package testing harness bs" | approved by owner 2026-10-17 |
+
+## The owner's answers on the overnight decisions (2026-10-21, later afternoon)
+
+Sources: the owner's answers on 2026-10-21 (UTC), after the orchestrator explained the ten decisions taken under the overnight delegation (KO2-88), as the go or no-go packet lists them: "3. Ok", "4. Ok", "8. Ok" and the three rows below.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-93 | A lone surrogate in a model answer's text (escaped as `\ud800`, raw in UTF-16 or UTF-32, written in UTF-8 as Python's reader takes it with surrogatepass, and in Databricks answer text) is read as U+FFFD and the prediction returns, instead of the answer being refused; register P1B-24 is rewritten to it (supersedes E93's refusal for answers, and KO2-88's widening of it) | "6. Ok, sure switch it" | approved by owner 2026-10-21 |
+| KO2-94 | The three refusals kept until Phase 4, `model`, `text_time_rules` and `aggregation`'s LIST_DISTINCT of a foreign key (KO2-22, KO2-75, KO2-90, KO2-92), are tracked as explicit exits of Phase 4 in migration-plan.md section 8, each to be enabled there | "9. Hmm ok, but make sure these are tracked and get enabled" | approved by owner 2026-10-21 |
+| KO2-95 | CI's `sbom` job and the build's trial install test the candidate's own wheels, installing them first without their dependencies, and `tests/test_ci_workflow.py` catches any job that installs this repository's packages by version from an index without them | "10. Yes please, fix them asap" | approved by owner 2026-10-21 |
