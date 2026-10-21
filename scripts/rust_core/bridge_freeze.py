@@ -15,12 +15,12 @@ that keep a row of the design's "Host-held semantics" ledger:
   (T2.14a, FR P3-2), whole: every function and method;
 - the files shared with the old route, for the functions ``COVERED`` names:
   in ``client.py``, ``query.py`` and ``materializers/relational.py`` the
-  ledgered functions and those the core route reaches through them; in
-  ``schema.py``, ``adapters/relational.py``, ``base.py``, ``result.py`` and
-  ``decompose.py`` the ledgered rules' own bodies; and the entry points
-  (``SDMClient.predict``, ``PredictiveQuery.materialize``,
+  functions the core route enters (T2.14c measured them); in ``schema.py``
+  and ``adapters/relational.py`` the ledgered rules' own bodies; and the
+  entry points (``SDMClient.predict``, ``PredictiveQuery.materialize``,
   ``RelationalMaterializer.materialize``, ``Schema.from_source``) with
-  ``RelationalMaterializer.__init__``;
+  ``RelationalMaterializer.__init__``; and a few the core route no longer
+  enters, which the self-tests seed;
 - ``_rust/__init__.py``, the bridges' package, for its skeleton only;
 - and every frozen file's skeleton, as ``<module>``: the whole module in
   order and in scope, each function's body (covered or not) replaced by
@@ -245,24 +245,26 @@ WHOLE = (
 #: The files shared with the old route, covered for the functions named
 #: here and for their module statements: the ledgered rules and what the
 #: core route reaches through them, its entry points among them.
+#: T2.14c measured which of them the core route still enters (python-core
+#: on every case and database under coverage, each call on the core route)
+#: and took out those it no longer enters, with ``base.py``, ``result.py``
+#: and ``decompose.py``, which then held none; the old route keeps them.
+#: Kept though not entered: those the self-tests seed (``selftest.py``),
+#: each marked.
 COVERED: dict[Path, tuple[str, ...]] = {
     _CLIENT / 'client.py': (
         'SDMClient._answer_in_parts',
+        # Not entered on the core route; the self-tests seed it.
         'SDMClient._prepare',
-        'SDMClient._send',
         'SDMClient._send_body',
-        'SDMClient._spec',
         'SDMClient.predict',
         '_adapter_for',
-        '_empty_answer',
-        '_names_its_rows',
         '_predicts_on_the_core',
         '_report_absent',
         '_require_a_request',
         '_require_output_names',
     ),
     _CLIENT / 'query.py': (
-        'PredictiveQuery._in_parts',
         'PredictiveQuery._refusal',
         'PredictiveQuery._resolve',
         'PredictiveQuery._validate_materialize_args',
@@ -271,33 +273,15 @@ COVERED: dict[Path, tuple[str, ...]] = {
     ),
     _CLIENT / 'materializers/relational.py': (
         'RelationalMaterializer.__init__',
+        # Not entered on the core route; the self-tests seed it.
         'RelationalMaterializer._check_limits',
-        'RelationalMaterializer._check_shape',
-        'RelationalMaterializer._gather',
-        'RelationalMaterializer._refuse_a_name_the_wire_reserves',
-        'RelationalMaterializer._run_mode_for',
-        'RelationalMaterializer._unreserved',
-        'RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities',
         'RelationalMaterializer.materialize',
-        '_columns_to_leave_out',
-        '_drop_context_that_answers_the_question',
-        '_entities_at_anchors',
-        '_instances_matching',
-        '_joins_nothing',
-        '_positions',
-        '_record_the_statistic',
-        '_remove_instances',
-        '_statistic_asked_for',
+        # Not entered on the core route; the self-tests seed it.
         '_tables_linked_to',
-        '_tables_sent',
-        '_warn_of_a_context_the_default_mode_capped',
-        '_warn_of_columns_the_model_does_not_read',
-        '_warn_of_relationships_that_join_nothing',
-        '_warn_of_tables_left_out',
-        '_warn_the_filter_chose_only_the_examples',
     ),
     # The ledgered rules' own bodies (T1.28's _preflight, model check and
-    # merge, the decomposition), and Schema.from_source, the describe
+    # merge, the decomposition: the core route no longer enters them, and
+    # T2.14c took out all but _preflight), and Schema.from_source, the describe
     # route's entry point. T1.21d moved the schema rows into sdm-schema and
     # took out the helpers the core route no longer reaches; what building a
     # Schema still runs on it stays (its key marking, its two-ways warning,
@@ -324,10 +308,8 @@ COVERED: dict[Path, tuple[str, ...]] = {
         '_require_joinable',
         '_warn_two_ways_to_reach_one_table',
     ),
+    # Not entered on the core route; the self-tests seed it.
     _CLIENT / 'adapters/relational.py': ('RelationalAdapter._preflight',),
-    _CLIENT / 'base.py': ('check_request_against_model',),
-    _CLIENT / 'result.py': ('PredictionResult.merge',),
-    _CLIENT / 'decompose.py': ('parts_of',),
     # The bridges' package: its module statements run on every core route.
     _CLIENT / '_rust/__init__.py': (),
 }

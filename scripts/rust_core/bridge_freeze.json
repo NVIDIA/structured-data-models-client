@@ -332,26 +332,14 @@
       "SDMClient._prepare": {
         "fingerprint": "7445da483034ad0cfce45c8edde75798bddf6e3c8ce1aad2c98082ad91e0bcea"
       },
-      "SDMClient._send": {
-        "fingerprint": "f518762d3b8ae98f80aafaa61656fc29577cec4b664d1c09f69d06105ed5130a"
-      },
       "SDMClient._send_body": {
         "fingerprint": "588c0f0918c84f08b49248447b4709af55b1abc7ea59e1dd34a9456341a26e88"
-      },
-      "SDMClient._spec": {
-        "fingerprint": "62fe113482328f15994f51ec540612a5ab68502bbb3e81f7eb2c476391a35a75"
       },
       "SDMClient.predict": {
         "fingerprint": "80c0b3fc986812e71678c3d65d121a4a9bb05a48a4df84ef316ce3d346db3a10"
       },
       "_adapter_for": {
         "fingerprint": "f3b57aa4d20ec3127f462227dd6e1df818233b7162fce794c1ddf12149f71f08"
-      },
-      "_empty_answer": {
-        "fingerprint": "a4d6ad43fb50873018222d82d3f81ec1cd58eeef249ed77a19d4c5153be28ec0"
-      },
-      "_names_its_rows": {
-        "fingerprint": "f60a6fbd6593842710266ca6f3f0fc2ef5221168fcad6127839be1646da10de4"
       },
       "_predicts_on_the_core": {
         "fingerprint": "d975fb749166e4a21e07e000928b890b48f576a00ef68139296374b90003b135"
@@ -369,9 +357,6 @@
     "packages/structured-data-models-client/src/sdm_client/query.py": {
       "<module>": {
         "fingerprint": "77e3deca76ce5b18302ef564bc46fb8a7d494ecc991eafad44c1f098051f149b"
-      },
-      "PredictiveQuery._in_parts": {
-        "fingerprint": "5d516e9bdd542af86772f79548c7b12991f5634a60a0ac2310e1f95e98918501"
       },
       "PredictiveQuery._refusal": {
         "fingerprint": "bfc5f58a968e98f9e32d32d0297d562d784a54b37a8edd770e69ccf4f45e484e"
@@ -399,74 +384,11 @@
       "RelationalMaterializer._check_limits": {
         "fingerprint": "5496e6431a2482bea8c5584eae80add3b1c7521932b27fefc62bea4c97d916ea"
       },
-      "RelationalMaterializer._check_shape": {
-        "fingerprint": "a5f2d5c45e4bf85b07837e00037b54bedc82dc256ebd629cf1df4564c5c322b0"
-      },
-      "RelationalMaterializer._gather": {
-        "fingerprint": "64faa292f319a8e642655443d1e8c62642a642ec4b3d8de1686c6234a6fcd628"
-      },
-      "RelationalMaterializer._refuse_a_name_the_wire_reserves": {
-        "fingerprint": "1773fc00d7291ca543635ca669ff685a29a86810b9aeae0e5cf27d94cd5f413a"
-      },
-      "RelationalMaterializer._run_mode_for": {
-        "fingerprint": "4ec3bf9246f7f8dfe19277873fdf01fd1f99513bbf7b21947f1150af06031995"
-      },
-      "RelationalMaterializer._unreserved": {
-        "fingerprint": "2bbe9f520da12579222c69933e685cfcf585dc2c715d00162ad0455438b39e6b"
-      },
-      "RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities": {
-        "fingerprint": "7a3b675295cec2a304c9ad6877d2c3e27bebd5830012bb67c9c8855054fddf4b"
-      },
       "RelationalMaterializer.materialize": {
         "fingerprint": "78d536be40a189e819e149b364f20dafbd08116d987569d44a03800873e43720"
       },
-      "_columns_to_leave_out": {
-        "fingerprint": "240620380b764dc9dc6e03d98aa7e2e1097f9579a0a5fb90918818ece008cd94"
-      },
-      "_drop_context_that_answers_the_question": {
-        "fingerprint": "a17be6f01a2b2726fb809a2d9671ee57d9919da28af1618891800d62df00a648"
-      },
-      "_entities_at_anchors": {
-        "fingerprint": "d767a401ab44dd253b79124387ed1bd6dad20fdcc4651e1046ad85b97fcc4ebb"
-      },
-      "_instances_matching": {
-        "fingerprint": "e85de6299e6797a3b9bbc516c0544706a8bfac16d2c083041936d3f4efad96e4"
-      },
-      "_joins_nothing": {
-        "fingerprint": "ae7a06545da2a379ece892f31fe11aa29fb399b604d81f33a949e3a6c249662f"
-      },
-      "_positions": {
-        "fingerprint": "50f3431cc872372b1ed9bdf5cc1078f21af1374b9bb6487ffda2e39b939d9adf"
-      },
-      "_record_the_statistic": {
-        "fingerprint": "942d28674ef5019f7d60089935146f313a9944bd60ea719dab954dc7170328f4"
-      },
-      "_remove_instances": {
-        "fingerprint": "02bc1fbe6a18fdc72b303cacabae6211fa616c862604acf5336b46fa6c3f1012"
-      },
-      "_statistic_asked_for": {
-        "fingerprint": "a5d7b761e07df4a9b8c5983d583a9bffed1112da846b086ea2496ba217aae8f3"
-      },
       "_tables_linked_to": {
         "fingerprint": "4fdf1b6b3eaefb88ca07bcd632b617d828cae0118384cff30dccc53429f2b83b"
-      },
-      "_tables_sent": {
-        "fingerprint": "cb46b3d89715289e8eb1245495e2929e0873cb9e74c4deb1e299157be09a994e"
-      },
-      "_warn_of_a_context_the_default_mode_capped": {
-        "fingerprint": "568fad028a4875f5bcc21160c4f0125ea8eb56e14ef0c21b02405bd6f4ed2069"
-      },
-      "_warn_of_columns_the_model_does_not_read": {
-        "fingerprint": "44d6920aaffb41293e6ac57436f83ad856efb51c526645b97cd9521d142901b3"
-      },
-      "_warn_of_relationships_that_join_nothing": {
-        "fingerprint": "6c7464105f6992b09ee65fcd6cd39a47a2de79ecac3b936a85ea4931a1eb5f07"
-      },
-      "_warn_of_tables_left_out": {
-        "fingerprint": "d3c71e8c365f99e29f71e2787ffb4a7d3a136ad0aae10c0f87b5165bcb30eca2"
-      },
-      "_warn_the_filter_chose_only_the_examples": {
-        "fingerprint": "4ffa637a0a74da15e5dea45b96d10fced8b493e91384f446994c4bcaddc3c9ed"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py": {
@@ -522,30 +444,6 @@
       },
       "RelationalAdapter._preflight": {
         "fingerprint": "a36203c27758b2b4499af351313b464a0c586e8cc6c1ca1d50f667f554003bb8"
-      }
-    },
-    "packages/structured-data-models-client/src/sdm_client/base.py": {
-      "<module>": {
-        "fingerprint": "cb1c414bc8d34ee6244916837c480d127a0b41cd4ccbb6a1e667b637ebdf18f9"
-      },
-      "check_request_against_model": {
-        "fingerprint": "789df2347ca7190d374d9b6187b36d619ddd619cb5d9674ff564e6a65931e969"
-      }
-    },
-    "packages/structured-data-models-client/src/sdm_client/result.py": {
-      "<module>": {
-        "fingerprint": "3b0f42183e7491c7226e8d12405babf926c98aed3828c3d0ab7d76f9fe94e28c"
-      },
-      "PredictionResult.merge": {
-        "fingerprint": "c4071c48eb024087824a1a826f17940b245b4402bdffc30df4c9b39fba175166"
-      }
-    },
-    "packages/structured-data-models-client/src/sdm_client/decompose.py": {
-      "<module>": {
-        "fingerprint": "7f632e952dcc37fc3cf5b58762afd15be026b1bc86dd97435b36817906179706"
-      },
-      "parts_of": {
-        "fingerprint": "ef9830a6433b6ec0f59a39cd7c831d796596d5b69c28aeee195b6956b66d98c4"
       }
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/__init__.py": {

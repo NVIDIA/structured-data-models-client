@@ -48,13 +48,13 @@
       "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
-      "moved": "T2.8: the module gains said_as_parts_are, _reworded, _too_many and _RULES, the words of the core's refusals of a question it asks in parts, as parts_of and _as_literal say them; no rule of their own"
+      "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::parts_of": {
-      "moved": "T2.8: the forecast's top_k and MOST_PARTS refusals on the core route are the core's (the on_the_core branch gone); parts_of is the old route's alone, as the reference's"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/base.py::check_request_against_model": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
       "moved": "T2.8: the module gains _said_of_the_part and _ranking_said, the words of the core's refusals of a ranking at predict (the part it names, its candidates as given), as _answer_in_parts said them; no rule of their own; T2.14b: _said_of_the_part reads the core's forecast_step and ranking_candidate only, the host's call counter gone (MID2 P2-4)"
@@ -72,13 +72,13 @@
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._gather": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
       "moved": "T2.8: a ranking's candidates passed to the core's gather on the core route, the core asking the ranking's questions; the old route unchanged; T2.14b: asked takes the core's state alone (MID2 P2-4, the facts the core resolved)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._in_parts": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
       "moved": "T2.18: names_a_query_cannot_say, whether a schema holds a column the old validator's language cannot say, which only the core route keeps and only the core resolves a query naming (KO2-36); it refuses nothing"
@@ -370,6 +370,87 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::numpy_warns_on_cast_overflow": {
       "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::_empty_answer": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::_names_its_rows": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._spec": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_columns_to_leave_out": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_drop_context_that_answers_the_question": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_entities_at_anchors": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_instances_matching": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_joins_nothing": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_positions": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_record_the_statistic": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_shape": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._refuse_a_name_the_wire_reserves": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._run_mode_for": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._unreserved": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_remove_instances": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_statistic_asked_for": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_tables_sent": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_a_context_the_default_mode_capped": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_columns_the_model_does_not_read": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_relationships_that_join_nothing": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_tables_left_out": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_the_filter_chose_only_the_examples": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/result.py::PredictionResult.merge": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/base.py::<module>": {
+      "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/result.py::<module>": {
+      "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
     }
   }
 }
