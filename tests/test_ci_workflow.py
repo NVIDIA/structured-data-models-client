@@ -551,7 +551,14 @@ def test_every_job_has_a_timeout() -> None:
 
 #: A pip install naming one of this repository's distributions by name (a
 #: requirement in quotes), not by path (``./packages/...``) or file.
-NAMED_OWN = re.compile(r'["\']structured-data-models-[a-z-]+')
+OWN_DISTRIBUTIONS = (
+    'structured-data-models-client',
+    'structured-data-models-api',
+    'structured-data-models-pql',
+    'structured-data-models-connectors',
+    'structured-data-models-relational-engine',
+)
+NAMED_OWN = re.compile(r'["\'](?:' + '|'.join(OWN_DISTRIBUTIONS) + ')')
 #: A pip install of the candidate's own wheels without their dependencies.
 OWN_FIRST = re.compile(
     r'pip3? install\b[^\n]*--no-deps[^\n]*(dist/\*\.whl|\$candidate)'
