@@ -1,10 +1,6 @@
 {
  "about": "T2.14b's acceptance tests (with T2.14d's Postgres value rules and the decimal stype fix riding along) that failed when the test author wrote them, before the implementation. Each key names its test file's family by prefix: host:<name> (contract/tests/test_t214b_host.py and sdm-testkit tests/t214b_host.rs), stype:<case key> (contract/tests/test_t214b_decimal_stype.py, sdm-schema tests/t214b_decimal_stype.rs and sdm-testkit tests/t214b_host.rs), wording:<key> (contract/tests/test_t214b_wording.py), regress:<name> (contract/tests/test_t214b_regressions.py), pg-regress:<name> (packages/structured-data-models-client/tests_test_ops/test_t214b_postgres_regressions.py), typed:<test> (sdm-request tests/t214b_typed_candidates.rs), pg-values:<rule> (packages/structured-data-models-client/tests_test_ops/test_t214d_postgres_values.py). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
- "pending": [
-  "regress:candidates:times-one-instant",
-  "regress:candidates:zone-against-utc",
-  "regress:candidates:zone-fold"
- ],
+ "pending": [],
  "authored": [
   "host:facts-from-the-core",
   "host:no-re-encoding",
