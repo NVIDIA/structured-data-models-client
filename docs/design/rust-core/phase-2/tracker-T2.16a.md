@@ -1,7 +1,7 @@
 # Phase 2 tracker: T2.16a
 
 The design branch owns `tracker.md`; this file holds T2.16a's section until it folds in.
-Lane o, on the phase head b2732c12 (after T2.13b's landing), then the test author's acceptance tests (`T2.16a tests:`, from `t216a-tests`), then this package (`T2.16a:` commits).
+Lane o, on the phase head 2df155b6 (after T2.0i's landing; first built on b2732c12), then the test author's acceptance tests (`T2.16a tests:`, from `t216a-tests`), then this package (`T2.16a:` commits).
 
 ## T2.16a
 
@@ -25,11 +25,13 @@ H11 reads "more than 4 cases differing from the reference without an entry appro
 - **The converter** (`heldout.py convert ORIG OUT --prefix P`): the held-out format (c8075715) into the head's case format, each case held to the head's own loader (`run_python.load_cases`).
   No field has moved since c8075715 (`FORMAT_MOVES` is empty): every field added since (T2.1m's `lag_timesteps`, `outputs` and `quantiles`, T2.1n's `explanation` and `item_metadata`, T2.1t's sampling options, `context_anchor_time` and `embeddings`) is optional, and the ranking and multi-call fields are still `input.materialize`'s. A case is therefore copied byte for byte and the digests stay the frozen ones; the command prints both.
 - **Dummy bundles** (`heldout.py dummy panic|over-threshold OUT --prefix P [--threshold N]`): check 9's two synthetic run directories, with DuckDB and SQLite legs, which `counts` must find a no-go: a rust-host `INTERNAL_ERROR` on one SQLite leg, and N+1 cases each differing on one leg (neither a panic nor a new refusal).
-- **The result's explanation in both runners** (`contract/runners/run_python.py`, `sdm-testkit/src/host.rs`, `contract/observation.schema.json`): `core.predicted.result.explanation`, the result schema's `explanation` metadata as the JSON text the core wrote, so `compare.py`'s whole-`core.predicted` comparison holds the hosts to the same bytes.
+- **The result's explanation in both runners** (`contract/runners/run_python.py`, `sdm-testkit/src/host.rs` and `observation.rs`, `contract/observation.schema.json`): `core.predicted.result.explanation`, the result schema's `explanation` metadata as the JSON text the core wrote, so `compare.py`'s whole-`core.predicted` comparison holds the hosts to the same bytes.
+  rust-host holds it apart from its answer (`Observed.explanation`, as T1.24b's `edits`) and only the observation writer writes it, because the gate overlays the checkpoint's writer and `run_python.py`: a gate judged by a checkpoint before this landing writes it on neither host (the checkpoint's observation schema refuses it), one after on both.
   An item's explanation and metadata are already the result's own `explanation` and `metadata` columns, among the rows both runners record.
 - **Offline L7** (`contract/tools/l7.py`): `measure` per environment and `report` against KO2-29's limits; a one-time report, no seeded-fault suite (KO2-53, KO2-76).
   Boundary overhead is measured as the Python host's codec CPU plus one native crossing's CPU per control message; zero-copy is left to `test_arrow_lifetimes.py` in CI.
-- **Coverage** (`scripts/rust_core/coverage.py`): a query's target is read behind `EVALUATE` or `EXPLAIN` and with `FOR t.c = v` or `FOR t.c IN (...)`; `float64/target` is back on the eight cases 1e89eacc took it from, and their 24 python-ref lines are re-recorded (identity only differs). `date.day-first-then-packed` predicts `COUNT(orders.*)`, which no column plays, so its claim stays dropped (the orchestrator's decision).
+- **Coverage** (`scripts/rust_core/coverage.py`): a query's target is read behind `EVALUATE` or `EXPLAIN` and with `FOR t.c = v` or `FOR t.c IN (...)`.
+  `float64/target` goes back on the eight cases 1e89eacc took it from in T2.14c, after this lands, since the gate judges a candidate with its checkpoint's `coverage.py` (with their 24 python-ref lines and option vectors re-recorded at 43e55f4f and register entry P2O-1). `date.day-first-then-packed` predicts `COUNT(orders.*)`, which no column plays, so its claim stays dropped (the orchestrator's decision).
 - **The kept rules on real data** (`docs/design/rust-core/phase-2/evidence/census/real-data.md`, `tests/test_census_real_data.py`): `text_time_rules` and `model` are hit 0 times on every database by construction (the orchestrator's option b), with a guard test.
 
 ### Not done
