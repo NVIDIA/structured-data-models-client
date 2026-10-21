@@ -466,6 +466,13 @@ jobs:
           SDM_PYTHON: python
         run: |
           set -o pipefail
+          # The gate above built sdm-testkit from its judging worktree, the
+          # checkpoint's observation writer overlaid, into this target
+          # directory, so Cargo, judging by modification times, takes that
+          # build as this tree's: the test kit's sources are marked newer,
+          # and this tree's host is built again (T2.16a, the result's
+          # explanation missing from SQLite and Postgres cross-host).
+          find rust/crates/sdm-testkit/src -name '*.rs' -exec touch {} +
           out=rust-host-sqlite
           mkdir -p "$out"
           reference=$(ls contract/reference/*.jsonl)

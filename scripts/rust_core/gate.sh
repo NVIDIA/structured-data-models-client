@@ -623,6 +623,14 @@ observe() {
     esac
     echo "$runner: $made/$runner.jsonl"
   done
+  if [ "$differs" = 1 ]; then
+    # The judging tree's test kit, the checkpoint's writer overlaid, was
+    # built into the candidate's target directory; Cargo judges freshness
+    # by modification times, so the candidate's next build would take it
+    # for its own. Its sources are marked newer, so that build is redone
+    # (T2.16a).
+    find "$candidate/rust/crates/sdm-testkit/src" -name '*.rs' -exec touch {} +
+  fi
 }
 refuse() {
   echo "the given observations were made by the candidate's own runner, and"
