@@ -12,7 +12,7 @@ every check.
 |---|---|---|
 | `SDM_ORCH_STATE` | State directory: `land-queue/`, `logs/`, `lanes_done`, `rule_watch.ignore`, the lander's lock | `~/.local/share/sdm-orchestration` |
 | `SDM_LAND_QUEUE` | The landing queue | `$SDM_ORCH_STATE/land-queue` |
-| `SDM_PHASE_BRANCH` | The phase branch, e.g. `rust-core-phase-2`. Lanes are `<phase>-lane-<x>`, topic branches `<phase>-<name>`, archives `<phase>-archive-...` | none; required by `auto_land.py`, `land_chain.sh`, `cancel_superseded.sh` and `lane_idle.py`, which exit 2 when it is unset (the two Python tools also take `--phase`). The tools beside them read it too (`../phases.py`, T2.0): `land.py` and `lane.py` (whose `--phase-branch` overrides it), `ratchet.py`, `prepush.sh`, `prune_caches.py`, `replay_jobs.py` and `bridge_freeze.py`; unset, they take the phase of the branch they work on, else `phases.py`'s `CURRENT` |
+| `SDM_PHASE_BRANCH` | The phase branch, e.g. `rust-core-phase-3`. Lanes are `<phase>-lane-<x>`, topic branches `<phase>-<name>`, archives `<phase>-archive-...` | none; required by `auto_land.py`, `land_chain.sh`, `cancel_superseded.sh` and `lane_idle.py`, which exit 2 when it is unset (the two Python tools also take `--phase`). The tools beside them read it too (`../phases.py`, T2.0): `land.py` and `lane.py` (whose `--phase-branch` overrides it), `ratchet.py`, `prepush.sh`, `prune_caches.py`, `replay_jobs.py` and `bridge_freeze.py`; unset, they take the phase of the branch they work on, else `phases.py`'s `CURRENT` |
 | `SDM_REPO` | The local clone | the git toplevel of this directory |
 | `SDM_TASKS_DIR` | The agents' task-output directory (`a*.output` transcripts) | none; required by the transcript tools |
 
@@ -108,6 +108,17 @@ every check.
   reviewer's throwaway worktree in its scratch directory is safe).
   Examples: `./clean_tmp.sh` to see what would go, and
   `./clean_tmp.sh --apply` to remove it.
+
+- **`guard_cmd.py`** (T3.0): the Claude Code PreToolUse hook the
+  repository's `.claude/settings.json` runs before every Bash and Agent
+  call. It denies the banned commands with the rule and the alternative,
+  lets an owner-approved one-off through as `SDM_APPROVED=<id> <command>`
+  (logged; `--tokens` lists the ids), and refuses a reviewer launch on a SHA
+  without a handoff stamp (`../handoff.py`). The handbook's "The command
+  hook" section has the list. `rule_watch.py` still watches Codex panes.
+- **`auto_land.py`'s stack entries** (T3.0): `"stack": true` stacks an
+  approved package with `land.py --stack`; `{"stack_tip": SHA, ...}` lands
+  the stack with `land.py stack-land` once its top's run is green.
 
 ## Phase-end, review and housekeeping tools
 
