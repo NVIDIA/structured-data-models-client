@@ -530,7 +530,7 @@ TIMEOUT_CEILINGS = {
     'landing': 10,
     'rust-test': 120,
     'test': 90,
-    'contract-python-ref-pandas3': 90,
+    'contract-python-ref-pandas3': 120,
     'engine': 90,
 }
 TIMEOUT_CEILING = 60
@@ -547,6 +547,55 @@ def test_every_job_has_a_timeout() -> None:
             minutes,
             ceiling,
         )
+
+
+#: A pip install naming one of this repository's distributions by name (a
+#: requirement in quotes), not by path (``./packages/...``) or file.
+NAMED_OWN = re.compile(r'["\']structured-data-models-[a-z-]+')
+#: A pip install of the candidate's own wheels without their dependencies.
+OWN_FIRST = re.compile(
+    r'pip3? install\b[^\n]*--no-deps[^\n]*(dist/\*\.whl|\$candidate)'
+)
+
+
+def _unguarded_named_installs(jobs: dict[str, Any]) -> list[str]:
+    r"""The jobs that install one of this repository's distributions by name
+    before installing the candidate's own wheels without their
+    dependencies: there an index's published distribution of the same
+    version stands in for the candidate's (T2.16, KO2-95)."""
+    found = []
+    for name, job in jobs.items():
+        own_first = False
+        for step in job.get('steps', []):
+            run = step.get('run') if isinstance(step, dict) else None
+            if not isinstance(run, str):
+                continue
+            for line in re.sub(r'\\\n\s*', ' ', run).split('\n'):
+                if OWN_FIRST.search(line):
+                    own_first = True
+                elif re.search(r'pip3? install', line) and NAMED_OWN.search(
+                    line
+                ):
+                    if not own_first:
+                        found.append(name)
+    return found
+
+
+def test_a_job_installs_the_candidate_s_wheels_before_naming_them() -> None:
+    assert _unguarded_named_installs(_workflow()['jobs']) == []
+    # The fault it catches: a by-version install with only --find-links.
+    seeded = {
+        'sbom': {
+            'steps': [
+                {
+                    'run': 'VERSION=$(cat dist/VERSION)\n'
+                    'pip install --find-links "$GITHUB_WORKSPACE/dist" \\\n'
+                    '  "structured-data-models-client[sqlite]==$VERSION"\n'
+                }
+            ]
+        }
+    }
+    assert _unguarded_named_installs(seeded) == ['sbom']
 
 
 # --- the images -----------------------------------------------------------------

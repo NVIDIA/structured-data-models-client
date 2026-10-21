@@ -1016,9 +1016,10 @@ jobs:
   contract-python-ref-pandas3:
     name: contract-python (ref-pandas3, duckdb)
     runs-on: ubuntu-latest
-    # 90, not 60: the phase head's own run took 57 minutes and runs vary by
-    # about 20 (T2.1o); the cause is being cut separately.
-    timeout-minutes: 90
+    # 120: the job took 80 to 90 minutes on Phase 2's last candidates and
+    # one run on T2.16's ran past 90 (T2.1o first raised it from 60); the
+    # cause is carried into Phase 3 (P2-T2.16-14).
+    timeout-minutes: 120
     needs: [native-wheel, native-test-ops]
     env:
       CELL: ref-pandas3
@@ -1743,8 +1744,12 @@ jobs:
       # Building each one proves nothing about installing them together. A pin
       # only one distribution carries makes the set unsatisfiable, and the
       # resolver is the only thing that says so.
+      # The candidate's own wheels go in first, without their dependencies,
+      # so the resolver sees them and never the published distributions of
+      # the same version (T2.16, KO2-95).
       - run: |
           VERSION=$(cat dist/VERSION)
+          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --dry-run --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[relational,sqlite,duckdb]==$VERSION"
       # The wheels only: dist/ also carries VERSION for the jobs downstream,
@@ -2049,6 +2054,9 @@ jobs:
       - run: |
           pip install --upgrade pip cyclonedx-bom
           VERSION=$(cat dist/VERSION)
+          # The candidate's own wheels first, as installed-wheel installs
+          # them (T2.16, KO2-95).
+          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$VERSION"
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
