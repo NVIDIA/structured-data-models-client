@@ -41,7 +41,7 @@ from phases import PACKAGE_ID  # noqa: E402
 #: A fix commit's subject: ``T3.1 fix 2: ...``.
 FIX_SUBJECT = re.compile(rf'({PACKAGE_ID.pattern}) fix [0-9]+: ')
 #: The rule line: ``Rule:`` and at least three words.
-RULE_LINE = re.compile(r'^Rule:\s*(\S+\s+){2,}\S+', re.MULTILINE)
+RULE_LINE = re.compile(r'^Rule:[ \t]*(\S+[ \t]+){2,}\S+', re.MULTILINE)
 
 
 def rule_problem(message: str, paths: Iterable[str], rules: judging.Rules) -> str | None:
