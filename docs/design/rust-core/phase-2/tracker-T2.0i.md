@@ -34,7 +34,8 @@ No `bridge_changes.json` entry: neither commit touches a frozen file.
 
 ### The chain
 
-T2.0i lands at the end of the landing chain T2.1u, T2.14a, T2.21, T2.11, stacked on T2.11's head `d5afc6d5`.
-The chain added 207 reference lines after `1d85bce3` and changed none: T2.10's and T2.21's cases (57, T2.18's deferred filter-role lines among them) and T2.11's sampling cases (150, its 50 cases on three databases).
-The recorder recorded all of them at `43e55f4f`, each equal to its `6298913c` line under `ratchet.semantic`, so the new file carries all 859 lines the old one did.
+T2.0i lands on the phase head `b2732c12`, after T2.1u, T2.14a, T2.21, T2.11 and T2.13b.
+Those packages added 234 reference lines after `1d85bce3` and changed none: T2.10's and T2.21's cases (57, T2.18's deferred filter-role lines among them), T2.11's sampling cases (150, its 50 cases on three databases) and T2.13b's cases (27).
+The recorder recorded all of them at `43e55f4f`, each equal to its `6298913c` line under `ratchet.semantic`, so the new file carries all 886 lines the old one did.
+Vector files that cite the reference, `contract/t136-forecast-vectors.json`'s `sum-entity-filter-3` among them (re-recorded by T2.13b), name `43e55f4f` like every other citation; their recorded answers are the reference's, which no line of the recording shows changed.
 Packages after T2.0i record their new reference lines at `43e55f4f` directly.
