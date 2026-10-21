@@ -1,0 +1,443 @@
+{
+ "format": "sdm-t214b-regression-vectors/1",
+ "about": "What the reference's public calls give for T2.14b's fix-round regressions: repeated and equal temporal ranking candidates, a column's meaning set to a number, an aggregation's filter reading a double past float32's range, and Postgres json documents escaping lone surrogates through predict. contract/tests/test_t214b_regressions.py holds python-core to them, observed by the same code (observe).",
+ "recorded_by": "contract/tools/t214b_regressions_record.py",
+ "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "candidates": {
+  "dates-repeated": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-01\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-02\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-02"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-01"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-02"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-01"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "dates-distinct": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-01\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-02\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-02"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-01"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-02"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-01"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "aware-one-instant": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-01 00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-02 00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-02 00:00:00+00:00"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-02 00:00:00+00:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "aware-distinct": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-01 00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-02 00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-02 00:00:00+00:00"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-02 00:00:00+00:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "naive-beside-aware": {
+   "parts": 3,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-01 00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-02 00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-02 00:00:00+00:00"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-02 00:00:00+00:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  }
+ },
+ "stype": {
+  "refusal": {
+   "error": "StructuredDataError",
+   "code": "INVALID_REQUEST",
+   "message": "[INVALID_REQUEST] 5 is not a semantic type; use one of ['ID', 'categorical', 'multicategorical', 'numerical', 'sequence', 'text', 'timestamp']"
+  }
+ },
+ "where": {
+  "refusal": null,
+  "runtime_warnings": [
+   "overflow encountered in cast"
+  ]
+ },
+ "json": {
+  "refusal": null,
+  "bodies": [
+   {
+    "model": "kumo-relational",
+    "task": {
+     "kind": "regression",
+     "target": {
+      "column_name": "TARGET",
+      "dtype": "int64"
+     },
+     "entity_table_names": [
+      "t214b_json_lone_surrogate"
+     ]
+    },
+    "schema": {
+     "instance_table": {
+      "columns": {
+       "instance_id": {
+        "dtype": "int64",
+        "stype": "ID",
+        "nullable": false
+       },
+       "__kumo_entity_ref_0": {
+        "dtype": "int64",
+        "stype": "ID"
+       },
+       "TARGET": {
+        "dtype": "int64",
+        "stype": "numerical"
+       }
+      },
+      "primary_key": "instance_id"
+     },
+     "related_tables": {
+      "t214b_json_lone_surrogate": {
+       "columns": {
+        "instance_id": {
+         "dtype": "int64",
+         "stype": "ID",
+         "nullable": false
+        },
+        "id": {
+         "dtype": "int64",
+         "nullable": false
+        },
+        "doc": {
+         "dtype": "string",
+         "stype": "categorical"
+        }
+       },
+       "primary_key": [
+        "instance_id",
+        "id"
+       ]
+      }
+     },
+     "relationships": [
+      {
+       "source_columns": [
+        "__kumo_entity_ref_0"
+       ],
+       "target_table": "t214b_json_lone_surrogate",
+       "target_columns": [
+        "id"
+       ]
+      }
+     ]
+    },
+    "context": {
+     "instance_table": {
+      "format": "arrays",
+      "columns": [
+       "instance_id",
+       "__kumo_entity_ref_0",
+       "TARGET"
+      ],
+      "rows": [
+       [
+        0,
+        4,
+        24
+       ],
+       [
+        1,
+        3,
+        23
+       ],
+       [
+        2,
+        7,
+        27
+       ],
+       [
+        4,
+        6,
+        26
+       ],
+       [
+        6,
+        2,
+        22
+       ],
+       [
+        7,
+        5,
+        25
+       ]
+      ]
+     },
+     "related_tables": {
+      "t214b_json_lone_surrogate": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "id",
+        "doc"
+       ],
+       "rows": [
+        [
+         0,
+         4,
+         "{\"s\":\"\\ud800\"}"
+        ],
+        [
+         1,
+         3,
+         "{\"s\":\"ok\"}"
+        ],
+        [
+         2,
+         7,
+         "{\"s\":\"ok\"}"
+        ],
+        [
+         4,
+         6,
+         "[\"\\ud800\",\"\\ud83d\\ude00\"]"
+        ],
+        [
+         6,
+         2,
+         "[\"\\ud800\",\"\\ud83d\\ude00\"]"
+        ],
+        [
+         7,
+         5,
+         "{\"\\udc00\":\"x\"}"
+        ]
+       ]
+      }
+     }
+    },
+    "predict": {
+     "instance_table": {
+      "format": "arrays",
+      "columns": [
+       "instance_id",
+       "__kumo_entity_ref_0"
+      ],
+      "rows": [
+       [
+        8,
+        0
+       ],
+       [
+        9,
+        1
+       ]
+      ]
+     },
+     "related_tables": {
+      "t214b_json_lone_surrogate": {
+       "format": "arrays",
+       "columns": [
+        "instance_id",
+        "id",
+        "doc"
+       ],
+       "rows": [
+        [
+         8,
+         0,
+         "{\"s\":\"\\ud800\"}"
+        ],
+        [
+         9,
+         1,
+         "{\"\\udc00\":\"x\"}"
+        ]
+       ]
+      }
+     }
+    },
+    "output": {
+     "fields": [
+      "prediction"
+     ],
+     "prediction_statistic": "median"
+    },
+    "inference": {
+     "run_mode": "fast",
+     "use_prediction_time": false
+    },
+    "metadata": {
+     "source_query": "PREDICT t214b_json_lone_surrogate.age FOR EACH t214b_json_lone_surrogate.id",
+     "num_context_examples": 8,
+     "num_prediction_examples": 2
+    }
+   }
+  ]
+ }
+}
