@@ -39,12 +39,14 @@
 #                        named, pinned and on the Python version its ci.yml
 #                        job gives (CELL, CELL_PINS, python-version), with
 #                        DuckDB at the version the install step pins; every
-#                        first-party package is a non-editable wheel install
+#                        first-party package is a non-editable wheel install;
+#                        and kit/, the reference cell with the test-ops build
+#                        first (SDM_KIT_PYTHON, as CI's contract jobs set it)
 #   current              a link to the environment in use
 #
 # A cell is checked after install: run_python.py's _cell() must name it from
 # its versions, and sdm_client._native must load. Its stamp (.cells-stamp)
-# holds the key. It prints CLIENT_WHEEL=... and one CELL <name>=<python>
+# holds the key. It prints CLIENT_WHEEL=..., KIT_PYTHON=... and one CELL <name>=<python>
 # line per cell. It deletes only an older env-<key12> of OUT, and touches
 # the network only for uv's and cargo's package downloads.
 set -euo pipefail
@@ -124,6 +126,7 @@ while IFS='|' read -r cell py pins; do
     || current=0
 done <<<"$CELLS"
 ls "$CLIENT_DIR"/structured_data_models_client-*.whl >/dev/null 2>&1 || current=0
+[ "$(cat "$ENV/kit/.cells-stamp" 2>/dev/null)" = "$KEY" ] || current=0
 
 if [ "$current" = 0 ]; then
   if [ ! -d "$SRC" ]; then
@@ -224,6 +227,26 @@ print(
 PY
   printf '%s\n' "$stamp" >"$V/.cells-stamp"
 done <<<"$CELLS"
+
+# The provider kit's interpreter, as CI's contract jobs make it: the
+# reference cell with the test-ops build of the client first on its path
+# (SDM_KIT_PYTHON for contract/runners/provider_kit.py).
+log "kit (the test-ops build over the reference cell)"
+KIT_WHEELS=$ENV/client-test-ops
+if ! ls "$KIT_WHEELS"/structured_data_models_client-*.whl >/dev/null 2>&1; then
+  (cd "$SRC" && PATH="$OUT/tools/bin:$PATH" "$OUT/tools/bin/python" -I \
+    scripts/rust_core/native_wheel.py --test-ops --out "$KIT_WHEELS") \
+    >"$OUT/logs/client-test-ops-$T12.log" 2>&1 \
+    || { echo "test-ops build failed; see $OUT/logs/client-test-ops-$T12.log" >&2; exit 1; }
+fi
+REF=$(printf '%s\n' "$CELLS" | awk -F'|' '$1 == "ref-pandas3" { print $2 }')
+[ -n "$REF" ] || { echo "ci.yml names no ref-pandas3 cell for the kit" >&2; exit 3; }
+[ -x "$ENV/kit/bin/python" ] || uv venv -q -p "$REF" "$ENV/kit"
+"$ENV/cell-ref-pandas3/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])' \
+  >"$("$ENV/kit/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/cells-ref-pandas3.pth"
+uv pip install -q -p "$ENV/kit/bin/python" --no-deps --reinstall "$(ls "$KIT_WHEELS"/structured_data_models_client-*.whl)"
+"$ENV/kit/bin/python" -I -c 'import sdm_client._native as n; assert n.TEST_OPS'
+printf '%s\n' "$KEY" >"$ENV/kit/.cells-stamp"
 fi
 
 # The lane holds one environment: this one is current, an older one goes
@@ -243,6 +266,7 @@ done
 CLIENT=$(ls "$CLIENT_DIR"/structured_data_models_client-*.whl)
 log "done: tree $T12, environment $K12 in $OUT"
 printf 'CLIENT_WHEEL=%s\n' "$CLIENT"
+printf 'KIT_PYTHON=%s\n' "$ENV/kit/bin/python"
 while IFS='|' read -r cell _ _; do
   printf 'CELL %s=%s\n' "$cell" "$ENV/cell-$cell/bin/python"
 done <<<"$CELLS"
