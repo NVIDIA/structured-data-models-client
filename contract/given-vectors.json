@@ -166,7 +166,8 @@
     "code": "INVALID_REQUEST",
     "fields": {
      "field": "primary_keys",
-     "table": "orders"
+     "table": "orders",
+     "reason": "empty_key"
     }
    },
    "register": null,
@@ -389,7 +390,8 @@
     "code": "INVALID_REQUEST",
     "fields": {
      "field": "primary_keys",
-     "table": "orders"
+     "table": "orders",
+     "reason": "empty_key"
     }
    },
    "register": null,
@@ -638,7 +640,14 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "column": "nope"
+     "column": "nope",
+     "reason": "no_column",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -745,7 +754,14 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "column": "nope"
+     "column": "nope",
+     "reason": "no_column",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -1091,7 +1107,14 @@
     "fields": {
      "field": "time_columns",
      "table": "orders",
-     "column": "nope"
+     "column": "nope",
+     "reason": "no_column",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -1126,7 +1149,12 @@
     "code": "INVALID_REQUEST",
     "fields": {
      "field": "primary_keys",
-     "table": "nope"
+     "table": "nope",
+     "reason": "no_table",
+     "tables": [
+      "orders",
+      "users"
+     ]
     }
    },
    "register": null,
@@ -1161,7 +1189,12 @@
     "code": "INVALID_REQUEST",
     "fields": {
      "field": "time_columns",
-     "table": "nope"
+     "table": "nope",
+     "reason": "no_table",
+     "tables": [
+      "orders",
+      "users"
+     ]
     }
    },
    "register": null,
@@ -1244,7 +1277,8 @@
     "code": "INVALID_REQUEST",
     "fields": {
      "field": "primary_keys",
-     "table": "orders"
+     "table": "orders",
+     "reason": "empty_key"
     }
    },
    "register": null,
@@ -1286,7 +1320,14 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "column": "nope"
+     "column": "nope",
+     "reason": "no_column",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -1330,7 +1371,14 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "column": "nope"
+     "column": "nope",
+     "reason": "no_column",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,

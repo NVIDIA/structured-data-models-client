@@ -292,7 +292,33 @@ TIME_NOT_A_NAME = {
     'table': 'orders',
     'rule': 'time_column_not_a_name',
 }
-EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
+#: From T2.14b each refusal also names its reason, and one of a column or
+#: a table the schema lacks lists those it has, so the host words it as the
+#: reference does ("table 'orders' has no column 'nope'; it has [...]").
+EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders', 'reason': 'empty_key'}
+ORDERS_COLUMNS = ['order_id', 'price', 'ts', 'user_id']
+TABLES = ['orders', 'users']
+
+
+def no_column(field: str) -> dict[str, Any]:
+    r"""The refusal of a column ``orders`` lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'orders',
+        'column': 'nope',
+        'reason': 'no_column',
+        'columns': ORDERS_COLUMNS,
+    }
+
+
+def no_table(field: str) -> dict[str, Any]:
+    r"""The refusal of a table the schema lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'nope',
+        'reason': 'no_table',
+        'tables': TABLES,
+    }
 
 
 def table_not_a_name(field: str) -> dict[str, Any]:
@@ -510,7 +536,7 @@ ROWS = [
         'k.missing',
         lambda: 'nope',
         V(['nope']),
-        refused({**EMPTY_KEY, 'column': 'nope'}),
+        refused(no_column('primary_keys')),
         REF_REFUSED,
     ),
     key(
@@ -552,7 +578,7 @@ ROWS = [
         't.missing',
         lambda: 'nope',
         V('nope'),
-        refused({'field': 'time_columns', 'table': 'orders', 'column': 'nope'}),
+        refused(no_column('time_columns')),
         REF_REFUSED,
     ),
     time('t.int', lambda: 3, U, NOT_A_NAME, REF_REFUSED),
@@ -1013,12 +1039,12 @@ def test_the_strategy_is_bounded_and_reaches_every_kind() -> None:
 ORDER = [
     pytest.param(
         {'primary_keys': {'nope': 3}},
-        {'field': 'primary_keys', 'table': 'nope'},
+        no_table('primary_keys'),
         id='the-table-before-the-key',
     ),
     pytest.param(
         {'time_columns': {'nope': ['ts']}},
-        {'field': 'time_columns', 'table': 'nope'},
+        no_table('time_columns'),
         id='the-table-before-the-time-column',
     ),
     pytest.param(
@@ -1031,12 +1057,12 @@ ORDER = [
     ),
     pytest.param(
         {'primary_keys': {'users': np.bool_(True), 'orders': 'nope'}},
-        {'field': 'primary_keys', 'table': 'orders', 'column': 'nope'},
+        no_column('primary_keys'),
         id='the-tables-in-name-order',
     ),
     pytest.param(
         {'primary_keys': {'orders': ['order_id', 'nope']}},
-        {'field': 'primary_keys', 'table': 'orders', 'column': 'nope'},
+        no_column('primary_keys'),
         id='a-missing-column-before-a-composite-key',
     ),
 ]

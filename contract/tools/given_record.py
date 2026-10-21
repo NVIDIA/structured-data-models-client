@@ -141,7 +141,35 @@ NOT_A_NAME = {
     'table': 'orders',
     'rule': 'time_column_not_a_name',
 }
-EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
+EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders', 'reason': 'empty_key'}
+#: From T2.14b a refusal of a column or a table the schema lacks names its
+#: reason and lists those it has, so the host words it as the reference
+#: does ("table 'orders' has no column 'nope'; it has [...]").
+ORDERS_COLUMNS = ['order_id', 'price', 'ts', 'user_id']
+TABLES = ['orders', 'users']
+
+
+def no_column(field: str) -> dict[str, Any]:
+    r"""The refusal of a column ``orders`` lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'orders',
+        'column': 'nope',
+        'reason': 'no_column',
+        'columns': ORDERS_COLUMNS,
+    }
+
+
+def no_table(field: str) -> dict[str, Any]:
+    r"""The refusal of a table the schema lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'nope',
+        'reason': 'no_table',
+        'tables': TABLES,
+    }
+
+
 #: D3's refusal of a key naming ``order_id`` twice.
 TWICE = {
     'field': 'primary_keys',
@@ -280,7 +308,7 @@ VECTORS: list[dict[str, Any]] = [
         'key.twice-missing-first',
         {'primary_keys': {'orders': ['nope', 'nope']}},
         spec({'orders': V(['nope', 'nope'])}),
-        refused('INVALID_REQUEST', **EMPTY_KEY, column='nope'),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
         owner='D3',
     ),
     case(
@@ -295,7 +323,7 @@ VECTORS: list[dict[str, Any]] = [
         'key.missing-column',
         {'primary_keys': {'orders': 'nope'}},
         spec({'orders': V(['nope'])}),
-        refused('INVALID_REQUEST', **EMPTY_KEY, column='nope'),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
     ),
     # --- time columns a caller can give, rows 18-22 ----------------------
     case(
@@ -352,25 +380,20 @@ VECTORS: list[dict[str, Any]] = [
         'time.missing-column',
         {'time_columns': {'orders': 'nope'}},
         spec(time_columns={'orders': V('nope')}),
-        refused(
-            'INVALID_REQUEST',
-            field='time_columns',
-            table='orders',
-            column='nope',
-        ),
+        refused('INVALID_REQUEST', **no_column('time_columns')),
     ),
     # --- the ordering promise, section 2, steps 3 to 6 --------------------
     case(
         'order.key-table-first',
         {'primary_keys': {'nope': 3}},
         spec({'nope': U}),
-        refused('INVALID_REQUEST', field='primary_keys', table='nope'),
+        refused('INVALID_REQUEST', **no_table('primary_keys')),
     ),
     case(
         'order.time-table-first',
         {'time_columns': {'nope': 3}},
         spec(time_columns={'nope': U}),
-        refused('INVALID_REQUEST', field='time_columns', table='nope'),
+        refused('INVALID_REQUEST', **no_table('time_columns')),
     ),
     case(
         'order.keys-before-times',
@@ -388,23 +411,13 @@ VECTORS: list[dict[str, Any]] = [
         'order.tables-by-name',
         {'primary_keys': {'users': 3, 'orders': 'nope'}},
         spec({'users': U, 'orders': V(['nope'])}),
-        refused(
-            'INVALID_REQUEST',
-            field='primary_keys',
-            table='orders',
-            column='nope',
-        ),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
     ),
     case(
         'order.missing-column-before-composite',
         {'primary_keys': {'orders': ['order_id', 'nope']}},
         spec({'orders': V(['order_id', 'nope'])}),
-        refused(
-            'INVALID_REQUEST',
-            field='primary_keys',
-            table='orders',
-            column='nope',
-        ),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
     ),
     # --- the wire: what no host may write (section 6A) -------------------
     wire('wire.key-bare-list', spec({'orders': ['order_id']}), HOST_BUG),
