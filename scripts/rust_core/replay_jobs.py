@@ -282,6 +282,11 @@ class Replay:
             except Unreplayable:
                 env.pop(key, None)
         for key, value in (job.get('env') or {}).items():
+            # A value only another job of the run can give (the landing
+            # job's recorded base, SDM_PUSH_BASE, T3.0) is left out: the
+            # replay's own default stands in for it.
+            if re.fullmatch(r'\$\{\{\s*needs\.[^}]*\}\}', str(value).strip()):
+                continue
             env[key] = substitute(str(value), values)
         if not self.args.postgres:
             for key in POSTGRES_ENV:

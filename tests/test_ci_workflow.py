@@ -525,13 +525,16 @@ def test_every_job_is_left_out_when_the_landing_job_says_skip() -> None:
 #: (fix round 1, P2-5); the landing job, which every other job waits on,
 #: does no more than read a few commits; the client test matrix and the
 #: ref-pandas3 DuckDB route tests reached 57 to 60 minutes as Phase 2's
-#: corpus grew (T2.1o).
+#: corpus grew (T2.1o); the checking tools' tests, split out of those
+#: two (T3.0), are as long on their own.
 TIMEOUT_CEILINGS = {
     'landing': 10,
     'rust-test': 120,
     'test': 90,
     'contract-python-ref-pandas3': 120,
     'engine': 90,
+    'tooling-contract': 90,
+    'tooling-root': 90,
 }
 TIMEOUT_CEILING = 60
 
@@ -922,7 +925,16 @@ def test_ci4_a_skip_condition_cannot_be_overridden(
     request: pytest.FixtureRequest,
 ) -> None:
     r"""A job's own condition on the landing job's answer is one conjunct
-    of its condition: nothing joined with ``||`` can run it anyway."""
+    of its condition: nothing joined with ``||`` can run it anyway. The
+    other conjuncts may only leave a job out more often: ``!cancelled()``,
+    and the landing job's plan (T3.0) saying the tooling jobs or the full
+    matrix are not wanted."""
+    allowed = (
+        SKIP,
+        '!cancelled()',
+        "needs.landing.outputs.tooling != 'false'",
+        "needs.landing.outputs.full != 'false'",
+    )
 
     def check() -> None:
         for name, job in _workflow()['jobs'].items():
@@ -932,7 +944,7 @@ def test_ci4_a_skip_condition_cannot_be_overridden(
             assert '||' not in condition, (name, condition)
             parts = [p.strip() for p in condition.split('&&')]
             assert SKIP in parts, (name, condition)
-            assert all(p in (SKIP, '!cancelled()') for p in parts), (
+            assert all(p in allowed for p in parts), (
                 name,
                 condition,
             )
@@ -1107,6 +1119,10 @@ def test_ci4_the_token_goes_only_to_ghcr_io(
                     if not re.search(TOKEN, str(value)):
                         continue
                     if name == 'landing' and step.get('id') == 'landing':
+                        _api_only(key, value, str(step['run']))
+                        continue
+                    # The timing guard reads the runs' jobs (T3.0).
+                    if name == 'timing-guard':
                         _api_only(key, value, str(step['run']))
                         continue
                     steps += 1
@@ -1798,13 +1814,14 @@ def test_t20_the_workflow_names_no_one_phase() -> None:
     [
         (PHASE, False, False),
         (PHASE_2, False, False),
-        (LANE, False, True),
-        (LANE_2, False, True),
-        ('rust-core-phase-7-lane-b', False, True),
+        # A lane's newer push supersedes its run (T3.0).
+        (LANE, True, True),
+        (LANE_2, True, True),
+        ('rust-core-phase-7-lane-b', True, True),
         (f'{PHASE_2}-t2.3', True, False),
         # Multi-digit phases (T2.0 fix 1): no cap.
         ('rust-core-phase-10', False, False),
-        ('rust-core-phase-10-lane-b', False, True),
+        ('rust-core-phase-10-lane-b', True, True),
         ('rust-core-phase-10-t10.2', True, False),
         ('rust-core-phase-123', False, False),
         # No phase branch, so cancelled like any branch (fix 2).
