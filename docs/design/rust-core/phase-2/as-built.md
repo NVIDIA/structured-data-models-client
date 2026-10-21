@@ -5,7 +5,8 @@ It reads the design's task table and choices, each package's `tracker-<ID>.md`, 
 A package built as its design row says gets one line with its landing SHA.
 Fix-round histories stay in the trackers; this file names only what changed against the design and where that change is decided.
 
-Written at T2.16. The final tree is T2.16's own candidate: the phase head `f133c4b8` (`Land T2.14c`, after `Land T2.14b` 0b6d9a12) plus T2.16's docs, evidence, its one product fix (an answer's text encoding, below) and the `cells.sh` fix.
+Written at T2.16.
+The final tree is T2.16's own candidate: the phase head `f133c4b8` (`Land T2.14c`, after `Land T2.14b` 0b6d9a12) plus T2.16's docs, evidence, its one product fix (an answer's text encoding, below), the `cells.sh` fix and DuckDB capped below 2.0.
 Phase 2 was merged into `rust-core` once mid-phase, through T2.1j, at `2e5fbd27`.
 
 ## Across the phase
@@ -253,6 +254,7 @@ The final package: the phase-end docs (KO2-90 and KO2-92 for check 2's kept rule
   `read_answer` now decodes the bytes first as `json.detect_encoding` does (`answer_text`), in the core, so a Java host reads alike.
   The Databricks transport encodes the served answer's text with `surrogatepass`, so a raw lone surrogate reaches the core and is refused by name.
   Register P1B-24 is widened to raw lone surrogates (the orchestrator's decision under KO2-88; on Databricks this refuses an answer the reference accepts).
+- **DuckDB below 2.0**: DuckDB 2.0 came out during the phase end and broke CI's `engine` and `installed-wheel` jobs, so the connectors' `duckdb` extra is capped `duckdb>=1.5.0,<2` (uv.lock's specifier with it), the orchestrator's decision under KO2-88; supporting 2.0 is carried as P2-T2.16-12.
 - **`scripts/rust_core/cells.sh`** installs the connectors with the `sqlite` and `postgres` extras, as `ci.yml`'s "Install the cell" step does, with one test.
 Its gaps found at the phase end are in the next section.
 
@@ -316,5 +318,7 @@ Measured at T2.16, true at the final tree:
 - `scripts/rust_core/cells.sh` installed the connectors with only the `duckdb` extra, while `ci.yml` installs `[duckdb,sqlite,postgres]`; T2.16 fixed it.
 - The census tool has no real-data mode, so the kept rules' counts are zero by construction (T2.16a, `evidence/census/real-data.md`, KO2-90).
 - No tool for H24's Postgres common-input comparison exists: nothing under `contract/tools`, `contract/runners` or `scripts/rust_core` names it.
-- Three trackers (T2.8c, T2.10, T2.13b) reported seven old-against-core differences on the generated DuckDB sources in what `from_source` infers for one column (`d`, categorical against numerical). At be55838a the inferred schema agrees on every source; L3 there finds the payload's one-ulp decimal differences under P2B-1 instead (`evidence/l3/classification.md`). Which landing closed the stype difference was not bisected; T2.14b's decimal stype fix is the likely one.
+- Three trackers (T2.8c, T2.10, T2.13b) reported seven old-against-core differences on the generated DuckDB sources in what `from_source` infers for one column (`d`, categorical against numerical).
+  At be55838a the inferred schema agrees on every source; L3 there finds the payload's one-ulp decimal differences under P2B-1 instead (`evidence/l3/classification.md`).
+  Which landing closed the stype difference was not bisected; T2.14b's decimal stype fix is the likely one.
 - Each gap above has a "Carried into Phase 3" row in migration-plan.md section 8 (P2-T2.16-3 onward).

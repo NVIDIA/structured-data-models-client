@@ -170,7 +170,7 @@ Sources: the owner's answers on 2026-10-21 (UTC) to the orchestrator's two quest
 
 ## The owner's kept-rules answer (2026-10-21)
 
-Sources: the owner's answer on 2026-10-21 (UTC) to the orchestrator's question whether it may accept the real-data counts for `model` and `text_time_rules` (kept until Phase 4, KO2-22) if each is hit by under 5% of real queries, stopping to ask only if one is higher (`owner-answers-2026-10-17.md`, "overnight finish"); the counts are T2.16a's (`phase-2/evidence/census/real-data.md`, held by `tests/test_census_real_data.py`).
+Sources: the owner's answer on 2026-10-21 (UTC) to the orchestrator's question whether it may accept the real-data counts for `model` and `text_time_rules` (kept until Phase 4, KO2-22) if each is hit by under 5% of real queries, stopping to ask only if one is higher (`owner-answers-2026-10-17.md`, "overnight finish"); the counts are T2.16a's (`phase-2/evidence/census/real-data.md`, held by `tests/test_census_real_data.py`); and KO2-92, the orchestrator's decision under KO2-88 on the third kept rule.
 
 | # | Decision | Reason | Status |
 |---|---|---|---|

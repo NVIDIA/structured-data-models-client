@@ -23,5 +23,6 @@ The tool has no rule for two approved entries, so it prints them UNCLASSIFIED; e
 
 So every divergence is classified under an approved entry, and none is a new refusal of an input the reference accepts.
 The seven payload differences are the more-exact decimal class, not a defect.
-On the same generated sources, T2.8c's and T2.13b's trackers reported a different difference: `from_source` read column `d` as categorical on one route and numerical on the other. At this tree the inferred schemas agree on every source, so that difference was closed by a later landing (not bisected; T2.14b's decimal stype fix is the likely one), and L3's first difference on these sources is now the payload's.
+On the same generated sources, T2.8c's and T2.13b's trackers reported a different difference: `from_source` read column `d` as categorical on one route and numerical on the other.
+At this tree the inferred schemas agree on every source, so that difference was closed by a later landing (not bisected; T2.14b's decimal stype fix is the likely one), and L3's first difference on these sources is now the payload's.
 Teaching `differential.py` these two rules is carried into Phase 3 as P2-T2.16-5 (no new harness at the phase end, KO2-91).
