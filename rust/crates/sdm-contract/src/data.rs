@@ -54,6 +54,98 @@ pub const EXACT_NUMBER_MARKED: &str = "true";
 /// The data layer reads such a column by its declaration, as the reference
 /// reads it (`DataLayer::conform`), and the core never sees the mark.
 pub const DECLARED_SCALE_MARKER: &str = "sdm:declared_scale";
+
+/// The magnitude past which an exponent is read as this bound: far past
+/// every decimal's 38 places and every float's range, and far within
+/// `i64`, so no arithmetic on a scale overflows (T1.32a fix round 1).
+const EXPONENT_BOUND: i64 = 1 << 40;
+
+/// A decimal number as written: its sign, its significant digits (no
+/// leading or trailing zeros; empty for zero) and the scale they stand at.
+pub struct WrittenNumber {
+    pub negative: bool,
+    pub digits: String,
+    pub scale: i64,
+}
+
+/// Text written as a decimal number: an optional sign, ASCII digits with
+/// an optional point and fraction (at least one digit in all), and an
+/// optional exponent (`e` or `E`, an optional sign, digits); `None` for
+/// any other text.
+pub fn written_number(text: &str) -> Option<WrittenNumber> {
+    let (mantissa, exponent) = match text.find(['e', 'E']) {
+        Some(at) => (&text[..at], Some(&text[at + 1..])),
+        None => (text, None),
+    };
+    let (negative, unsigned) = match mantissa.as_bytes().first() {
+        Some(b'-') => (true, &mantissa[1..]),
+        Some(b'+') => (false, &mantissa[1..]),
+        _ => (false, mantissa),
+    };
+    let (whole, fraction) = match unsigned.split_once('.') {
+        Some((whole, fraction)) => (whole, fraction),
+        None => (unsigned, ""),
+    };
+    let ascii = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    if whole.len() + fraction.len() == 0 || !ascii(whole) || !ascii(fraction) {
+        return None;
+    }
+    let exponent: i64 = match exponent {
+        None => 0,
+        Some(written) => {
+            let (sign, digits) = match written.as_bytes().first() {
+                Some(b'-') => (-1, &written[1..]),
+                Some(b'+') => (1, &written[1..]),
+                _ => (1, written),
+            };
+            if digits.is_empty() || !ascii(digits) {
+                return None;
+            }
+            // An exponent past any decimal's or float's reach still reads:
+            // it decides only whether the value is out of range or inexact.
+            let magnitude = digits.trim_start_matches('0');
+            let magnitude = if magnitude.len() > 13 {
+                EXPONENT_BOUND
+            } else {
+                magnitude.parse::<i64>().unwrap_or(0).min(EXPONENT_BOUND)
+            };
+            sign * magnitude
+        }
+    };
+    // The digits as one run, leading zeros dropped, then trailing zeros,
+    // which carry no value, each moving the scale by one. Lengths are of
+    // text, far within i64.
+    let all = format!("{whole}{fraction}");
+    let significant = all.trim_start_matches('0');
+    let digits = significant.trim_end_matches('0');
+    let length = |part: &str| i64::try_from(part.len()).unwrap_or(EXPONENT_BOUND);
+    let dropped = length(significant) - length(digits);
+    Some(WrittenNumber {
+        negative,
+        digits: digits.to_owned(),
+        scale: length(fraction) - dropped - exponent,
+    })
+}
+
+/// The one text of the number `text` writes, the same for every spelling
+/// of it (`1.0`, `1.00`, `1E0`): `0`, or its sign, its significant digits
+/// and the power of ten they stand at (`1e0`, `-125e-2`); text that writes
+/// no number (a `NaN`, an `Infinity`) is itself. A column marked
+/// [`EXACT_NUMBER_MARKER`] holds two keys the same exactly when their
+/// texts are, as the source compares them, with nothing passed through a
+/// float.
+pub fn exact_number_text(text: &str) -> String {
+    match written_number(text) {
+        None => text.to_owned(),
+        Some(written) if written.digits.is_empty() => "0".to_owned(),
+        Some(written) => format!(
+            "{}{}e{}",
+            if written.negative { "-" } else { "" },
+            written.digits,
+            -written.scale
+        ),
+    }
+}
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
 /// catalog's `type`, kept in the described schema for a marked big-integer

@@ -27,6 +27,7 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::DataType;
+use sdm_contract::data::{WrittenNumber, written_number};
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -189,12 +190,7 @@ impl Key {
                 };
             }
         }
-        Key::Text(format!(
-            "{}{}e{}",
-            if negative { "-" } else { "" },
-            written.digits,
-            -written.scale
-        ))
+        Key::Text(sdm_contract::data::exact_number_text(text))
     }
 }
 
@@ -392,76 +388,10 @@ fn read_integer(text: &str) -> Result<i128, Uncast> {
     text.parse::<i128>().map_err(|_| Uncast::OutOfRange)
 }
 
-/// The magnitude past which an exponent is read as this bound: far past
-/// every decimal's 38 places and every float's range, and far within
-/// `i64`, so no arithmetic on a scale overflows (T1.32a fix round 1).
-const EXPONENT_BOUND: i64 = 1 << 40;
-
-/// A decimal number as written: its sign, its significant digits (no
-/// leading or trailing zeros; empty for zero) and the scale they stand at.
-struct Written {
-    negative: bool,
-    digits: String,
-    scale: i64,
-}
-
-/// Text written as a decimal number: an optional sign, ASCII digits with
-/// an optional point and fraction (at least one digit in all), and an
-/// optional exponent (`e` or `E`, an optional sign, digits); `NotANumber`
-/// for any other text.
-fn written(text: &str) -> Result<Written, Uncast> {
-    let (mantissa, exponent) = match text.find(['e', 'E']) {
-        Some(at) => (&text[..at], Some(&text[at + 1..])),
-        None => (text, None),
-    };
-    let (negative, unsigned) = match mantissa.as_bytes().first() {
-        Some(b'-') => (true, &mantissa[1..]),
-        Some(b'+') => (false, &mantissa[1..]),
-        _ => (false, mantissa),
-    };
-    let (whole, fraction) = match unsigned.split_once('.') {
-        Some((whole, fraction)) => (whole, fraction),
-        None => (unsigned, ""),
-    };
-    let ascii = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
-    if whole.len() + fraction.len() == 0 || !ascii(whole) || !ascii(fraction) {
-        return Err(Uncast::NotANumber);
-    }
-    let exponent: i64 = match exponent {
-        None => 0,
-        Some(written) => {
-            let (sign, digits) = match written.as_bytes().first() {
-                Some(b'-') => (-1, &written[1..]),
-                Some(b'+') => (1, &written[1..]),
-                _ => (1, written),
-            };
-            if digits.is_empty() || !ascii(digits) {
-                return Err(Uncast::NotANumber);
-            }
-            // An exponent past any decimal's or float's reach still reads:
-            // it decides only whether the value is out of range or inexact.
-            let magnitude = digits.trim_start_matches('0');
-            let magnitude = if magnitude.len() > 13 {
-                EXPONENT_BOUND
-            } else {
-                magnitude.parse::<i64>().unwrap_or(0).min(EXPONENT_BOUND)
-            };
-            sign * magnitude
-        }
-    };
-    // The digits as one run, leading zeros dropped, then trailing zeros,
-    // which carry no value, each moving the scale by one. Lengths are of
-    // text, far within i64.
-    let all = format!("{whole}{fraction}");
-    let significant = all.trim_start_matches('0');
-    let digits = significant.trim_end_matches('0');
-    let length = |part: &str| i64::try_from(part.len()).unwrap_or(EXPONENT_BOUND);
-    let dropped = length(significant) - length(digits);
-    Ok(Written {
-        negative,
-        digits: digits.to_owned(),
-        scale: length(fraction) - dropped - exponent,
-    })
+/// Text written as a decimal number
+/// ([`sdm_contract::data::written_number`]); `NotANumber` for any other.
+fn written(text: &str) -> Result<WrittenNumber, Uncast> {
+    written_number(text).ok_or(Uncast::NotANumber)
 }
 
 /// Text written as a decimal number ([`written`]) as its value

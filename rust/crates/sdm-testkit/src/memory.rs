@@ -62,9 +62,10 @@ use arrow_select::filter::filter_record_batch;
 use arrow_select::take::take;
 use sdm_contract::ErrorKind;
 use sdm_contract::data::{
-    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Determinism, Filter, KeySet,
-    MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities, ProviderError, Relation,
-    SEED_BATCH, TieTerm, Window, catalog_columns as c, results, seed_integer, seed_key_columns,
+    AttachmentId, BATCH_COLUMN, DataRequest, DescribePart, Determinism, EXACT_NUMBER_MARKED,
+    EXACT_NUMBER_MARKER, Filter, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest,
+    ProviderCapabilities, ProviderError, Relation, SEED_BATCH, TieTerm, Window,
+    catalog_columns as c, results, seed_integer, seed_key_columns,
 };
 
 /// A DuckDB constraint as [`Memory::from_duckdb`] reads it: its type, its
@@ -880,7 +881,36 @@ fn joined(
         .iter()
         .map(|name| seed_column(seeds, name))
         .collect::<Result<Vec<_>, _>>()?;
-    pairs(&named(rows, key)?, &seed_keys)
+    let mut columns = named(rows, key)?;
+    let mut seed_keys = seed_keys;
+    // A column of numbers handed over as their exact text compares by the
+    // number each text writes, as Postgres compares a `numeric`: `1.0` is
+    // `1.00` (`sdm_contract::data::exact_number_text`).
+    for (at, name) in key.iter().enumerate() {
+        let marked = rows.schema().field_with_name(name).is_ok_and(|f| {
+            f.metadata().get(EXACT_NUMBER_MARKER).map(String::as_str) == Some(EXACT_NUMBER_MARKED)
+        });
+        if marked {
+            columns[at] = exact_numbers(&columns[at]);
+            seed_keys[at] = exact_numbers(&seed_keys[at]);
+        }
+    }
+    pairs(&columns, &seed_keys)
+}
+
+/// Text `array`'s values each as the one text of the number it writes; an
+/// array of any other type as it is.
+fn exact_numbers(array: &ArrayRef) -> ArrayRef {
+    if array.data_type() != &DataType::Utf8 {
+        return Arc::clone(array);
+    }
+    Arc::new(
+        array
+            .as_string::<i32>()
+            .iter()
+            .map(|v| v.map(sdm_contract::data::exact_number_text))
+            .collect::<StringArray>(),
+    )
 }
 
 /// The pairs whose row's window column is within the seed's bounds; a row
