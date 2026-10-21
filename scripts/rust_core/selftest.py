@@ -1488,6 +1488,48 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         '_tables_linked_to: covered code the baseline does not hold',
     )
+    # T2.16a: a copy judging another tree (the gate's checkpoint copy)
+    # takes covered code the tree's baseline leaves out, and a frozen file
+    # it leaves out whole, when the tree declares each gone: the tree no
+    # longer freezes them, and its own copy refuses a baseline entry for
+    # them. Undeclared, or judged strict, each is still refused.
+    linked = f'{key_of["relational"]}::_tables_linked_to'
+    dropped = lambda r: baseline(  # noqa: E731
+        r,
+        lambda d: d['files'][key_of['relational']].pop('_tables_linked_to'),
+    )
+    declared_gone = {linked: {'gone': 'no longer frozen (T2.14c)'}}
+    case(
+        'control: a covered function left out of the baseline, declared gone',
+        dropped,
+        None,
+        declare=declared_gone,
+    )
+    case(
+        'a covered function left out of the baseline, declared gone, strict',
+        dropped,
+        '_tables_linked_to: covered code the baseline does not hold',
+        declare=declared_gone,
+        strict=True,
+    )
+    every_client = {
+        f'{key_of["client"]}::{name}': {'gone': 'no longer frozen (T2.14c)'}
+        for name in json.loads(committed)['files'][key_of['client']]
+    }
+    no_client = lambda r: baseline(  # noqa: E731
+        r, lambda d: d['files'].pop(key_of['client'])
+    )
+    case(
+        'control: a frozen file left out of the baseline, every entry gone',
+        no_client,
+        None,
+        declare=every_client,
+    )
+    case(
+        'a frozen file left out of the baseline, not declared',
+        no_client,
+        f'no entry for the frozen file {key_of["client"]}',
+    )
     case(
         'a covered function renamed away',
         lambda r: edit(

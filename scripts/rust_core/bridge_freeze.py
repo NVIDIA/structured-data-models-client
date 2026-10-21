@@ -115,6 +115,11 @@ gate judges it with its checkpoint's copy (T2.1v). On the same
 principle this copy judges only what it freezes: a baseline entry for a
 name of a frozen file it does not cover, and a declaration of an entry it
 does not measure, are ignored; every entry it freezes is judged as before.
+And the other way (T2.16a): a function it covers, or a frozen file whole,
+that the tree's baseline leaves out is taken when the tree declares each
+``gone`` in ``bridge_changes.json``, since a tree that lowers the freeze
+cannot hold a baseline entry its own copy refuses; the ratchet still
+holds each such declaration to the base.
 Those tolerances are for a copy judging another tree's lists, the gate's
 checkpoint copy. A copy judging its own tree (strict: the tree's
 ``bridge_freeze.py`` is this file, byte for byte, as where ``prepush.sh``
@@ -535,14 +540,21 @@ def _json(text: str, where: str) -> tuple[Any, list[str]]:
 
 
 def load(
-    text: str | None, where: str, *, base: bool = False, strict: bool = False
+    text: str | None,
+    where: str,
+    *,
+    base: bool = False,
+    strict: bool = False,
+    gone: frozenset[str] = frozenset(),
 ) -> tuple[Baseline | None, list[str]]:
     """A baseline read and checked, or the problems that stop it: its
     fingerprints, from format 3 or format 2 (whose counts are ignored, each
     entry still holding exactly the fields its format names). The base's is
     read whole: a file it froze that is no longer frozen keeps its entries,
     each of which is then gone and declared; a file frozen since holds
-    nothing there."""
+    nothing there. A copy judging another tree (not ``strict``) takes a
+    frozen file with no entry when the tree declares its ``<module>`` gone
+    (``gone``; T2.16a)."""
     if text is None:
         return None, [f'{where}: the baseline is missing']
     data, problems = _json(text, where)
@@ -570,6 +582,8 @@ def load(
     expected = {str(rel) for rel in FROZEN}
     if not base:
         for name in sorted(expected - set(files)):
+            if not strict and f'{name}::{MODULE}' in gone:
+                continue
             problems.append(f'{where}: no entry for the frozen file {name}')
         if strict:
             for name in sorted(set(files) - expected):
@@ -646,10 +660,16 @@ def exactness(
     deleted_by_main: frozenset[str] = frozenset(),
     *,
     strict: bool = False,
+    gone: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Where the code differs from the baseline. A covered name the file no
     longer defines is excused only when ``deleted_by_main`` holds its key
-    (declared ``main``, a reason :func:`ratchet` judges)."""
+    (declared ``main``, a reason :func:`ratchet` judges). A copy judging
+    another tree (not ``strict``) takes covered code the baseline does not
+    hold when the tree declares it gone (``gone``): the tree no longer
+    freezes it, and its own copy refuses a baseline entry for it, so no
+    one baseline would satisfy both copies; :func:`ratchet` still holds
+    the declaration to the base (T2.16a)."""
     problems = []
     covered = entries(code)
     remedy = 'rewrite the baseline (bridge_freeze.py --write)'
@@ -677,6 +697,8 @@ def exactness(
                 f'{rel}::{name}: in the baseline but not covered code: {remedy}'
             )
         for name in sorted(set(now) - set(recorded)):
+            if not strict and f'{rel}::{name}' in gone:
+                continue
             problems.append(
                 f'{rel}::{name}: covered code the baseline does not hold: '
                 f'{remedy}, and declare the change'
@@ -806,15 +828,18 @@ def check(root: Path, base: Base | str, *, strict: bool = False) -> list[str]:
     """Every problem of the tree at ``root``. ``base`` is what the merge
     base holds, or why there is no base; ``strict`` keeps the refusals a
     copy judging its own tree keeps (:func:`own_tree`)."""
-    path = root / BASELINE
-    text = path.read_text(encoding='utf-8') if path.is_file() else None
-    baseline, problems = load(text, str(BASELINE), strict=strict)
     path = root / CHANGES
-    declared, unreadable = load_changes(
+    declared, problems = load_changes(
         path.read_text(encoding='utf-8') if path.is_file() else None,
         str(CHANGES),
     )
-    problems += unreadable
+    gone = frozenset(
+        key for key, (kind, _) in (declared or {}).items() if kind == 'gone'
+    )
+    path = root / BASELINE
+    text = path.read_text(encoding='utf-8') if path.is_file() else None
+    baseline, unreadable = load(text, str(BASELINE), strict=strict, gone=gone)
+    problems = unreadable + problems
     if baseline is None or declared is None:
         return problems
     try:
@@ -828,6 +853,7 @@ def check(root: Path, base: Base | str, *, strict: bool = False) -> list[str]:
         baseline,
         frozenset(key for key, (kind, _) in declared.items() if kind == 'main'),
         strict=strict,
+        gone=gone,
     )
     problems += shadowing(root)
     if isinstance(base, str):
