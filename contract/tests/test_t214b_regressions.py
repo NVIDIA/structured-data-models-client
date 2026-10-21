@@ -220,3 +220,83 @@ def test_json_documents_escaping_lone_surrogates_are_sent_as_the_reference() -> 
         )
 
     held(f'{PREFIX}json', check)
+
+
+# --- FLOAT32_OVERFLOW by the runtime's NumPy (fix 5) --------------------------
+
+
+def _codes_reported(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    r"""Each warning code the core reports, as the host takes its
+    warnings at ``sdm_client._native``'s boundary (the one function through
+    which the host imports the native module)."""
+    from sdm_client._rust import codec, run
+
+    imported = run.native
+    codes: list[str] = []
+
+    class Handle:
+        def __init__(self, handle: Any) -> None:
+            self._handle = handle
+
+        def take_warnings(self) -> Any:
+            taken = self._handle.take_warnings()
+            if taken is not None:
+                control, sent = taken
+                read = codec.read(control, sent)
+                codes.extend(w['code'] for w in read.get('warnings', []))
+            return taken
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._handle, name)
+
+    class Run:
+        def __init__(self, native: Any) -> None:
+            self._native = native
+
+        def start(self, message: bytes, attachments: Any) -> Handle:
+            return Handle(self._native.Run.start(message, attachments))
+
+    class Native:
+        def __init__(self, native: Any) -> None:
+            self._native = native
+            self.Run = Run(native)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._native, name)
+
+    monkeypatch.setattr(run, 'native', lambda: Native(imported()))
+    return codes
+
+
+@pytest.mark.parametrize(
+    ('numpy', 'shown'),
+    [('1.23.5', False), ('1.24.0', True), ('2.3.4', True)],
+)
+def test_float32_overflow_is_shown_where_the_runtime_s_numpy_warns(
+    numpy: str, shown: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""Fix 5 (KO2-88, CI's floor cell): the core reports a double past
+    float32's range (``FLOAT32_OVERFLOW``) on every runtime, and the Python
+    host shows it as ``RuntimeWarning`` ("overflow encountered in cast")
+    only where the installed NumPy is 1.24 or later, which first warns on
+    such a cast, as the reference's own warning is NumPy's; NumPy 1.23 casts
+    silently. The version the host's function reads is set either side of
+    1.24; the core's fact is there either way."""
+    import numpy as np
+    from sdm_client._rust import errors
+
+    monkeypatch.setattr(np, '__version__', numpy)
+    assert errors.numpy_warns_on_cast_overflow() is shown
+    codes = _codes_reported(monkeypatch)
+    from sdm_client import _routing
+
+    monkeypatch.setenv(
+        _routing.ENVIRONMENT,
+        ','.join(_routing.FROM_SOURCE_DUCKDB + _routing.MATERIALIZE_DUCKDB),
+    )
+    observed = recorder().where()
+    assert observed['refusal'] is None, observed
+    assert 'FLOAT32_OVERFLOW' in codes, codes
+    assert observed['runtime_warnings'] == (
+        ['overflow encountered in cast'] if shown else []
+    ), (numpy, observed['runtime_warnings'])
