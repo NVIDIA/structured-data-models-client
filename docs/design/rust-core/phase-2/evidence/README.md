@@ -7,9 +7,9 @@ Local paths in copied outputs are left out or written `<scratch>`.
 
 ## The final tree and what ran on it
 
-- The final tree is T2.16's own candidate, not the phase head: `f133c4b8` (`Land T2.14c`) plus T2.16's commits, among them two product changes, an answer's text encoding (`sdm_wire::json::answer_text`, `core/databricks_serving.py`; register P1B-24 widened) and DuckDB capped below 2.0 in the connectors' `duckdb` extra.
+- The final tree is T2.16's own candidate, not the phase head: `f133c4b8` (`Land T2.14c`) plus T2.16's commits, among them two product changes, an answer's text encoding (`sdm_wire::json::answer_text`, `core/databricks_serving.py`), with a lone surrogate in an answer read as U+FFFD as the owner chose (KO2-93, register P1B-24), and DuckDB capped below 2.0 in the connectors' `duckdb` extra.
 - Every report below ran on `aa44c1d95d27b71bc9d090f3c6d95b9f9f30f0a3`, the candidate with the encoding fix and its tests, from a clean detached worktree, with cells built at that tree by `scripts/rust_core/cells.sh --rev aa44c1d9… OUT`.
-  The later commits on it are the DuckDB cap and docs: the cap changes nothing these runs measured, since every local cell, the reference's environment and every pinned CI cell already hold DuckDB 1.5.6.
+  The later commits on it are the DuckDB cap, the U+FFFD reading, CI and docs. The cap changes nothing these runs measured, since every local cell, the reference's environment and every pinned CI cell already hold DuckDB 1.5.6. The U+FFFD reading changes only an answer holding a lone surrogate, which no input of these reports holds; its own tests (`contract/tests/test_t216_response_encoding.py`, `rust/crates/sdm-core/tests/t216_answer_encoding.rs`, `rust/crates/sdm-wire/tests/json.rs`) ran on the final SHA, and the locked gate runs on it again in the phase-end run.
 - The reports first ran on `be55838a` (T2.14c's candidate, whose tree `f133c4b8` holds), before the encoding fix; every one was run again on aa44c1d9 and the results here are aa44c1d9's.
   L7's be55838a runs are kept beside the final one ([l7/be55838a/](l7/be55838a/)), since they differ.
 - Reference: `rust-core-reference` at `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1` (KO2-84), `contract/reference/43e55f4f….jsonl`.
