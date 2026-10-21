@@ -2,7 +2,7 @@
  "format": "sdm-t214b-host-vectors/1",
  "about": "What T2.14b's host facts give on the reference's public calls: each query's request entity_table and whether its target moves with time; a forecast's and a ranking's refused call, said of its part; and a ranking given candidates that repeat by Python's equality, each question asked and the rankings. contract/tests/test_t214b_host.py holds python-core to them, observed by the same code (observe).",
  "recorded_by": "contract/tools/t214b_host_record.py",
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "facts": {
   "windowed": {
    "entity_table": "users",

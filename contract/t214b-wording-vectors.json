@@ -2,7 +2,7 @@
  "format": "sdm-t214b-wording-vectors/1",
  "about": "What the reference says for T2.14b's wording cases (KO2-32's G15, M4, FX-1 and FX-4, the generic refusal the core route gives where the reference words one, and a one-class binary target), by case key, recorded from the reference's public calls: the outcome, a refusal's message and details, and every warning by class and text; and, under probes, FX-4's from_source warnings over a column whose whole-table MIN is an infinity. contract/tests/test_t214b_wording.py holds python-core to them, observed by the same code.",
  "recorded_by": "contract/tools/wording_record.py",
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "vectors": {
   "date.day-first-then-packed": {
    "case": "92541ca5e7e300857eb3a5b381992d213684bcba39e41339bc395ba418994e2a",
