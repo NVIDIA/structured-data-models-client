@@ -4,9 +4,11 @@
 
 """T2.16a's exit on ``scripts/rust_core/coverage.py`` (the package's test
 author's): rule 6 places the target of an EVALUATE, an EXPLAIN and a
-named-entity query (``FOR t.c = v``, ``FOR t.c IN (...)``), so the
-``float64/target`` claim T2.13's tests dropped from eight cases
-(1e89eacc: "coverage cannot place") is back on them and held.
+named-entity query (``FOR t.c = v``, ``FOR t.c IN (...)``), the forms of
+the eight cases T2.13's tests dropped the ``float64/target`` claim from
+(1e89eacc: "coverage cannot place"). The claims come back in T2.14c
+(``tests/test_t214c_coverage_tags.py``), once this reading has landed: the
+gate judges a candidate with the checkpoint's coverage.py.
 
 Each seed is this repository's HEAD with case files changed, written as a
 commit whose objects live in a temporary object directory (nothing of the
@@ -137,26 +139,10 @@ def _rule_6(done: subprocess.CompletedProcess[str]) -> list[str]:
     return [line for line in output.splitlines() if line.startswith('rule 6:')]
 
 
-def test_the_eight_cases_claim_the_target_again() -> None:
-    for case_id, form in RESTORED.items():
-        case = _case(case_id)
-        assert form in case['input']['pql'], case_id  # the form it holds
-        assert CLAIM in case['cells'], f'{case_id}: {CLAIM} is not restored'
-
-
 def test_the_ninth_case_has_no_target_column_and_claims_none() -> None:
     case = _case(NO_TARGET)
     assert 'COUNT(orders.*' in case['input']['pql']
     assert CLAIM not in case['cells']
-
-
-def test_rule_6_holds_the_restored_claims(tmp_path: Path) -> None:
-    done = seeded(
-        tmp_path, {case_id: _claiming(_case(case_id)) for case_id in RESTORED}
-    )
-    failing = _rule_6(done)
-    assert not failing, '\n'.join(failing)
-    assert done.returncode == 0, done.stdout + done.stderr
 
 
 @pytest.mark.parametrize('case_id', sorted(RESTORED))
@@ -167,7 +153,9 @@ def test_rule_6_finds_each_query_form_s_target(case_id: str) -> None:
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    assert module._target(_case(case_id)) == ('orders', 'price')
+    case = _case(case_id)
+    assert RESTORED[case_id] in case['input']['pql'], case_id
+    assert module._target(case) == ('orders', 'price')
 
 
 def test_claiming_the_target_of_a_count_still_fails_rule_6(
