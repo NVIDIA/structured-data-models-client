@@ -8373,3 +8373,44 @@ entries:
   - {case: sample.num-neighbors.minus-one@sqlite, cell: ref-pandas3, runner: rust-host, old: 'success', new: 'refusal INVALID_REQUEST', statements_differ: [materialize], summary: 'num_neighbors=[-1] refused by name, where the reference''s SQLite keeps every referring row (LIMIT -1) and answers'}
   - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: python-core, old: 'refusal INTERNAL_ERROR at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
   - {case: sample.num-neighbors.minus-one@postgres, cell: ref-pandas3, runner: rust-host, old: 'refusal INTERNAL_ERROR', new: 'refusal INVALID_REQUEST', summary: 'num_neighbors=[-1] refused by name, where the reference''s Postgres fails INTERNAL_ERROR'}
+
+# --- lane o entries (P2O-1..9) ---
+
+- id: P2O-1
+  title: Eight query cases claim float64/target again, now that coverage reads their target
+  kind: keep
+  old_behavior: >-
+    The eight cases (EVALUATE, EXPLAIN and named-entity queries, each
+    predicting SUM(orders.price)) claimed no float64/target cell since
+    1e89eacc (T2.13 review round 1, P2-3): coverage.py read a query's target
+    only in PREDICT ... FOR EACH, so its rule 6 could not place the claim.
+  new_behavior: >-
+    coverage.py reads the target behind EVALUATE or EXPLAIN and with FOR
+    t.c = v or FOR t.c IN (...) (T2.16a), and the eight cases claim
+    float64/target again, which their reference observations show. Only
+    the claim changes: the input, the expectation and every runner's
+    outcome are unchanged, and the cases' python-ref lines (24, on three
+    databases) and T2.13 option vectors are re-recorded, identity and case
+    digest only.
+  affected_inputs: >-
+    The case files of the eight cases, which the ratchet's cases rule
+    passes only under an approved entry naming each case.
+  cases: [T2.16a, evaluate.regression, explain.answered, explain.query, explain.two-entities, ids.absent, ids.in-list-other-indices, ids.one, ids.wrong-type]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer, a claim-only correction as P1B-52 was, never
+    self-approved. The ninth case 1e89eacc changed,
+    date.day-first-then-packed, predicts COUNT(orders.*), which no column
+    plays, so its claim stays dropped (the orchestrator's decision). The
+    outcomes below are python-ref's, unchanged.
+  case_outcomes:
+  - {case: evaluate.regression, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: explain.answered, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: explain.query, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: explain.two-entities, cell: ref-pandas3, runner: python-ref, old: 'refusal UNSUPPORTED_REQUEST at predict (UnsupportedRequestError)', new: 'refusal UNSUPPORTED_REQUEST at predict (UnsupportedRequestError)', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: ids.absent, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: ids.in-list-other-indices, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: ids.one, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
+  - {case: ids.wrong-type, cell: ref-pandas3, runner: python-ref, old: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', new: 'refusal INVALID_REQUEST at materialize (StructuredDataError)', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
