@@ -43,6 +43,12 @@
 #   there; python-old on DuckDB only. A leg off DuckDB is keyed
 #   <id>@<database>, and heldout.py counts each. Postgres needs
 #   SDM_POSTGRES_TEST_DSN, the server each case gets a new database on.
+#   The environment --wheel makes installs the client wheel with the
+#   extras of the databases named (the client's own: duckdb, sqlite,
+#   postgres); every Python environment, --python and --reference-python
+#   included, must import each named database's driver (duckdb,
+#   adbc_driver_sqlite, psycopg), checked in the preconditions and again
+#   before the stamp, so a missing driver stops the run before it starts.
 #
 # The default is a dry run: it checks every precondition, verifies the
 # bundle's digests, prints each command, and writes nothing. It never
@@ -75,7 +81,7 @@ if [ -n "${HELDOUT_WHEELS:-}" ]; then
 fi
 
 usage() { sed -n '6,14p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
-full_help() { sed -n '6,53p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+full_help() { sed -n '6,59p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --execute) mode=execute; shift; continue ;;
@@ -144,6 +150,27 @@ case "$out" in /*) ;; *) out=$PWD/$out ;; esac
 case "$stamp" in '' | /*) ;; *) stamp=$PWD/$stamp ;; esac
 
 here=$(cd "$(dirname "$0")" && pwd)
+# Each database's driver, as run_python.py and databases.py import it.
+drivers=()
+for db in "${dbs[@]}"; do
+  case "$db" in
+    duckdb) drivers+=(duckdb) ;;
+    sqlite) drivers+=(adbc_driver_sqlite.dbapi) ;;
+    postgres) drivers+=(psycopg) ;;
+  esac
+done
+extras=$(IFS=,; echo "${dbs[*]}")
+drivers_in() { # PYTHON: whether it imports every selected database's driver
+  "$1" -I -c 'import importlib, sys
+missing = []
+for name in sys.argv[1:]:
+    try:
+        importlib.import_module(name)
+    except ImportError:
+        missing.append(name)
+if missing:
+    sys.exit("missing " + ", ".join(missing))' "${drivers[@]}"
+}
 heldout=("${HELDOUT_TOOL_PYTHON:-python3}" -I "$here/heldout.py")
 py_ref=${py_ref:-$reference/.venv/bin/python}
 stamp=${stamp:-$out/.ran}
@@ -206,6 +233,12 @@ if [ ${#wheels[@]} -eq 0 ] &&
   problem "the candidate python $py_cand cannot load an installed sdm_client._native"
 fi
 command -v cargo >/dev/null || problem 'no cargo, for rust-host'
+if ! why=$(drivers_in "$py_ref" 2>&1); then
+  problem "the reference python cannot import a database driver (${why##*: })"
+fi
+if [ ${#wheels[@]} -eq 0 ] && ! why=$(drivers_in "$py_cand" 2>&1); then
+  problem "the candidate python cannot import a database driver (${why##*: })"
+fi
 [ ! -e "$stamp" ] || problem "$stamp exists: the held-out cases have run once already"
 case ",$databases," in *,postgres,*)
   # Its value is a credential: only whether it is set is said.
@@ -233,10 +266,26 @@ copy_bundle() { # the original is never written
     cp "$bundle/README.md" "$out/bundle-README.md"
   fi
 }
-make_env() {
+make_env() { # the wheels, the client's with the named databases' extras
+  local wheel install=()
+  for wheel in "$@"; do
+    case "$(basename "$wheel")" in
+      structured_data_models_client-*) install+=("$wheel[$extras]") ;;
+      *) install+=("$wheel") ;;
+    esac
+  done
   "${HELDOUT_VENV_PYTHON:-python3}" -m venv "$env_dir"
   "$env_dir/bin/python" -m pip --disable-pip-version-check --no-input install \
-    --quiet --only-binary=:all: "$@" jsonschema pyyaml
+    --quiet --only-binary=:all: "${install[@]}" jsonschema pyyaml
+}
+drivers_ready() { # before the stamp: every runner's environment has the drivers
+  local python why
+  for python in "$py_ref" "$py_cand"; do
+    if ! why=$(drivers_in "$python" 2>&1); then
+      echo "!! $python cannot import a database driver (${why##*: }): nothing run"
+      return 1
+    fi
+  done
 }
 load_check() {
   "$py_cand" -I -c 'import pathlib, sys
@@ -331,6 +380,7 @@ do_ append_legs python-ref
 do_ "${heldout[@]}" same "$out/python-ref.orig.jsonl" "$out/python-ref.jsonl"
 
 echo "== 7. THE run, once per runner (a second --execute stops here)"
+do_ drivers_ready
 do_ stamp_once
 for db in "${dbs[@]}"; do
   record=()
