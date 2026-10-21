@@ -23,13 +23,14 @@ python-core with the core routes forced, by the recorder's own
 (``contract/t216-encoding-vectors.json``): the result's columns and values
 for each encoding, and the refusal for two byte forms no encoding decodes.
 
-Two scenarios are differences the core keeps (register P1B-24, an answer
-holding a lone surrogate, which the reference reads and keeps): a UTF-16
-answer whose id is a lone surrogate (``lone-surrogate-utf-16``), and a
-Databricks serving answer whose ``response_json`` holds one written as
-itself (``serving-lone-surrogate``). The reference's success is recorded;
-the core's refusal by name is pinned (the recorder's ``REFUSED`` and
-``SERVING_REFUSED``). The serving client's plain answer
+An answer holding a lone surrogate is a difference the core keeps
+(register P1B-24, the owner's rule of 2026-10-21): the reference keeps the
+surrogate, and the core reads it as U+FFFD and answers. The answer's id
+(the result's ``request_id``) and its metadata each hold one, as a JSON
+escape, and written as itself in UTF-8, UTF-16 and UTF-32, over HTTP and
+from a Databricks serving endpoint (the recorder's ``REPLACED``). The
+core's observation is held to the reference's with each lone surrogate
+U+FFFD, and nothing else differing. The serving client's plain answer
 (``serving-plain``) is held to the reference's as the HTTP forms are.
 
 The core's own reader on the same byte forms is
@@ -45,6 +46,7 @@ from __future__ import annotations
 import functools
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -75,12 +77,11 @@ FORMS = (
     *recorder().FORMS,
     *(f'serving-{form}' for form in recorder().SERVING),
 )
-#: The forms the core refuses where the reference reads them (register
-#: P1B-24): the code and details pinned.
-REFUSED = {
-    **recorder().REFUSED,
-    **{f'serving-{k}': v for k, v in recorder().SERVING_REFUSED.items()},
-}
+#: The forms whose lone surrogates the core reads as U+FFFD (register
+#: P1B-24).
+REPLACED = frozenset(recorder().REPLACED)
+#: A lone surrogate: one not in a pair, as Python's ``str`` holds it.
+LONE = re.compile('[\ud800-\udfff]')
 NAMES = tuple(
     f'{query}.{form}' for query in recorder().QUERY_NAMES for form in FORMS
 )
@@ -113,6 +114,17 @@ def test_the_pending_list_only_shrinks() -> None:
     assert mine == {f'{PREFIX}{name}' for name in NAMES}
 
 
+def _replaced(value: Any) -> Any:
+    r"""``value`` with each lone surrogate in its texts U+FFFD."""
+    if isinstance(value, str):
+        return LONE.sub('\ufffd', value)
+    if isinstance(value, dict):
+        return {_replaced(k): _replaced(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_replaced(v) for v in value]
+    return value
+
+
 def _named(refusal: dict[str, Any]) -> tuple[str, str]:
     return (refusal['error'], refusal['code'])
 
@@ -142,10 +154,12 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
     for name, observed in document['answers'].items():
         query, form = name.split('.', 1)
         assert observed['calls'] == 1, name
-        if form in REFUSED:
-            # The reference reads it: the difference the core keeps.
+        if form in REPLACED:
+            # The reference reads it and keeps each surrogate.
             assert observed['refusal'] is None, name
             assert observed['values']['prediction'] == want[query], name
+            assert observed['request_id'] == recorder().LONE_ID, name
+            assert observed['metadata'] == {'note': recorder().LONE_NOTE}, name
         elif form.startswith('malformed-'):
             assert observed['refusal']['code'] == 'TRANSPORT_ERROR', name
             assert observed['values'] is None, name
@@ -170,25 +184,37 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
         'utf-32-be': 'utf-32-be',
         'malformed-utf-16-odd': 'utf-16-le',
         'malformed-utf-8-invalid': 'utf-8',
+        'lone-surrogate-escaped': 'utf-8',
+        'lone-surrogate-utf-8': 'utf-8',
         'lone-surrogate-utf-16': 'utf-16',
+        'lone-surrogate-utf-32': 'utf-32',
     }
     for form, write in recorder().FORMS.items():
         if form.startswith('malformed-'):
             with pytest.raises(UnicodeDecodeError):
                 json.loads(write(text))
-        elif form not in REFUSED:
+        elif not form.startswith('lone-'):
             assert json.loads(write(text)) == json.loads(text), form
-    # The lone surrogate is in the bytes, and Python's reader keeps it.
-    answer = '{"id": "r1"}'
-    assert json.loads(recorder().FORMS['lone-surrogate-utf-16'](answer)) == {
-        'id': 'x\ud800'
+    # Each lone-surrogate form holds its surrogates as it says, and
+    # Python's reader keeps them.
+    answer = '{"id": "r1", "metadata": {}}'
+    kept = {
+        'id': recorder().LONE_ID,
+        'metadata': {'note': recorder().LONE_NOTE},
     }
-    served = recorder().SERVING['lone-surrogate'](answer)
-    assert '\ud800' in served and '\\ud800' not in served
+    for form, write in recorder().FORMS.items():
+        if form.startswith('lone-'):
+            assert json.loads(write(answer)) == kept, form
+    raw = recorder().SERVING['lone-surrogate'](answer)
+    escaped = recorder().SERVING['lone-surrogate-escaped'](answer)
+    assert LONE.search(raw) and '\\u' not in raw
+    assert not LONE.search(escaped) and '\\ud800' in escaped
+    assert json.loads(raw) == json.loads(escaped) == kept
+    assert b'\xed\xa0\x80' in recorder().FORMS['lone-surrogate-utf-8'](answer)
 
 
 @pytest.mark.parametrize(
-    'name', [n for n in NAMES if n.split('.', 1)[1] not in REFUSED]
+    'name', [n for n in NAMES if n.split('.', 1)[1] not in REPLACED]
 )
 def test_an_answer_in_each_encoding_is_read_as_the_reference_reads_it(
     name: str,
@@ -220,30 +246,28 @@ def test_an_answer_in_each_encoding_is_read_as_the_reference_reads_it(
 
 
 @pytest.mark.parametrize(
-    'name', [n for n in NAMES if n.split('.', 1)[1] in REFUSED]
+    'name', [n for n in NAMES if n.split('.', 1)[1] in REPLACED]
 )
-def test_an_answer_holding_a_lone_surrogate_is_refused_by_name(
-    name: str,
-) -> None:
-    r"""Register P1B-24: an answer holding a lone surrogate, which the
-    reference reads, is refused by the core as ``INVALID_RESPONSE``,
-    ``field=response``, ``reason=not_json``, with the category the
-    difference names: ``encoding`` for UTF-16 bytes no UTF-8 text holds,
-    ``syntax`` for a Databricks ``response_json`` holding one written as
-    itself (not a bare ``UnicodeEncodeError``)."""
-    code, details = REFUSED[name.split('.', 1)[1]]
+def test_a_lone_surrogate_in_an_answer_is_read_as_u_fffd(name: str) -> None:
+    r"""Register P1B-24 (the owner's rule of 2026-10-21): an answer holding
+    lone surrogates, which the reference reads and keeps, is answered on the
+    core route, each lone surrogate U+FFFD: the predictions, the request id
+    and the metadata are the reference's with only that character
+    differing, as a JSON escape and written as itself in UTF-8, UTF-16 and
+    UTF-32, and from a Databricks serving endpoint (where the answer's text
+    was refused, or escaped as a bare ``UnicodeEncodeError``)."""
 
     def check() -> None:
+        want = vectors()['answers'][name]
         got = core()['answers'][name]
-        refusal = got['refusal']
-        assert refusal is not None, f'{name}: answered {json.dumps(got)}'
-        assert (refusal['error'], refusal['code']) == (
-            'StructuredDataError',
-            code,
-        ), refusal
-        assert {k: refusal['details'].get(k) for k in details} == details, (
-            refusal
+        assert LONE.search(json.dumps(want, ensure_ascii=False)), want
+        replaced = _replaced(want)
+        assert replaced['request_id'] == recorder().LONE_ID.replace(
+            '\ud800', '\ufffd'
         )
-        assert got['calls'] == 1, got
+        assert got == replaced, (
+            f'{name}: {ascii(got)[:400]} where python-ref, its lone '
+            f'surrogates U+FFFD, has {ascii(replaced)[:400]}'
+        )
 
     held(name, check)

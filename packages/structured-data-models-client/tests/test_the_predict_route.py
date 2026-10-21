@@ -520,12 +520,14 @@ def test_an_answer_too_deep_for_python_s_reader_is_too_deep_on_the_core(
     )
 
 
-def test_a_lone_surrogate_in_an_answer_is_refused_on_the_core(
+def test_a_lone_surrogate_in_an_answer_is_u_fffd_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Diagnostic, register P1B-24 (proposed): Python's reader takes a
-    # lone surrogate escape in text, and the old route passes it on; the
-    # core's reader, which holds text as UTF-8, refuses the answer.
+    # Diagnostic, register P1B-24 (the owner's rule of 2026-10-21): Python's
+    # reader takes a lone surrogate escape in text, and the old route passes
+    # it on; the core's reader, which holds text as UTF-8, reads it as
+    # U+FFFD and answers. Every encoding of it is
+    # contract/tests/test_t216_response_encoding.py's.
     request = _materialized(monkeypatch)
     answer = (
         '{"id": "r1", "model": "kumo-relational", "metadata": {"note": '
@@ -537,9 +539,9 @@ def test_a_lone_surrogate_in_an_answer_is_refused_on_the_core(
         core, old = _both(monkeypatch, request, url)
     assert not isinstance(old, Exception), old
     assert old.metadata['note'] == '\ud800'
-    assert isinstance(core, StructuredDataError)
-    assert core.code == 'INVALID_RESPONSE'
-    assert core.details['field'] == 'response'
+    assert not isinstance(core, Exception), core
+    assert core.metadata == {'note': '\ufffd'}
+    assert core.to_pandas().equals(old.to_pandas())
 
 
 def test_a_failed_transport_is_named_for_what_failed(
