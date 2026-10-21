@@ -15,12 +15,18 @@
 //! (`contract/t213-option-vectors.json`); a forecast's whole explanation
 //! (`{"by_forecast_step": ...}`) is on the schema metadata only, so
 //! `explain.forecast` tells a recorded explanation from the rows' column.
+//!
+//! Each is read from the observation as `sdm-contract-run` writes it
+//! (`observation::write`), not from the in-process answer: the gate
+//! overlays the checkpoint's writer, so the explanation reaches the
+//! observation through the writer alone.
 
 use std::path::{Path, PathBuf};
 
 use sdm_testkit::bases;
 use sdm_testkit::case;
-use sdm_testkit::host::{self, Answer};
+use sdm_testkit::host;
+use sdm_testkit::observation::{self, Identity};
 use serde_json::Value;
 
 fn root() -> PathBuf {
@@ -37,16 +43,21 @@ fn vector(id: &str) -> Value {
     all["vectors"][id].clone()
 }
 
-/// `predict`'s answer on DuckDB, as `core.predicted` records it.
+/// The case's observation on DuckDB, as `sdm-contract-run` writes it: its
+/// `core.predicted`.
 fn predicted(id: &str) -> Value {
     let contract = root().join("contract");
     let bases = bases::load(&contract.join("bases.yaml")).unwrap();
     let loaded = case::load(&[contract.join(format!("cases/s1/{id}.json"))]).unwrap();
     let observed = host::run(&loaded[0].case, &bases).unwrap();
-    match observed.answer {
-        Answer::Predicted(answer) => answer,
-        other => panic!("{id}: no answer of predict: {other:?}"),
-    }
+    let identity = Identity::new(&root()).unwrap();
+    let line = observation::write(&identity, &loaded[0], &observed, None);
+    assert_eq!(
+        line["outcome"]["result"], "success",
+        "{id}: {}",
+        line["outcome"]
+    );
+    line["core"]["predicted"].clone()
 }
 
 /// Two JSON values the same, a number by its value.
