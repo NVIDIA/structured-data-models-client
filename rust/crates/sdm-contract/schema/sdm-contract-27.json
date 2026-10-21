@@ -1944,7 +1944,7 @@
       "type": "object"
     },
     "GivenCandidate": {
-      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\n  no scalar holds, as `spelled` is, with the name of the kind of value it\n  is (`date`, `datetime`, `time`), so that two of one kind and one text\n  are one candidate, as the host's language holds them equal and the\n  reference's `dict.fromkeys` keeps the first (T2.14b fix 1).\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
+      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\", \"at\": \"<digits>\"}}`:\n  a value of a type no scalar holds, written into its question by its\n  text as `spelled` is, with the name of the kind of value it is\n  (`date`, `datetime` for a timestamp with no zone, `datetime_zoned` for\n  one with, `time`) and, where the host's language compares such values\n  by a point in time, that point (`at`: a count of nanoseconds since the\n  epoch, a zoned one's UTC instant). Two of one kind are one candidate\n  where their `at` is one, or, with none, their text: as the host's\n  language holds them equal, the reference's `dict.fromkeys` keeping the\n  first, and its text, for the question (T2.14b fixes 1 and 2).\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
       "oneOf": [
         {
           "type": "string",
@@ -2023,13 +2023,29 @@
           "type": "string"
         },
         "type": {
-          "type": "string"
+          "$ref": "#/$defs/TypedKind"
+        },
+        "at": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,
       "required": [
         "text",
         "type"
+      ]
+    },
+    "TypedKind": {
+      "description": "The kinds a typed candidate is of, a closed set: a kind no host may\nname otherwise, an unknown one refused by the contract's reader by\nname.",
+      "type": "string",
+      "enum": [
+        "date",
+        "datetime",
+        "datetime_zoned",
+        "time"
       ]
     },
     "SamplerMemo": {

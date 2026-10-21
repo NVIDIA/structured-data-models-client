@@ -87,6 +87,13 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 - Claude P3-6: a `json[]` column's elements are marked as JSON and handed over as JSON text, so `sdm-data`'s list rule reads them.
 - Claude P3-7: the 2,000-character cap on a spelled value is registered (P2D-2, proposed; the ID is from lane D's block).
 
+### Fix 2 (round 2 reviews)
+
+- Codex P2-1: a timestamp candidate carries the point in time Python's equality compares (`at`: a zoned one's UTC instant, a zone-less one's wall clock, in nanoseconds), beside its kind and text, so two zoned timestamps of one instant are one candidate, the first one's text written into the question.
+- Claude: the typed candidate's kind is a closed set in the contract (`TypedKind`: `date`, `datetime`, `datetime_zoned`, `time`); the contract's reader refuses another by name.
+- Claude P3-3: a Postgres `json` cell whose whole value is a string holding a lone surrogate is refused by name (`VALUE_OUT_OF_RANGE`, rule `text_not_utf8`), where the reference fails unnamed (register P2D-3, proposed); in a `json[]`, whose column the reference leaves out, such an element is missing.
+- Claude P3-4: `key.uint64-above-int64-max`'s wording without the data's value is registered (P2D-4, proposed, under KO2-86).
+
 ### Carried to Phase 3 (P3)
 
 - Decimal stype on Postgres: inference reads a scaled decimal by Arrow's `ToDouble`, where the reference's Postgres double is `float(Decimal)`, correctly rounded (0.700 as 0.7000000000000001 here, 0.7 there); distinct counts agree but near collisions (Claude r1 P3-3).

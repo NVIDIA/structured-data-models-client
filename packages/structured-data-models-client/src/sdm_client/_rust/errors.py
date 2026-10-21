@@ -325,6 +325,12 @@ WORDED: dict[tuple[str, ...], str] = {
         'version {reads}: materialize the request again with this client '
         'to predict it'
     ),
+    # A Postgres JSON cell whose whole value is a string holding a lone
+    # surrogate, which no UTF-8 text holds (T2.14b fix 2; register P2D-3).
+    ('VALUE_OUT_OF_RANGE', 'column', 'text_not_utf8'): (
+        'column {column!r} holds a JSON string with a lone surrogate, text '
+        'with no UTF-8 form, which the core cannot read'
+    ),
     ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
     ('INVALID_REQUEST', 'payload', 'smaller_calls'): _ASK_IN_SMALLER_CALLS,
     ('INVALID_REQUEST', 'payload', 'no_smaller_call'): _NO_CALL_IS_SMALLER,

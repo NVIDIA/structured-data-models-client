@@ -292,26 +292,42 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
             written.append({'value': {'t': 'utf8', 'v': value}})
         elif isinstance(value, (datetime.date, datetime.time)):
             # A date, a time of day or a timestamp (pandas' among them), with
-            # its kind, so the core holds two of one kind and text one
-            # candidate, as Python's equality does (T2.14b fix 1).
-            written.append(
-                {'typed': {'text': str(value), 'type': _kind(value)}}
-            )
+            # its kind and, for a timestamp, the point in time Python
+            # compares it by, so the core holds two equal ones one
+            # candidate (T2.14b fixes 1 and 2); its text is the question's.
+            written.append({'typed': _typed(value)})
         else:
             written.append({'spelled': str(value)})
     return written
 
 
-def _kind(value: Any) -> str:
-    r"""The kind of a date, a time of day or a timestamp, as the contract's
-    typed candidate names it: ``datetime`` for a timestamp (a
-    ``datetime.datetime``, a ``pandas.Timestamp`` among them), which
-    Python holds unequal to a date of the same day."""
+def _typed(value: Any) -> dict[str, Any]:
+    r"""A date, a time of day or a timestamp as the contract's typed
+    candidate: its text (``str``), its kind, and for a timestamp the point
+    in time Python's equality compares (``at``, nanoseconds since the
+    epoch): a zoned one's UTC instant (``datetime_zoned``), a zone-less
+    one's wall clock (``datetime``), which Python never holds equal to each
+    other, nor either to a date."""
+    typed: dict[str, Any] = {'text': str(value)}
     if isinstance(value, datetime.datetime):
-        return 'datetime'
-    if isinstance(value, datetime.date):
-        return 'date'
-    return 'time'
+        nanos = getattr(value, 'nanosecond', 0)
+        zoned = value.utcoffset() is not None
+        moment = (
+            value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+            if zoned
+            else value.replace(tzinfo=None)
+        )
+        delta = moment - datetime.datetime(1970, 1, 1)
+        micros = (delta.days * 86_400 + delta.seconds) * 1_000_000 + (
+            delta.microseconds
+        )
+        typed['type'] = 'datetime_zoned' if zoned else 'datetime'
+        typed['at'] = str(micros * 1_000 + nanos)
+    elif isinstance(value, datetime.date):
+        typed['type'] = 'date'
+    else:
+        typed['type'] = 'time'
+    return typed
 
 
 def _text(value: Any) -> str:

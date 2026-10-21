@@ -682,11 +682,16 @@ impl<T> Given<T> {
 /// - `{"spelled": "<text>"}`: a value of a type no scalar holds, by the
 ///   text the reference writes into its question (in Python, `str` of it);
 ///   it is no text candidate, and the core holds it equal to no other.
-/// - `{"typed": {"text": "<text>", "type": "<name>"}}`: a value of a type
-///   no scalar holds, as `spelled` is, with the name of the kind of value it
-///   is (`date`, `datetime`, `time`), so that two of one kind and one text
-///   are one candidate, as the host's language holds them equal and the
-///   reference's `dict.fromkeys` keeps the first (T2.14b fix 1).
+/// - `{"typed": {"text": "<text>", "type": "<name>", "at": "<digits>"}}`:
+///   a value of a type no scalar holds, written into its question by its
+///   text as `spelled` is, with the name of the kind of value it is
+///   (`date`, `datetime` for a timestamp with no zone, `datetime_zoned` for
+///   one with, `time`) and, where the host's language compares such values
+///   by a point in time, that point (`at`: a count of nanoseconds since the
+///   epoch, a zoned one's UTC instant). Two of one kind are one candidate
+///   where their `at` is one, or, with none, their text: as the host's
+///   language holds them equal, the reference's `dict.fromkeys` keeping the
+///   first, and its text, for the question (T2.14b fixes 1 and 2).
 /// - `repeat`: a value the host's own language holds equal to one given
 ///   before it, left out as the reference's `dict.fromkeys` leaves it out.
 ///   A host whose candidates are all scalars sends none, the core keeping
@@ -713,7 +718,23 @@ pub enum GivenCandidate {
 pub struct TypedCandidate {
     pub text: String,
     #[serde(rename = "type")]
-    pub kind: String,
+    pub kind: TypedKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<String>,
+}
+
+/// The kinds a typed candidate is of, a closed set: a kind no host may
+/// name otherwise, an unknown one refused by the contract's reader by
+/// name.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TypedKind {
+    Date,
+    Datetime,
+    DatetimeZoned,
+    Time,
 }
 
 /// Build a request for a query over a described source.

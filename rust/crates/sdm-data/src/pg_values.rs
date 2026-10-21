@@ -165,10 +165,11 @@ pub fn conform(
             let name = field.name();
             columns.push(match rule {
                 Rule::Kept => Arc::clone(array),
-                Rule::Json => json_column(name, array.as_string::<i32>(), float_text)?,
+                Rule::Json => json_column(name, array.as_string::<i32>(), float_text, false)?,
                 Rule::JsonList(item) => {
                     let list = array.as_list::<i32>();
-                    let values = json_column(name, list.values().as_string::<i32>(), float_text)?;
+                    let values =
+                        json_column(name, list.values().as_string::<i32>(), float_text, true)?;
                     Arc::new(
                         ListArray::try_new(
                             Arc::clone(item),
@@ -192,18 +193,35 @@ pub fn conform(
     Ok(Some((conformed, out)))
 }
 
+/// A JSON column's cells, each the reference's text of it. A cell that is
+/// not JSON is the provider's fault; one whose whole value is a string
+/// holding a lone surrogate, which no UTF-8 text holds, is refused by name
+/// (`VALUE_OUT_OF_RANGE`, rule `text_not_utf8`), where the reference fails
+/// unnamed (`UnicodeEncodeError`); in a list, whose column the reference
+/// leaves out, such an element is missing (`in_list`).
 fn json_column(
     column: &str,
     texts: &StringArray,
     float_text: fn(f64) -> String,
+    in_list: bool,
 ) -> Result<ArrayRef, CoreError> {
     let read: Result<StringArray, CoreError> = texts
         .iter()
         .map(|text| match text {
             None => Ok(None),
-            Some(text) => {
-                reference_text(text, float_text).ok_or_else(|| unreadable(column, "JSON"))
-            }
+            Some(text) => match read_reference_text(text, float_text) {
+                Ok(read) => Ok(read),
+                Err(Unread::NotUtf8) if in_list => Ok(None),
+                Err(Unread::NotUtf8) => Err(CoreError::new(
+                    ErrorKind::Unsupported,
+                    ErrorCode::ValueOutOfRange,
+                    "a JSON string holds a lone surrogate, which no UTF-8 text holds",
+                )
+                .with_field("field", Detail::text("column"))
+                .with_field("column", Detail::text(column))
+                .with_field("rule", Detail::text("text_not_utf8"))),
+                Err(Unread::NotJson) => Err(unreadable(column, "JSON")),
+            },
         })
         .map(|r| r.map(|v: Option<String>| v))
         .collect::<Result<Vec<_>, _>>()
@@ -319,18 +337,37 @@ enum Json {
 
 /// The reference's text of the JSON value `text` holds, a JSON null none;
 /// `None` (outer) where `text` is not JSON.
+#[cfg(test)]
 fn reference_text(text: &str, float_text: fn(f64) -> String) -> Option<Option<String>> {
+    read_reference_text(text, float_text).ok()
+}
+
+/// Why a JSON cell is not read.
+#[derive(Debug, PartialEq, Eq)]
+enum Unread {
+    /// It is not JSON.
+    NotJson,
+    /// It is a JSON string holding a lone surrogate, which Python's `str`
+    /// holds and no UTF-8 text does.
+    NotUtf8,
+}
+
+/// [`reference_text`], saying why a cell is not read.
+fn read_reference_text(
+    text: &str,
+    float_text: fn(f64) -> String,
+) -> Result<Option<String>, Unread> {
     let mut reader = Reader {
         text,
         bytes: text.as_bytes(),
         at: 0,
     };
-    let value = reader.value(0)?;
+    let value = reader.value(0).ok_or(Unread::NotJson)?;
     reader.space();
     if reader.at != reader.bytes.len() {
-        return None;
+        return Err(Unread::NotJson);
     }
-    Some(match value {
+    Ok(match value {
         Json::Null => None,
         Json::Bool(true) => Some("True".to_owned()),
         Json::Bool(false) => Some("False".to_owned()),
@@ -338,7 +375,7 @@ fn reference_text(text: &str, float_text: fn(f64) -> String) -> Option<Option<St
         Json::Float(f) => Some(float_text(f)),
         // Text as Python's `str` of it; one holding a lone surrogate has no
         // UTF-8 form, and is not read.
-        Json::Text(units) => Some(String::from_utf16(&units).ok()?),
+        Json::Text(units) => Some(String::from_utf16(&units).map_err(|_| Unread::NotUtf8)?),
         nested => {
             let mut out = String::new();
             write(&nested, float_text, &mut out);

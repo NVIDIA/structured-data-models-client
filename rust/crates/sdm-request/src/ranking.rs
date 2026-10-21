@@ -27,7 +27,7 @@ use std::sync::Arc;
 use arrow_array::builder::{Float64Builder, Int64Builder, ListBuilder, StringBuilder};
 use arrow_array::{Array, ArrayRef, Int64Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::ops::GivenCandidate;
+use sdm_contract::ops::{GivenCandidate, TypedKind};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 use crate::predict::{Entity, Part, id_columns};
@@ -111,10 +111,12 @@ pub enum Candidate {
     Spelled(String),
     /// A value of a type no scalar holds, by its text and its kind's name
     /// (`GivenCandidate::Typed`): written as [`Candidate::Spelled`] is,
-    /// and equal to another of one kind and one text.
+    /// and equal to another of one kind and one point in time (`at`), or,
+    /// with none, one text.
     Typed {
         text: String,
-        kind: String,
+        kind: TypedKind,
+        at: Option<String>,
     },
     /// A value the host holds equal to one given before it, left out
     /// (`GivenCandidate::Repeat`).
@@ -205,7 +207,10 @@ impl Candidate {
                 Some(format!("n{}", trimmed(decimal_text(unscaled, *scale))))
             }
             Candidate::Text(text) => Some(format!("s{text}")),
-            Candidate::Typed { text, kind } => Some(format!("t{kind}\u{0}{text}")),
+            Candidate::Typed { text, kind, at } => Some(match at {
+                Some(at) => format!("t{kind:?}@{at}"),
+                None => format!("t{kind:?}\u{0}{text}"),
+            }),
             Candidate::Spelled(_)
             | Candidate::Repeat
             | Candidate::Other(_)
@@ -235,7 +240,8 @@ pub fn read(given: &GivenCandidate) -> Candidate {
         GivenCandidate::Typed(typed) => {
             return Candidate::Typed {
                 text: typed.text.clone(),
-                kind: typed.kind.clone(),
+                kind: typed.kind,
+                at: typed.at.clone(),
             };
         }
         GivenCandidate::Repeat => return Candidate::Repeat,

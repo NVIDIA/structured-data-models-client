@@ -6843,6 +6843,61 @@ entries:
     orchestrator may renumber. Found by T2.14b's round 1 review (Claude,
     P3-7).
 
+- id: P2D-3
+  title: A Postgres json cell whose value is a string holding a lone surrogate is refused by name, where the reference fails unnamed
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a Postgres table whose json
+    column holds a cell whose whole value is a string escaping a lone
+    surrogate ('"\ud800"'::json) fails with an unnamed UnicodeEncodeError.
+  new_behavior: >-
+    On the core route the core refuses it by name: StructuredDataError,
+    VALUE_OUT_OF_RANGE, field column, rule text_not_utf8, naming the
+    column, said as a JSON string with a lone surrogate, text with no UTF-8
+    form. A lone surrogate inside an object or an array is kept, escaped,
+    as the reference keeps it; one as a json[] element is missing, the
+    column being one the reference leaves out.
+  affected_inputs: >-
+    Schema.from_source and materialize on the core route over a Postgres
+    json or jsonb column holding a cell whose whole value is a string
+    escaping a lone surrogate.
+  cases: [T2.14b]
+  refs: [T2.14b, E66]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer, a named error in place of a crash (E66(b)). Found
+    by T2.14b's round 2 review (Claude, P3-3). The ID is from lane D's
+    block; the orchestrator may renumber.
+
+- id: P2D-4
+  title: A cell past int64 in the request is refused without its value, where the reference names the value
+  kind: change
+  old_behavior: >-
+    The reference refuses a request cell past int64 naming the table, the
+    column, the row and the value ("Column 'instance_table.__kumo_entity_ref_0'
+    row 0: value 9223372036854775810 is outside the range int64 represents
+    ..."), the value a key read from the data (key.uint64-above-int64-max).
+  new_behavior: >-
+    On the core route the refusal is the reference's, the same code and
+    class, said with the table, the column and the row and without the
+    value, a value read from data, which KO2-86 and H17 keep out of every
+    error.
+  affected_inputs: >-
+    materialize on the core route where a cell of the request (a key read
+    from the source, a feature) is past int64.
+  cases: [key.uint64-above-int64-max]
+  refs: [T2.14b, KO2-86, H17]
+  status: proposed
+  approved_by: null
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
+  notes: >-
+    Approver: reviewer, under KO2-86 (the owner's: a value read from data
+    stays out). Only the message's text differs. Its wording key stays in
+    contract/tests/t214b-pending.json. The ID is from lane D's block; the
+    orchestrator may renumber.
+
 # --- lane E entries (P2E-1..19) ---
 
 - id: P2E-1

@@ -18,7 +18,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py": {
       "<module>": {
-        "fingerprint": "18e09b632e68e118dfc9a6be15d360cd52cf8ca28517ee7ebd12d4c6e5ef1ac6"
+        "fingerprint": "3e1a90839c64fd2606089bc6aac90a54fe19d0ca436405adc5e835c922ad9094"
       },
       "Unresolved.__init__": {
         "fingerprint": "c0b3ba4e9b03529f042be0997a497d6e8f69c45ce50b92ec1c529c60dd27365c"
@@ -30,16 +30,13 @@
         "fingerprint": "8845c755285774562396f76aecab772e0dc002483f9f9ada1951406a3ebe523f"
       },
       "_candidates": {
-        "fingerprint": "461264594278f0505c1892ea8bbdcdb2ae42635efaaf893c520e8d48aee73b26"
+        "fingerprint": "7937bdb067557de640fb180c8719019788ab2b5b4f4672e5db5b1e07046fee54"
       },
       "_context_anchor": {
         "fingerprint": "c94d62a7d024f1a909501507ef1afdcaa05cebe6c750f2a6342de3206aab7c0b"
       },
       "_indices": {
         "fingerprint": "5f823fd5a856df6d4b3f2ca28d0ee23fa11662360a6ea7bf1ca74ea76374fece"
-      },
-      "_kind": {
-        "fingerprint": "0a53aa3b734a9a35e0c651bb2c98a3d9b6c80c835eb59a18461c1544f548313b"
       },
       "_missing": {
         "fingerprint": "466127ee6c502f180f36fbe6b1e4750b86ffbce40dad1d2a16b53b2d79c117a0"
@@ -49,6 +46,9 @@
       },
       "_text": {
         "fingerprint": "32485edb4f50fd57ef9c965f6d5eebcfdb8b2f520cb1c260b9cd8596a91390d5"
+      },
+      "_typed": {
+        "fingerprint": "40b43e7eda340f5cc564304156e8b0976672e04e17bc1d80ff67c1380ebcb4b3"
       },
       "asked": {
         "fingerprint": "27071d5d7c40c941fde88fbaae8edfd183a63525a82b2eb927fc02c7029f481e"
@@ -215,7 +215,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "13f6fd19cb9253af22ecf8ecc89f3c38040ba2d3dac82f6084c1a96a6202791b"
+        "fingerprint": "03d2faa67f3248cbc806ab9d5c797a03f5b46cb20c5d75e39f7614c82d80fed9"
       },
       "_Words.convert_field": {
         "fingerprint": "eb6ac343d2114984bb9b64652349aea1b0c0de4ccde38f032ef0297837b857f7"
