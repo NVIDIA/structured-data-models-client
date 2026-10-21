@@ -857,6 +857,17 @@ fn the_comparison_fails_on_each_seeded_answer() {
             ),
         ),
         (
+            "KO2-86: another value named than the one given",
+            "key.int",
+            refused(
+                "INVALID_REQUEST",
+                "run",
+                json!({"field": "primary_keys", "table": "orders", "rule": "key_not_names",
+                       "given": "4", "variant": "given"}),
+                not_names,
+            ),
+        ),
+        (
             "2: the refusal judged before the source is read",
             "key.int",
             Got {
@@ -884,10 +895,12 @@ fn the_comparison_fails_on_each_seeded_answer() {
     }
     // Seed 11 beside its pair, and the rule dropped from the edit alone.
     let edit = by_id("edit.key-not-names");
+    // From KO2-86 each names the value given, as the host spelled it.
     let paired = refused(
         "INVALID_REQUEST",
         "run",
-        json!({"field": "primary_keys", "table": "orders", "rule": "key_not_names"}),
+        json!({"field": "primary_keys", "table": "orders", "rule": "key_not_names",
+               "given": "3", "variant": "given"}),
         not_names,
     );
     let good = Got {
@@ -895,7 +908,8 @@ fn the_comparison_fails_on_each_seeded_answer() {
         ..refused(
             "INVALID_REQUEST",
             "run",
-            json!({"field": "primary_key", "table": "orders", "rule": "key_not_names"}),
+            json!({"field": "primary_key", "table": "orders", "rule": "key_not_names",
+                   "given": "3", "variant": "given"}),
             not_names,
         )
     };

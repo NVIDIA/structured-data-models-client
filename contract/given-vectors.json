@@ -192,7 +192,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "3"
+     }
     },
     "time_columns": {}
    },
@@ -203,7 +205,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "3",
+     "variant": "given"
     }
    },
    "register": null,
@@ -228,7 +232,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "1.5"
+     }
     },
     "time_columns": {}
    },
@@ -239,7 +245,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "1.5",
+     "variant": "given"
     }
    },
    "register": null,
@@ -264,7 +272,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "True"
+     }
     },
     "time_columns": {}
    },
@@ -275,7 +285,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "True",
+     "variant": "given"
     }
    },
    "register": null,
@@ -304,7 +316,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "[['order_id']]"
+     }
     },
     "time_columns": {}
    },
@@ -315,7 +329,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "[['order_id']]",
+     "variant": "given"
     }
    },
    "register": null,
@@ -342,7 +358,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "{'order_id': 1}"
+     }
     },
     "time_columns": {}
    },
@@ -353,7 +371,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "{'order_id': 1}",
+     "variant": "given"
     }
    },
    "register": null,
@@ -419,7 +439,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "['order_id', 3]"
+     }
     },
     "time_columns": {}
    },
@@ -430,7 +452,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "['order_id', 3]",
+     "variant": "given"
     }
    },
    "register": null,
@@ -458,7 +482,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "['order_id', None]"
+     }
     },
     "time_columns": {}
    },
@@ -469,7 +495,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "['order_id', None]",
+     "variant": "given"
     }
    },
    "register": null,
@@ -905,7 +933,9 @@
     "tables": [],
     "primary_keys": {},
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "3"
+     }
     }
    },
    "core": {
@@ -915,7 +945,15 @@
     "fields": {
      "field": "time_columns",
      "table": "orders",
-     "rule": "time_column_not_a_name"
+     "rule": "time_column_not_a_name",
+     "given": "3",
+     "variant": "given",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -941,7 +979,9 @@
     "tables": [],
     "primary_keys": {},
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "1.5"
+     }
     }
    },
    "core": {
@@ -951,7 +991,15 @@
     "fields": {
      "field": "time_columns",
      "table": "orders",
-     "rule": "time_column_not_a_name"
+     "rule": "time_column_not_a_name",
+     "given": "1.5",
+     "variant": "given",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -977,7 +1025,9 @@
     "tables": [],
     "primary_keys": {},
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "True"
+     }
     }
    },
    "core": {
@@ -987,7 +1037,15 @@
     "fields": {
      "field": "time_columns",
      "table": "orders",
-     "rule": "time_column_not_a_name"
+     "rule": "time_column_not_a_name",
+     "given": "True",
+     "variant": "given",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": null,
@@ -1015,7 +1073,9 @@
     "tables": [],
     "primary_keys": {},
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "['ts']"
+     }
     }
    },
    "core": {
@@ -1025,7 +1085,15 @@
     "fields": {
      "field": "time_columns",
      "table": "orders",
-     "rule": "time_column_not_a_name"
+     "rule": "time_column_not_a_name",
+     "given": "['ts']",
+     "variant": "given",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": {
@@ -1056,7 +1124,9 @@
     "tables": [],
     "primary_keys": {},
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "{'ts': 1}"
+     }
     }
    },
    "core": {
@@ -1066,7 +1136,15 @@
     "fields": {
      "field": "time_columns",
      "table": "orders",
-     "rule": "time_column_not_a_name"
+     "rule": "time_column_not_a_name",
+     "given": "{'ts': 1}",
+     "variant": "given",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "register": {
@@ -1139,7 +1217,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "nope": "unreadable"
+     "nope": {
+      "spelled": "3"
+     }
     },
     "time_columns": {}
    },
@@ -1180,7 +1260,9 @@
     "tables": [],
     "primary_keys": {},
     "time_columns": {
-     "nope": "unreadable"
+     "nope": {
+      "spelled": "3"
+     }
     }
    },
    "core": {
@@ -1222,10 +1304,14 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "3"
+     }
     },
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "3"
+     }
     }
    },
    "core": {
@@ -1235,7 +1321,9 @@
     "fields": {
      "field": "primary_keys",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "3",
+     "variant": "given"
     }
    },
    "register": null,
@@ -1268,7 +1356,9 @@
      }
     },
     "time_columns": {
-     "orders": "unreadable"
+     "orders": {
+      "spelled": "3"
+     }
     }
    },
    "core": {
@@ -1304,7 +1394,9 @@
    "spec": {
     "tables": [],
     "primary_keys": {
-     "users": "unreadable",
+     "users": {
+      "spelled": "3"
+     },
      "orders": {
       "value": [
        "nope"
@@ -1915,7 +2007,9 @@
    "edit": {
     "edit": "primary_key",
     "table": "orders",
-    "key": "unreadable"
+    "key": {
+     "spelled": "3"
+    }
    },
    "core": {
     "outcome": "refusal",
@@ -1924,7 +2018,9 @@
     "fields": {
      "field": "primary_key",
      "table": "orders",
-     "rule": "key_not_names"
+     "rule": "key_not_names",
+     "given": "3",
+     "variant": "given"
     }
    },
    "pair": "key.int",
@@ -1944,7 +2040,9 @@
    "edit": {
     "edit": "time_column",
     "table": "orders",
-    "column": "unreadable"
+    "column": {
+     "spelled": "3"
+    }
    },
    "core": {
     "outcome": "refusal",
@@ -1953,7 +2051,15 @@
     "fields": {
      "field": "time_column",
      "table": "orders",
-     "rule": "time_column_not_a_name"
+     "rule": "time_column_not_a_name",
+     "given": "3",
+     "variant": "given",
+     "columns": [
+      "order_id",
+      "price",
+      "ts",
+      "user_id"
+     ]
     }
    },
    "pair": "time.int",

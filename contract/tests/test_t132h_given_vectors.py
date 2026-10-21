@@ -708,6 +708,8 @@ def test_each_seeded_fault_fails_a_check() -> None:
             'field': 'primary_keys',
             'table': 'orders',
             'rule': 'key_not_names',
+            'given': '3',
+            'variant': 'given',
         },
         'fetches': 2,
     }
@@ -719,6 +721,11 @@ def test_each_seeded_fault_fails_a_check() -> None:
             core,
             {**good, 'fields': {'field': 'primary_keys', 'table': 'orders'}},
         )
+        != []
+    )
+    # KO2-86: the value named, not another.
+    assert (
+        differs(core, {**good, 'fields': {**good['fields'], 'given': '4'}})
         != []
     )
     assert differs(core, {**good, 'at': 'start', 'fetches': 0}) != []
