@@ -10,6 +10,7 @@ Lane q, on the phase head f133c4b8 (`Land T2.14c`); the reports first ran on be5
 - [as-built.md](as-built.md); the "Carried into Phase 3" rows in migration-plan.md section 8.
 - The evidence pack, [evidence/README.md](evidence/README.md).
 - An answer's text encoding (the whole-phase review part 2's finding, a regression since T2.14b): the core reads UTF-8 with a mark, UTF-16 and UTF-32 as Python's reader decodes bytes; register P1B-24 widened to raw lone surrogates (the orchestrator's decision under KO2-88).
+- DuckDB capped below 2.0 in the connectors' `duckdb` extra (2.0 broke CI's `engine` and `installed-wheel` jobs on aa44c1d9; the orchestrator's decision under KO2-88; P2-T2.16-12 carries 2.0's support).
 - `scripts/rust_core/cells.sh` installs the connectors' SQLite and Postgres drivers, as CI's cells do, with one test (`tests/test_cells_drivers.py`).
 
 ## What the phase-end run needs (found with `phase_end.sh` dry)
