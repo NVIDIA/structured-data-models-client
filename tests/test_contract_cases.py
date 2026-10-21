@@ -143,25 +143,31 @@ def _refused_before_reading(case_id: str) -> bool:
     return False
 
 
+def _spelled(value: Any) -> Any:
+    r"""A value no contract type holds, as the codec's ``spelled`` writes
+    it from T2.14b (KO2-86): its ``repr``, which the core names."""
+    return {'spelled': repr(value)}
+
+
 def _given_key(key: Any) -> Any:
     r"""A primary key given to ``from_source`` as contract 23's ``Given``
     writes it (decision E101, the codec's one classifier): a name or a list
-    of names as their list, None as itself, anything else unreadable."""
+    of names as their list, None as itself, anything else spelled."""
     if key is None:
         return {'value': None}
     if isinstance(key, str):
         return {'value': [key]}
     if isinstance(key, list) and all(isinstance(k, str) for k in key):
         return {'value': key}
-    return 'unreadable'
+    return _spelled(key)
 
 
 def _given_time(column: Any) -> Any:
     r"""A time column given to ``from_source`` as contract 23's ``Given``
-    writes it: a name or None as itself, anything else unreadable."""
+    writes it: a name or None as itself, anything else spelled."""
     if column is None or isinstance(column, str):
         return {'value': column}
-    return 'unreadable'
+    return _spelled(column)
 
 
 def _held_to_its_input(case: dict[str, Any]) -> list[str]:

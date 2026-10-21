@@ -38,7 +38,9 @@
         "tables": [],
         "primary_keys": {},
         "time_columns": {
-          "orders": "unreadable"
+          "orders": {
+            "spelled": "5"
+          }
         }
       },
       "check_keys": true

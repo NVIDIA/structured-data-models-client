@@ -37,7 +37,9 @@
       "source": {
         "tables": [],
         "primary_keys": {
-          "users": "unreadable"
+          "users": {
+            "spelled": "5"
+          }
         },
         "time_columns": {}
       },
