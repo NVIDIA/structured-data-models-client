@@ -175,3 +175,11 @@ Sources: the owner's answer on 2026-10-21 (UTC) to the orchestrator's question w
 | # | Decision | Reason | Status |
 |---|---|---|---|
 | KO2-90 | Check 2's two kept rules (KO2-22) are kept until Phase 4 at their real-data counts: `text_time_rules` 0 hits and `model` 0 hits (0 of the real-data benchmark's 6 tasks), on DuckDB, SQLite and Postgres 17, for both real datasets (AdventureWorks at full size and RelBench H&M), each 0%, under the owner's 5% condition; both counts are zero by construction (no provider reads text times by the client's rules, and every task asks `KumoRelational`), not from loading the data | "Yes, under 5% (Recommended)" | approved by owner 2026-10-21 |
+
+## The owner's lean plan (2026-10-17), recorded at the phase end
+
+Sources: the owner's answer on 2026-10-17 (UTC) to the orchestrator's lean-plan proposal after the owner's note on setup and harness time ("We seem to be running into same issues as phase 1 i.e. too much time in setup, gates, random harnesses"), which asked for KO2 rows in the next owner-row docs landing; no landing carried them until T2.16, which records them here so the packages it closed have their decision on the phase branch.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-91 | The lean plan: exact decimals (T2.17's scope, `d > 1.5` included) fixed inside T2.0c instead of excused; T2.0g only the one-line bridge-freeze fix; CI5 and CI6 dropped; T2.0b shrunk to the watchdog and temp-cleanup fixes; T2.0d folded into T2.1a; tooling fixes get a minimal test (one per fix) and no seeded-fault suites; product packages keep real tests but no extra harness machinery; two reviewers per round stay | "Yes just fix these and do them. No need for so much per package testing harness bs" | approved by owner 2026-10-17 |
