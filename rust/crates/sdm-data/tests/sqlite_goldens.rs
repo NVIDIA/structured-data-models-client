@@ -3055,6 +3055,24 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT \"user_id\"\nFROM \"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('users') WHERE name = 'user_id')), 1) = 1 THEN ((((1369975286 * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 1202242073) % 2147483647) * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 976413892) % 2147483647 * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 327741615) % 2147483647 ELSE ((((1369975286 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1202242073) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 976413892) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 327741615) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('users') WHERE name = 'user_id')), 1) = 1 THEN \"user_id\" END, rowid LIMIT 10000",
         ],
     ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts","d"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &[
+            "SELECT \"order_id\", \"user_id\", \"price\", \"ts\", \"d\" FROM \"orders\" ORDER BY rowid LIMIT 1000",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","f"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"key_dtype":"int","n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\", \"f\"\nFROM \"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('users') WHERE name = 'user_id')), 1) = 1 THEN ((((787846414 * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((\"user_id\" % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 ELSE ((((787846414 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1935803228) % 2147483647) * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1273642419) % 2147483647 * ((rowid % 2147483647 + 2147483647) % 2147483647) + 1608637542) % 2147483647 END, CASE WHEN COALESCE((SELECT CASE WHEN instr(t, 'INT') > 0 THEN 1 WHEN instr(t, 'TEXT') + instr(t, 'CHAR') + instr(t, 'CLOB') + instr(t, 'REAL') + instr(t, 'FLOA') + instr(t, 'DOUB') > 0 THEN 0 END FROM (SELECT upper(trim(type)) AS t FROM pragma_table_info('users') WHERE name = 'user_id')), 1) = 1 THEN \"user_id\" END, rowid LIMIT 10000",
+        ],
+    ),
+    (
+        r##"{"columns":["user_id","age","country","score"],"limit":1000,"request":"preview","table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\", \"age\", \"country\", \"score\" FROM \"users\" ORDER BY rowid LIMIT 1000",
+        ],
+    ),
 ];
 
 #[test]

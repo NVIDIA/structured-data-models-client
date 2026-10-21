@@ -3061,6 +3061,16 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT \"user_id\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user_id\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (7)",
         ],
     ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts","d"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &["SELECT \"order_id\", \"user_id\", \"price\", \"ts\", \"d\" FROM \"orders\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns":["user_id","f"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT \"user_id\", \"f\"\nFROM (SELECT * FROM \"users\"\nWHERE \"user_id\" IS NOT NULL)\nUSING SAMPLE reservoir(10000 ROWS) REPEATABLE (42)",
+        ],
+    ),
 ];
 
 #[test]

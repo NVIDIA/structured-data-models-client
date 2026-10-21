@@ -3117,6 +3117,17 @@ const GOLDENS: goldens::Goldens = &[
             "SELECT \"user_id\"\nFROM \"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
         ],
     ),
+    (
+        r##"{"columns":["order_id","user_id","price","ts","d"],"limit":1000,"request":"preview","table":{"source":["orders"]}}"##,
+        &["SELECT \"order_id\", \"user_id\", \"price\", \"ts\", \"d\" FROM \"orders\" LIMIT 1000"],
+    ),
+    (
+        r##"{"columns":["user_id","f"],"filters":[{"column":"user_id","filter":"not_null"}],"key":["user_id"],"n":10000,"request":"sample_entities","seed":{"t":"u64","v":"42"},"table":{"source":["users"]}}"##,
+        &[
+            "SELECT setseed(-0.31481207155156876)",
+            "SELECT \"user_id\", \"f\"\nFROM \"users\"\nWHERE \"user_id\" IS NOT NULL\nORDER BY random()\nLIMIT 10000",
+        ],
+    ),
 ];
 
 #[test]
