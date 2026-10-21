@@ -276,7 +276,7 @@ def test_the_tree_tracks_no_data_and_no_spec() -> None:
     assert specs == [], specs
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 def test_the_data_check_finds_a_seeded_file(tmp_path: Path) -> None:
     # Not vacuous: the same reading of a repository that tracks a sample.
     repo = tmp_path / 'seeded'
@@ -307,7 +307,7 @@ def _inside(repo: Path, spelling: str, name: str) -> tuple[str, Path]:
     return str(repo / 'contract' / '..' / name), repo.parent
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('spelling', ['absolute', 'relative', 'dotdot'])
 def test_sample_refuses_an_out_inside_the_worktree(
     spelling: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -349,7 +349,7 @@ def test_sample_refuses_an_out_inside_the_worktree(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('spelling', ['absolute', 'relative', 'dotdot'])
 def test_run_refuses_an_out_inside_the_worktree(
     spelling: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -394,7 +394,7 @@ def test_run_refuses_an_out_inside_the_worktree(
 # --- --cache --------------------------------------------------------------------
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('spelling', ['absolute', 'relative', 'dotdot'])
 def test_sample_refuses_a_cache_inside_the_worktree(
     spelling: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -426,7 +426,7 @@ def test_sample_refuses_a_cache_inside_the_worktree(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('command', ['fetch', 'run'])
 def test_fetch_and_run_refuse_a_cache_inside_the_worktree(
     command: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -456,7 +456,7 @@ def test_fetch_and_run_refuse_a_cache_inside_the_worktree(
 # --- what sample writes ---------------------------------------------------------
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 def test_a_sample_outside_the_worktree_writes_nothing_inside_it(
     tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:
@@ -503,7 +503,7 @@ def _link(path: Path, target: Path) -> None:
     path.symlink_to(target, target_is_directory=target.is_dir())
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('linked', ['samples', f'samples/{DATASET}'])
 def test_sample_refuses_samples_linked_into_the_worktree(
     linked: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -532,7 +532,7 @@ def test_sample_refuses_samples_linked_into_the_worktree(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 def test_fetch_refuses_downloads_linked_into_the_worktree(
     tmp_path: Path, request: pytest.FixtureRequest
 ) -> None:
@@ -559,7 +559,7 @@ def test_fetch_refuses_downloads_linked_into_the_worktree(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize(
     'linked',
     ['spec.json', 'old.json', 'core.json', 'corrected.json', 'samples'],
@@ -611,7 +611,7 @@ def _home(tmp: Path) -> dict[str, str]:
     return {'HOME': str(home)}
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('command', ['sample', 'run'])
 def test_an_out_spelled_with_a_tilde_writes_nothing_in_the_worktree(
     command: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -655,7 +655,7 @@ def test_an_out_spelled_with_a_tilde_writes_nothing_in_the_worktree(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('command', ['fetch', 'sample'])
 def test_a_cache_spelled_with_a_tilde_writes_nothing_in_the_worktree(
     command: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -700,7 +700,7 @@ def _case_kind() -> str:
     return 'case-insensitive' if folds else 'case-sensitive'
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('disk', [_case_kind()])
 def test_an_out_spelled_in_another_case_is_refused(
     disk: str, tmp_path: Path, request: pytest.FixtureRequest
@@ -730,7 +730,7 @@ def test_an_out_spelled_in_another_case_is_refused(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 @pytest.mark.parametrize('other', ['sibling worktree', 'another repository'])
 @pytest.mark.parametrize('option', ['out', 'cache'])
 def test_a_path_in_any_other_git_work_tree_is_refused(
@@ -778,7 +778,7 @@ def test_a_path_in_any_other_git_work_tree_is_refused(
     gated(request, check)
 
 
-@pytest.mark.gate_tooling
+@pytest.mark.tooling
 def test_sampling_spills_nothing_into_the_worktree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

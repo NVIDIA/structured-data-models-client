@@ -7,7 +7,7 @@ r"""The tests of the checking tools, found by what they do, and when CI
 runs them (T3.0, item 3).
 
 The tests of our own checking and orchestration scripts carry the pytest
-marker ``gate_tooling`` (``pytestmark = pytest.mark.gate_tooling``). CI's
+marker ``tooling`` (``pytestmark = pytest.mark.tooling``). CI's
 client matrix, ``engine`` and ``contract-python`` deselect them, and the two
 ``tooling`` jobs run only them, only when a change can affect them
 (:func:`must_run`).
@@ -28,7 +28,8 @@ selects is the tooling job's, whatever the detector finds.
     tooling_tests.py list [--root DIR]
         the marked files, then the gate-copying ones, each with its builders
     tooling_tests.py must-run --base SHA [--head REV] [--root DIR]
-        prints ``true`` or ``false`` and why: whether the tooling jobs run
+        prints ``true`` or ``false``, then why, on two lines: whether the
+        tooling jobs run
 
 ``must-run`` is ``true`` when a file changed since ``git merge-base BASE
 HEAD`` matches ``scripts/rust_core/judging-paths.txt`` (protected-paths
@@ -52,7 +53,7 @@ from ratchet import patterns, protects  # noqa: E402
 ROOT = Path(__file__).resolve().parents[2]
 #: The two suites the marker splits.
 SUITES = ('tests', 'contract/tests')
-MARKER = 'gate_tooling'
+MARKER = 'tooling'
 #: The marker as a test file carries it.
 MARKED = re.compile(rf'\bpytest\.mark\.{MARKER}\b')
 #: The one list of judging paths (owned by the tooling train, T3.0 item 1).
@@ -236,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     run_them, why = must_run(root, arguments.base, arguments.head)
     print('true' if run_them else 'false')
-    print(why, file=sys.stderr)
+    print(why)
     return 0
 
 
