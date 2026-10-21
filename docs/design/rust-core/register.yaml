@@ -8412,15 +8412,17 @@ entries:
     The case files of the eight cases, which the ratchet's cases rule
     passes only under an approved entry naming each case.
   cases: [T2.16a, evaluate.regression, explain.answered, explain.query, explain.two-entities, ids.absent, ids.in-list-other-indices, ids.one, ids.wrong-type]
-  status: proposed
-  approved_by: null
+  status: approved
+  approved_by: reviewer
   decision_ref: null
   notes: >-
-    Approver: reviewer, a claim-only correction as P1B-52 was, never
-    self-approved. The ninth case 1e89eacc changed,
-    date.day-first-then-packed, predicts COUNT(orders.*), which no column
-    plays, so its claim stays dropped (the orchestrator's decision). The
-    outcomes below are python-ref's, unchanged.
+    A claim-only correction as P1B-52 was, never self-approved: its
+    approval is the T2.14c round 2 reviewers', who both review and approve
+    this exact SHA, and either can reject it (committed at the
+    orchestrator's instruction to save a CI cycle). The ninth case
+    1e89eacc changed, date.day-first-then-packed, predicts COUNT(orders.*),
+    which no column plays, so its claim stays dropped (the orchestrator's
+    decision). The outcomes below are python-ref's, unchanged.
   case_outcomes:
   - {case: evaluate.regression, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
   - {case: explain.answered, cell: ref-pandas3, runner: python-ref, old: 'success at predict', new: 'success at predict', summary: 'claim-only correction: float64/target restored, its outcome unchanged'}
