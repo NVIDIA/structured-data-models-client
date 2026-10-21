@@ -33,7 +33,7 @@ from typing import Any
 import pytest
 
 # Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
-pytestmark = pytest.mark.gate_tooling
+pytestmark = pytest.mark.tooling
 
 HERE = Path(__file__).resolve().parent
 if 'cross_host_tests' in sys.modules:

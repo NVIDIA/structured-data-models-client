@@ -137,7 +137,7 @@ import pytest
 import yaml
 
 # Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
-pytestmark = pytest.mark.gate_tooling
+pytestmark = pytest.mark.tooling
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / 'scripts/rust_core/evidence.py'

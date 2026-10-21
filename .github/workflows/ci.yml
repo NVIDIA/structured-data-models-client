@@ -173,7 +173,7 @@ jobs:
       #   of failed jobs keeps it, and a rerun of every job after the
       #   candidate landed takes the head it landed on;
       # - tooling: whether the tests of the checking tools (the
-      #   gate_tooling marker) run, which they do when the change touches a
+      #   tooling marker) run, which they do when the change touches a
       #   judging path or such a test (tooling_tests.py must-run);
       # - full: false on a test author's branch (<topic>-tests, or
       #   <topic>-tests-<suffix>), whose tests fail by design until the
@@ -194,8 +194,9 @@ jobs:
             if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; fi
             git fetch --quiet origin "refs/heads/$phase:refs/remotes/origin/$phase" || exit 1
             base=$(python3 scripts/rust_core/ratchet.py push-base) || exit 1
-            tooling=$(python3 scripts/rust_core/tooling_tests.py must-run --base "$base" 2> "$RUNNER_TEMP/why") || exit 1
-            why=$(cat "$RUNNER_TEMP/why")
+            plan=$(python3 scripts/rust_core/tooling_tests.py must-run --base "$base") || exit 1
+            tooling=${plan%%$'\n'*}
+            why=${plan#*$'\n'}
             if [[ "$GITHUB_REF_NAME" =~ -tests(-[^-]+)*$ ]]; then full=false; fi
           fi
           if [ "$full" = true ]; then pythons='["3.10", "3.11", "3.12", "3.13", "3.14"]'; else pythons='["3.12"]'; fi
@@ -959,14 +960,14 @@ jobs:
             -e './packages/structured-data-models-connectors[sqlite,duckdb,postgres,databricks,snowflake,s3,test]'
       # In parallel, as contract/tests runs: each test file on one worker,
       # so its module fixtures are built once. The gate's tooling tests
-      # (the gate_tooling marker) run once, in tooling (root), not on five
+      # (the tooling marker) run once, in tooling (root), not on five
       # Pythons and again in engine (T3.0). A test past 10 minutes
       # fails with its stack, and a worker that dies ends the run rather
       # than leaving xdist waiting on it.
       - run: |
           python -m pytest packages/structured-data-models-api/tests packages/structured-data-models-pql/tests \
             packages/structured-data-models-client/tests packages/structured-data-models-connectors/tests tests -q \
-            -m 'not live_nim and not live_warehouse and not gate_tooling' \
+            -m 'not live_nim and not live_warehouse and not tooling' \
             -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -1053,7 +1054,7 @@ jobs:
       # The contract cases and the runner's controls (contract/tests) run
       # in contract-python, from T1.18. In parallel, as in the test job.
       # The checking tools' own tests run in tooling (root) (T3.0).
-      - run: python -m pytest tests -q -m 'not gate_tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+      - run: python -m pytest tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       - if: ${{ !cancelled() && env.SAVE_PIP_CACHES == 'true' && steps.pip-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1140,7 +1141,7 @@ jobs:
       # leaving xdist waiting on it.
       # The checking tools' own tests run in tooling (contract) (T3.0).
       - name: The runner's controls and the route tests
-        run: python -m pytest contract/tests -q -m 'not gate_tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+        run: python -m pytest contract/tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # As in rust-test, whether the gate runs fails closed (T1.18); off
       # the phase branch, the candidate's own runners and comparator run.
       # Every cell gates, the floor's too (T1.18's own run alone reported
@@ -1204,7 +1205,7 @@ jobs:
           if-no-files-found: error
 
   # The checking tools' own tests (T3.0): every test carrying the
-  # gate_tooling marker, the ones that copy the checkout into a temporary
+  # tooling marker, the ones that copy the checkout into a temporary
   # repository and rerun the gate, the ratchet or the comparator over the
   # corpus, minutes a test (scripts/rust_core/tooling_tests.py, which
   # fails on such a test without the marker). They run here once, on CI's
@@ -1234,7 +1235,7 @@ jobs:
       - *contract-kit-wheel
       - *contract-kit-python
       - name: The checking tools' tests in contract/tests
-        run: python -m pytest contract/tests -q -m gate_tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+        run: python -m pytest contract/tests -q -m tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
 
   tooling-root:
     name: tooling (root)
@@ -1268,8 +1269,12 @@ jobs:
             pyyaml jsonschema
           pip install -e './packages/structured-data-models-relational-engine[test,explain]'
           pip install "$(ls native/*.whl)[test]"
+          echo "SDM_TEST_CORE_PYTHON=$(command -v python)" >> "$GITHUB_ENV"
+      # SDM_TEST_CORE_PYTHON: the interpreter holding the candidate's
+      # client, which the handoff's tests run the cases on
+      # (tests/test_t30_process.py).
       - name: The checking tools' tests in tests/
-        run: python -m pytest tests -q -m gate_tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
+        run: python -m pytest tests -q -m tooling -n auto --dist loadfile --timeout=600 --max-worker-restart=0
 
   # The two core hosts on core fields (design, "Observations and
   # comparator"; T1.29): python-core's observations from
@@ -2211,20 +2216,19 @@ jobs:
 
   # The timing guard (T3.0): every job's time in this run, recorded in the
   # ci-timing artifact, and each job held to its time limit over its last
-  # three runs on the Rust core's branches: more than 80% of its
-  # timeout-minutes on two of them fails this job, naming the slow one,
-  # and writes a fix item the orchestrator's heartbeat pulls
-  # (scripts/rust_core/ci_timing.py pull); no issue is opened. It needs
-  # every other job, so it runs last, and it is continue-on-error: it
-  # marks itself red and never fails the run, so no candidate is refused
-  # for a time limit (no hard budgets, the owner's rule). An API that does
-  # not answer passes it. tests/test_ci_workflow.py holds it to needing
-  # every job.
+  # three runs on the Rust core's branches: a job over 80% of its
+  # timeout-minutes on two of them is named, as an error annotation and in
+  # a fix item the orchestrator's heartbeat pulls
+  # (scripts/rust_core/orchestration/ci_timing.py --pull); no issue is
+  # opened. It needs every other job, so it runs last
+  # (tests/test_ci_workflow.py holds it to that). A named job does not fail
+  # the run, so no candidate is refused for a time limit (the owner: no
+  # hard budgets); the guard's own failure (status 2) does, and an API that
+  # does not answer judges nothing.
   timing-guard:
     name: timing guard
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    continue-on-error: true
     needs: [landing, lint, hygiene, rust-lint, rust-deny, rust-test, native-wheel, native-test-ops, native-wheel-aarch64, binding, wheel-smoke, wheel-smoke-aarch64, typecheck, test, engine, contract-python-ref-pandas3, tooling-contract, tooling-root, cross-host, contract-python-dbr17-pandas2, contract-python-floor-pandas2-2, contract-python-ref-pandas3-sqlite, contract-python-ref-pandas3-postgres, contract-python-dbr17-pandas2-sqlite, contract-python-dbr17-pandas2-postgres, contract-python-floor-pandas2-2-sqlite, contract-python-floor-pandas2-2-postgres, cross-host-sqlite, cross-host-postgres, l4-goldens, l5-conversion, build, engine-wheels, installed-wheel, runtime-install, sbom]
     if: ${{ !cancelled() && needs.landing.outputs.skip != 'true' }}
     steps:
@@ -2237,7 +2241,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           pip install pyyaml
-          python scripts/rust_core/ci_timing.py guard --run "$GITHUB_RUN_ID" --out ci-timing
+          status=0
+          python scripts/rust_core/orchestration/ci_timing.py --run "$GITHUB_RUN_ID" --out ci-timing || status=$?
+          if [ "$status" = 1 ]; then
+            cat ci-timing/ci-timing-*.md >> "$GITHUB_STEP_SUMMARY"
+            echo 'timing guard: a job is near its limit, named above and in the fix item; the run is not failed for it'
+          elif [ "$status" != 0 ]; then
+            exit "$status"
+          fi
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
