@@ -174,7 +174,7 @@ Sources: the owner's answer on 2026-10-21 (UTC) to the orchestrator's question w
 
 | # | Decision | Reason | Status |
 |---|---|---|---|
-| KO2-90 | Check 2's two kept rules (KO2-22) are kept until Phase 4 at their real-data counts: `text_time_rules` 0 hits and `model` 0 hits (0 of the real-data benchmark's 6 tasks), on DuckDB, SQLite and Postgres 17, for both real datasets (AdventureWorks at full size and RelBench H&M), each 0%, under the owner's 5% condition; both counts are zero by construction (no provider reads text times by the client's rules, and every task asks `KumoRelational`), not from loading the data | "Yes, under 5% (Recommended)" | approved by owner 2026-10-21 |
+| KO2-90 | Check 2's two kept rules (KO2-22) are kept until Phase 4 at their real-data counts: `text_time_rules` 0 hits and `model` 0 hits (0 of the real-data benchmark's 6 tasks), on DuckDB, SQLite and Postgres 17, for both real datasets (AdventureWorks at full size and RelBench H&M), each 0%, under the owner's 5% condition; both counts are zero by construction (no provider reads text times by the client's rules, and every task asks `KumoRelational`), not from loading the data. Separately, the orchestrator's decision under the owner's overnight delegation (KO2-88), not the owner's words, listed for the owner's reading: the third kept rule, `aggregation`'s LIST_DISTINCT of a foreign key (KO2-75, Phase 4), is accepted by the same under-5% rule at 0 real-data hits on all three databases (none of the 6 tasks asks LIST_DISTINCT) | "Yes, under 5% (Recommended)" | approved by owner 2026-10-21 |
 
 ## The owner's lean plan (2026-10-17), recorded at the phase end
 
