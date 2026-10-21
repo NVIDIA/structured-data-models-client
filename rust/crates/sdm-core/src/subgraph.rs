@@ -685,8 +685,10 @@ pub(crate) fn exact_text(table: &Table, column: &str) -> bool {
 /// The keys `array`, column `column` of `table`, holds: by the numbers it
 /// writes for a column of numbers handed over as their exact text
 /// ([`exact_text`], [`keys::read_numbers`]), so `1.0` and `1.00` are one
-/// key as the source and the reference hold them; as [`keys::read`] reads
-/// any other.
+/// key, as the source compares them (the reference keys a caller-keyed
+/// column by its double, one key, but a key the catalog declares by its
+/// text, two: register P2G-4 and P2G-5); as [`keys::read`] reads any
+/// other.
 pub(crate) fn key_values(
     table: &Table,
     column: &str,

@@ -6771,8 +6771,8 @@ entries:
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-87}
   notes: >-
-    Approver: reviewer, a named error in place of a crash (E66(b)). The
-    call answers nothing on either route. Measured by the implementer's
+    A named error in place of a crash (E66(b)), approved by the owner
+    (KO2-87, below). The call answers nothing on either route. Measured by the implementer's
     probe of the ranking's inputs (tracker-T2.8.md, Probes).
     Approved by the owner on 2026-10-21 as KO2-87 ("Approve all 3
     (Recommended)", relayed by the orchestrator; recorded at T2.14c).
@@ -8155,8 +8155,8 @@ entries:
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-87}
   notes: >-
-    Approver: reviewer, an answer in place of a crash (E66(b)). Found by
-    CI7's runtime cells (runtime-install (dbr14.3), (dbr15.4) and
+    An answer in place of a crash (E66(b)), approved by the owner
+    (KO2-87, below). Found by CI7's runtime cells (runtime-install (dbr14.3), (dbr15.4) and
     (dbr16.4)); pinned on both routes by the client's
     tests/test_the_materialize_route.py
     (test_a_numpy_context_size_reaches_the_core[uint64]), which holds the
@@ -8184,7 +8184,7 @@ entries:
   approved_by: owner
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-87}
   notes: >-
-    Approver: reviewer. DT-14's refusal is unchanged; this records that the
+    Approved by the owner (KO2-87, below). DT-14's refusal is unchanged; this records that the
     reference's own code for it is INVALID_REQUEST on pandas 2, which
     DT-14's old_behavior, measured on pandas 3, does not say. Found by
     CI7's runtime cells; pinned by the client's
