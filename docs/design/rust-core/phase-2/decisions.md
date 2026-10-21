@@ -167,3 +167,11 @@ Sources: the owner's answers on 2026-10-21 (UTC) to the orchestrator's two quest
 |---|---|---|---|
 | KO2-87 | Register entries P2D-1 (an unhashable ranking candidate: the reference raises a bare TypeError, the core refuses by name), P2J-1 (a `numpy.uint64` context size under NumPy 1: the reference crashes, the core takes it) and P2J-2 (a text date of the year 0001: the reference's code moves with pandas, the core gives VALUE_OUT_OF_RANGE) approved as known differences | "Approve all 3 (Recommended)" | approved by owner 2026-10-21 |
 | KO2-88 | Delegation for the overnight run of 2026-10-21, until the owner's morning reading: an owner-only product question is decided by the orchestrator as under KO2-70; each decision cites this row, is listed for the owner's reading, and does not block the finish. The merge of Phase 2 into `rust-core` is excluded and stays the owner's | "Yes, decide and list (Recommended)" | approved by owner 2026-10-21 |
+
+## The owner's kept-rules answer (2026-10-21)
+
+Sources: the owner's answer on 2026-10-21 (UTC) to the orchestrator's question whether it may accept the real-data counts for `model` and `text_time_rules` (kept until Phase 4, KO2-22) if each is hit by under 5% of real queries, stopping to ask only if one is higher (`owner-answers-2026-10-17.md`, "overnight finish"); the counts are T2.16a's (`phase-2/evidence/census/real-data.md`, held by `tests/test_census_real_data.py`).
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-90 | Check 2's two kept rules (KO2-22) are kept until Phase 4 at their real-data counts: `text_time_rules` 0 hits and `model` 0 hits (0 of the real-data benchmark's 6 tasks), on DuckDB, SQLite and Postgres 17, for both real datasets (AdventureWorks at full size and RelBench H&M), each 0%, under the owner's 5% condition; both counts are zero by construction (no provider reads text times by the client's rules, and every task asks `KumoRelational`), not from loading the data | "Yes, under 5% (Recommended)" | approved by owner 2026-10-21 |
