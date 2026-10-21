@@ -6885,10 +6885,10 @@ entries:
   approved_by: null
   decision_ref: null
   notes: >-
-    Found by T2.14b's round 3 review (Claude, P3-3), measured on
-    PostgreSQL 17. The core answers where the reference fails unnamed, so
-    the approver is the owner unless the orchestrator rules it E66(b)'s
-    class. The ID is from lane D's block; the orchestrator may renumber.
+    Approver: reviewer, an answer in place of a crash (E66(b)); the
+    orchestrator decides it under KO2-88 in T2.14c. Found by T2.14b's round
+    3 review (Claude, P3-3), measured on PostgreSQL 17. The ID is from lane
+    D's block; the orchestrator may renumber.
 
 # --- lane E entries (P2E-1..19) ---
 
