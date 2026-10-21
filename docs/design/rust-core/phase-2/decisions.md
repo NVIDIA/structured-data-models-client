@@ -158,3 +158,12 @@ Sources: the owner's answer on 2026-10-21 to the orchestrator's question "Should
 |---|---|---|---|
 | KO2-86 | Narrows H17 and E79 (and E101's `unreadable`): an error may name a value the caller passed in that same call, as the reference words it (keys and key-like values given, a query's date literal, option values such as `num_hops True` or a seed of `-1`); a value read from data (row contents, driver messages, panic text) stays out, as H17 says. A value no contract type holds may be given spelled (`Given::Spelled`, the host's text of it) for the core to name | "Echo own args (Recommended)" | approved by owner 2026-10-21 |
 | KO2-89 | M4's warnings and refusals (`CONTEXT_BEFORE_DATA`, `ANCHOR_AFTER_DATA`, and the anchor and context refusals checked against the data's time range) may name the time column's earliest and latest timestamps, as the reference does; a refusal of a non-finite value may name `inf` or `-inf`, a category, not a value. KO2-86 still keeps row values, driver messages and panic text out | Orchestrator, under the owner's overnight delegation of 2026-10-21 (KO2-88); listed for the owner's reading | approved by orchestrator 2026-10-21 |
+
+## The owner's register and delegation answers (2026-10-21, later)
+
+Sources: the owner's answers on 2026-10-21 (UTC) to the orchestrator's two questions, whether to approve P2D-1, P2J-1 and P2J-2 as known differences, and whether the orchestrator may decide other owner-only product questions overnight as on 19 Oct (KO2-70), recording each and listing them for the morning, so they don't block the finish (the merge into `rust-core` excluded); relayed by the orchestrator.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-87 | Register entries P2D-1 (an unhashable ranking candidate: the reference raises a bare TypeError, the core refuses by name), P2J-1 (a `numpy.uint64` context size under NumPy 1: the reference crashes, the core takes it) and P2J-2 (a text date of the year 0001: the reference's code moves with pandas, the core gives VALUE_OUT_OF_RANGE) approved as known differences | "Approve all 3 (Recommended)" | approved by owner 2026-10-21 |
+| KO2-88 | Delegation for the overnight run of 2026-10-21, until the owner's morning reading: an owner-only product question is decided by the orchestrator as under KO2-70; each decision cites this row, is listed for the owner's reading, and does not block the finish. The merge of Phase 2 into `rust-core` is excluded and stays the owner's | "Yes, decide and list (Recommended)" | approved by owner 2026-10-21 |

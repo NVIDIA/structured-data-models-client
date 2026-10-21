@@ -6767,13 +6767,15 @@ entries:
     hash.
   cases: [T2.8]
   refs: [T2.8, E66, E101]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-87}
   notes: >-
     Approver: reviewer, a named error in place of a crash (E66(b)). The
     call answers nothing on either route. Measured by the implementer's
     probe of the ranking's inputs (tracker-T2.8.md, Probes).
+    Approved by the owner on 2026-10-21 as KO2-87 ("Approve all 3
+    (Recommended)", relayed by the orchestrator; recorded at T2.14c).
 
 - id: P2D-2
   title: A refusal names a value of the caller's own call by its repr only up to 2,000 characters
@@ -8069,9 +8071,9 @@ entries:
     a runtime with NumPy 1, on the default route.
   cases: []
   refs: [CI7]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-87}
   notes: >-
     Approver: reviewer, an answer in place of a crash (E66(b)). Found by
     CI7's runtime cells (runtime-install (dbr14.3), (dbr15.4) and
@@ -8079,6 +8081,8 @@ entries:
     tests/test_the_materialize_route.py
     (test_a_numpy_context_size_reaches_the_core[uint64]), which holds the
     core's count first and the old route's TypeError under NumPy 1.
+    Approved by the owner on 2026-10-21 as KO2-87 ("Approve all 3
+    (Recommended)", relayed by the orchestrator; recorded at T2.14c).
 
 - id: P2J-2
   title: The old route's code for a text date of the year 0001 depends on pandas' major version
@@ -8096,9 +8100,9 @@ entries:
     holds a date of the year 0001, on the default route, with pandas 2.
   cases: []
   refs: [CI7, DT-14]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-87}
   notes: >-
     Approver: reviewer. DT-14's refusal is unchanged; this records that the
     reference's own code for it is INVALID_REQUEST on pandas 2, which
@@ -8107,6 +8111,8 @@ entries:
     tests/test_the_materialize_route.py
     (test_a_time_past_nanoseconds_is_refused_on_both_routes_under_its_code[text
     0001]), which holds the core's VALUE_OUT_OF_RANGE on every pandas.
+    Approved by the owner on 2026-10-21 as KO2-87 ("Approve all 3
+    (Recommended)", relayed by the orchestrator; recorded at T2.14c).
 
 - id: P2I-1
   title: A sampling option value the reference writes into its SQL as given is read as its DuckDB sampler reads it, and one that is no number is refused by name
