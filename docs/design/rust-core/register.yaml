@@ -6799,14 +6799,18 @@ entries:
     longer than 2,000 characters.
   cases: [T2.14b]
   refs: [T2.14b, KO2-86, E101]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-88}
   notes: >-
-    Approver: reviewer; only a message's text differs, never the outcome,
+    Proposed for the reviewer; only a message's text differs, never the outcome,
     code or class. The ID is from lane D's block, beside P2D-1; the
     orchestrator may renumber. Found by T2.14b's round 1 review (Claude,
     P3-7).
+    Approved by the orchestrator on 2026-10-21 under the owner's overnight
+    delegation (KO2-88), listed for the owner's reading; not the owner's
+    own approval. The schema's approved_by takes only owner or reviewer,
+    so the field holds the non-owner value (recorded at T2.14c).
 
 - id: P2D-3
   title: A Postgres json cell whose value is a string holding a lone surrogate is refused by name, where the reference fails unnamed
@@ -6829,13 +6833,17 @@ entries:
     escaping a lone surrogate.
   cases: [T2.14b]
   refs: [T2.14b, E66]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-88}
   notes: >-
-    Approver: reviewer, a named error in place of a crash (E66(b)). Found
+    Proposed for the reviewer, a named error in place of a crash (E66(b)). Found
     by T2.14b's round 2 review (Claude, P3-3). The ID is from lane D's
     block; the orchestrator may renumber.
+    Approved by the orchestrator on 2026-10-21 under the owner's overnight
+    delegation (KO2-88), listed for the owner's reading; not the owner's
+    own approval. The schema's approved_by takes only owner or reviewer,
+    so the field holds the non-owner value (recorded at T2.14c).
 
 - id: P2D-4
   title: A cell past int64 in the request is refused without its value, where the reference names the value
@@ -6855,16 +6863,20 @@ entries:
     from the source, a feature) is past int64.
   cases: [key.uint64-above-int64-max]
   refs: [T2.14b, KO2-86, H17]
-  status: proposed
-  approved_by: null
-  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-88}
   notes: >-
-    Approver: reviewer, under KO2-86 (the owner's: a value read from data
+    Proposed for the reviewer, under KO2-86 (the owner's: a value read from data
     stays out). Only the message's text differs. The wording test's NAMED
     pin for the case holds the table, the column, the row, the range and
     the remedy, and not the value (contract/tests/test_t214b_wording.py,
     the test author's t3). The ID is from lane D's block; the orchestrator
     may renumber.
+    Approved by the orchestrator on 2026-10-21 under the owner's overnight
+    delegation (KO2-88), listed for the owner's reading; not the owner's
+    own approval. The schema's approved_by takes only owner or reviewer,
+    so the field holds the non-owner value (recorded at T2.14c).
 
 - id: P2D-5
   title: A Postgres json[] column is left out on the core route, where the reference refuses the table
@@ -6883,14 +6895,18 @@ entries:
     table with a json[] or jsonb[] column.
   cases: [T2.14b]
   refs: [T2.14b, E66]
-  status: proposed
-  approved_by: null
-  decision_ref: null
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-88}
   notes: >-
     Approver: reviewer, an answer in place of a crash (E66(b)); the
     orchestrator decides it under KO2-88 in T2.14c. Found by T2.14b's round
     3 review (Claude, P3-3), measured on PostgreSQL 17. The ID is from lane
     D's block; the orchestrator may renumber.
+    Approved by the orchestrator on 2026-10-21 under the owner's overnight
+    delegation (KO2-88), listed for the owner's reading; not the owner's
+    own approval. The schema's approved_by takes only owner or reviewer,
+    so the field holds the non-owner value (recorded at T2.14c).
 
 # --- lane E entries (P2E-1..19) ---
 
