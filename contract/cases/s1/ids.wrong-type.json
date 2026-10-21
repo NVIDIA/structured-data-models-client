@@ -22,7 +22,8 @@
   "cells": [
     "int64/primary-key",
     "int64/foreign-key",
-    "timestamp-us/time-column"
+    "timestamp-us/time-column",
+    "float64/target"
   ],
   "input": {
     "base": "shop",
