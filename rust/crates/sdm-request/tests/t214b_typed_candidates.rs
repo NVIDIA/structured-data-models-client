@@ -212,12 +212,11 @@ fn a_kind_outside_the_set_is_refused() {
         // Control: each kind of the set is read, and a repeat.
         assert!(serde_json::from_str::<GivenCandidate>(&repeat().to_string()).is_ok());
         for kind in ["date", "datetime", "datetime_zoned", "time"] {
-            for written in [typed(kind, "2023-01-01")] {
-                assert!(
-                    serde_json::from_str::<GivenCandidate>(&written.to_string()).is_ok(),
-                    "a typed candidate of kind {kind:?} is refused: {written}"
-                );
-            }
+            let written = typed(kind, "2023-01-01");
+            assert!(
+                serde_json::from_str::<GivenCandidate>(&written.to_string()).is_ok(),
+                "a typed candidate of kind {kind:?} is refused: {written}"
+            );
         }
     });
 }
