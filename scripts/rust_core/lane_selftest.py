@@ -40,6 +40,7 @@ LAND_PY = SCRIPTS / 'land.py'
 PHASE = 'rust-core-phase-1'
 sys.path.insert(0, str(SCRIPTS))
 from phases import CURRENT  # noqa: E402
+
 BRANCH = f'{PHASE}-lane-1b'
 PROTECTED = ('main', 'rust-core', PHASE)
 

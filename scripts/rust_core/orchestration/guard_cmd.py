@@ -229,7 +229,9 @@ def unwrap(words: list[str]) -> tuple[list[str], dict[str, str], list[str]]:
             rest = w[1:]
             for n, word in enumerate(rest):
                 if word == '-c' or (
-                    word.startswith('-') and not word.startswith('--') and 'c' in word
+                    word.startswith('-')
+                    and not word.startswith('--')
+                    and 'c' in word
                 ):
                     if n + 1 < len(rest):
                         nested.append(rest[n + 1])
@@ -287,9 +289,9 @@ def check_git(argv: list[str]) -> Verdict | None:
                 'let the hooks run; fix what they report',
             )
     flags = options(args)
-    if '--no-verify' in flags or (sub == 'commit' and any(
-        short_cluster(f, 'n') for f in flags
-    )):
+    if '--no-verify' in flags or (
+        sub == 'commit' and any(short_cluster(f, 'n') for f in flags)
+    ):
         return Verdict(
             '--no-verify skips the hooks',
             'let the hooks run and fix what they report; a slow pre-push '
@@ -314,20 +316,21 @@ def check_git(argv: list[str]) -> Verdict | None:
                 'push without the +, to a new branch name if it is not a '
                 'fast-forward',
             )
-        if (
-            any(
-                f in ('--delete', '--prune', '--mirror') or short_cluster(f, 'd')
-                for f in flags
-            )
-            or any(a.startswith(':') and len(a) > 1 for a in positional[1:])
-        ):
+        if any(
+            f in ('--delete', '--prune', '--mirror') or short_cluster(f, 'd')
+            for f in flags
+        ) or any(a.startswith(':') and len(a) > 1 for a in positional[1:]):
             return Verdict(
                 'git push --delete removes a remote branch',
                 'leave the branch; deleting one needs the owner: run it under '
                 f'{TOKEN_VAR}=<owner-answers id>',
             )
-    if sub == 'worktree' and args[:1] == ['remove'] and any(
-        f == '--force' or short_cluster(f, 'f') for f in options(args[1:])
+    if (
+        sub == 'worktree'
+        and args[:1] == ['remove']
+        and any(
+            f == '--force' or short_cluster(f, 'f') for f in options(args[1:])
+        )
     ):
         return Verdict(
             'git worktree remove --force discards work',
@@ -340,8 +343,16 @@ def check_git(argv: list[str]) -> Verdict | None:
             'make a temporary WIP commit on your own branch instead',
         )
     if sub == 'config':
-        reads = {'--get', '--get-all', '--get-regexp', '--list', '-l',
-                 '--get-urlmatch', '--get-color', '--get-colorbool'}
+        reads = {
+            '--get',
+            '--get-all',
+            '--get-regexp',
+            '--list',
+            '-l',
+            '--get-urlmatch',
+            '--get-color',
+            '--get-colorbool',
+        }
         if not (set(flags) & reads or args[:1] in (['get'], ['list'])):
             return Verdict(
                 'git config changes a configuration the clone shares',
@@ -377,7 +388,11 @@ def check_git(argv: list[str]) -> Verdict | None:
 
 
 def scratch_roots(session: str | None) -> list[str]:
-    roots = [os.path.realpath(p) for p in os.environ.get('SDM_SCRATCH', '').split(':') if p]
+    roots = [
+        os.path.realpath(p)
+        for p in os.environ.get('SDM_SCRATCH', '').split(':')
+        if p
+    ]
     if session and re.fullmatch(r'[A-Za-z0-9_-]+', session):
         roots.extend(
             os.path.realpath(str(p))
@@ -417,7 +432,7 @@ def check_rm(argv: list[str], cwd: str, session: str | None) -> Verdict | None:
     if not targets:
         return Verdict(
             'rm -r of paths it is handed (xargs, find), which cannot be checked',
-            "remove only inside your own scratch, its path written out",
+            'remove only inside your own scratch, its path written out',
         )
     return check_targets(targets, cwd, session, 'rm -r')
 
@@ -429,7 +444,7 @@ def check_targets(
     alternative = (
         "remove only inside your own scratch (the session's scratchpad, or "
         '/mnt/localssd/{tmp,target}/<yours>), written out literally; '
-        'anything else is the owner\'s, after a dry run, or clean_tmp.sh'
+        "anything else is the owner's, after a dry run, or clean_tmp.sh"
     )
     for target in targets:
         expanded = os.path.expandvars(os.path.expanduser(target))
@@ -441,14 +456,22 @@ def check_targets(
             )
         literal = re.split(r'[*?\[]', expanded, maxsplit=1)[0]
         if literal != expanded:
-            literal = os.path.dirname(literal) if not literal.endswith('/') else literal
+            literal = (
+                os.path.dirname(literal)
+                if not literal.endswith('/')
+                else literal
+            )
         path = literal if os.path.isabs(literal) else os.path.join(cwd, literal)
         if not inside_scratch(path or '/', roots):
-            return Verdict(f'{what} of {target!r}, outside your scratch', alternative)
+            return Verdict(
+                f'{what} of {target!r}, outside your scratch', alternative
+            )
     return None
 
 
-def check_simple(argv: list[str], cwd: str, session: str | None) -> Verdict | None:
+def check_simple(
+    argv: list[str], cwd: str, session: str | None
+) -> Verdict | None:
     head = os.path.basename(argv[0])
     if head == 'sudo':
         return Verdict('sudo', 'ask the owner; nothing here needs root')
@@ -474,12 +497,16 @@ def check_simple(argv: list[str], cwd: str, session: str | None) -> Verdict | No
     if head == 'gh' and argv[1:3] == ['run', 'watch']:
         return Verdict(
             'gh run watch has hung agents',
-            "poll `gh run view <id> --json status,conclusion` under a "
+            'poll `gh run view <id> --json status,conclusion` under a '
             'timeout, from the orchestrator, in the background',
         )
-    if head == 'docker' and (
-        argv[1:2] == ['rm'] or argv[1:3] == ['container', 'rm']
-    ) and any(f == '--force' or short_cluster(f, 'f') for f in options(argv[2:])):
+    if (
+        head == 'docker'
+        and (argv[1:2] == ['rm'] or argv[1:3] == ['container', 'rm'])
+        and any(
+            f == '--force' or short_cluster(f, 'f') for f in options(argv[2:])
+        )
+    ):
         return Verdict(
             'docker rm --force kills a running container',
             'stop it first, then docker rm without --force',
@@ -537,7 +564,9 @@ def log(name: str, line: str) -> None:
 # --- the hook ---------------------------------------------------------------------
 
 
-def check_command(command: str, cwd: str, session: str | None) -> Verdict | None:
+def check_command(
+    command: str, cwd: str, session: str | None
+) -> Verdict | None:
     try:
         commands = list(simple_commands(command))
     except ValueError as error:
@@ -561,8 +590,10 @@ def check_command(command: str, cwd: str, session: str | None) -> Verdict | None
             try:
                 queue.extend(simple_commands(text))
             except ValueError:
-                return Verdict('a nested shell command the guard cannot parse',
-                               'run the commands directly')
+                return Verdict(
+                    'a nested shell command the guard cannot parse',
+                    'run the commands directly',
+                )
         if not argv:
             continue
         if os.path.basename(argv[0]) == 'cd' and len(argv) > 1:
@@ -577,12 +608,15 @@ def check_command(command: str, cwd: str, session: str | None) -> Verdict | None
             if tokens_cache is None:
                 tokens_cache = valid_tokens()
             if token in tokens_cache:
-                log('approved-commands.log', f'{TOKEN_VAR}={token} {" ".join(argv)}')
+                log(
+                    'approved-commands.log',
+                    f'{TOKEN_VAR}={token} {" ".join(argv)}',
+                )
                 continue
             return Verdict(
                 f'{verdict.rule}, and {TOKEN_VAR}={token} names no heading of '
                 'an owner-answers file',
-                'use the slug of the owner\'s answer approving it '
+                "use the slug of the owner's answer approving it "
                 '(guard_cmd.py --tokens lists them)',
             )
         return verdict
@@ -592,7 +626,14 @@ def check_command(command: str, cwd: str, session: str | None) -> Verdict | None
 def git_common_dir(cwd: str) -> Path | None:
     try:
         done = subprocess.run(
-            ['git', '-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+            [
+                'git',
+                '-C',
+                cwd,
+                'rev-parse',
+                '--path-format=absolute',
+                '--git-common-dir',
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -638,7 +679,9 @@ def decide(event: dict) -> Verdict | None:
     data = event.get('tool_input') or {}
     cwd = event.get('cwd') or os.getcwd()
     if tool == 'Bash':
-        return check_command(str(data.get('command') or ''), cwd, event.get('session_id'))
+        return check_command(
+            str(data.get('command') or ''), cwd, event.get('session_id')
+        )
     if tool in ('Agent', 'Task'):
         return check_agent(str(data.get('prompt') or ''), cwd)
     return None

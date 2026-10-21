@@ -585,9 +585,7 @@ def commits_not_owned(
     landing owning the commits below it, and only the commits above are
     the package's."""
     if stacked:
-        chain, problems = stack_chain(
-            tools, base, head, *where, remote=remote
-        )
+        chain, problems = stack_chain(tools, base, head, *where, remote=remote)
         if any(link.package != package for link in chain):
             floor = chain[-1].sha
             return [
@@ -1236,9 +1234,12 @@ def landing_shaped(tools: Tools, sha: str, *where: str) -> bool:
     subject = tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
     if not LANDING_SUBJECT.match(subject):
         return False
-    if tools.attempt(
-        'git', *where, 'rev-parse', '--verify', '--quiet', f'{sha}^2'
-    ).returncode == 0:
+    if (
+        tools.attempt(
+            'git', *where, 'rev-parse', '--verify', '--quiet', f'{sha}^2'
+        ).returncode
+        == 0
+    ):
         return False
     return tools.git(*where, 'rev-parse', f'{sha}^{{tree}}').strip() == (
         tools.git(*where, 'rev-parse', f'{sha}^^{{tree}}').strip()
@@ -1321,9 +1322,12 @@ def phase_first_landing(
     """The phase's first landing (up to ``base``), as ``<sha> <subject>``,
     or None while the phase holds none. The phase starts at its merge base
     with the epic branch as the remote holds it."""
-    if tools.attempt(
-        'git', *where, 'fetch', '--quiet', remote, f'refs/heads/{EPIC}'
-    ).returncode == 0:
+    if (
+        tools.attempt(
+            'git', *where, 'fetch', '--quiet', remote, f'refs/heads/{EPIC}'
+        ).returncode
+        == 0
+    ):
         epic = f'refs/remotes/{remote}/{EPIC}'
         start = tools.attempt('git', *where, 'merge-base', base, epic)
     else:
@@ -1382,7 +1386,7 @@ def judging_problem(
         f'{package} changes judging paths ('
         + ', '.join(found[:8])
         + (' ...' if len(found) > 8 else '')
-        + f') and is not the phase\'s first package ({earlier} landed '
+        + f") and is not the phase's first package ({earlier} landed "
         'before it). Judging changes found mid-phase ride one tooling train: '
         'move them '
         'into the train package and land it at the front of the next stack '
@@ -1408,8 +1412,14 @@ def rule_problems(
         if not sep:
             continue
         files = tools.git(
-            *where, 'diff-tree', '--no-commit-id', '--name-only', '-r', '-z',
-            '--root', sha,
+            *where,
+            'diff-tree',
+            '--no-commit-id',
+            '--name-only',
+            '-r',
+            '-z',
+            '--root',
+            sha,
         )
         paths = [p for p in files.split('\0') if p]
         why = commit_msg.rule_problem(message, paths, rules)
@@ -1422,8 +1432,14 @@ def rule_problems(
 #: log names no file the stack changed: the stack's commits under these
 #: paths are implicated instead.
 JOB_AREAS = (
-    (r'(rust-|native-|binding|wheel-smoke|build|engine-wheels|installed-wheel)', 'rust/**'),
-    (r'(contract-python|cross-host|l4-goldens|l5-conversion)', 'contract/**\nrust/**\npackages/**'),
+    (
+        r'(rust-|native-|binding|wheel-smoke|build|engine-wheels|installed-wheel)',
+        'rust/**',
+    ),
+    (
+        r'(contract-python|cross-host|l4-goldens|l5-conversion)',
+        'contract/**\nrust/**\npackages/**',
+    ),
     (r'(test|engine|typecheck|runtime-install)', 'packages/**\ntests/**'),
     (r'(lint|hygiene)', '**'),
 )
@@ -1441,7 +1457,8 @@ def implicated(
         tools.gh('run', 'view', run_id, '--json', 'jobs') or '{}'
     ).get('jobs', [])
     failed = [
-        j for j in jobs
+        j
+        for j in jobs
         if j.get('conclusion') in ('failure', 'timed_out', 'cancelled')
     ]
     commits = []
@@ -1458,8 +1475,14 @@ def implicated(
     report = []
     for job in failed:
         log = tools.attempt(
-            'gh', 'run', 'view', run_id, '--log-failed', '--job',
-            str(job.get('databaseId')), *repo,
+            'gh',
+            'run',
+            'view',
+            run_id,
+            '--log-failed',
+            '--job',
+            str(job.get('databaseId')),
+            *repo,
         ).stdout
         named = set(re.findall(r'[A-Za-z0-9_][\w./-]*\.[A-Za-z]{1,5}\b', log))
         hit = [
@@ -1473,8 +1496,11 @@ def implicated(
         if not hit:
             name = str(job.get('name'))
             area = next(
-                (judging.patterns(paths) for start, paths in JOB_AREAS
-                 if re.match(start, name)),
+                (
+                    judging.patterns(paths)
+                    for start, paths in JOB_AREAS
+                    if re.match(start, name)
+                ),
                 [],
             )
             hit = [
@@ -1553,7 +1579,7 @@ def land(
             )
     elif foreign:
         raise Refusal(
-            f'the candidate sits on a stack of other packages\' landing '
+            f"the candidate sits on a stack of other packages' landing "
             f'commits ({", ".join(link.package for link in foreign)}); add it '
             'with `land.py --stack ...`, then land the whole stack with '
             '`land.py stack-land --tip <its landing commit>`'
@@ -1767,7 +1793,8 @@ def stack_one(
         base=tail,
         checkpoint=tail,
         summary=(
-            args.summary or f'Both reviews approve the candidate {candidate[:7]}.'
+            args.summary
+            or f'Both reviews approve the candidate {candidate[:7]}.'
         ).strip(),
         evidence=(
             f'Stacked on {tail} ({len(chain)} package(s) below it, on the phase '
@@ -1778,7 +1805,9 @@ def stack_one(
         moved=extra,
     )
     if args.dry_run:
-        out('dry run: every check passed; the stacked landing commit would read:\n')
+        out(
+            'dry run: every check passed; the stacked landing commit would read:\n'
+        )
         out(landing.message())
         out('dry run: nothing committed')
         return 0
@@ -1812,9 +1841,7 @@ def stack_land(
             'with `land.py --stack ...` and name the last landing commit'
         )
     if problems:
-        raise Refusal(
-            'the stack is not sound:\n- ' + '\n- '.join(problems)
-        )
+        raise Refusal('the stack is not sound:\n- ' + '\n- '.join(problems))
     limit = stack_max(args.max_stack)
     if len(chain) > limit:
         raise Refusal(
@@ -1822,9 +1849,7 @@ def stack_land(
             f'covers ({limit}); land a prefix (--tip a lower landing)'
         )
     rules = judging_rules(tools, base)
-    earlier = (
-        phase_first_landing(tools, args.remote, base) if rules else None
-    )
+    earlier = phase_first_landing(tools, args.remote, base) if rules else None
     refused: list[str] = []
     for n, link in enumerate(chain):
         paths = changed_paths(tools, link.below, link.sha)
@@ -1836,12 +1861,14 @@ def stack_land(
         refused.extend(rule_problems(tools, link.below, link.sha, rules))
         earlier = earlier or f'{link.sha[:12]} Land {link.package}'
     if refused:
-        raise Refusal('the stack breaks a landing rule:\n- ' + '\n- '.join(refused))
+        raise Refusal(
+            'the stack breaks a landing rule:\n- ' + '\n- '.join(refused)
+        )
     tested = tested_commit(tools, tip)
     runs = runs_on(tools, tested)
     if not runs:
         raise Refusal(
-            f'no CI run on the stack top {tested[:12]} (the last package\'s '
+            f"no CI run on the stack top {tested[:12]} (the last package's "
             'top) that is a push under the phase branch; push it, for '
             f'example `git push {args.remote} {tested}:refs/heads/'
             f'{args.phase_branch}-{chain[-1].package.lower()}-stack`, and '
@@ -1854,7 +1881,9 @@ def stack_land(
             'wait for it'
         )
     if newest.get('conclusion') != 'success':
-        out(f'RED  {describe(newest)} {newest.get("url")}, on the stack top {tested[:12]}')
+        out(
+            f'RED  {describe(newest)} {newest.get("url")}, on the stack top {tested[:12]}'
+        )
         report = implicated(tools, newest, base, tested)
         first_bad: int | None = None
         for job, hits in report:
@@ -1866,8 +1895,12 @@ def stack_land(
             for sha, subject in hits:
                 out(f'IMPLICATED {job}: {sha[:12]} {subject}')
                 for n, link in enumerate(chain):
-                    if tools.git_ok('merge-base', '--is-ancestor', sha, link.sha):
-                        first_bad = n if first_bad is None else min(first_bad, n)
+                    if tools.git_ok(
+                        'merge-base', '--is-ancestor', sha, link.sha
+                    ):
+                        first_bad = (
+                            n if first_bad is None else min(first_bad, n)
+                        )
                         break
         if first_bad is None:
             out(
@@ -1876,7 +1909,9 @@ def stack_land(
                 '--failed`) and land again'
             )
         elif first_bad == 0:
-            out(f'the first package, {chain[0].package}, is implicated: no green prefix')
+            out(
+                f'the first package, {chain[0].package}, is implicated: no green prefix'
+            )
         else:
             prefix = chain[first_bad - 1]
             ptested = tested_commit(tools, prefix.sha)
@@ -1886,7 +1921,9 @@ def stack_land(
             )
             out(f'GREEN PREFIX: land.py stack-land --tip {prefix.sha}')
         return 1
-    out(f'ok   the stack of {len(chain)} on {args.phase_branch} at {base[:12]} is sound')
+    out(
+        f'ok   the stack of {len(chain)} on {args.phase_branch} at {base[:12]} is sound'
+    )
     for link in chain:
         out(f'ok   {link.sha[:12]} Land {link.package} on {link.below[:12]}')
     out(f'ok   {describe(newest)}, on the stack top {tested[:12]}')
@@ -1951,7 +1988,9 @@ def restack(
     base = phase_head(tools, args.remote, args.phase_branch)
     old_base = tools.git('merge-base', tip, base).strip()
     if old_base == base:
-        raise Refusal(f'the stack is already on the head of {args.phase_branch}')
+        raise Refusal(
+            f'the stack is already on the head of {args.phase_branch}'
+        )
     chain, problems = stack_chain(tools, old_base, tip, remote=args.remote)
     if not chain or chain[-1].sha != tip:
         raise Refusal(f'{tip[:12]} is not the top landing commit of a stack')
@@ -1969,7 +2008,10 @@ def restack(
         current = base
         for link in order:
             olds = tools.git(
-                'rev-list', '--reverse', '--no-merges', f'{link.below}..{link.sha}^'
+                'rev-list',
+                '--reverse',
+                '--no-merges',
+                f'{link.below}..{link.sha}^',
             ).split()
             for old in olds:
                 done = tools.attempt('git', '-C', where, 'cherry-pick', old)
@@ -1990,7 +2032,9 @@ def restack(
                     patch = tools.git('show', '--format=', sha)
                     done = subprocess.run(
                         ['git', 'patch-id', '--stable'],
-                        input=patch, capture_output=True, text=True,
+                        input=patch,
+                        capture_output=True,
+                        text=True,
                     )
                     found.append((done.stdout.split() or [''])[0])
                 return found
@@ -2003,26 +2047,42 @@ def restack(
             top = tools.git('-C', where, 'rev-parse', 'HEAD').strip()
             message = replace_trailers(
                 tools.git('log', '-1', '--format=%B', link.sha),
-                {'Base-SHA': current, 'Checkpoint-SHA': current, STACK_BASE: base},
+                {
+                    'Base-SHA': current,
+                    'Checkpoint-SHA': current,
+                    STACK_BASE: base,
+                },
             )
             note = Path(scratch / 'message.txt')
             note.write_text(message)
             tools.git(
-                '-C', where, 'commit', '--allow-empty', '--quiet', '-F', str(note)
+                '-C',
+                where,
+                'commit',
+                '--allow-empty',
+                '--quiet',
+                '-F',
+                str(note),
             )
             current = tools.git('-C', where, 'rev-parse', 'HEAD').strip()
             moved.append((link, top, current))
     finally:
         tools.attempt('git', 'worktree', 'remove', where)
     for link, top, landing in moved:
-        out(f'moved {link.package}: {link.sha[:12]} -> {landing} (top {top[:12]})')
+        out(
+            f'moved {link.package}: {link.sha[:12]} -> {landing} (top {top[:12]})'
+        )
         branch = link.trailers.get('Topic-branch', '')
         if not (args.move_branches and branch):
             continue
         old_top = tools.git('rev-parse', f'{link.sha}^').strip()
-        held = tools.git('ls-remote', args.remote, f'refs/heads/{branch}').split()
+        held = tools.git(
+            'ls-remote', args.remote, f'refs/heads/{branch}'
+        ).split()
         if not held or held[0] not in (old_top, link.sha):
-            out(f'left {branch}: the remote does not hold {link.package}\'s old top')
+            out(
+                f"left {branch}: the remote does not hold {link.package}'s old top"
+            )
             continue
         archive = phase_named(args.phase_branch).archive_prefix + (
             f'{branch.rsplit("-", 1)[-1]}-{link.package}-{held[0][:8]}'
@@ -2167,14 +2227,20 @@ def verify(
         )
         if own is not None:
             later = tools.git(
-                'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+                'log',
+                '--first-parent',
+                '--reverse',
+                '--format=%H%x00%s',
                 f'{sha}..{head}',
             ).splitlines()
             for line in later:
                 above, _, subject = line.partition('\0')
                 if not LANDING_SUBJECT.match(subject):
                     continue
-                if trailers_of(tools, above).get(STACK_BASE) != trailers[STACK_BASE]:
+                if (
+                    trailers_of(tools, above).get(STACK_BASE)
+                    != trailers[STACK_BASE]
+                ):
                     continue
                 top = tested_commit(tools, above)
                 why_top, _ = evidence_problem(
@@ -2184,7 +2250,7 @@ def verify(
                     evidenced = top
                     what = (
                         f'the stack top (landed with {above[:12]}), whose tree '
-                        f'holds {sha[:12]}\'s, at'
+                        f"holds {sha[:12]}'s, at"
                     )
                     break
     unresolved: list[dict[str, object]] = []
@@ -2358,7 +2424,7 @@ def parser_for(command: str) -> argparse.ArgumentParser:
         parser.add_argument(
             '--stack',
             action='store_true',
-            help="add the package to the stack: make its landing commit on "
+            help='add the package to the stack: make its landing commit on '
             'the stack tail locally, needing no CI run and pushing nothing; '
             'land.py stack-land lands the stack (T3.0)',
         )
@@ -2414,7 +2480,9 @@ def main(
 ) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command = (
-        argv[0] if argv[:1] in (['verify'], ['stack-land'], ['restack']) else 'land'
+        argv[0]
+        if argv[:1] in (['verify'], ['stack-land'], ['restack'])
+        else 'land'
     )
     args = parser_for(command).parse_args(
         argv if command == 'land' else argv[1:]

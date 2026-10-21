@@ -124,7 +124,9 @@ def git(*args: str) -> str:
         stdin=subprocess.DEVNULL,
     )
     if done.returncode != 0:
-        raise SystemExit(f'affected.py: git {" ".join(args)}: {done.stderr.strip()}')
+        raise SystemExit(
+            f'affected.py: git {" ".join(args)}: {done.stderr.strip()}'
+        )
     return done.stdout
 
 
@@ -167,7 +169,9 @@ def naming_tests(path: str, files: Sequence[str]) -> list[Suite]:
         ):
             continue
         try:
-            text = (ROOT / candidate).read_text(encoding='utf-8', errors='replace')
+            text = (ROOT / candidate).read_text(
+                encoding='utf-8', errors='replace'
+            )
         except OSError:
             continue
         if wanted.search(text):
@@ -185,7 +189,9 @@ def syntax(path: str) -> list[Suite]:
     return []
 
 
-def suites(paths: Iterable[str], files: Sequence[str] | None = None) -> list[Suite]:
+def suites(
+    paths: Iterable[str], files: Sequence[str] | None = None
+) -> list[Suite]:
     """The suites for ``paths``, each once, in a stable order."""
     files = tracked() if files is None else files
     out: list[Suite] = []

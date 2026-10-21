@@ -50,6 +50,7 @@ STATE = Path(
 REPO = Path(os.environ.get('SDM_REPO', Path.home() / 'code/sdmc-rust-core'))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import handoff  # noqa: E402
+
 HERDR = os.environ.get('SDM_HERDR', 'herdr')
 CAP = int(os.environ.get('SDM_CODEX_CAP', '4'))
 MODEL = os.environ.get('SDM_CODEX_MODEL', 'gpt-6-astra')

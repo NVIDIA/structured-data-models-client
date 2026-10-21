@@ -44,12 +44,12 @@ FIX_SUBJECT = re.compile(rf'({PACKAGE_ID.pattern}) fix [0-9]+: ')
 RULE_LINE = re.compile(r'^Rule:[ \t]*(\S+[ \t]+){2,}\S+', re.MULTILINE)
 
 
-def rule_problem(message: str, paths: Iterable[str], rules: judging.Rules) -> str | None:
+def rule_problem(
+    message: str, paths: Iterable[str], rules: judging.Rules
+) -> str | None:
     """None when the commit with ``message`` changing ``paths`` needs no
     rule line or has one; else why it is refused."""
-    lines = [
-        line for line in message.splitlines() if not line.startswith('#')
-    ]
+    lines = [line for line in message.splitlines() if not line.startswith('#')]
     subject = lines[0] if lines else ''
     if not FIX_SUBJECT.match(subject):
         return None
@@ -59,7 +59,7 @@ def rule_problem(message: str, paths: Iterable[str], rules: judging.Rules) -> st
     if RULE_LINE.search('\n'.join(lines[1:])):
         return None
     return (
-        'a fix commit that changes product code names the old client\'s rule '
+        "a fix commit that changes product code names the old client's rule "
         "it ports, in a line 'Rule: <one sentence>' (product paths: "
         + ', '.join(touched[:5])
         + (' ...' if len(touched) > 5 else '')
