@@ -42,6 +42,6 @@ The package brief above gives the scope, the exits, the design row and the decis
 - Keep credentials, hostnames, account and workspace names and internal infrastructure names out of everything you write. The repository is public.
 - The command hook (`scripts/rust_core/orchestration/guard_cmd.py`) blocks `rm -r` outside your scratch, `--force` and `-D` removals, `--no-verify`, `sudo`, `git config`, `git stash`, `gh run watch` and `git fetch --prune`, naming the alternative. `git worktree prune` is the only cleanup allowed. Never touch another lane's worktrees. If something seems to need approval, report it instead.
 - Run every probe and subprocess under a timeout with stdin closed: `perl -e 'alarm shift; exec @ARGV' 600 <cmd> </dev/null`, with `GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0`.
-- Reuse your lane's Cargo target; don't create a fresh `CARGO_TARGET_DIR` per task.
-- Use non-editable installs in test venvs, so tests never import the lane checkout by accident.
+- Run in your lane's environment: `scripts/rust_core/cells.sh /mnt/localssd/cells/<lane>` and `SDM_LANE_ENV` (the runners refuse the shared `.venv`). Keep `CARGO_TARGET_DIR` at `/mnt/localssd/target/<you>`; the shared sccache holds the builds.
+- Heavy runs go through `$SDM_ORCH_STATE/bin/heavy`, which queues them until the machine can take them.
 - Never open held-out data.

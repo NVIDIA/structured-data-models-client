@@ -107,7 +107,20 @@ every check.
   which a worktree that `git -C "$SDM_REPO" worktree list` names lies (so a
   reviewer's throwaway worktree in its scratch directory is safe).
   Examples: `./clean_tmp.sh` to see what would go, and
-  `./clean_tmp.sh --apply` to remove it.
+  `./clean_tmp.sh --apply` to remove it. It also sweeps the agents'
+  `/mnt/localssd/{target,tmp}/<name>` and each lane's older environment
+  under `/mnt/localssd/cells/<lane>`, and `--release <name>` removes a
+  finished lane's or agent's directories (T3.0).
+- **`heavy`**: runs a heavy command when a CPU slot, free memory and free
+  disk all allow it (thresholds in `heavy.conf` or `$SDM_HEAVY_CONFIG`),
+  running `clean_tmp.sh --apply` first when the disk is short, and queues
+  otherwise; `$SDM_ORCH_STATE/bin/heavy` calls it. Its exit status is the
+  command's.
+- **`ci_timing.py`**: CI's timing guard (`--run ID` in the `timing guard`
+  job, `--durations FILE` for given times): names a job over 80% of its
+  `timeout-minutes` on two of its last three runs and writes a fix item.
+  `--pull` brings the newest run's items to
+  `$SDM_ORCH_STATE/fix-items/ci-timing.md` for the heartbeat.
 
 - **`guard_cmd.py`** (T3.0): the Claude Code PreToolUse hook the
   repository's `.claude/settings.json` runs before every Bash and Agent
@@ -129,9 +142,9 @@ Each has `--help`; anything that changes state is a dry run unless told otherwis
 - **`packet_checks.sh PHASE`**: read-only go or no-go checks: landings without gate evidence, plan markers against decisions, rows awaiting the owner, proposed register entries.
 - **`register_tools.py`**: `proposed` lists proposed register entries and rows awaiting the owner; `resolve` merges `register.yaml` by entry and pending JSON files by group, usable as a git merge driver (setup lines in `--help`).
 - **`branch_cleanup.py`**: end-of-phase branch and worktree cleanup: `audit`, `plan` (with a keep-list), `execute` (dry run unless `--apply`; writes and verifies a backup bundle and a restore manifest first, re-checks each item before deleting, stops at the first failure, never deletes anything not merged into the base).
-- **`phase_stats.py`**: read-only retrospective numbers: landings per day, package stage times, CI per day with failures split into infrastructure and real, and review verdicts with same-SHA pairing of the two reviewers.
+- **`phase_stats.py`**: read-only retrospective numbers: landings per day, package stage times, CI per day with failures split into infrastructure and real, and review verdicts with same-SHA pairing of the two reviewers. With `--forecast FILE [--now TIME]` it prints only the slip report against the design's forecast (T3.0).
 
-Outside this folder: `../cells.sh` builds warm, non-editable cell venvs keyed by tree hash; `../heldout.py` and `../heldout_run.sh` validate, freeze, run and count a held-out set; `scripts/live/dbx_runs.py` and `scripts/live/dbr_install_check*` run one-time Databricks checks, with every workspace-specific value from the environment.
+Outside this folder: `../cells.sh` builds a lane's warm, non-editable cell venvs, keyed by what they install (`--print-key`); `../gate_dryrun.sh` runs the checking tools over stub cases of planned kinds and lists their gaps; `../tooling_tests.py` finds the tests that must carry the `tooling` marker; `../heldout.py` and `../heldout_run.sh` validate, freeze, run and count a held-out set; `scripts/live/dbx_runs.py` and `scripts/live/dbr_install_check*` run one-time Databricks checks, with every workspace-specific value from the environment.
 
 ## Rules these tools follow, and probes should too
 

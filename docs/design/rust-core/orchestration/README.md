@@ -193,12 +193,58 @@ The orchestrator's own session gets the hook when it is started in a checkout ho
 ## CI
 
 - **The four container images are private copies on ghcr.io** (`ghcr.io/nvidia/structured-data-models-client/...`, same digests), pulled with the workflow token. Anonymous registry pulls caused about 57% of Phase 1's failed runs before the move.
-- **Every job has `timeout-minutes`.** A hung `rust-test` once ran 2h24m.
+- **Every job has `timeout-minutes`.** A hung `rust-test` once ran 2h24m. The timing guard names a job that comes near it (see "CI's split, timing guard and base" below).
 - **Dependencies build at opt-level 1**, so a cold `rust-test` takes about 34 minutes (it was over 2 hours).
 - **Caches are branch-scoped.** A push restores caches only from its own branch and `main`, so a new topic branch starts cold. Prefer lanes. The Actions cache holds 10 GiB; `scripts/rust_core/prune_caches.py` prunes it, and pip caches save only on `main`.
 - **External dependencies drift.** snowflake-connector-python 5.0.0 turned CI red mid-phase. When an unrelated job fails, check the dependency versions first.
 - **Watch CI from the orchestrator only**, in the background: poll `gh run view <id> --json status,conclusion` under a timeout. Never `gh run watch`; it has hung agents.
 - **The binding tests hard-code the contract version** in `rust/bindings/sdm-py/tests/messages.py`. Phase 1 missed it at two contract bumps (Phase 2 row FX-6 derives it). Until FX-6 lands, every contract bump updates it.
+
+## CI's split, timing guard and base (T3.0)
+
+These replace rules Phase 2 kept by hand; each is enforced by the workflow and held by `tests/test_ci_workflow.py`.
+
+- **The checking tools' own tests run once, and only when they can change.**
+  A test that copies the checkout into a temporary repository and reruns the gate, the ratchet or the comparator carries the pytest marker `tooling` (`pytestmark = pytest.mark.tooling`, or on its copying tests alone when the file also checks the real tree).
+  `scripts/rust_core/tooling_tests.py check` lists any such test without the marker, and `list` shows what it finds.
+  `test (3.x)`, `engine` and `contract-python (ref-pandas3)` deselect them; `tooling (contract)` and `tooling (root)` run them, on Python 3.12, only when the landing job's plan says a judging path (`scripts/rust_core/judging-paths.txt`), the workflow, or a marked test or a module one loads changed (`tooling_tests.py must-run`).
+  A product package that adds a case does not run them; a tooling change does.
+- **The landing job plans the run once, as it starts.**
+  It records the phase head the candidate was pushed on (`ratchet.py push-base`), and every judging job reads it as `SDM_PUSH_BASE` through `ratchet.py where` (and `rust-lint`'s bridge freeze), so a landing while the run goes on, the candidate's own included, cannot turn a comparison into a self-comparison.
+  A rerun of failed jobs keeps it; a rerun of every job after the candidate landed takes the head it landed on.
+- **Test authors' branches run a short matrix.**
+  A branch named `<topic>-tests` or `<topic>-tests-<suffix>` runs the client tests on 3.12 alone and builds no aarch64 or engine wheels; its tests fail by design until the code exists.
+- **A newer push cancels the run in progress on the same topic or lane branch.**
+  A lane carries one package, so its older run is evidence for nothing; the phase branch's runs are never cancelled.
+- **The timing guard** (`scripts/rust_core/orchestration/ci_timing.py`, the `timing guard` job) records every job's minutes in the run's `ci-timing` artifact and names a job that used more than 80% of its `timeout-minutes` on two of its last three runs, as an error annotation and a fix item.
+  It never fails the run (no hard budgets).
+  The heartbeat runs `ci_timing.py --pull`, which writes the newest run's items to `$SDM_ORCH_STATE/fix-items/ci-timing.md`; a named job gets a fix at its cause, not a higher limit.
+
+## Environments within the machine (T3.0)
+
+The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/localssd`.
+
+- **One environment per lane, reused until what it installs changes.**
+  `scripts/rust_core/cells.sh /mnt/localssd/cells/<lane>` builds the lane's cells into `env-<key>`, keyed by `uv.lock`, `rust/`, the packages' sources, `native_wheel.py` and the cells in `ci.yml` (`cells.sh --print-key` prints it).
+  A docs, cases or tests commit reuses the environment in under a second; a new key builds a new one (about 3 minutes, most of it from the shared cache) and removes the lane's older one.
+  Export `SDM_LANE_ENV=/mnt/localssd/cells/<lane>` and run with the cell python it prints (`$SDM_LANE_ENV/current/cell-ref-pandas3/bin/python`).
+- **The runners refuse the shared `.venv`.**
+  On this machine `run_python.py` and the provider kit refuse a checkout's `.venv`, and with `SDM_LANE_ENV` set any interpreter outside it, naming the right one; Phase 2 lost twelve hours to a stale shared environment read as an environment fault.
+- **One Rust build cache.**
+  `~/.cargo/config.toml` routes every build through sccache at `/mnt/localssd/sccache`.
+  An agent's `CARGO_TARGET_DIR` (`/mnt/localssd/target/<agent>`) holds incremental state only; `clean_tmp.sh` removes it when stale or over `CAP_GIB`.
+- **`heavy` admits a job only when the machine can take it.**
+  `$SDM_ORCH_STATE/bin/heavy` calls `scripts/rust_core/orchestration/heavy`, which starts a heavy command when a CPU slot, free memory and free disk all allow it (thresholds in `scripts/rust_core/orchestration/heavy.conf`, or `SDM_HEAVY_CONFIG`), runs `clean_tmp.sh --apply` first when the disk is short, and otherwise queues, saying what it waits for.
+  Heavy means any `gate.sh` leg, a full `pytest` of `contract/tests` or `tests`, a `tooling` test file, `cargo test`, `build` or `clippy` of the workspace, and every wheel build.
+- **A lane's directories go when it ends**: `clean_tmp.sh --release <lane>` (dry run first, then `--apply`) removes its environment, target and tmp directories.
+
+## The dry run and the slip report (T3.0)
+
+- **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
+  It judges each stub with the case reader, `coverage.py`, `ratchet.py`, both Python runners and `compare.py` (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
+  Those lines are the first package's tooling list, found up front instead of one judging package at a time mid-phase.
+- **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
+  It never blocks anything.
 
 ## Watchdogs and stalls
 
@@ -277,6 +323,6 @@ Never approve your own register entry or exception.
 - **The held-out bundle froze in an older case format.** Phase 1 converted it with `--pre-given-specs` (owner item 49). Phase 2 needs a new held-out set, frozen once the scope is locked and T2.1 has settled the case format, with a tested converter and a dry run of the held-out runner on a dummy bundle before the one-shot, and never opened by implementers.
 - **New register and decision IDs collide across lanes.** Give each lane its own ID block (for example P2B-1..19 and E1..9 for lane a) and have lanes write only in their own sub-table or section of shared docs.
 - **Shared docs conflict on rebase** (17 conflicts, mostly `tracker.md` and `decisions.md`). Each package writes only in its pre-created section.
-- **A lane venv that imports the lane checkout** gives false "passes now" results. Use non-editable installs.
+- **A lane venv that imports the lane checkout** gives false "passes now" results. `cells.sh` installs every first-party package as a wheel.
 - **Pushes need an SSH key authorized for the organisation's SSO.** A push failing with "has enabled or enforced SAML SSO" means the key needs re-authorizing on GitHub.
 - **The held-out H11 rule has no approved-entry exception for new refusals.** A new refusal found there fails the check, whatever the register says.
