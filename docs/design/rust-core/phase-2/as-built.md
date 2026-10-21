@@ -5,7 +5,7 @@ It reads the design's task table and choices, each package's `tracker-<ID>.md`, 
 A package built as its design row says gets one line with its landing SHA.
 Fix-round histories stay in the trackers; this file names only what changed against the design and where that change is decided.
 
-Written at T2.16 on the final tree, the phase head `f133c4b8` (`Land T2.14c`, after `Land T2.14b` 0b6d9a12).
+Written at T2.16. The final tree is T2.16's own candidate: the phase head `f133c4b8` (`Land T2.14c`, after `Land T2.14b` 0b6d9a12) plus T2.16's docs, evidence, its one product fix (an answer's text encoding, below) and the `cells.sh` fix.
 Phase 2 was merged into `rust-core` once mid-phase, through T2.1j, at `2e5fbd27`.
 
 ## Across the phase
@@ -61,7 +61,7 @@ Teaching `tests/test_contract_reference.py` the database keys was left to T2.1a,
 Landed `5e972867` after 23 rounds of design review.
 The locked set was changed once since, by T2.1s under KO2-76 (below).
 Owner rows after it landed as docs landings of their own: T2.1d, T2.1k, T2.1p, T2.1s and T2.1u, and T2.14c for KO2-87 and KO2-88.
-[tracker.md](tracker.md)'s package table was not updated after the first landings and still shows most rows "not started".
+[tracker.md](tracker.md)'s package table was not updated after the first landings; T2.16 brought every row up to date and filled the stop-rule counters from the log.
 
 ### T2.0c
 
@@ -228,7 +228,7 @@ The freeze also covers `_rust/providers/postgres.py`, beyond the design's list, 
 
 ### T2.14b
 
-Not landed at the phase head; its commits are on this tree above `9a899950`.
+Landed as 0b6d9a12.
 T2.14d (the Postgres value rules, MID2 P2-3) and the decimal stype fix ride in it, by the owner's granularity decision.
 Errors may name a value the caller passed in that call (KO2-86) and M4's data times (KO2-89).
 The candidate-repeat rule stays the host's, by Python's own equality, sent as the contract's `repeat` (fix 7); `PredictiveQuery._resolve` stays in the ledger.
@@ -236,7 +236,7 @@ Four items are carried to Phase 3 (the tracker's "Carried to Phase 3").
 
 ### T2.14c
 
-Not landed at the phase head; its commits are on this tree.
+Landed as f133c4b8.
 It lands with product items rather than alone, since T2.16a's fix 4 taught the checkpoint's freeze to accept a declared `gone` entry.
 The freeze was lowered by measurement: 29 functions leave `COVERED`, five stay because `selftest.py` seeds faults in them.
 It carries a Postgres numeric-key fix (P2G-4, P2G-5), `labels::compare`'s deletion, KO2-87 and KO2-88, P2D-2 to P2D-5, and T2.16a's part B (P2O-1).
@@ -248,8 +248,13 @@ It is not in `contract/protected-paths.txt`.
 
 ### T2.16
 
-In progress at this tree; its one commit is KO2-90.
-Its gaps found so far are in the next section.
+The final package: the phase-end docs (KO2-90 and KO2-92 for check 2's kept rules, KO2-91 for the lean plan, the tracker's true statuses, this file, the "Carried into Phase 3" rows), the evidence pack, and two fixes.
+- **An answer's text encoding** (the whole-phase review part 2, a regression since T2.14b): since T2.14b the HTTP transport hands the core the answer's bytes, and `sdm_wire::json::read_answer` refused UTF-8 with a byte order mark, UTF-16 and UTF-32, which the reference's `json.loads` reads.
+  `read_answer` now decodes the bytes first as `json.detect_encoding` does (`answer_text`), in the core, so a Java host reads alike.
+  The Databricks transport encodes the served answer's text with `surrogatepass`, so a raw lone surrogate reaches the core and is refused by name.
+  Register P1B-24 is widened to raw lone surrogates (the orchestrator's decision under KO2-88; on Databricks this refuses an answer the reference accepts).
+- **`scripts/rust_core/cells.sh`** installs the connectors with the `sqlite` and `postgres` extras, as `ci.yml`'s "Install the cell" step does, with one test.
+Its gaps found at the phase end are in the next section.
 
 ### HO2
 
@@ -263,7 +268,7 @@ Dropped by the owner on 2026-10-17 (the lean plan); C4 went with it.
 
 ### CI6
 
-Never built, and no owner row drops it.
+Dropped by the owner on 2026-10-17 (the lean plan, KO2-91).
 Landings stayed on `land.py`, which confirms a clean identical move without a review round (KO2-80).
 
 ### CI7
@@ -301,15 +306,15 @@ The CI-green parts of checks 1, 3, 4, 5, 8 and 10 are judged by `land.py`'s exac
 The census, coverage S1, H24, L3 and L7 are reports read by both reviewers, and check 9 runs once through `phase_end.sh`.
 H24 went from gating (KO2-25) to a report, and unseeded SQLite sampling is judged by properties (KO2-76).
 
-Measured at T2.16, true at this tree:
+Measured at T2.16, true at the final tree:
 
 - `scripts/rust_core/coverage.py` has no `--gate S1`: rule 7 is not built and `ACTIVE` is still `('python', 'S0')`.
   So the S1 coverage report is generated from `coverage.py`'s own `generated()`.
 - `contract/tools/differential.py` (L3) runs DuckDB sources only, so L3 on SQLite and Postgres is not measured.
 - `scripts/rust_core/evidence.py` and `scripts/rust_core/orchestration/phase_end.sh` read a Phase 1b inventory (`cases: [{id: ...}]`).
   Phase 2's locked set lists `halves.2a.cases` as plain ids, and `evidence.py` has no per-database legs.
-- `scripts/rust_core/cells.sh` installs the connectors with only the `duckdb` extra, while `ci.yml` installs `[duckdb,sqlite,postgres]`.
+- `scripts/rust_core/cells.sh` installed the connectors with only the `duckdb` extra, while `ci.yml` installs `[duckdb,sqlite,postgres]`; T2.16 fixed it.
 - The census tool has no real-data mode, so the kept rules' counts are zero by construction (T2.16a, `evidence/census/real-data.md`, KO2-90).
 - No tool for H24's Postgres common-input comparison exists: nothing under `contract/tools`, `contract/runners` or `scripts/rust_core` names it.
-- Three trackers (T2.8c, T2.10, T2.13b) report seven old-against-core differences on the generated DuckDB sources in what `from_source` infers for one column (categorical against numerical); none records a classification, which check 6 asks for.
-- Check 8's freeze lowering and host clean-up (T2.14b, T2.14c) are on this tree but not on the phase head.
+- Three trackers (T2.8c, T2.10, T2.13b) reported seven old-against-core differences on the generated DuckDB sources in what `from_source` infers for one column (`d`, categorical against numerical). At be55838a the inferred schema agrees on every source; L3 there finds the payload's one-ulp decimal differences under P2B-1 instead (`evidence/l3/classification.md`). Which landing closed the stype difference was not bisected; T2.14b's decimal stype fix is the likely one.
+- Each gap above has a "Carried into Phase 3" row in migration-plan.md section 8 (P2-T2.16-3 onward).
