@@ -46,7 +46,9 @@
 # the worktrees listed beside it and does nothing in any other. lane.py start
 # installs it in each lane worktree. The hook passes git's list of the refs
 # being pushed on (--pushed-refs, read from standard input), so the lane check
-# looks at each lane ref pushed rather than at the branch checked out.
+# looks at each lane ref pushed rather than at the branch checked out. It also
+# installs the commit-msg hook (commit_msg.py, T3.0): a fix commit changing
+# product code needs a 'Rule:' line, in the same worktrees.
 # land.py and lane.py push with --no-verify: their own checks stand in.
 #
 # Every check runs even after one fails; the summary lists each, and the exit
@@ -103,9 +105,28 @@ fi
 exec "\$top/scripts/rust_core/prepush.sh" --pushed-refs
 EOF
   chmod +x "$hook"
+  # The commit-msg hook (T3.0, item 4): a product fix names the old
+  # client's rule. Same worktree list as the pre-push hook.
+  msg_hook="$hooks/commit-msg"
+  msg_marker='# commit_msg.py hook (scripts/rust_core/prepush.sh --install-hook)'
+  if [ -e "$msg_hook" ] && ! grep -qF "$msg_marker" "$msg_hook"; then
+    echo "prepush.sh: $msg_hook exists and is not this hook; not replacing it" >&2
+    exit 2
+  fi
+  cat >"$msg_hook" <<EOF
+#!/usr/bin/env bash
+$msg_marker
+# Checks the message in the worktrees listed in prepush-worktrees beside this
+# file; in any other worktree of the clone it does nothing.
+top=\$(git rev-parse --show-toplevel) || exit 0
+grep -qxF "\$top" "\$(dirname "\$0")/prepush-worktrees" 2>/dev/null || exit 0
+[ -f "\$top/scripts/rust_core/commit_msg.py" ] || exit 0
+exec python3 "\$top/scripts/rust_core/commit_msg.py" "\$1"
+EOF
+  chmod +x "$msg_hook"
   touch "$list"
   grep -qxF "$root" "$list" || echo "$root" >>"$list"
-  echo "prepush.sh: the pre-push hook runs the cheap tier in $root"
+  echo "prepush.sh: the pre-push hook runs the cheap tier in $root, and the commit-msg hook checks fix commits there"
   echo "  (hook $hook; to stop, remove that line from $list)"
   exit 0
 fi

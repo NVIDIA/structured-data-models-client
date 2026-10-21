@@ -1275,9 +1275,7 @@ def test_advancing_the_phase_ref_cannot_erase_a_changed_outcome_or_a_protected_e
     assert found is None and any('not a landing commit' in p for p in problems)
     # Nor can a phase push carrying it land.
     found, problems = resolve(repo, phase_push=landed)
-    assert found is None and any(
-        'lands exactly one package' in p for p in problems
-    )
+    assert found is None and any('its tip is none' in p for p in problems)
 
 
 def test_a_rebased_package_is_judged_against_the_new_tip(repo: Path) -> None:
@@ -1297,17 +1295,26 @@ def test_a_rebased_package_is_judged_against_the_new_tip(repo: Path) -> None:
     assert problems == [] and found.sha == other and found.notes == []
 
 
-def test_a_push_that_lands_two_packages_fails(repo: Path) -> None:
+def test_a_push_that_lands_a_stack_is_judged_against_the_landing_below(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # T3.0: a push may land a stack of up to SDM_STACK_MAX packages, each
+    # landing on the one before it; the top is judged against its own
+    # Base-SHA, the landing below it.
+    monkeypatch.delenv('SDM_STACK_MAX', raising=False)
     landed = checkpoint_of(repo)
     first = land(repo, 'T1.15')
     found, problems = resolve(repo, phase_push=landed)
     assert problems == [] and found.sha == landed
     land(repo, 'T1.16')
     found, problems = resolve(repo, phase_push=landed)
+    assert problems == [] and found.sha == first
+    monkeypatch.setenv('SDM_STACK_MAX', '1')
+    found, problems = resolve(repo, phase_push=landed)
     assert found is None
     assert problems == [
-        'a push to the phase branch lands exactly one package, as its tip: '
-        'it holds 2 landing commits'
+        'a push to the phase branch lands at most 1 packages (a stack, '
+        'T3.0): it holds 2 landing commits'
     ]
     # One landing whose recorded base is not the previous tip fails too.
     found, problems = resolve(repo, phase_push=first)

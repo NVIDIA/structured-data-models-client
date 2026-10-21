@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The judging paths (T3.0, item 1): the checking tools, the gate, the
+# ratchet, the comparator and the case-format readers, which decide whether a
+# candidate passes. land.py reads this file at the phase head, never at the
+# candidate. A package that changes one lands it in a tooling train
+# (land.py --stack --train) at the front of a stack, or before the phase's
+# first product landing; anywhere else land.py refuses it. Same pattern
+# syntax as contract/protected-paths.txt: "*" within a path segment, "**"
+# across segments, "!" takes paths out of the patterns above it.
+
+# What gate.sh takes from the checkpoint (its "judging" list and overlay).
+scripts/rust_core/gate.sh
+scripts/rust_core/ratchet.py
+scripts/rust_core/compare.py
+scripts/rust_core/coverage.py
+scripts/rust_core/register.py
+scripts/rust_core/phases.py
+scripts/rust_core/wheel_smoke.py
+scripts/rust_core/bridge_freeze.py
+scripts/rust_core/bridge_freeze.json
+scripts/rust_core/bridge_changes.json
+scripts/rust_core/l0_*.py
+scripts/rust_core/selftest.py
+scripts/rust_core/emulation-allowlist.txt
+scripts/rust_core/judging-paths.txt
+# The runners and the case format: what reads a case and writes an observation.
+contract/runners/**
+contract/*.schema.json
+contract/compare-policy.yaml
+contract/protected-paths.txt
+rust/crates/sdm-testkit/src/case.rs
+rust/crates/sdm-testkit/src/observation.rs
+# CI, which runs all of them.
+.github/workflows/ci.yml

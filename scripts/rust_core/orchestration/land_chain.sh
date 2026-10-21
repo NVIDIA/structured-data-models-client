@@ -22,12 +22,12 @@
 #   SDM_ORCH_STATE    state directory (default ~/.local/share/sdm-orchestration): the queue,
 #                     logs/ and rule_watch.ignore (acknowledged violations, one pattern a line)
 #   SDM_LAND_QUEUE    the queue directory (default $SDM_ORCH_STATE/land-queue)
-#   SDM_PHASE_BRANCH  the phase branch, e.g. rust-core-phase-2 (required; exits 2 when
+#   SDM_PHASE_BRANCH  the phase branch, e.g. rust-core-phase-3 (required; exits 2 when
 #                     unset), passed on to the tools
 set -u
 case "${1:-}" in -h|--help) sed -n '6,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0;; esac
 [ -n "${SDM_PHASE_BRANCH:-}" ] || {
-  echo "land_chain.sh: set SDM_PHASE_BRANCH to the phase branch, e.g. rust-core-phase-2 (see --help)" >&2
+  echo "land_chain.sh: set SDM_PHASE_BRANCH to the phase branch, e.g. rust-core-phase-3 (see --help)" >&2
   exit 2
 }
 export SDM_PHASE_BRANCH

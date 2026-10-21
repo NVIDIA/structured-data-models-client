@@ -1481,11 +1481,14 @@ def _phase_scenario(phase: _Phase, scenario: str) -> str:
         p = phase.package('T1.15')
         base = {'sound': before, 'moved': before, 'wrong-base': p}[scenario]
         phase.landing('T1.15', base, 'a' * 40 if scenario == 'moved' else None)
-    elif scenario == 'two-landings':
+    elif scenario in ('two-landings', 'unstacked'):
+        # A stack (T3.0) lands each package on the one before it.
         phase.package('T1.15')
         first = phase.landing('T1.15', before)
         phase.package('T1.16')
-        phase.landing('T1.16', first)
+        phase.landing('T1.16', first if scenario == 'two-landings' else before)
+        # The stack's top is judged against the landing below it.
+        phase.judged_against = first
     elif scenario == 'not-a-landing':
         phase.package('T1.15')
     elif scenario == 'not-a-fast-forward':
@@ -1511,7 +1514,8 @@ def _phase_scenario(phase: _Phase, scenario: str) -> str:
             'wrong-base',
             "the landing's Base-SHA is not the phase branch's previous tip",
         ),
-        ('two-landings', 'it holds 2 landing commits'),
+        ('two-landings', None),
+        ('unstacked', 'does not stack on the landing before it'),
         ('not-a-landing', 'its tip is none'),
         ('not-a-fast-forward', 'not a fast-forward of the previous tip'),
     ],
@@ -1532,9 +1536,13 @@ def test_ci4_the_phase_check_in_a_clone_of_depth_two(
             assert done.returncode == 0, message
             # Every other job is left out of a sound landing's run, and
             # the check still ran: its output names the checkpoint.
-            assert done.stdout.split()[:2] == [before, before], message
+            checkpoint = getattr(phase, 'judged_against', before)
+            assert done.stdout.split()[:2] == [checkpoint, checkpoint], message
             skip = _skip(clone, tmp_path, 'push', PHASE)
-            assert skip == ('true' if scenario == 'sound' else 'false')
+            # A sound stack (T3.0) is left out like one landing.
+            assert skip == (
+                'true' if scenario in ('sound', 'two-landings') else 'false'
+            )
         else:
             assert done.returncode != 0, message
             # A previous tip the push dropped is on no branch the clone

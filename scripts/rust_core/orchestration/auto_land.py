@@ -62,7 +62,7 @@ Environment:
   SDM_ORCH_STATE      state directory (default ~/.local/share/sdm-orchestration): holds
                       land-queue/, logs/ and the lock that keeps one lander at a time
   SDM_LAND_QUEUE      the queue directory (default <state>/land-queue)
-  SDM_PHASE_BRANCH    the phase branch, e.g. rust-core-phase-2 (required unless --phase
+  SDM_PHASE_BRANCH    the phase branch, e.g. rust-core-phase-3 (required unless --phase
                       gives it; exits 2 when neither does); lanes are <phase>-lane-<x>,
                       topic branches <phase>-<name>
   SDM_TOOLS_PYTHON    the Python that runs `ratchet.py check` first (default: the Python
@@ -560,12 +560,12 @@ if __name__ == '__main__':
     ap.add_argument(
         '--phase',
         default=PHASE,
-        help='the phase branch, e.g. rust-core-phase-2 (default $SDM_PHASE_BRANCH; one is required)',
+        help='the phase branch, e.g. rust-core-phase-3 (default $SDM_PHASE_BRANCH; one is required)',
     )
     PHASE = ap.parse_args().phase
     if not PHASE:
         ap.error(
-            'set SDM_PHASE_BRANCH or pass --phase: the phase branch, e.g. rust-core-phase-2'
+            'set SDM_PHASE_BRANCH or pass --phase: the phase branch, e.g. rust-core-phase-3'
         )
     TOPIC_BRANCH = topic_branch_re(PHASE)
     import fcntl

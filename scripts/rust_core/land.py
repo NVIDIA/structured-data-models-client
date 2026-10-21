@@ -168,6 +168,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import commit_msg  # noqa: E402
+import judging  # noqa: E402
 from phases import (  # noqa: E402
     ENVIRONMENT,
     PACKAGE_ID,
@@ -571,12 +573,28 @@ def commits_not_owned(
     package: str,
     *where: str,
     remote: str = 'origin',
+    stacked: bool = False,
 ) -> list[tuple[str, str, str]]:
     """The commits in ``base..head`` that ``package`` does not own, each as
     (SHA, subject, why). An earlier landing commit of ``package`` that
     ``landing_problem`` accepts is owned, and the commits of ``main`` one
     merge commit of the package brings in are exempt (:func:`main_merge`,
-    T2.0e)."""
+    T2.0e). With ``stacked`` (T3.0), the package may sit on a stack of
+    other packages' landing commits (``land.py --stack``): the stack below
+    its newest landing is checked as a stack (:func:`stack_chain`), each
+    landing owning the commits below it, and only the commits above are
+    the package's."""
+    if stacked:
+        chain, problems = stack_chain(
+            tools, base, head, *where, remote=remote
+        )
+        if any(link.package != package for link in chain):
+            floor = chain[-1].sha
+            return [
+                (floor, 'the stack below', why) for why in problems
+            ] + commits_not_owned(
+                tools, floor, head, package, *where, remote=remote
+            )
     exempt, found = main_merge(tools, remote, base, head, package, *where)
     refused = {sha for sha, _, _ in found}
     out = tools.git(*where, 'log', '--format=%H%x00%s%x1e', f'{base}..{head}')
@@ -1065,7 +1083,8 @@ class Landing:
     checkpoint: str
     summary: str
     evidence: str
-    #: ``Moved-from`` and ``Moved-from-run`` for a moved candidate (E130).
+    #: ``Moved-from`` and ``Moved-from-run`` for a moved candidate (E130);
+    #: ``Stack-base``, ``Topic-branch`` and ``Train`` for a stacked one.
     moved: dict[str, str] = field(default_factory=dict)
 
     def message(self) -> str:
@@ -1167,6 +1186,285 @@ def watch(tools: Tools, run_id: object) -> dict[str, object]:
     return json.loads(out)
 
 
+# --- stacks and trains (T3.0, items 1 and 2) --------------------------------
+
+#: How many packages one CI run may cover: the owner's "every N packages
+#: (e.g. 4 packages) before CI is mandatory" (2026-10-21, evening).
+STACK_MAX = 4
+STACK_MAX_ENV = 'SDM_STACK_MAX'
+#: The trailer naming the phase head a stack was built on.
+STACK_BASE = 'Stack-base'
+#: The trailer a train's landing carries.
+TRAIN = 'Train'
+#: The epic branch, whose merge base with the phase head is the phase's start.
+EPIC = 'rust-core'
+
+
+def stack_max(given: int | None) -> int:
+    """The most packages one stack may hold: ``--max-stack``, else
+    ``SDM_STACK_MAX``, else 4."""
+    if given is not None:
+        value = given
+    else:
+        raw = os.environ.get(STACK_MAX_ENV, '')
+        try:
+            value = int(raw) if raw else STACK_MAX
+        except ValueError:
+            raise Refusal(f'{STACK_MAX_ENV}={raw!r} is not a number') from None
+    if value < 1:
+        raise Refusal(f'the stack limit is {value}; it is at least 1')
+    return value
+
+
+@dataclass
+class Stacked:
+    """A landing commit of a stack: the package it lands, and the commit
+    below its own commits (the landing before it, or the phase head)."""
+
+    sha: str
+    package: str
+    below: str
+    trailers: dict[str, str]
+
+    @property
+    def train(self) -> bool:
+        return self.trailers.get(TRAIN, '').lower() == 'yes'
+
+
+def landing_shaped(tools: Tools, sha: str, *where: str) -> bool:
+    """One parent, its parent's tree, a subject ``Land <ID>: ...``."""
+    subject = tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
+    if not LANDING_SUBJECT.match(subject):
+        return False
+    if tools.attempt(
+        'git', *where, 'rev-parse', '--verify', '--quiet', f'{sha}^2'
+    ).returncode == 0:
+        return False
+    return tools.git(*where, 'rev-parse', f'{sha}^{{tree}}').strip() == (
+        tools.git(*where, 'rev-parse', f'{sha}^^{{tree}}').strip()
+    )
+
+
+def stack_chain(
+    tools: Tools, base: str, tip: str, *where: str, remote: str = 'origin'
+) -> tuple[list[Stacked], list[str]]:
+    """The landing commits between the phase head ``base`` and ``tip``,
+    oldest first, and what is wrong with them as a stack: each one empty,
+    with ``Reviewed-by`` and ``Protected-paths``, its ``Base-SHA`` and
+    ``Checkpoint-SHA`` the landing before it (the phase head for the
+    first), and every commit between them owned by its package. An earlier
+    landing of the same package left on a lane (the obsolete
+    ``--wait-for-landing-run``), whose Base-SHA is in the phase branch
+    below ``base``, is not a stack's and is left to ``landing_problem``."""
+    out = tools.git(*where, 'log', '--format=%H%x00%s%x1e', f'{base}..{tip}')
+    listed = []
+    for entry in out.split('\x1e'):
+        sha, sep, text = entry.strip('\n').partition('\x00')
+        match = LANDING_SUBJECT.match(text.split('\n', 1)[0])
+        if sep and match:
+            listed.append((sha, match))
+    chain: list[Stacked] = []
+    problems: list[str] = []
+    below_sha = base
+    for sha, match in reversed(listed):
+        subject = tools.git(*where, 'log', '-1', '--format=%s', sha).strip()
+        trailers = trailers_of(tools, sha, *where)
+        recorded = trailers.get('Base-SHA', '')
+        package = match.group(1)
+        label = f'{sha[:12]} {subject}'
+        if not landing_shaped(tools, sha, *where):
+            problems.append(
+                f'{label}: a landing commit has one parent and changes no file'
+            )
+        if recorded != below_sha:
+            problems.append(
+                f'{label}: its Base-SHA {recorded[:12] or "(none)"} is not '
+                f'the landing below it, {below_sha[:12]}; restack it '
+                '(land.py restack)'
+            )
+        if trailers.get('Checkpoint-SHA') != below_sha:
+            problems.append(
+                f'{label}: its Checkpoint-SHA is not the landing below it, '
+                f'{below_sha[:12]}'
+            )
+        for key in ('Reviewed-by', 'Protected-paths'):
+            if not trailers.get(key):
+                problems.append(f'{label}: no {key} trailer')
+        problems.extend(
+            f'{label}: {stray[:12]} {stray_subject} ({why})'
+            for stray, stray_subject, why in commits_not_owned(
+                tools, below_sha, f'{sha}^', package, *where, remote=remote
+            )
+        )
+        chain.append(Stacked(sha, package, below_sha, trailers))
+        below_sha = sha
+    return chain, problems
+
+
+def changed_paths(tools: Tools, old: str, new: str, *where: str) -> list[str]:
+    out = tools.git(*where, 'diff', '--name-only', '-z', old, new)
+    return [p for p in out.split('\0') if p]
+
+
+def judging_rules(tools: Tools, base: str, *where: str) -> judging.Rules | None:
+    """The judging paths as the phase head lists them, or None before the
+    list exists (T3.0 lands it)."""
+    done = tools.attempt('git', *where, 'show', f'{base}:{judging.FILE}')
+    if done.returncode != 0:
+        return None
+    return judging.patterns(done.stdout)
+
+
+def phase_product(
+    tools: Tools, remote: str, base: str, rules: judging.Rules, *where: str
+) -> str | None:
+    """The first landing of the phase (up to ``base``) that changed a
+    product path, as ``<sha> <subject>``, or None. The phase starts at its
+    merge base with the epic branch as the remote holds it."""
+    if tools.attempt(
+        'git', *where, 'fetch', '--quiet', remote, f'refs/heads/{EPIC}'
+    ).returncode == 0:
+        epic = f'refs/remotes/{remote}/{EPIC}'
+        start = tools.attempt('git', *where, 'merge-base', base, epic)
+    else:
+        start = Completed(1)
+    rng = f'{start.stdout.strip()}..{base}' if start.returncode == 0 else base
+    out = tools.git(
+        *where, 'log', '--first-parent', '--reverse', '--format=%H%x00%s', rng
+    )
+    for line in out.splitlines():
+        sha, _, subject = line.partition('\0')
+        if not LANDING_SUBJECT.match(subject):
+            continue
+        landed_on = trailers_of(tools, sha, *where).get('Base-SHA', '')
+        if not re.fullmatch(r'[0-9a-f]{40}', landed_on):
+            continue
+        if judging.product(rules, changed_paths(tools, landed_on, sha, *where)):
+            return f'{sha[:12]} {subject}'
+    return None
+
+
+def judging_problem(
+    paths: Sequence[str],
+    rules: judging.Rules | None,
+    package: str,
+    train: bool,
+    first: bool,
+    product_before: str | None,
+) -> str | None:
+    """Why a package changing ``paths`` may not land where it is (T3.0,
+    item 1), or None. ``first``: it is the first package of its stack, on
+    the phase head; ``product_before``: a product landing before it."""
+    if rules is None:
+        return None
+    found = judging.judging(rules, paths)
+    if train:
+        if not found:
+            return (
+                f'{package} is landed as a train but changes no judging path; '
+                'land it without --train'
+            )
+        if not first:
+            return (
+                f'{package} is a train, and a train lands at the front of a '
+                'stack, on the phase head: restack it first (land.py restack '
+                '--train-first) or land it before the others'
+            )
+        others = judging.not_train(rules, paths)
+        if others:
+            return (
+                f'{package} is a train, which changes judging paths, their '
+                'tests and docs only; it also changes '
+                + ', '.join(others[:8])
+                + (' ...' if len(others) > 8 else '')
+                + '; move those into a product package'
+            )
+        return None
+    if not found or product_before is None:
+        return None
+    return (
+        f'{package} changes judging paths ('
+        + ', '.join(found[:8])
+        + (' ...' if len(found) > 8 else '')
+        + f') after the phase\'s first product landing ({product_before}). '
+        'Judging changes found mid-phase ride one tooling train: move them '
+        'into the train package and land it at the front of the next stack '
+        'with `land.py --stack --train --candidate <train> ...`, then stack '
+        'this package on it'
+    )
+
+
+def rule_problems(
+    tools: Tools, old: str, new: str, rules: judging.Rules | None, *where: str
+) -> list[str]:
+    """Each commit of ``old..new`` refused by the commit-msg rule: a product
+    fix without its ``Rule:`` line (T3.0, item 4). None before the judging
+    list exists (the rule starts with T3.0's landing)."""
+    if rules is None:
+        return []
+    out = tools.git(
+        *where, 'log', '--no-merges', '--format=%H%x00%B%x1e', f'{old}..{new}'
+    )
+    found = []
+    for entry in out.split('\x1e'):
+        sha, sep, message = entry.strip('\n').partition('\x00')
+        if not sep:
+            continue
+        files = tools.git(
+            *where, 'diff-tree', '--no-commit-id', '--name-only', '-r', '-z',
+            '--root', sha,
+        )
+        paths = [p for p in files.split('\0') if p]
+        why = commit_msg.rule_problem(message, paths, rules)
+        if why:
+            found.append(f'{sha[:12]} {message.splitlines()[0]}: {why}')
+    return found
+
+
+def implicated(
+    tools: Tools, run: dict[str, object], base: str, top: str
+) -> list[tuple[str, list[tuple[str, str]]]]:
+    """For each failed job of ``run``, the commits of ``base..top`` that
+    touch a path its log names, as (job, [(sha, subject)])."""
+    repo = ('--repo', tools.repo) if tools.repo else ()
+    run_id = str(run.get('databaseId'))
+    jobs = json.loads(
+        tools.gh('run', 'view', run_id, '--json', 'jobs') or '{}'
+    ).get('jobs', [])
+    failed = [
+        j for j in jobs
+        if j.get('conclusion') in ('failure', 'timed_out', 'cancelled')
+    ]
+    commits = []
+    for line in tools.git(
+        'log', '--no-merges', '--format=%H%x00%s', f'{base}..{top}'
+    ).splitlines():
+        sha, _, subject = line.partition('\0')
+        if LANDING_SUBJECT.match(subject):
+            continue
+        files = tools.git(
+            'diff-tree', '--no-commit-id', '--name-only', '-r', '-z', sha
+        )
+        commits.append((sha, subject, [p for p in files.split('\0') if p]))
+    report = []
+    for job in failed:
+        log = tools.attempt(
+            'gh', 'run', 'view', run_id, '--log-failed', '--job',
+            str(job.get('databaseId')), *repo,
+        ).stdout
+        named = set(re.findall(r'[A-Za-z0-9_][\w./-]*\.[A-Za-z]{1,5}\b', log))
+        hit = [
+            (sha, subject)
+            for sha, subject, files in commits
+            if any(
+                path in named or any(n.endswith('/' + path) for n in named)
+                for path in files
+            )
+        ]
+        report.append((str(job.get('name')), hit))
+    return report
+
+
 # --- the commands -------------------------------------------------------------
 
 
@@ -1181,6 +1479,12 @@ def land(
             "for or rerun the candidate's run, then land without the flag"
         )
     check_branches(args.phase_branch, args.topic_branch)
+    if args.stack and args.moved_from is not None:
+        raise Refusal(
+            '--stack and --moved-from: a stacked package stands on the '
+            "stack top's run, not a moved-from commit's; restack a moved "
+            'stack with land.py restack'
+        )
     title = one_line(args.title, '--title')
     package = package_of(title)
     on_lane = lane_of(args.topic_branch) is not None
@@ -1191,9 +1495,81 @@ def land(
     check_worktree(tools, candidate)
     base = phase_head(tools, args.remote, args.phase_branch)
     check_descent(tools, candidate, base, args.phase_branch)
-    checkpoint = checkpoint_of(tools, candidate, base, args.checkpoint)
-    if on_lane:
-        check_lane_commits(tools, base, candidate, package, args.remote)
+    chain, chain_problems = stack_chain(
+        tools, base, candidate, remote=args.remote
+    )
+    foreign = [link for link in chain if link.package != package]
+    tail = base
+    if args.stack:
+        if chain_problems:
+            raise Refusal(
+                'the stack below the candidate is not sound:\n- '
+                + '\n- '.join(chain_problems)
+            )
+        limit = stack_max(args.max_stack)
+        if len(chain) >= limit:
+            raise Refusal(
+                f'the stack already holds {len(chain)} packages, the most one '
+                f'CI run covers ({limit}; --max-stack or {STACK_MAX_ENV}); '
+                'land it with land.py stack-land first'
+            )
+        tail = chain[-1].sha if chain else base
+        if args.checkpoint is not None and (
+            resolve(tools, args.checkpoint, 'the checkpoint') != tail
+        ):
+            raise Refusal(
+                f'the checkpoint of a stacked package is the landing below '
+                f'it, {tail[:12]}; omit --checkpoint'
+            )
+        checkpoint = tail
+        stray = commits_not_owned(
+            tools, tail, candidate, package, remote=args.remote
+        )
+        if stray:
+            raise Refusal(
+                f'commits above the stack are not owned by {package}:\n- '
+                + '\n- '.join(f'{c[:12]} {t} ({w})' for c, t, w in stray)
+            )
+    elif foreign:
+        raise Refusal(
+            f'the candidate sits on a stack of other packages\' landing '
+            f'commits ({", ".join(link.package for link in foreign)}); add it '
+            'with `land.py --stack ...`, then land the whole stack with '
+            '`land.py stack-land --tip <its landing commit>`'
+        )
+    else:
+        checkpoint = checkpoint_of(tools, candidate, base, args.checkpoint)
+        if on_lane:
+            check_lane_commits(tools, base, candidate, package, args.remote)
+    # The judging-path rule (T3.0, item 1) and the fix rule (item 4), from
+    # the phase head's list on (none before T3.0 lands it).
+    rules = judging_rules(tools, base)
+    paths = changed_paths(tools, tail, candidate) if rules is not None else []
+    if args.train and rules is None:
+        raise Refusal(
+            f'the head of {args.phase_branch} has no {judging.FILE}, so no '
+            'train: land without --train'
+        )
+    product_before = None
+    if rules is not None and judging.judging(rules, paths) and not args.train:
+        product_before = phase_product(tools, args.remote, base, rules)
+        for link in chain:
+            if product_before is None and judging.product(
+                rules, changed_paths(tools, link.below, link.sha)
+            ):
+                product_before = f'{link.sha[:12]} Land {link.package}'
+    why = judging_problem(
+        paths, rules, package, args.train, tail == base, product_before
+    )
+    if why:
+        raise Refusal(why)
+    unruled = rule_problems(tools, tail, candidate, rules)
+    if unruled:
+        raise Refusal(
+            "fix commits that change product code without a 'Rule:' line "
+            "(the old client's rule they port, one sentence):\n- "
+            + '\n- '.join(unruled)
+        )
     moved: str | None = None
     if args.moved_from is not None:
         moved = resolve(tools, args.moved_from, 'the moved-from commit')
@@ -1202,6 +1578,10 @@ def land(
     evidenced = moved or candidate
     what = 'the moved-from commit' if moved else 'the candidate'
     check_reviews(tools, args.review, evidenced, what)
+    if args.stack:
+        return stack_one(
+            args, tools, out, title, package, candidate, base, tail, chain
+        )
     if moved:
         # E130's order: X's evidence (its reviews, then its run), then the
         # same tree, the same patches and only landing commits in X..H.
@@ -1328,6 +1708,324 @@ def land(
     return status
 
 
+def stack_one(
+    args: argparse.Namespace,
+    tools: Tools,
+    out: Callable[[str], None],
+    title: str,
+    package: str,
+    candidate: str,
+    base: str,
+    tail: str,
+    chain: list[Stacked],
+) -> int:
+    """``land.py --stack``: the package's landing commit, made on the
+    candidate locally with the stack's tail as its Base-SHA and
+    Checkpoint-SHA, pushing nothing (T3.0, item 2). Its CI evidence is the
+    stack top's run, which ``stack-land`` checks."""
+    out(f'ok   worktree clean, HEAD is the candidate {candidate}')
+    out(
+        f'ok   the candidate descends from {args.phase_branch} at {base}'
+        + (
+            f', on a stack of {len(chain)} '
+            f'({", ".join(link.package for link in chain)})'
+            if chain
+            else ''
+        )
+    )
+    out(f'ok   {len(args.review)} reviews approve {candidate[:12]}')
+    reviewer = one_line(
+        args.reviewer
+        or f'independent reviewer (fresh agent) and Codex, {package}',
+        '--reviewer',
+    )
+    extra = {STACK_BASE: base, 'Topic-branch': args.topic_branch}
+    if args.train:
+        extra[TRAIN] = 'yes'
+    landing = Landing(
+        title=title,
+        reviewer=reviewer,
+        protected_paths=one_line(args.protected_paths, '--protected-paths'),
+        base=tail,
+        checkpoint=tail,
+        summary=(
+            args.summary or f'Both reviews approve the candidate {candidate[:7]}.'
+        ).strip(),
+        evidence=(
+            f'Stacked on {tail} ({len(chain)} package(s) below it, on the phase '
+            f'head {base}): it lands with its stack, on the green run of the '
+            "stack's top (land.py stack-land, T3.0), whose tree holds this "
+            "one's; this commit changes no file."
+        ),
+        moved=extra,
+    )
+    if args.dry_run:
+        out('dry run: every check passed; the stacked landing commit would read:\n')
+        out(landing.message())
+        out('dry run: nothing committed')
+        return 0
+    sha = make_landing(tools, landing, candidate)
+    out(f'STACKED {sha}')
+    out(
+        f'next: build the next package on {sha[:12]}, or land the stack with '
+        f'`land.py stack-land --tip {sha}` once the run on its top is green'
+    )
+    return 0
+
+
+def stack_land(
+    args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
+) -> int:
+    """``land.py stack-land --tip SHA``: the stack from the phase head up to
+    TIP, a landing commit made by ``--stack``, lands in one atomic push on
+    one green run: the newest gating run on TIP's tested commit, whose tree
+    holds every package below (T3.0, item 2). A red run is reported by the
+    commits its failed jobs implicate, with the green prefix to land."""
+    if args.topic_branch:
+        check_branches(args.phase_branch, args.topic_branch)
+    tip = resolve(tools, args.tip, 'the stack tip')
+    base = phase_head(tools, args.remote, args.phase_branch)
+    check_descent(tools, tip, base, args.phase_branch)
+    chain, problems = stack_chain(tools, base, tip, remote=args.remote)
+    if not chain or chain[-1].sha != tip:
+        raise Refusal(
+            f'{tip[:12]} is not the top landing commit of a stack on the '
+            f'head of {args.phase_branch} ({base[:12]}); stack each package '
+            'with `land.py --stack ...` and name the last landing commit'
+        )
+    if problems:
+        raise Refusal(
+            'the stack is not sound:\n- ' + '\n- '.join(problems)
+        )
+    limit = stack_max(args.max_stack)
+    if len(chain) > limit:
+        raise Refusal(
+            f'the stack holds {len(chain)} packages, more than one CI run '
+            f'covers ({limit}); land a prefix (--tip a lower landing)'
+        )
+    rules = judging_rules(tools, base)
+    product_before = (
+        phase_product(tools, args.remote, base, rules) if rules else None
+    )
+    refused: list[str] = []
+    for n, link in enumerate(chain):
+        paths = changed_paths(tools, link.below, link.sha)
+        why = judging_problem(
+            paths, rules, link.package, link.train, n == 0, product_before
+        )
+        if why:
+            refused.append(why)
+        refused.extend(rule_problems(tools, link.below, link.sha, rules))
+        if rules and product_before is None and judging.product(rules, paths):
+            product_before = f'{link.sha[:12]} Land {link.package}'
+    if refused:
+        raise Refusal('the stack breaks a landing rule:\n- ' + '\n- '.join(refused))
+    tested = tested_commit(tools, tip)
+    runs = runs_on(tools, tested)
+    if not runs:
+        raise Refusal(
+            f'no CI run on the stack top {tested[:12]} (the last package\'s '
+            'top) that is a push under the phase branch; push it, for '
+            f'example `git push {args.remote} {tested}:refs/heads/'
+            f'{args.phase_branch}-{chain[-1].package.lower()}-stack`, and '
+            'let its run finish'
+        )
+    newest = runs[0]
+    if newest.get('status') != 'completed':
+        raise Refusal(
+            f'the run on the stack top is not finished ({describe(newest)}); '
+            'wait for it'
+        )
+    if newest.get('conclusion') != 'success':
+        out(f'RED  {describe(newest)} {newest.get("url")}, on the stack top {tested[:12]}')
+        report = implicated(tools, newest, base, tested)
+        first_bad: int | None = None
+        for job, hits in report:
+            if not hits:
+                out(f'IMPLICATED {job}: no stack commit by path; read `gh run view {newest.get("databaseId")} --log-failed`')
+            for sha, subject in hits:
+                out(f'IMPLICATED {job}: {sha[:12]} {subject}')
+                for n, link in enumerate(chain):
+                    if tools.git_ok('merge-base', '--is-ancestor', sha, link.sha):
+                        first_bad = n if first_bad is None else min(first_bad, n)
+                        break
+        if first_bad is None:
+            out(
+                'no package is implicated by path; if the failure is drift or a '
+                f'flake, rerun it (`gh run rerun {newest.get("databaseId")} '
+                '--failed`) and land again'
+            )
+        elif first_bad == 0:
+            out(f'the first package, {chain[0].package}, is implicated: no green prefix')
+        else:
+            prefix = chain[first_bad - 1]
+            ptested = tested_commit(tools, prefix.sha)
+            out(
+                f'PREFIX RUN: git push {args.remote} {ptested}:refs/heads/'
+                f'{args.phase_branch}-{prefix.package.lower()}-prefix'
+            )
+            out(f'GREEN PREFIX: land.py stack-land --tip {prefix.sha}')
+        return 1
+    out(f'ok   the stack of {len(chain)} on {args.phase_branch} at {base[:12]} is sound')
+    for link in chain:
+        out(f'ok   {link.sha[:12]} Land {link.package} on {link.below[:12]}')
+    out(f'ok   {describe(newest)}, on the stack top {tested[:12]}')
+    if args.dry_run:
+        out('dry run: nothing pushed')
+        return 0
+    refs = [f'{tip}:refs/heads/{args.phase_branch}']
+    if args.topic_branch:
+        refs.append(f'{tip}:refs/heads/{args.topic_branch}')
+    push(
+        tools,
+        'nothing was committed; the push changed nothing',
+        '--atomic',
+        args.remote,
+        *refs,
+    )
+    out(f'ok   fast-forwarded {args.phase_branch} to {tip}')
+    for link in chain:
+        out(f'landed {link.sha} Land {link.package}')
+    out(f'LANDED {tip}')
+    status = 0
+    if args.topic_branch and lane_of(args.topic_branch) is not None:
+        mismatch = confirm_lane(
+            tools, args.remote, args.topic_branch, args.phase_branch, tip
+        )
+        if mismatch:
+            out(f'LANE MISMATCH: the remote has {mismatch}, not both at {tip}')
+            status = 1
+    out('next: land.py verify <each landing above>')
+    return status
+
+
+def replace_trailers(message: str, values: dict[str, str]) -> str:
+    """``message`` with each trailer of ``values`` set to its value."""
+    lines = message.rstrip('\n').split('\n')
+    seen = set()
+    for n, line in enumerate(lines):
+        key = line.partition(': ')[0]
+        if key in values and line.startswith(key + ': '):
+            lines[n] = f'{key}: {values[key]}'
+            seen.add(key)
+    missing = [f'{k}: {v}' for k, v in values.items() if k not in seen]
+    return '\n'.join(lines + missing) + '\n'
+
+
+def restack(
+    args: argparse.Namespace, tools: Tools, out: Callable[[str], None]
+) -> int:
+    """``land.py restack --tip SHA``: moves a stack onto the phase head as
+    it is now, keeping its reviews when every patch is the same (T3.0,
+    item 2; move_confirm.py's rule, by patch-id). Each package's commits
+    are cherry-picked in a scratch worktree, in order (the train first with
+    ``--train-first``), each new commit's patch-id must be its old one's,
+    and each landing commit is made again with the new Base-SHA,
+    Checkpoint-SHA and Stack-base. A conflict or a changed patch refuses and
+    changes nothing: that package needs a review round. With
+    ``--move-branches`` each package's Topic-branch, where the remote holds
+    the package's old top, moves to its new top as ``auto_land.py`` moves a
+    rebased lane: the old tip kept under an archive branch, the branch
+    pushed with a lease on the old tip. The new top needs its own CI run."""
+    tip = resolve(tools, args.tip, 'the stack tip')
+    base = phase_head(tools, args.remote, args.phase_branch)
+    old_base = tools.git('merge-base', tip, base).strip()
+    if old_base == base:
+        raise Refusal(f'the stack is already on the head of {args.phase_branch}')
+    chain, problems = stack_chain(tools, old_base, tip, remote=args.remote)
+    if not chain or chain[-1].sha != tip:
+        raise Refusal(f'{tip[:12]} is not the top landing commit of a stack')
+    if problems:
+        raise Refusal('the stack is not sound:\n- ' + '\n- '.join(problems))
+    order = list(chain)
+    if args.train_first:
+        trains = [link for link in order if link.train]
+        order = trains + [link for link in order if not link.train]
+    scratch = Path(tempfile.mkdtemp(prefix='sdm-restack-'))
+    where = str(scratch / 'tree')
+    tools.git('worktree', 'add', '--quiet', '--detach', where, base)
+    moved: list[tuple[Stacked, str, str]] = []
+    try:
+        current = base
+        for link in order:
+            olds = tools.git(
+                'rev-list', '--reverse', '--no-merges', f'{link.below}..{link.sha}^'
+            ).split()
+            for old in olds:
+                done = tools.attempt('git', '-C', where, 'cherry-pick', old)
+                if done.returncode != 0:
+                    tools.attempt('git', '-C', where, 'cherry-pick', '--abort')
+                    raise Refusal(
+                        f'{link.package}: {old[:12]} does not apply on the new '
+                        'head without a conflict; it needs a normal move and '
+                        'review round'
+                    )
+            news = tools.git(
+                '-C', where, 'rev-list', '--reverse', f'{current}..HEAD'
+            ).split()
+
+            def ids(shas: list[str]) -> list[str]:
+                found = []
+                for sha in shas:
+                    patch = tools.git('show', '--format=', sha)
+                    done = subprocess.run(
+                        ['git', 'patch-id', '--stable'],
+                        input=patch, capture_output=True, text=True,
+                    )
+                    found.append((done.stdout.split() or [''])[0])
+                return found
+
+            if len(news) != len(olds) or ids(news) != ids(olds):
+                raise Refusal(
+                    f'{link.package}: the move changed a patch; it needs a '
+                    'review round on the new SHA'
+                )
+            top = tools.git('-C', where, 'rev-parse', 'HEAD').strip()
+            message = replace_trailers(
+                tools.git('log', '-1', '--format=%B', link.sha),
+                {'Base-SHA': current, 'Checkpoint-SHA': current, STACK_BASE: base},
+            )
+            note = Path(scratch / 'message.txt')
+            note.write_text(message)
+            tools.git(
+                '-C', where, 'commit', '--allow-empty', '--quiet', '-F', str(note)
+            )
+            current = tools.git('-C', where, 'rev-parse', 'HEAD').strip()
+            moved.append((link, top, current))
+    finally:
+        tools.attempt('git', 'worktree', 'remove', where)
+    for link, top, landing in moved:
+        out(f'moved {link.package}: {link.sha[:12]} -> {landing} (top {top[:12]})')
+        branch = link.trailers.get('Topic-branch', '')
+        if not (args.move_branches and branch):
+            continue
+        old_top = tools.git('rev-parse', f'{link.sha}^').strip()
+        held = tools.git('ls-remote', args.remote, f'refs/heads/{branch}').split()
+        if not held or held[0] not in (old_top, link.sha):
+            out(f'left {branch}: the remote does not hold {link.package}\'s old top')
+            continue
+        archive = phase_named(args.phase_branch).archive_prefix + (
+            f'{branch.rsplit("-", 1)[-1]}-{link.package}-{held[0][:8]}'
+        )
+        push(
+            tools,
+            f'{branch} was not moved',
+            '--atomic',
+            f'--force-with-lease=refs/heads/{branch}:{held[0]}',
+            args.remote,
+            f'{held[0]}:refs/heads/{archive}',
+            f'{top}:refs/heads/{branch}',
+        )
+        out(f'ok   {branch} moved to {top[:12]}; the old tip kept as {archive}')
+    new_tip = moved[-1][2]
+    out(f'RESTACKED {new_tip}')
+    out(
+        f'next: push the new top {moved[-1][1][:12]} for its CI run, then '
+        f'`land.py stack-land --tip {new_tip}`'
+    )
+    return 0
+
+
 def push(tools: Tools, undo: str, *args: str) -> None:
     # --no-verify: the pre-push hook would run prepush.sh's whole cheap tier
     # again. On a lane, land.py has made the hook's lane checks itself
@@ -1439,6 +2137,36 @@ def verify(
             f'{sha[:12]} is not in {args.phase_branch} (at {head[:12]}); '
             'verify checks a landing the phase branch holds'
         )
+    if evidenced and not problems and STACK_BASE in trailers:
+        # A stacked landing (T3.0) stands on its stack top's run when its
+        # own candidate has none green: the first later landing of the same
+        # stack whose tested commit's run is green, whose tree holds this
+        # one's (it descends from it).
+        own, _ = evidence_problem(
+            tools, runs_on(tools, evidenced), evidenced, what
+        )
+        if own is not None:
+            later = tools.git(
+                'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+                f'{sha}..{head}',
+            ).splitlines()
+            for line in later:
+                above, _, subject = line.partition('\0')
+                if not LANDING_SUBJECT.match(subject):
+                    continue
+                if trailers_of(tools, above).get(STACK_BASE) != trailers[STACK_BASE]:
+                    continue
+                top = tested_commit(tools, above)
+                why_top, _ = evidence_problem(
+                    tools, runs_on(tools, top), top, 'the stack top'
+                )
+                if why_top is None:
+                    evidenced = top
+                    what = (
+                        f'the stack top (landed with {above[:12]}), whose tree '
+                        f'holds {sha[:12]}\'s, at'
+                    )
+                    break
     unresolved: list[dict[str, object]] = []
     green: dict[str, object] | None = None
     if evidenced and not problems:
@@ -1548,6 +2276,34 @@ def parser_for(command: str) -> argparse.ArgumentParser:
         parser.add_argument(
             '--appear-timeout', type=float, default=0, help=argparse.SUPPRESS
         )
+    elif command in ('stack-land', 'restack'):
+        parser = argparse.ArgumentParser(
+            prog=f'land.py {command}',
+            description=(
+                stack_land if command == 'stack-land' else restack
+            ).__doc__.split('\n\n', 1)[0],
+        )
+        parser.add_argument(
+            '--tip', required=True, help='the top landing commit of the stack'
+        )
+        if command == 'stack-land':
+            parser.add_argument(
+                '--topic-branch',
+                help="also fast-forward this branch (the stack top's) to the tip",
+            )
+            parser.add_argument('--max-stack', type=int)
+            parser.add_argument('--dry-run', action='store_true')
+        else:
+            parser.add_argument(
+                '--train-first',
+                action='store_true',
+                help='move the train package to the front of the stack',
+            )
+            parser.add_argument(
+                '--move-branches',
+                action='store_true',
+                help="move each package's Topic-branch to its new top",
+            )
     else:
         parser = argparse.ArgumentParser(
             prog='land.py', description=__doc__.split('\n', 1)[0]
@@ -1578,6 +2334,25 @@ def parser_for(command: str) -> argparse.ArgumentParser:
             metavar='SHA',
             help="land on this commit's reviews and green run: the "
             'candidate is it moved over landing commits only (E130)',
+        )
+        parser.add_argument(
+            '--stack',
+            action='store_true',
+            help="add the package to the stack: make its landing commit on "
+            'the stack tail locally, needing no CI run and pushing nothing; '
+            'land.py stack-land lands the stack (T3.0)',
+        )
+        parser.add_argument(
+            '--train',
+            action='store_true',
+            help='the package is the tooling train: judging paths, their '
+            'tests and docs only, first in its stack (T3.0)',
+        )
+        parser.add_argument(
+            '--max-stack',
+            type=int,
+            help=f'the most packages one stack holds (default {STACK_MAX}, '
+            f'or {STACK_MAX_ENV})',
         )
     # Resolved in main: the flag, SDM_PHASE_BRANCH, the topic branch's
     # phase (landing), else the phase in progress (phases.py).
@@ -1618,9 +2393,11 @@ def main(
     out: Callable[[str], None] = print,
 ) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    command = 'verify' if argv[:1] == ['verify'] else 'land'
+    command = (
+        argv[0] if argv[:1] in (['verify'], ['stack-land'], ['restack']) else 'land'
+    )
     args = parser_for(command).parse_args(
-        argv[1:] if command == 'verify' else argv
+        argv if command == 'land' else argv[1:]
     )
     tools = tools or Tools()
     tools.repo = args.repo or tools.repo or repo_of(tools, args.remote)
@@ -1644,7 +2421,13 @@ def main(
                 f'{error}; land.py lands only on a phase branch'
             ) from error
         tools.phase = phase_named(args.phase_branch)
-        return (verify if command == 'verify' else land)(args, tools, out)
+        commands = {
+            'verify': verify,
+            'land': land,
+            'stack-land': stack_land,
+            'restack': restack,
+        }
+        return commands[command](args, tools, out)
     except Refusal as why:
         out(f'REFUSED: {why}')
         return 2

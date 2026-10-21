@@ -700,12 +700,15 @@ def next_steps(plan: Plan, remote: str) -> list[str]:
         f"'{plan.package}: ...' or '{plan.package} tracker: ...' "
         '(prepush.sh and land.py refuse any other); squash fixup! and '
         'squash! commits (git rebase --autosquash) before pushing',
-        '  scripts/rust_core/prepush.sh before each push, --full before the '
-        'last',
+        '  scripts/rust_core/handoff.py run --package '
+        f'{plan.package} before reporting ready (reviews refuse a SHA '
+        'without its stamp); scripts/rust_core/prepush.sh (the cheap tier, '
+        'never --full) before each push',
         f'  git push {remote} HEAD:{plan.branch}',
-        '  land with scripts/rust_core/land.py --topic-branch '
+        '  land with scripts/rust_core/land.py --stack --topic-branch '
         f"{plan.branch} --title 'Land {plan.package}: ...' (it checks the "
-        'package), then land.py verify and prune_caches.py --delete',
+        'package), then land.py stack-land --tip <landing>, land.py verify '
+        'and prune_caches.py --delete',
         f"  the lane's next package: lane.py start --lane {plan.lane} "
         '--package <ID>',
     ]
@@ -808,7 +811,11 @@ def check_lane_range(
     ).stdout.strip()
     if not base:
         raise Refusal(f'no {base_ref}; fetch {remote} first')
-    stray = commits_not_owned(tools, base, head, package, remote=remote)
+    # A package stacked on approved packages' landing commits (land.py
+    # --stack, T3.0) carries the stack below it: checked as a stack.
+    stray = commits_not_owned(
+        tools, base, head, package, remote=remote, stacked=True
+    )
     if stray:
         raise Refusal(
             f'{branch} carries {package}, and these commits since '

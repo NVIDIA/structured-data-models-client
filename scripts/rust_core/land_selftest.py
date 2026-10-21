@@ -176,6 +176,10 @@ class Fake:
         ok = land.Completed(0)
         if args[0] == 'status':
             return land.Completed(0, self.status)
+        if args[0] == 'show':
+            # No judging-paths list at the phase head: the scripted phase
+            # predates T3.0, whose rules the T3.0 tests hold.
+            return land.Completed(1)
         if args[0] == 'fetch':
             return ok
         if args[:2] == ['rev-list', '--merges']:
@@ -1419,7 +1423,9 @@ for label, fake_of, why in (
     ('changes a file', lambda: relanding(tree='tree-changed'), 'changes no file'),
     ('has no Base-SHA', lambda: relanding(base=None), 'has none'),
     ('has a Base-SHA outside the phase', lambda: relanding(base=OTHER), 'not in the phase branch'),
-    ("is another package's", lambda: relanding(subject='Land T1.98: other'), "is not 'Land T1.99"),
+    # Since T3.0 another package's landing commit below is a stack, which
+    # plain land.py refuses, naming stack-land.
+    ("is another package's", lambda: relanding(subject='Land T1.98: other'), 'stack-land'),
 ):  # fmt: skip
 
     @case(f'refused: an earlier landing commit on the lane that {label}')

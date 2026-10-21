@@ -28,8 +28,13 @@ commit but a package the candidate is stacked on, landed on a head that
 is a landing commit, the checkpoint is the merge base with that head, so
 every job of a run judges against the same commit (decision E131).
 ``--phase-push`` is a push to the phase branch, ``BEFORE`` its previous
-tip: the push must land exactly one package, the candidate being that
-landing commit with ``Base-SHA`` ``BEFORE``, as a fast-forward. It refuses
+tip: the push must land one package, the candidate being that landing
+commit with ``Base-SHA`` ``BEFORE``, as a fast-forward, or a stack of up to
+``SDM_STACK_MAX`` (default 4) packages (T3.0, ``land.py stack-land``), each
+landing commit's ``Base-SHA`` the landing before it and the first's
+``BEFORE``, so each landing's checkpoint stays the landing before it; the
+candidate, the stack's top landing, is judged against its own
+``Base-SHA``. It refuses
 a candidate that is its own checkpoint (self-comparison: the base already
 holds the candidate) and a checkpoint that is not a landing commit, so
 advancing the phase branch to an unreviewed commit cannot make that commit
@@ -605,19 +610,38 @@ def resolve(
             problems.append(
                 'the push is not a fast-forward of the previous tip'
             )
-        if landings != [candidate]:
+        limit = stack_limit()
+        if not landings or landings[0] != candidate:
             problems.append(
-                'a push to the phase branch lands exactly one package, as '
-                f'its tip: it holds {len(landings)} landing commits'
-                + ('' if candidate in landings else ', and its tip is none')
+                'a push to the phase branch lands packages, its tip a landing '
+                f'commit: it holds {len(landings)} landing commits, and its '
+                'tip is none'
             )
-        elif trailers(repo, candidate).get('Base-SHA') != before:
+        elif len(landings) > limit:
             problems.append(
-                "the landing's Base-SHA is not the phase branch's previous tip"
+                f'a push to the phase branch lands at most {limit} packages '
+                f'(a stack, T3.0): it holds {len(landings)} landing commits'
             )
+        else:
+            # A stack (T3.0): each landing's Base-SHA is the landing before
+            # it, the first's the previous tip, so each landing's checkpoint
+            # is the landing before it.
+            below = before
+            for sha in reversed(landings):
+                if trailers(repo, sha).get('Base-SHA') != below:
+                    problems.append(
+                        "the landing's Base-SHA is not the phase branch's "
+                        'previous tip'
+                        if below == before
+                        else f'the landing {sha[:12]} does not stack on the '
+                        f'landing before it, {below[:12]}: its Base-SHA is '
+                        'not that landing'
+                    )
+                    break
+                below = sha
         if problems:
             return None, problems
-        base = before
+        base = trailers(repo, candidate)['Base-SHA']
     elif is_landing(repo, candidate):
         recorded = trailers(repo, candidate)['Base-SHA']
         notes.append(
@@ -683,6 +707,13 @@ def resolve(
         )
     bootstrap = Tree(repo, found).read('scripts/rust_core/ratchet.py') is None
     return Checkpoint(found, base, candidate, bootstrap, notes), []
+
+
+def stack_limit() -> int:
+    r"""The most landings one phase push may hold: ``SDM_STACK_MAX``, as
+    land.py reads it, else 4 (T3.0, the owner's "every N packages")."""
+    raw = os.environ.get('SDM_STACK_MAX', '')
+    return int(raw) if raw.isdigit() and int(raw) > 0 else 4
 
 
 # --- reading -------------------------------------------------------------------

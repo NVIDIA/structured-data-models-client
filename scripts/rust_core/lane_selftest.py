@@ -38,6 +38,8 @@ SCRIPTS = Path(__file__).resolve().parent
 LANE_PY = SCRIPTS / 'lane.py'
 LAND_PY = SCRIPTS / 'land.py'
 PHASE = 'rust-core-phase-1'
+sys.path.insert(0, str(SCRIPTS))
+from phases import CURRENT  # noqa: E402
 BRANCH = f'{PHASE}-lane-1b'
 PROTECTED = ('main', 'rust-core', PHASE)
 
@@ -1030,7 +1032,9 @@ def landing_commit(
 for label, why in (
     ('changes a file', 'changes no file'),
     ('has a Base-SHA outside the phase', 'not in the phase branch'),
-    ('lands another package', "is not 'Land T1.11e"),
+    # Since T3.0 another package's landing commit below is a stack: both
+    # refuse it, the check as a stack, land.py naming stack-land.
+    ('lands another package', 'T1.11f'),
 ):
 
     @case(f'check and land.py: refuse a landing commit that {label}')
@@ -1125,7 +1129,7 @@ def _(w: World) -> tuple[bool, str]:
     # The clone has main checked out, so phases.CURRENT, which this
     # remote lacks.
     return verdict(
-        refused_untouched(w, ran, f'origin has no {PHASE_2}', before),
+        refused_untouched(w, ran, f'origin has no {CURRENT}', before),
         'refused, naming the phase in progress',
         ran,
     )
