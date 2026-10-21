@@ -1,3 +1,4 @@
 coverage: python S0: 2 paths, each with an acceptance case; 315 cases read
-coverage: rule 8 against 9a8999507f3d
+coverage: rule 8 against f133c4b8f52e
 coverage: ok
+exit 0

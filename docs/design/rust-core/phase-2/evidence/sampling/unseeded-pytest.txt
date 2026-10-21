@@ -15,5 +15,5 @@ contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_
 contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded@postgres] PASSED [ 88%]
 contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded.chain@postgres] PASSED [100%]
 
-======================== 9 passed in 287.35s (0:04:47) =========================
+======================== 9 passed in 139.32s (0:02:19) =========================
 exit 0

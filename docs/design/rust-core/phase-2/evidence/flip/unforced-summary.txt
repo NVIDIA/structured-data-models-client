@@ -1,1 +1,1 @@
-2789 passed, 22 skipped, 76 warnings in 163.61s (0:02:43)
+2789 passed, 22 skipped, 76 warnings in 151.01s (0:02:31)

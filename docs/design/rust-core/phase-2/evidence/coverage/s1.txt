@@ -1,4 +1,4 @@
-# S1 coverage at f133c4b8f52ed5934a17218be0ca7b0f94e03436: python manifest, acceptance cases only (315 cases read)
+# S1 coverage at aa44c1d95d27b71bc9d090f3c6d95b9f9f30f0a3: python manifest, acceptance cases only (315 cases read)
 paths in S0 and S1: 75; with an acceptance case: 17; empty: 58
   empty path source.open/explicit/duckdb
   empty path source.open/auto/duckdb
