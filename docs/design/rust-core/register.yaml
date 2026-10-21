@@ -2985,7 +2985,12 @@ entries:
   affected_inputs: >-
     SDMClient.predict of a request materialized on the core over a DuckDB
     source, under a forced core route, answered with JSON text holding a
-    lone surrogate escape.
+    lone surrogate escape; widened at T2.16 to a raw lone surrogate too: in
+    an answer encoded as UTF-16 or UTF-32, in UTF-8 bytes Python's reader
+    takes with surrogatepass, and in a Databricks serving answer's text
+    (which the transport encodes with surrogatepass), each refused
+    INVALID_RESPONSE (category encoding) where the reference reads it or,
+    on Databricks, fails with a bare UnicodeEncodeError.
   cases: [T1.11d, T1.28b]
   status: approved
   approved_by: owner
@@ -2998,6 +3003,14 @@ entries:
     owner, never self-approved. Reading it would need text that is not
     UTF-8 (a replacement character would differ too); a named refusal is
     the recommendation. Approved by the owner on 2026-10-13, relayed by the orchestrator (E93): "if we're sure it's invalid, refuse"; a lone surrogate is never valid Unicode text, cannot be encoded as UTF-8 and arises only from lossy byte decoding.
+    Widened at T2.16 (the whole-phase review's finding that answers in
+    UTF-8 with a mark, UTF-16 and UTF-32 were refused; the fix reads them
+    as Python's reader decodes bytes) to the raw lone surrogates in
+    affected_inputs: the same class, a code point the core cannot hold as
+    text, refused by name instead of crashing. The widening is the
+    orchestrator's decision under the owner's overnight delegation
+    (phase-2/decisions.md KO2-88), listed for the owner's reading; the
+    owner's approval above (E93) is unchanged and covers the escaped form.
 
 - id: P1B-25
   title: A probability written with a decimal digit Unicode added after 13.0 is refused where Python 3.12 and later read it
