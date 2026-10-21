@@ -14,7 +14,7 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.0f | The locked-set reader for Phase 2, check 7's `main` ancestry, the `<case>@<database>` keys | H | landed | b8f704e3 | Lands after T2.0e and before T2.0a, so the lock reads with the checkpoint's reader |
 | T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | B | landed | 5a33dd7d | T2.17's exact decimals done inside it (KO2-91) |
 | T2.0d | Refusal census | H | dropped | – | Folded into T2.1a, which landed the census tool and its first DuckDB run (abd6846b, [tracker-T2.1a.md](tracker-T2.1a.md)); a one-time report at the phase end, not a gate step (KO2-53, KO2-76, KO2-91) |
-| T2.0b | Carried tooling rows | H | dropped | – | Shrunk by the owner to the watchdog and temp-cleanup fixes (KO2-91), which never landed; its carried rows go to "Carried into Phase 3" in migration-plan.md section 8 |
+| T2.0b | Carried tooling rows | H | not built | – | Shrunk by the owner to the watchdog and temp-cleanup fixes (KO2-91), never built: the two fixes are carried as P2-T2.0b-2 and P2-T2.0b-3, and its other carried rows as "Carried into Phase 3" rows in migration-plan.md section 8 |
 | T2.0g | The gate judges the merge of `main` (a deleted covered function, more-exact fields, new cases moved) | – | landed | 95259022 | [tracker-T2.0g.md](tracker-T2.0g.md) |
 | T2.0h | The floor cell at its new pins | – | landed | 5520d634 | [tracker-T2.0h.md](tracker-T2.0h.md) |
 | T2.0i | `main` merged again, the reference re-recorded at 43e55f4f | n | landed | 2df155b6 | KO2-81, KO2-84; [tracker-T2.0i.md](tracker-T2.0i.md) |

@@ -22,5 +22,6 @@ The tool has no rule for two approved entries, so it prints them UNCLASSIFIED; e
 | g193 | A text column (`cat`, values `US`, `DE`, `IN`) made the time column by an edit: both refuse; the reference with `INVALID_REQUEST`, the core with `UNSUPPORTED_REQUEST`, rule `text_time` | DT-15 (text outside the core's list of formats refused by name) | owner, E66 |
 
 So every divergence is classified under an approved entry, and none is a new refusal of an input the reference accepts.
-The seven payload differences are the ones T2.8c's tracker reported as a pre-existing finding; they are the more-exact decimal class, not a defect.
-Teaching `differential.py` these two rules is carried into Phase 3 (no new harness at the phase end, KO2-91).
+The seven payload differences are the more-exact decimal class, not a defect.
+On the same generated sources, T2.8c's and T2.13b's trackers reported a different difference: `from_source` read column `d` as categorical on one route and numerical on the other. At this tree the inferred schemas agree on every source, so that difference was closed by a later landing (not bisected; T2.14b's decimal stype fix is the likely one), and L3's first difference on these sources is now the payload's.
+Teaching `differential.py` these two rules is carried into Phase 3 as P2-T2.16-5 (no new harness at the phase end, KO2-91).
