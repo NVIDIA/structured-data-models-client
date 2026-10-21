@@ -1945,7 +1945,15 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
             rows.push(Value::Array(cells));
         }
     }
-    Ok(json!({"columns": columns, "rows": rows}))
+    let mut recorded = json!({"columns": columns, "rows": rows});
+    // The result's explanation (T2.13), on the schema's metadata as the JSON
+    // text the core wrote, recorded as text so the hosts are held to the
+    // same bytes (T2.16a); an item's explanation and metadata are the
+    // result's own columns, among the rows.
+    if let Some(explanation) = data.schema.metadata().get("explanation") {
+        recorded["explanation"] = Value::String(explanation.clone());
+    }
+    Ok(recorded)
 }
 
 /// A list cell's members as [`result_rows`] records a cell: an integer,

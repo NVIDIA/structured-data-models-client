@@ -1033,7 +1033,9 @@ class _Capture:
 
 def _result_rows(stream: Any) -> dict[str, Any]:
     r"""An Arrow result the core gave, as the pure-Rust host records one:
-    its columns' names and types, and its rows in order, each cell an
+    the result's explanation where the core gave one (its schema's
+    ``explanation``, T2.16a), its columns' names and types, and its rows in
+    order, each cell an
     integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
     hex digits, so no text form of a float is compared) or text
     (``utf8``); from T1.28b a boolean (``bool``) and a class's
@@ -1102,7 +1104,15 @@ def _result_rows(stream: Any) -> dict[str, Any]:
             strict=True,
         )
     ]
-    return {'columns': columns, 'rows': rows}
+    recorded: dict[str, Any] = {'columns': columns, 'rows': rows}
+    # The result's explanation (T2.13), on the schema's metadata as the JSON
+    # text the core wrote, recorded as text so the hosts are held to the
+    # same bytes (T2.16a); an item's explanation and metadata are the
+    # result's own columns, among the rows.
+    explanation = (table.schema.metadata or {}).get(b'explanation')
+    if explanation is not None:
+        recorded['explanation'] = explanation.decode('utf-8')
+    return recorded
 
 
 #: A pyarrow integer type's contract scalar tag.

@@ -276,7 +276,8 @@
               "required": ["columns", "rows"],
               "properties": {
                 "columns": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name", "type"], "properties": {"name": {"type": "string"}, "type": {"type": "string"}}}},
-                "rows": {"type": "array", "items": {"type": "array"}}
+                "rows": {"type": "array", "items": {"type": "array"}},
+                "explanation": {"description": "The result's explanation where the core gave one: its Arrow schema's metadata key explanation, the JSON text the core wrote, as text (T2.13; recorded by both core runners from T2.16a, so the gate holds the hosts to the same bytes); absent where it gave none. An item's explanation and metadata are the result's own columns, among the rows.", "type": "string"}
               }
             }
           }
