@@ -35,7 +35,10 @@ timed in a loop) so the crossings' own cost is counted.
 ``report`` holds them to KO2-29's limits and writes ``l7.md``:
 
 1. CPU: the median scenario's core-to-reference ratio at most 1.0, and
-   every scenario's at most 1.1;
+   every scenario's at most 1.1, over the scenarios complete on both
+   sides: a scenario any repetition of which stopped before the stage its
+   case runs to (a refusal, say) did less work, so it is listed as
+   incomplete and left out of the verdict, as it is of item 4;
 2. import time: the core's at most the reference client's;
 3. native library: the candidate wheel's ``_native`` library at most 1.25
    times the baseline wheel's (Phase 1's merged wheel, built at 91a00319;
@@ -268,7 +271,7 @@ def cmd_measure(args: argparse.Namespace) -> int:
             continue
         runs: list[dict[str, float]] = []
         boundary: list[dict[str, Any]] = []
-        outcome = None
+        outcomes: list[dict[str, Any]] = []
         for _ in range(args.repeats):
             clock.spent = {}
             codec.reset()
@@ -277,7 +280,7 @@ def cmd_measure(args: argparse.Namespace) -> int:
                     run.routes_on(case, args.database)
                 )
             try:
-                outcome = run._call(case, bases, False, args.database)[0]
+                outcomes.append(run._call(case, bases, False, args.database)[0])
             finally:
                 os.environ.pop('SDM_CORE_ROUTES', None)
             runs.append(dict(clock.spent))
@@ -288,9 +291,15 @@ def cmd_measure(args: argparse.Namespace) -> int:
                     'cpu': codec.cpu,
                 }
             )
+        # A scenario is complete only when every repetition answered
+        # through the stage the case runs to: one that stopped early did
+        # less work, and its CPU is no comparison (T2.16a fix 1).
+        seen = sorted(
+            {f'{o.get("result")} at {o.get("stage")}' for o in outcomes}
+        )
         entry: dict[str, Any] = {
-            'outcome': (outcome or {}).get('result'),
-            'stage': (outcome or {}).get('stage'),
+            'outcomes': seen,
+            'complete': seen == [f'success at {case["until"]}'],
             'cpu': {
                 stage: statistics.median(r.get(stage, 0.0) for r in runs)
                 for stage, _, _ in CALLS
@@ -432,8 +441,16 @@ def judge(
     ]
     both = sorted(set(ref['scenarios']) & set(core['scenarios']))
     only = sorted(set(ref['scenarios']) ^ set(core['scenarios']))
+    # Only a scenario every repetition of both completed is judged.
+    incomplete = [
+        key
+        for key in both
+        if ref['scenarios'][key].get('complete') is not True
+        or core['scenarios'][key].get('complete') is not True
+    ]
+    judged = [key for key in both if key not in incomplete]
     rows = []
-    for key in both:
+    for key in judged:
         r, c = ref['scenarios'][key], core['scenarios'][key]
         rows.append((key, r['cpu']['total'], c['cpu']['total']))
     ratios = [_ratio(c, r) for _, r, c in rows]
@@ -450,6 +467,14 @@ def judge(
         '',
         f'- scenarios measured on both: {len(both)}'
         + (f'; on one only (not judged): {only}' if only else ''),
+        f'- incomplete on either side, a repetition stopping before the '
+        f'stage the case runs to (not judged): {len(incomplete)}',
+        *(
+            f'  - {key}: reference {ref["scenarios"][key].get("outcomes")}, '
+            f'core {core["scenarios"][key].get("outcomes")}'
+            for key in incomplete
+        ),
+        f'- judged: {len(judged)}',
         '- median core-to-reference ratio: '
         + (f'{median:.3f}' if median is not None else 'none')
         + f' (limit {MEDIAN_CPU_RATIO})',
@@ -491,7 +516,7 @@ def judge(
         ]
     crossing = core.get('crossing_cpu') or 0.0
     over, largest, rows_b = [], 0, []
-    for key in both:
+    for key in judged:
         c = core['scenarios'][key]
         b = c.get('boundary') or {}
         overhead = b.get('codec_cpu', 0.0) + b.get('messages', 0) * crossing
@@ -500,7 +525,7 @@ def judge(
         rows_b.append((key, overhead, bound, b.get('messages', 0)))
         if overhead > bound:
             over.append(key)
-    boundary_ok = bool(both) and not over
+    boundary_ok = bool(judged) and not over
     held &= boundary_ok
     worst = max(rows_b, key=lambda row: row[1] / row[2], default=None)
     lines += [
