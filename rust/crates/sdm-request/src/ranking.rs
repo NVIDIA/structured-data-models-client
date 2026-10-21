@@ -111,13 +111,10 @@ pub enum Candidate {
     Spelled(String),
     /// A value of a type no scalar holds, by its text and its kind's name
     /// (`GivenCandidate::Typed`): written as [`Candidate::Spelled`] is,
-    /// and in one group with another the host names the same `first` of
-    /// (the host's language's equality), or, where it names none, with
-    /// another of one kind and one text.
+    /// and equal to another of one kind and one text.
     Typed {
         text: String,
         kind: TypedKind,
-        first: Option<u32>,
     },
     /// A value the host holds equal to one given before it, left out
     /// (`GivenCandidate::Repeat`).
@@ -208,10 +205,7 @@ impl Candidate {
                 Some(format!("n{}", trimmed(decimal_text(unscaled, *scale))))
             }
             Candidate::Text(text) => Some(format!("s{text}")),
-            Candidate::Typed { text, kind, first } => Some(match first {
-                Some(first) => format!("g{first}"),
-                None => format!("t{kind:?}\u{0}{text}"),
-            }),
+            Candidate::Typed { text, kind } => Some(format!("t{kind:?}\u{0}{text}")),
             Candidate::Spelled(_)
             | Candidate::Repeat
             | Candidate::Other(_)
@@ -242,7 +236,6 @@ pub fn read(given: &GivenCandidate) -> Candidate {
             return Candidate::Typed {
                 text: typed.text.clone(),
                 kind: typed.kind,
-                first: typed.first,
             };
         }
         GivenCandidate::Repeat => return Candidate::Repeat,

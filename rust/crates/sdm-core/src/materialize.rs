@@ -3609,7 +3609,11 @@ async fn anchors_checked(
             )
             .with_field("reason", Detail::text("context_before_data"))
             .with_field("context_anchor", at(context_anchor))
-            .with_field("earliest", at(bounds.min)));
+            .with_field("earliest", at(bounds.min))
+            // As the reference's client marks this refusal
+            // (`window_outran_the_data`), so a forecast's step says its
+            // window is that step's (T2.14b fix 7).
+            .with_field("window_outran_the_data", Detail::Scalar(Scalar::Bool(true))));
         }
         // The reference's three warnings of the context's anchor, of which
         // it gives the first that holds: a context anchored after the

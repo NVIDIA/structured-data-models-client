@@ -244,11 +244,11 @@ def _indices(indices: Sequence[Any]) -> Any:
 
 def _candidates(candidates: Sequence[Any]) -> list[Any]:
     r"""A ranking's candidates as the contract's given candidates (T2.8),
-    each as the caller gave it, a repeat among them: which candidates
-    repeat, as the reference's ``dict.fromkeys`` keeps the first of each by
-    Python's equality, is the core's (``sdm-request``'s ranking, T2.14b),
-    but for a date, a time of day or a timestamp, whose group this names
-    by Python's own equality (``first``).
+    each as the caller gave it. Which candidates repeat is Python's: a
+    candidate equal to one given before it, by
+    Python's own ``==`` and ``hash`` as the reference's ``dict.fromkeys``
+    keeps the first of each, is ``repeat``, which the core leaves out
+    (T2.14b fix 7); the core holds each other as given.
     One Python cannot hash, which ``dict.fromkeys`` fails on, is
     ``unreadable``, the contract's word for a value of the host's no
     contract type holds (decision E101), which the core refuses by name.
@@ -267,17 +267,20 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
     from sdm_client.wire.dtypes import _is_missing
 
     written: list[Any] = []
-    # The temporal candidates grouped as dict.fromkeys groups them, by
-    # Python's own == and hash: each one's group named by the position of
-    # its first.
-    firsts: dict[Any, int] = {}
-    for position, value in enumerate(candidates):
+    # The candidates kept as dict.fromkeys keeps them, by Python's own ==
+    # and hash: each later one equal to one given before it is a repeat
+    # (T2.14b fix 7).
+    kept: dict[Any, None] = {}
+    for value in candidates:
         try:
-            hash(value)
+            repeat = value in kept
         except TypeError:
             written.append(codec.UNREADABLE)
             continue
-        given = value
+        if repeat:
+            written.append('repeat')
+            continue
+        kept[value] = None
         if hasattr(value, 'item'):
             with contextlib.suppress(AttributeError, ValueError):
                 value = value.item()
@@ -299,18 +302,9 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
             written.append({'value': {'t': 'utf8', 'v': value}})
         elif isinstance(value, (datetime.date, datetime.time)):
             # A date, a time of day or a timestamp (pandas' among them), with
-            # its kind and the position of the first candidate Python holds
-            # equal to it, its own where none before it is: Python's
-            # equality, never the core's (T2.14b fix 4); its text is the
-            # question's.
+            # its kind; its text is the question's.
             written.append(
-                {
-                    'typed': {
-                        'text': str(value),
-                        'type': _kind(value),
-                        'first': firsts.setdefault(given, position),
-                    }
-                }
+                {'typed': {'text': str(value), 'type': _kind(value)}}
             )
         else:
             written.append({'spelled': str(value)})

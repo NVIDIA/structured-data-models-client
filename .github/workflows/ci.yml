@@ -1377,6 +1377,11 @@ jobs:
       - &contract-postgres-vectors
         name: T2.3's Postgres regression and key vectors, and T2.21's exact-key vectors, on the service
         run: python -m pytest contract/tests/test_t23_postgres_regressions.py contract/tests/test_t23_postgres_keys.py contract/tests/test_t221_exact_keys.py -q
+      # T2.14b's Postgres JSON regressions (a document escaping a lone
+      # surrogate kept as the reference keeps it), on the service, in the
+      # reference cell (T2.14b fix 7).
+      - name: T2.14b's Postgres JSON regressions, on the service
+        run: python -m pytest contract/tests/test_t214b_regressions.py -k json -q
       - *contract-kit-wheel
       - *contract-kit-python
       - *contract-kit

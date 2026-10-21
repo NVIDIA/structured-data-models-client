@@ -28,6 +28,7 @@ Paths are under `packages/structured-data-models-client/src/sdm_client/`; a defi
 | MID2 row | Rule held outside the core | Where, at 1d85bce3 | Owner |
 |---|---|---|---|
 | P2-4 | The old validator's pick: which validator resolves a query, chosen by a Python column-name check (`schema.py`'s `names_a_query_cannot_say`) | `query.py`'s `PredictiveQuery._resolve` (`:636`, the check at `:662-666`) | T2.14b |
+| P2-2 (rest) | The candidate-repeat rule: a candidate equal to one given before it is a repeat by Python's equality, as the reference's `dict.fromkeys` keeps the first; stays the host's (the host language's own equality, sent as the contract's `repeat`), by the orchestrator's decision at T2.14b fix 7 | `_rust/materialize.py`'s `_candidates` | stays host |
 
 ### Deviations
 
@@ -67,7 +68,7 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
   `decimal_to_f64` moved from `sdm-engine`'s `labels.rs` into `sdm-contract`'s `scalar.rs`; `sdm-schema`'s inference reads a `Decimal128` of scale above 0 as that double, so stype counting, key scoring and distinct examples count what the reference's cast counts.
   Materialize and predict keep exact decimals (P2B-1).
 - **Ledger.**
-  The rows moved (P2-4's facts, step numbering and ranking split; P2-2's repeats; P2-3; the answer re-encoding) are deleted from the ledger above, their bridge entries declared `moved` naming T2.14b in `scripts/rust_core/bridge_changes.json`, and `bridge_freeze.json` rewritten with `--write`.
+  The rows moved (P2-4's facts, step numbering and ranking split; P2-3; the answer re-encoding; P2-2's repeats returned to the host at fix 7) are deleted from the ledger above, their bridge entries declared `moved` naming T2.14b in `scripts/rust_core/bridge_changes.json`, and `bridge_freeze.json` rewritten with `--write`.
 
 ### Deviations
 
@@ -103,6 +104,12 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 ### Fix 5 (the floor cell)
 
 - CI's `floor-pandas2.2` cell pins NumPy 1.23.5, which does not warn when a cast to float32 overflows; NumPy warns from 1.24. The core keeps reporting `FLOAT32_OVERFLOW` on every runtime, and the Python host shows it as `RuntimeWarning` only where the installed NumPy is 1.24 or later (`_rust/errors.py`'s `numpy_warns_on_cast_overflow`), as the reference's NumPy shows it: the orchestrator's decision under KO2-88, listed for the owner.
+
+### Fix 7 (round 4 review)
+
+- Claude r4 P2-1: the context-before-data refusal carries `window_outran_the_data`, as the reference's client marks it, so a forecast's step is said with the old route's whole message, its hint sentence included.
+- Claude r4 P3-2 and P3-3 (the orchestrator's decision): `first` is gone from the contract before contract 27 ships. Which candidates repeat is Python's own again: the host runs `dict.fromkeys`'s grouping over every hashable candidate, by Python's `==` and `hash`, and sends each later one as the contract's `repeat`, which the core leaves out; a typed candidate keeps its closed set of kinds, and two of one kind and one text are one candidate where a host sends no `repeat`. This also groups a `pandas.Timestamp` with an equal `numpy.datetime64`. MID2 P2-2's row is therefore not moved into the core: its rule stays the host's, by the host language's own equality, with no field carrying it. No position index remains in the contract (P3-4).
+- Claude r4 P3-1: CI's reference-cell Postgres job runs `contract/tests/test_t214b_regressions.py -k json`.
 
 ### Carried to Phase 3 (P3)
 

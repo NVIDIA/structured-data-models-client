@@ -1944,7 +1944,7 @@
       "type": "object"
     },
     "GivenCandidate": {
-      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\", \"first\": <n>}}`: a\n  value of a type no scalar holds, written into its question by its text\n  as `spelled` is, with the name of the kind of value it is (`date`,\n  `datetime` for a timestamp with no zone, `datetime_zoned` for one with\n  one, `time`). Its equality is the host's language's own, never the\n  core's: `first`, optional, is the position among the candidates given\n  of the first one the host's language holds equal to it (its own where\n  none before it is), as the reference's `dict.fromkeys` groups them, and\n  the core keeps the first of each group and its text. A host that sends\n  no `first` gets the core's own rule: two of one kind and one text are\n  one candidate (T2.14b fixes 1, 2 and 4).\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
+      "description": "One candidate of a ranking as a host gives it (`Materialize.candidates`,\nT2.8), each in one of these forms:\n\n- `{\"value\": <scalar>}`: the host's value as the contract's scalar of\n  its own type, a missing value `null`.\n- `{\"integer\": \"<digits>\"}`: an integer wider than an integer scalar\n  holds, by its digits (`-` before a negative one).\n- `{\"decimal\": \"<digits>\"}`: an exact decimal of any precision, by its\n  fixed-point digits (`-12.50`), its scale the digits after the point.\n- `{\"spelled\": \"<text>\"}`: a value of a type no scalar holds, by the\n  text the reference writes into its question (in Python, `str` of it);\n  it is no text candidate, and the core holds it equal to no other.\n- `{\"typed\": {\"text\": \"<text>\", \"type\": \"<name>\"}}`: a value of a type\n  no scalar holds, written into its question by its text as `spelled`\n  is, with the name of the kind of value it is (`date`, `datetime` for a\n  timestamp with no zone, `datetime_zoned` for one with one, `time`).\n  Two of one kind and one text are one candidate; a host whose language\n  holds others equal (two zones of one instant) says so with `repeat`\n  (T2.14b).\n- `repeat`: a value the host's own language holds equal to one given\n  before it, left out as the reference's `dict.fromkeys` leaves it out.\n  A host whose candidates are all scalars sends none, the core keeping\n  each distinct value once by its own equality.\n- `unreadable`: a value the host cannot look up by value (in Python,\n  one it cannot hash), which names no row and which the core refuses by\n  name, as the reference fails on it.",
       "oneOf": [
         {
           "type": "string",
@@ -2024,14 +2024,6 @@
         },
         "type": {
           "$ref": "#/$defs/TypedKind"
-        },
-        "first": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
         }
       },
       "additionalProperties": false,
