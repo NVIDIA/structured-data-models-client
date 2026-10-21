@@ -37,6 +37,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.gate_tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 REGISTER = ROOT / 'docs/design/rust-core/register.yaml'
 DECISIONS = 'docs/design/rust-core/phase-2/decisions.md'

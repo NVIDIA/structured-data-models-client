@@ -31,6 +31,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.gate_tooling
+
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
     'ratchet_tests', ROOT / 'tests/test_contract_ratchet.py'

@@ -43,6 +43,9 @@ from typing import Any
 import pytest
 import yaml
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.gate_tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 COVERAGE = ROOT / 'scripts/rust_core/coverage.py'
 spec = importlib.util.spec_from_file_location(

@@ -194,6 +194,7 @@ def test_every_site_has_a_probe() -> None:
     assert done.returncode == 0, done.stdout + done.stderr
 
 
+@pytest.mark.gate_tooling
 @pytest.mark.parametrize(
     ('relative', 'code', 'named'),
     [

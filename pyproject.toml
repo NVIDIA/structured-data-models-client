@@ -193,4 +193,5 @@ markers = [
     "live_warehouse: needs a real Snowflake or Databricks warehouse",
     "socket: binds a local socket; deselect where that is not permitted",
     "gpu: needs a CUDA GPU",
+    "gate_tooling: a test of the checking tools that copies the checkout for the gate; CI runs it in the tooling jobs only (scripts/rust_core/tooling_tests.py)",
 ]

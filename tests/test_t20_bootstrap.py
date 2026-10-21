@@ -62,6 +62,9 @@ from typing import Any
 
 import pytest
 
+# Gate tooling (T3.0): CI runs it in the tooling jobs, not in every matrix job.
+pytestmark = pytest.mark.gate_tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 RATCHET = ROOT / 'scripts/rust_core/ratchet.py'
 PHASE1, PHASE2, EPIC = 'rust-core-phase-1', 'rust-core-phase-2', 'rust-core'

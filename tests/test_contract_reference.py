@@ -529,6 +529,7 @@ LINE_FAULTS: dict[str, tuple[Callable[[list[dict[str, Any]]], None], str]] = {
 }
 
 
+@pytest.mark.gate_tooling
 @pytest.mark.parametrize('fault', sorted(LINE_FAULTS))
 def test_a_seeded_fault_in_a_line_fails(tmp_path: Path, fault: str) -> None:
     reference, environment, lines = _copy(tmp_path)
@@ -540,6 +541,7 @@ def test_a_seeded_fault_in_a_line_fails(tmp_path: Path, fault: str) -> None:
     assert any(wanted in problem for problem in problems), problems
 
 
+@pytest.mark.gate_tooling
 def test_a_line_nested_past_the_parser_s_depth_is_refused_by_name(
     tmp_path: Path,
 ) -> None:
@@ -712,12 +714,14 @@ FILE_FAULTS: dict[str, tuple[Callable[[Path, Path], None], str]] = {
 }
 
 
+@pytest.mark.gate_tooling
 @pytest.mark.parametrize('fault', sorted(FILE_FAULTS))
 def test_a_seeded_fault_in_the_files_fails(tmp_path: Path, fault: str) -> None:
     change, wanted = FILE_FAULTS[fault]
     _file_fault(change, wanted, tmp_path)
 
 
+@pytest.mark.gate_tooling
 def test_every_line_is_checked_not_only_the_first(tmp_path: Path) -> None:
     reference, environment, lines = _copy(tmp_path)
     lines[-1]['identity']['reference']['guard']['before'] = 'failed'
