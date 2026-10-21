@@ -1,6 +1,6 @@
 {
  "format": "sdm-t216-encoding-vectors/1",
- "about": "What the reference's public calls give when the model endpoint writes its answer in each encoding json.detect_encoding finds (UTF-8 with and without its byte order mark, UTF-16 and UTF-32 of either byte order with and without theirs), and in two byte forms no such encoding decodes: the result, or the refusal. contract/tests/test_t216_response_encoding.py holds python-core to them, observed by the same code (observe).",
+ "about": "What the reference's public calls give when the model endpoint writes its answer in each encoding json.detect_encoding finds (UTF-8 with and without its byte order mark, UTF-16 and UTF-32 of either byte order with and without theirs), in two byte forms no such encoding decodes, and with lone surrogates in its id and metadata, over HTTP and from a Databricks serving endpoint: the result, its request_id and metadata, or the refusal. contract/tests/test_t216_response_encoding.py holds python-core to them, observed by the same code (observe).",
  "recorded_by": "contract/tools/t216_encoding_record.py",
  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "answers": {
@@ -24,6 +24,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -47,6 +49,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -70,6 +74,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -93,6 +99,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -116,6 +124,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -139,6 +149,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -162,6 +174,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -185,6 +199,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -208,6 +224,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -231,12 +249,16 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
   "windowed.malformed-utf-16-odd": {
    "columns": null,
    "values": null,
+   "request_id": null,
+   "metadata": null,
    "refusal": {
     "error": "StructuredDataError",
     "code": "TRANSPORT_ERROR",
@@ -250,6 +272,8 @@
   "windowed.malformed-utf-8-invalid": {
    "columns": null,
    "values": null,
+   "request_id": null,
+   "metadata": null,
    "refusal": {
     "error": "StructuredDataError",
     "code": "TRANSPORT_ERROR",
@@ -258,6 +282,60 @@
     },
     "message": "[TRANSPORT_ERROR] <endpoint>/v1/predictions did not return JSON"
    },
+   "calls": 1
+  },
+  "windowed.lone-surrogate-escaped": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     1.0,
+     1.0
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
+   "calls": 1
+  },
+  "windowed.lone-surrogate-utf-8": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     1.0,
+     1.0
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
    "calls": 1
   },
   "windowed.lone-surrogate-utf-16": {
@@ -279,6 +357,37 @@
      1.0,
      1.0
     ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
+   "calls": 1
+  },
+  "windowed.lone-surrogate-utf-32": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     1.0,
+     1.0
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
    },
    "refusal": null,
    "calls": 1
@@ -303,6 +412,8 @@
      1.0
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -325,6 +436,37 @@
      1.0,
      1.0
     ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
+   "calls": 1
+  },
+  "windowed.serving-lone-surrogate-escaped": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     1.0,
+     1.0
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
    },
    "refusal": null,
    "calls": 1
@@ -349,6 +491,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -372,6 +516,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -395,6 +541,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -418,6 +566,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -441,6 +591,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -464,6 +616,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -487,6 +641,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -510,6 +666,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -533,6 +691,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -556,12 +716,16 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
   "condition.malformed-utf-16-odd": {
    "columns": null,
    "values": null,
+   "request_id": null,
+   "metadata": null,
    "refusal": {
     "error": "StructuredDataError",
     "code": "TRANSPORT_ERROR",
@@ -575,6 +739,8 @@
   "condition.malformed-utf-8-invalid": {
    "columns": null,
    "values": null,
+   "request_id": null,
+   "metadata": null,
    "refusal": {
     "error": "StructuredDataError",
     "code": "TRANSPORT_ERROR",
@@ -583,6 +749,60 @@
     },
     "message": "[TRANSPORT_ERROR] <endpoint>/v1/predictions did not return JSON"
    },
+   "calls": 1
+  },
+  "condition.lone-surrogate-escaped": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     false,
+     false
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
+   "calls": 1
+  },
+  "condition.lone-surrogate-utf-8": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     false,
+     false
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
    "calls": 1
   },
   "condition.lone-surrogate-utf-16": {
@@ -604,6 +824,37 @@
      false,
      false
     ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
+   "calls": 1
+  },
+  "condition.lone-surrogate-utf-32": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     false,
+     false
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
    },
    "refusal": null,
    "calls": 1
@@ -628,6 +879,8 @@
      false
     ]
    },
+   "request_id": "r1",
+   "metadata": {},
    "refusal": null,
    "calls": 1
   },
@@ -650,6 +903,37 @@
      false,
      false
     ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
+   },
+   "refusal": null,
+   "calls": 1
+  },
+  "condition.serving-lone-surrogate-escaped": {
+   "columns": [
+    "row_index",
+    "id",
+    "prediction"
+   ],
+   "values": {
+    "row_index": [
+     0,
+     1
+    ],
+    "id": [
+     0,
+     1
+    ],
+    "prediction": [
+     false,
+     false
+    ]
+   },
+   "request_id": "x\ud800y",
+   "metadata": {
+    "note": "a\udc00b"
    },
    "refusal": null,
    "calls": 1

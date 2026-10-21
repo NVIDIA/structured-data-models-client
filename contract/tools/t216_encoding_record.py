@@ -19,14 +19,21 @@ The reference's transport reads an answer with ``json.loads`` on its bytes,
 which takes the encoding ``json.detect_encoding`` finds: UTF-32 or UTF-16 by
 their byte order marks, UTF-8 with its mark, or, with no mark, UTF-16 or
 UTF-32 of either byte order by where the first four bytes are zero, and
-UTF-8 otherwise. Each form of :data:`FORMS` is one of these, and two are
-bytes no such encoding decodes (``malformed-*``).
+UTF-8 otherwise, decoding with ``surrogatepass``. Each form of
+:data:`FORMS` is one of these; two are bytes no such encoding decodes
+(``malformed-*``); and four put a lone surrogate in the answer's id and in
+its metadata, as a JSON escape and written as itself in UTF-8, UTF-16 and
+UTF-32 (``lone-surrogate-*``), which the reference keeps.
 
-For each query of :data:`QUERIES` (T2.14b's shop, a regression and a
+For each query of :data:`QUERY_NAMES` (T2.14b's shop, a regression and a
 classification) and each form, the public calls ``Schema.from_source``,
 ``PredictiveQuery.materialize`` and ``SDMClient.predict`` against the
 scripted endpoint, which answers by its rule with the answer's JSON text
-written in that form: the result's columns and values, or the refusal.
+written in that form: the result's columns and values, its ``request_id``
+and ``metadata``, or the refusal. And each answer of :data:`SERVING`
+through a Databricks serving client (``serving-*``), whose served model
+writes it in ``response_json``: plain, and with the lone surrogates written
+as themselves and as escapes.
 
 :func:`observe` is imported by
 ``contract/tests/test_t216_response_encoding.py``, so ``python-core`` is
@@ -68,18 +75,31 @@ def _invalid(text: str) -> bytes:
     return text.encode().replace(b'"r1"', b'"r\xff"', 1)
 
 
+#: Where a lone-surrogate form puts its surrogates: the answer's id (the
+#: result's ``request_id``) holds a high one, and its metadata a low one.
+LONE_ID = 'x\ud800y'
+LONE_NOTE = 'a\udc00b'
+
+
 def _lone(text: str) -> str:
-    r"""The answer's id a lone high surrogate, written as itself, not
-    escaped."""
-    return text.replace('"r1"', '"x\ud800"', 1)
-
-
-def _lone_utf16(text: str) -> bytes:
-    r"""UTF-16 with its mark, the answer's id holding a lone surrogate,
-    which Python's reader decodes (``surrogatepass``) and keeps."""
-    return codecs.BOM_UTF16_LE + _lone(text).encode(
-        'utf-16-le', 'surrogatepass'
+    r"""The answer's id and metadata each holding a lone surrogate, written
+    as itself, not escaped."""
+    return text.replace('"r1"', f'"{LONE_ID}"', 1).replace(
+        '"metadata": {}', f'"metadata": {{"note": "{LONE_NOTE}"}}', 1
     )
+
+
+def _lone_escaped(text: str) -> str:
+    r"""The same surrogates written as JSON escapes (``\ud800``)."""
+    return text.replace('"r1"', '"x\\ud800y"', 1).replace(
+        '"metadata": {}', '"metadata": {"note": "a\\udc00b"}', 1
+    )
+
+
+def _lone_in(mark: bytes, codec: str) -> Callable[[str], bytes]:
+    r"""The lone surrogates written as themselves in ``codec`` after
+    ``mark``, as Python's reader decodes them (``surrogatepass``)."""
+    return lambda text: mark + _lone(text).encode(codec, 'surrogatepass')
 
 
 #: How each form writes the answer's JSON text, by name.
@@ -96,31 +116,30 @@ FORMS: dict[str, Callable[[str], bytes]] = {
     'utf-32-be': lambda text: text.encode('utf-32-be'),
     'malformed-utf-16-odd': _odd,
     'malformed-utf-8-invalid': _invalid,
-    'lone-surrogate-utf-16': _lone_utf16,
-}
-#: The forms the core refuses where the reference reads them (register
-#: P1B-24, an answer holding a lone surrogate), by name: the refusal's code
-#: and details.
-REFUSED = {
-    'lone-surrogate-utf-16': (
-        'INVALID_RESPONSE',
-        {'field': 'response', 'reason': 'not_json', 'category': 'encoding'},
-    ),
+    'lone-surrogate-escaped': lambda text: _lone_escaped(text).encode(),
+    'lone-surrogate-utf-8': _lone_in(b'', 'utf-8'),
+    'lone-surrogate-utf-16': _lone_in(codecs.BOM_UTF16_LE, 'utf-16-le'),
+    'lone-surrogate-utf-32': _lone_in(codecs.BOM_UTF32_LE, 'utf-32-le'),
 }
 #: The Databricks serving answers, by name: the scripted rule's answer as
-#: the served model writes it in ``response_json``, and that answer with its
-#: id a lone surrogate written as itself (register P1B-24, refused by the
-#: core as text that is not JSON, ``category=syntax``).
+#: the served model writes it in ``response_json``, and that answer with
+#: lone surrogates written as themselves and as escapes.
 SERVING = {
     'plain': lambda text: text,
     'lone-surrogate': _lone,
+    'lone-surrogate-escaped': _lone_escaped,
 }
-SERVING_REFUSED = {
-    'lone-surrogate': (
-        'INVALID_RESPONSE',
-        {'field': 'response', 'reason': 'not_json', 'category': 'syntax'},
-    ),
-}
+#: The forms whose lone surrogates the core reads as U+FFFD where the
+#: reference keeps them (register P1B-24, the owner's rule of 2026-10-21),
+#: by the name the vectors give them.
+REPLACED = (
+    'lone-surrogate-escaped',
+    'lone-surrogate-utf-8',
+    'lone-surrogate-utf-16',
+    'lone-surrogate-utf-32',
+    'serving-lone-surrogate',
+    'serving-lone-surrogate-escaped',
+)
 #: The queries, by name: T2.14b's shop's regression (its predictions
 #: numbers) and classification (its predictions classes).
 QUERY_NAMES = ('windowed', 'condition')
@@ -165,7 +184,12 @@ def _predicted(request: Any, form: str) -> dict[str, Any]:
     the result's columns and values, or the refusal."""
     from sdm_client import KumoRelational, SDMClient
 
-    observed: dict[str, Any] = {'columns': None, 'values': None}
+    observed: dict[str, Any] = {
+        'columns': None,
+        'values': None,
+        'request_id': None,
+        'metadata': None,
+    }
     with (
         host().endpoint().serve(encode=FORMS[form]) as (url, received),
         warnings.catch_warnings(),
@@ -177,6 +201,8 @@ def _predicted(request: Any, form: str) -> dict[str, Any]:
             frame = result.to_pandas()
             observed['columns'] = [str(c) for c in frame.columns]
             observed['values'] = host().as_json(frame.to_dict(orient='list'))
+            observed['request_id'] = result.request_id
+            observed['metadata'] = host().as_json(result.metadata)
             observed['refusal'] = None
         except Exception as error:  # noqa: BLE001 - recorded
             observed['refusal'] = _without(host()._refusal(error), url)
@@ -215,7 +241,12 @@ def _served(request: Any, form: str) -> dict[str, Any]:
     from sdm_client import KumoRelational, SDMClient
 
     workspace = _Workspace(SERVING[form])
-    observed: dict[str, Any] = {'columns': None, 'values': None}
+    observed: dict[str, Any] = {
+        'columns': None,
+        'values': None,
+        'request_id': None,
+        'metadata': None,
+    }
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         try:
@@ -226,6 +257,8 @@ def _served(request: Any, form: str) -> dict[str, Any]:
             frame = result.to_pandas()
             observed['columns'] = [str(c) for c in frame.columns]
             observed['values'] = host().as_json(frame.to_dict(orient='list'))
+            observed['request_id'] = result.request_id
+            observed['metadata'] = host().as_json(result.metadata)
             observed['refusal'] = None
         except Exception as error:  # noqa: BLE001 - recorded
             observed['refusal'] = host()._refusal(error)
@@ -291,8 +324,11 @@ def main(argv: list[str] | None = None) -> int:
             "What the reference's public calls give when the model endpoint "
             'writes its answer in each encoding json.detect_encoding finds '
             '(UTF-8 with and without its byte order mark, UTF-16 and UTF-32 '
-            'of either byte order with and without theirs), and in two byte '
-            'forms no such encoding decodes: the result, or the refusal. '
+            'of either byte order with and without theirs), in two byte '
+            'forms no such encoding decodes, and with lone surrogates in its '
+            'id and metadata, over HTTP and from a Databricks serving '
+            'endpoint: the result, its request_id and metadata, or the '
+            'refusal. '
             'contract/tests/test_t216_response_encoding.py holds python-core '
             'to them, observed by the same code (observe).'
         ),
