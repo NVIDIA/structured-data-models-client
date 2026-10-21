@@ -1,0 +1,574 @@
+#!/usr/bin/env python3
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+r"""The handoff check before review (T3.0, item 4): problems found before a
+reviewer looks, and a stamp for the exact SHA that passed.
+
+    handoff.py run --package ID [--previous SHA] [--case ID ...]
+        [--python PY] [--base REV]
+    handoff.py check SHA
+
+``run`` checks the committed ``HEAD`` of a clean worktree and, only when
+every step passes, writes ``<git common dir>/sdm-handoff/<sha>.json``
+(``{"sha", "package", "ok": true, "time", "previous", "steps"}``); a failed
+step exits 1 and writes no stamp. Implementers and test authors run it
+before they report "ready"; ``codex_pane.py review`` and the Claude reviewer
+launch (``guard_cmd.py``) refuse a round on a SHA without a stamp. Run it
+with the tools' interpreter (the one that runs ``compare.py``); ``--python``
+is the interpreter holding the candidate's client (the lane's environment),
+default the same. The steps:
+
+- ``reference``: the package's cases (each case file it adds or changes,
+  and each ``--case``) run on python-core, on each database the case names
+  (Postgres only with ``SDM_POSTGRES_TEST_DSN``; without it, noted as not
+  run), and on rust-host (DuckDB and SQLite) when the package changes
+  ``rust/``, then ``compare.py`` holds them to the recorded old-client
+  answers in ``contract/reference/`` (with the ratchet's effective
+  expectations). No live old-client run, except for a case with no
+  recorded answer on a database: that one runs python-ref live when
+  ``SDM_REFERENCE_PYTHON`` (an interpreter holding the old client) and
+  ``SDM_REFERENCE_REPO`` (its checkout) are set, and fails naming the case
+  otherwise;
+- ``fails-before``: in a fix round (a commit ``<ID> fix <n>: ...`` since the
+  phase head) ``--previous`` is the previous round's SHA, and every new or
+  changed test file (pytest files, ``*selftest.py``, the crates' ``tests/``)
+  runs there, its HEAD copy over the previous tree: at least one must fail;
+- ``affected``: every suite ``affected.py`` names for the changed files;
+- ``lint``: ``ruff check`` and ``ruff format --check`` on the changed Python
+  files, ``cargo fmt --check`` on the changed crates, and ``mypy`` on each
+  changed package's ``src``.
+
+``check SHA`` exits 0 when SHA has a passing stamp, else 1, naming why.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from collections.abc import Sequence
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import affected  # noqa: E402
+import judging  # noqa: E402
+from phases import PACKAGE_ID, PhaseError, phase_branch  # noqa: E402
+
+STAMPS = 'sdm-handoff'
+DATABASES = ('duckdb', 'sqlite', 'postgres')
+FIX = re.compile(rf'({PACKAGE_ID.pattern}) fix [0-9]+: ')
+CRATE_TEST = re.compile(r'rust/crates/([^/]+)/tests/([^/]+)\.rs$')
+
+
+class Failure(Exception):
+    """A usage problem: nothing was checked."""
+
+
+# --- stamps ----------------------------------------------------------------------
+
+
+def stamp_path(common: Path, sha: str) -> Path:
+    return Path(common) / STAMPS / f'{sha}.json'
+
+
+def stamp_problem(common: Path, sha: str) -> str | None:
+    """None when ``sha`` has a passing stamp in the clone whose common git
+    directory is ``common``; else why not."""
+    if not re.fullmatch(r'[0-9a-f]{40}', sha):
+        return f'{sha!r} is not a full 40-character SHA'
+    path = stamp_path(common, sha)
+    try:
+        stamp = json.loads(path.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return f'no handoff stamp for {sha[:12]} (handoff.py run on that SHA)'
+    except (OSError, ValueError) as error:
+        return f'the stamp {path} is unreadable: {error}'
+    if not isinstance(stamp, dict) or stamp.get('sha') != sha:
+        return f'the stamp {path} names another SHA'
+    if stamp.get('ok') is not True:
+        return f'the stamp {path} does not say ok'
+    return None
+
+
+# --- git --------------------------------------------------------------------------
+
+
+def run(
+    argv: Sequence[str], cwd: Path, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        list(argv),
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+    )
+
+
+def git(root: Path, *args: str) -> str:
+    done = run(['git', *args], root)
+    if done.returncode != 0:
+        raise Failure(f'git {" ".join(args)}: {done.stderr.strip()}')
+    return done.stdout
+
+
+def common_dir(root: Path) -> Path:
+    return Path(
+        git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').strip()
+    )
+
+
+def phase_base(root: Path, given: str | None) -> str:
+    if given:
+        return git(root, 'rev-parse', f'{given}^{{commit}}').strip()
+    branch = run(['git', 'symbolic-ref', '--short', '-q', 'HEAD'], root).stdout.strip()
+    try:
+        phase = phase_branch(branch=branch or None)
+    except PhaseError as error:
+        raise Failure(str(error)) from None
+    for ref in (f'refs/remotes/origin/{phase}', f'refs/heads/{phase}'):
+        done = run(['git', 'merge-base', 'HEAD', ref], root)
+        if done.returncode == 0:
+            return done.stdout.strip()
+    raise Failure(f'no {phase} here to diff against; fetch it or give --base')
+
+
+# --- the steps --------------------------------------------------------------------
+
+
+class Step:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.problems: list[str] = []
+        self.notes: list[str] = []
+
+    @property
+    def ok(self) -> bool:
+        return not self.problems
+
+
+def tail(text: str, lines: int = 25) -> str:
+    return '\n'.join(text.strip().splitlines()[-lines:])
+
+
+def case_index(root: Path) -> dict[str, Path]:
+    found = {}
+    for path in sorted((root / 'contract/cases').rglob('*.json')):
+        try:
+            case = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if isinstance(case, dict) and isinstance(case.get('id'), str):
+            found[case['id']] = path
+    return found
+
+
+def reference_lines(root: Path) -> tuple[Path | None, dict[str, str]]:
+    files = sorted((root / 'contract/reference').glob('*.jsonl'))
+    if len(files) != 1:
+        return None, {}
+    lines = {}
+    for line in files[0].read_text(encoding='utf-8').splitlines():
+        if line.strip():
+            lines[json.loads(line)['case']] = line
+    return files[0], lines
+
+
+def key(case: str, database: str) -> str:
+    return case if database == 'duckdb' else f'{case}@{database}'
+
+
+def step_reference(
+    root: Path, touched: list[str], named: list[str], python: str, base: str,
+    scratch: Path,
+) -> Step:
+    step = Step('reference')
+    index = case_index(root)
+    chosen: dict[str, Path] = {}
+    for path in touched:
+        if path.startswith('contract/cases/') and path.endswith('.json'):
+            full = root / path
+            if full.is_file():
+                case = json.loads(full.read_text(encoding='utf-8'))
+                chosen[str(case.get('id'))] = full
+    for name in named:
+        if name not in index:
+            step.problems.append(f'--case {name}: no case with that id')
+        else:
+            chosen[name] = index[name]
+    if not chosen:
+        step.notes.append('no case changed or named')
+        return step
+    reference, recorded = reference_lines(root)
+    if reference is None:
+        step.problems.append('contract/reference/ holds no single reference file')
+        return step
+    effective = scratch / 'effective.json'
+    done = run(
+        [sys.executable, str(root / 'scripts/rust_core/ratchet.py'), 'effective',
+         '--repo', str(root), '--base', base, '--out', str(effective)],
+        root,
+    )  # fmt: skip
+    expect = ['--expect', str(effective)] if done.returncode == 0 else []
+    if done.returncode != 0:
+        step.notes.append(
+            "the ratchet's effective expectations are unreadable here, so the "
+            'committed answers stand alone: ' + tail(done.stdout + done.stderr, 2)
+        )
+    rust = any(p.startswith('rust/') for p in touched)
+    for database in DATABASES:
+        cases = {
+            case: path
+            for case, path in chosen.items()
+            if database in (json.loads(path.read_text()).get('databases') or DATABASES)
+        }
+        if not cases:
+            continue
+        if database == 'postgres' and not os.environ.get('SDM_POSTGRES_TEST_DSN'):
+            step.notes.append(
+                f'postgres: not run (no SDM_POSTGRES_TEST_DSN) for '
+                f'{", ".join(sorted(cases))}; CI runs it'
+            )
+            continue
+        files = [str(p) for p in cases.values()]
+        observed = []
+        out = scratch / f'{database}-python-core.jsonl'
+        done = run(
+            [python, '-I', str(root / 'contract/runners/run_python.py'), '--mode',
+             'python-core', '--database', database, '--out', str(out), *files],
+            root,
+        )  # fmt: skip
+        if done.returncode != 0:
+            step.problems.append(
+                f'python-core on {database} failed for {", ".join(sorted(cases))}:\n'
+                + tail(done.stdout + done.stderr)
+            )
+            continue
+        observed.append(out)
+        if rust and database in ('duckdb', 'sqlite'):
+            host = scratch / f'{database}-rust-host.jsonl'
+            flags = ['--database', 'sqlite'] if database == 'sqlite' else []
+            done = run(
+                ['cargo', 'run', '-q', '-p', 'sdm-testkit', '--bin', 'sdm-contract-run',
+                 '--locked', '--', *flags, '--out', str(host), *files],
+                root / 'rust',
+            )  # fmt: skip
+            if done.returncode != 0:
+                step.problems.append(
+                    f'rust-host on {database} failed:\n' + tail(done.stdout + done.stderr)
+                )
+            else:
+                observed.append(host)
+        # The recorded answers of these cases on this database, and a live
+        # old-client answer where none is recorded.
+        lines = []
+        for case in sorted(cases):
+            line = recorded.get(key(case, database))
+            if line is None:
+                live = live_reference(root, case, cases[case], database, scratch)
+                if isinstance(live, str):
+                    step.problems.append(live)
+                    continue
+                lines.extend(live)
+                step.notes.append(f'{key(case, database)}: no recorded answer; ran the old client live')
+            else:
+                lines.append(line)
+        held = scratch / f'{database}-reference.jsonl'
+        held.write_text(''.join(line + '\n' for line in lines), encoding='utf-8')
+        done = run(
+            [sys.executable, str(root / 'scripts/rust_core/compare.py'),
+             *(arg for f in files for arg in ('--cases', f)),
+             '--database', database, '--reference', str(held), *expect,
+             '--register', str(root / 'docs/design/rust-core/register.yaml'),
+             *map(str, observed)],
+            root,
+        )  # fmt: skip
+        if done.returncode != 0:
+            differs = [
+                line for line in done.stdout.splitlines() if line.startswith('DIFFERS')
+            ]
+            step.problems.append(
+                f'{database}: the cases differ from the old client:\n'
+                + '\n'.join(differs[:40] or [tail(done.stdout + done.stderr)])
+            )
+        else:
+            step.notes.append(f'{database}: {", ".join(sorted(cases))} match the old client')
+    return step
+
+
+def live_reference(
+    root: Path, case: str, path: Path, database: str, scratch: Path
+) -> list[str] | str:
+    python = os.environ.get('SDM_REFERENCE_PYTHON')
+    checkout = os.environ.get('SDM_REFERENCE_REPO')
+    if not (python and checkout):
+        return (
+            f'{key(case, database)} has no recorded old-client answer; set '
+            'SDM_REFERENCE_PYTHON and SDM_REFERENCE_REPO to run the old client '
+            'live, or record its answer first'
+        )
+    out = scratch / f'{database}-{case}-python-ref.jsonl'
+    done = run(
+        [python, '-I', str(root / 'contract/runners/run_python.py'), '--mode',
+         'python-ref', '--reference', checkout, '--database', database,
+         '--out', str(out), str(path)],
+        root,
+    )  # fmt: skip
+    if done.returncode != 0:
+        return f'{key(case, database)}: the live old-client run failed:\n' + tail(
+            done.stdout + done.stderr
+        )
+    return [line for line in out.read_text(encoding='utf-8').splitlines() if line.strip()]
+
+
+def is_test(path: str) -> bool:
+    return bool(
+        judging.matches(affected.IS_TEST, path)
+        or path.endswith('selftest.py')
+        or CRATE_TEST.match(path)
+    )
+
+
+def step_fails_before(
+    root: Path, base: str, previous: str | None, python: str, scratch: Path
+) -> Step:
+    step = Step('fails-before')
+    subjects = git(root, 'log', '--format=%s', f'{base}..HEAD').splitlines()
+    fixes = [s for s in subjects if FIX.match(s)]
+    if previous is None:
+        if fixes:
+            step.problems.append(
+                f'a fix round ({fixes[0]}) names the previous round\'s SHA: '
+                '--previous SHA'
+            )
+        else:
+            step.notes.append('not a fix round')
+        return step
+    previous = git(root, 'rev-parse', f'{previous}^{{commit}}').strip()
+    changed = [
+        p
+        for p in git(root, 'diff', '--name-only', '-z', previous, 'HEAD').split('\0')
+        if p and is_test(p) and (root / p).is_file()
+    ]
+    if not changed:
+        step.problems.append(
+            f'the fix round adds or changes no test since {previous[:12]}; a fix '
+            'comes with a test that fails without it'
+        )
+        return step
+    tree = scratch / 'previous'
+    git(root, 'worktree', 'add', '--quiet', '--detach', str(tree), previous)
+    try:
+        for path in changed:
+            target = tree / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(root / path, target)
+        failed: list[str] = []
+        passed: list[str] = []
+        pytest_files = [p for p in changed if judging.matches(affected.IS_TEST, p)]
+        if pytest_files:
+            done = run(
+                [python, '-m', 'pytest', '-q', '-p', 'no:cacheprovider', *pytest_files],
+                tree,
+            )
+            (failed if done.returncode in (1, 2) else passed).extend(pytest_files)
+            if done.returncode not in (0, 1, 2, 5):
+                step.problems.append(
+                    f'pytest could not run the tests on {previous[:12]}:\n'
+                    + tail(done.stdout + done.stderr)
+                )
+        for path in changed:
+            if path.endswith('selftest.py'):
+                done = run([python, path], tree)
+                (failed if done.returncode else passed).append(path)
+            match = CRATE_TEST.match(path)
+            if match:
+                done = run(
+                    ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
+                     '-p', match.group(1), '--test', match.group(2)],
+                    tree,
+                )  # fmt: skip
+                (failed if done.returncode else passed).append(path)
+        if not failed and not step.problems:
+            step.problems.append(
+                f'every new or changed test passes on the previous round '
+                f'{previous[:12]}, so none shows the fix: ' + ', '.join(passed)
+            )
+        else:
+            step.notes.append(f'fails on {previous[:12]}: ' + ', '.join(failed))
+    finally:
+        shutil.rmtree(tree, ignore_errors=True)
+        run(['git', 'worktree', 'prune'], root)
+    return step
+
+
+def step_affected(root: Path, touched: list[str], python: str) -> Step:
+    step = Step('affected')
+    suites = affected.suites(touched)
+    if not suites:
+        step.notes.append('no suite reads the changed files')
+    for suite in suites:
+        argv = [python if part == 'python3' and n == 0 else part for n, part in enumerate(suite)]
+        done = run(argv, root)
+        shown = ' '.join(suite)
+        if done.returncode != 0:
+            step.problems.append(f'{shown} failed:\n' + tail(done.stdout + done.stderr))
+        else:
+            step.notes.append(f'{shown}: ok')
+    return step
+
+
+def ruff() -> list[str] | None:
+    beside = Path(sys.executable).parent / 'ruff'
+    if beside.is_file():
+        return [str(beside)]
+    found = shutil.which('ruff')
+    if found:
+        return [found]
+    uvx = shutil.which('uvx')
+    if uvx:
+        return [uvx, '--quiet', '--from', 'ruff==0.16.*', 'ruff']
+    return None
+
+
+def step_lint(root: Path, touched: list[str], python: str) -> Step:
+    step = Step('lint')
+    present = [p for p in touched if (root / p).is_file()]
+    python_files = [p for p in present if p.endswith('.py')]
+    if python_files:
+        tool = ruff()
+        if tool is None:
+            step.problems.append('no ruff here (nor uvx to fetch it)')
+        else:
+            for args in (['check'], ['format', '--check']):
+                done = run([*tool, *args, *python_files], root)
+                if done.returncode != 0:
+                    step.problems.append(
+                        f'ruff {" ".join(args)}:\n' + tail(done.stdout + done.stderr)
+                    )
+    crates = sorted({m.group(1) for p in present if (m := re.match(r'rust/crates/([^/]+)/', p))})
+    for crate in crates:
+        done = run(
+            ['cargo', 'fmt', '--manifest-path', 'rust/Cargo.toml', '-p', crate, '--', '--check'],
+            root,
+        )
+        if done.returncode != 0:
+            step.problems.append(f'cargo fmt -p {crate}:\n' + tail(done.stdout + done.stderr))
+    packages = sorted(
+        {m.group(1) for p in python_files if (m := re.match(r'(packages/[^/]+/src)/', p))}
+    )
+    for source in packages:
+        done = run([python, '-m', 'mypy', source], root)
+        if done.returncode != 0:
+            step.problems.append(f'mypy {source}:\n' + tail(done.stdout + done.stderr))
+    if not (python_files or crates):
+        step.notes.append('no Python or Rust file changed')
+    return step
+
+
+# --- the commands -----------------------------------------------------------------
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    root = Path(git(Path.cwd(), 'rev-parse', '--show-toplevel').strip())
+    status = git(root, 'status', '--porcelain', '--untracked-files=all')
+    if status.strip():
+        raise Failure(
+            'the worktree has uncommitted or untracked files; a stamp is for '
+            'a commit: commit them first'
+        )
+    if not PACKAGE_ID.fullmatch(args.package):
+        raise Failure(f'{args.package!r} is not a package ID')
+    sha = git(root, 'rev-parse', 'HEAD').strip()
+    base = phase_base(root, args.base)
+    touched = [p for p in git(root, 'diff', '--name-only', '-z', base, 'HEAD').split('\0') if p]
+    python = args.python or sys.executable
+    scratch = Path(tempfile.mkdtemp(prefix='sdm-handoff-'))
+    print(f'handoff of {args.package} at {sha} ({len(touched)} file(s) since {base[:12]})')
+    try:
+        steps = [
+            step_reference(root, touched, args.case, python, base, scratch),
+            step_fails_before(root, base, args.previous, python, scratch),
+            step_affected(root, touched, python),
+            step_lint(root, touched, python),
+        ]
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    for step in steps:
+        print(f'{"ok  " if step.ok else "FAIL"} {step.name}')
+        for note in step.notes:
+            print(f'     {note}')
+        for problem in step.problems:
+            print('     ' + problem.replace('\n', '\n     | '))
+    if not all(step.ok for step in steps):
+        print(f'NO STAMP: fix the failing steps and run handoff.py again on the new SHA')
+        return 1
+    path = stamp_path(common_dir(root), sha)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                'sha': sha,
+                'package': args.package,
+                'ok': True,
+                'time': datetime.datetime.now(datetime.timezone.utc).isoformat(
+                    timespec='seconds'
+                ),
+                'previous': args.previous,
+                'steps': {s.name: s.notes for s in steps},
+            },
+            indent=1,
+        )
+        + '\n',
+        encoding='utf-8',
+    )
+    print(f'STAMPED {sha}: {path}')
+    return 0
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    root = Path(git(Path.cwd(), 'rev-parse', '--show-toplevel').strip())
+    done = run(['git', 'rev-parse', '--verify', '--quiet', f'{args.sha}^{{commit}}'], root)
+    sha = done.stdout.strip() if done.returncode == 0 else args.sha
+    why = stamp_problem(common_dir(root), sha)
+    if why:
+        print(f'NO STAMP: {why}')
+        return 1
+    print(f'STAMPED {sha}')
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__.split('\n\n', 1)[0],
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = parser.add_subparsers(dest='command', required=True)
+    p = sub.add_parser('run', help='check HEAD and stamp it when every step passes')
+    p.add_argument('--package', required=True)
+    p.add_argument('--previous', help="a fix round's previous SHA")
+    p.add_argument('--case', action='append', default=[], help='a case id to run')
+    p.add_argument('--python', help="the interpreter holding the candidate's client")
+    p.add_argument('--base', help='diff from here (default: the phase head merge base)')
+    p = sub.add_parser('check', help='exit 0 when SHA has a passing stamp')
+    p.add_argument('sha')
+    args = parser.parse_args(argv)
+    try:
+        return (cmd_run if args.command == 'run' else cmd_check)(args)
+    except Failure as error:
+        print(f'REFUSED: {error}')
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())
