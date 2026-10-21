@@ -1362,6 +1362,23 @@ def raise_from_core(
     ) from None
 
 
+def numpy_warns_on_cast_overflow() -> bool:
+    r"""Whether the installed NumPy warns when a cast to float32 overflows
+    (``RuntimeWarning: overflow encountered in cast``), as it does from
+    NumPy 1.24 on, which first warns on a cast that overflows (its 1.24.0
+    release notes); before it the cast is silent. The reference's warning
+    (FX-1) is NumPy's, so this client shows the core's ``FLOAT32_OVERFLOW``
+    only where the reference's NumPy would show it (T2.14b fix 5)."""
+    import re
+
+    import numpy as np
+
+    found = re.match(r'(\d+)\.(\d+)', np.__version__)
+    if found is None:
+        return True
+    return (int(found.group(1)), int(found.group(2))) >= (1, 24)
+
+
 def warn_from_core(
     control: bytes,
     attachments: dict[int, Any],
@@ -1388,6 +1405,10 @@ def warn_from_core(
         if code in quiet:
             if held is not None:
                 held.append(warning)
+            continue
+        if code == 'FLOAT32_OVERFLOW' and not numpy_warns_on_cast_overflow():
+            # The core reports the cast's overflow on every runtime; this
+            # client shows it where the reference's NumPy warns of it.
             continue
         group = GROUPED.get(code)
         key = (

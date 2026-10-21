@@ -215,7 +215,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py": {
       "<module>": {
-        "fingerprint": "03d2faa67f3248cbc806ab9d5c797a03f5b46cb20c5d75e39f7614c82d80fed9"
+        "fingerprint": "9102e46cf4f5379c305695fc470dd517bd6a2de8a8f66249f0bbc3316a1ae883"
       },
       "_Words.convert_field": {
         "fingerprint": "eb6ac343d2114984bb9b64652349aea1b0c0de4ccde38f032ef0297837b857f7"
@@ -247,6 +247,9 @@
       "error_from_core": {
         "fingerprint": "0f90410dc266a29fd456374cfd376601ec504fdefcad66e0a595ac8cbf51f3a8"
       },
+      "numpy_warns_on_cast_overflow": {
+        "fingerprint": "d152c028f851318aa7d29ee83b460d95e35eae190dfc5df59bbea6fc0df046ea"
+      },
       "raise_from_core": {
         "fingerprint": "b3a43c78a0fefe59130b503128d06dc97940280739ab0acf47cdcb3dcb184305"
       },
@@ -254,7 +257,7 @@
         "fingerprint": "bca18cb08ad590e82a5faf8787849ab71f3f2b15363fe858ba210c5a914b8402"
       },
       "warn_from_core": {
-        "fingerprint": "5cdf355c4ce1a89226d8c8a1b56c9c0b1cb78175b3b3ee4d8a8e971237908183"
+        "fingerprint": "8e74cae7045195239110b4d765c64a638f12b5dcf2c74bc48113bd7d717396e8"
       },
       "warn_held": {
         "fingerprint": "f428d852f03ee9543d73a97bfcb82ba77804633e3e395d14ec12a6138b6a2ce4"

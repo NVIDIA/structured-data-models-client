@@ -231,7 +231,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
-      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning; T2.13b: FILTER_CHOSE_EXAMPLES added to SAID, the client's words for the notice that an entity filter chooses the labelled examples and not the entities scored (_warn_the_filter_chose_only_the_examples), and WORDED gains the words of a context no example was collected for, by the reason the core found (_diagnose_empty_sample's); whether to warn, and why a context is empty, are sdm-core materialize's (FILTER_CHOSE_EXAMPLES, empty_sample); the host only words them; T2.14b: the host wording rows G15, M4, FX-1 and FX-4 (KO2-32) and the generic refusals said as the reference says them: WORDED's and SAID's templates over the fields the core decides (rule, table, columns, value given, times), FLOAT32_OVERFLOW shown as RuntimeWarning; no rule beyond the tables; T2.14b fix 2: WORDED says VALUE_OUT_OF_RANGE text_not_utf8 (a Postgres JSON string with a lone surrogate, register P2D-3) by the column the core names; no rule added"
+      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning; T2.13b: FILTER_CHOSE_EXAMPLES added to SAID, the client's words for the notice that an entity filter chooses the labelled examples and not the entities scored (_warn_the_filter_chose_only_the_examples), and WORDED gains the words of a context no example was collected for, by the reason the core found (_diagnose_empty_sample's); whether to warn, and why a context is empty, are sdm-core materialize's (FILTER_CHOSE_EXAMPLES, empty_sample); the host only words them; T2.14b: the host wording rows G15, M4, FX-1 and FX-4 (KO2-32) and the generic refusals said as the reference says them: WORDED's and SAID's templates over the fields the core decides (rule, table, columns, value given, times), FLOAT32_OVERFLOW shown as RuntimeWarning; no rule beyond the tables; T2.14b fix 2: WORDED says VALUE_OUT_OF_RANGE text_not_utf8 (a Postgres JSON string with a lone surrogate, register P2D-3) by the column the core names; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
       "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: the conversions the reference's words need (!R, !G, !S, !N) over the core's fields; formatting only"
@@ -270,7 +270,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
@@ -367,6 +367,9 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_kind": {
       "moved": "T2.14b fix 4: the kind a date, time of day or timestamp candidate is given with (GivenCandidate::Typed), its equality left to Python (MID2 P2-2)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::numpy_warns_on_cast_overflow": {
+      "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
     }
   }
 }

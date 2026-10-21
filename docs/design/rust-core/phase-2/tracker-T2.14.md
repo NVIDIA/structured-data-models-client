@@ -100,6 +100,10 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 - Claude r3 P3-3: P2D-3 says the reference refuses a table with a `json[]` column; that older difference is registered (P2D-5, proposed).
 - Claude r3 P3-4: P2D-4's note names the NAMED pin as it now stands.
 
+### Fix 5 (the floor cell)
+
+- CI's `floor-pandas2.2` cell pins NumPy 1.23.5, which does not warn when a cast to float32 overflows; NumPy warns from 1.24. The core keeps reporting `FLOAT32_OVERFLOW` on every runtime, and the Python host shows it as `RuntimeWarning` only where the installed NumPy is 1.24 or later (`_rust/errors.py`'s `numpy_warns_on_cast_overflow`), as the reference's NumPy shows it: the orchestrator's decision under KO2-88, listed for the owner.
+
 ### Carried to Phase 3 (P3)
 
 - Decimal stype on Postgres: inference reads a scaled decimal by Arrow's `ToDouble`, where the reference's Postgres double is `float(Decimal)`, correctly rounded (0.700 as 0.7000000000000001 here, 0.7 there); distinct counts agree but near collisions (Claude r1 P3-3).
