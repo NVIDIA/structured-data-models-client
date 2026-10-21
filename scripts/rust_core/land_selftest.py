@@ -2882,6 +2882,598 @@ def _(tmp: Path) -> tuple[bool, str]:
     return ok, detail
 
 
+# --- T3.0: stacks of packages on one CI run, and the tooling train ------------
+#
+# The interfaces, as T3.0's implementer gives them:
+#
+# - ``land.py --stack <the usual land arguments>`` makes the package's empty
+#   ``Land <ID>: ...`` commit locally, its Base-SHA and Checkpoint-SHA the
+#   stack's tail (the previous stacked landing, or the phase head) and a
+#   ``Stack-base: <phase head>`` trailer, and prints ``STACKED <sha>``. It
+#   refuses past N packages (default 4). The next package is built on that
+#   landing commit.
+# - ``land.py stack-land --tip SHA [--topic-branch B]`` lands the chain in one
+#   atomic push on one green CI run on the tip's tested commit, and prints
+#   ``LANDED <tip>``. On a red run it exits 1 and prints ``IMPLICATED <job>:
+#   <sha> <subject>``, ``PREFIX RUN: ...`` and ``GREEN PREFIX: land.py
+#   stack-land --tip <Land Pk>``.
+# - ``ratchet.py checkpoint --phase-push`` accepts a stack pushed at once, as
+#   a Base-SHA chain; a plain ``land.py`` on a candidate stacked on unlanded
+#   landings is refused, naming stack-land.
+# - The train: ``scripts/rust_core/judging-paths.txt`` (protected-paths
+#   syntax). A package changing a judging path is refused, naming ``land.py
+#   --stack --train``, unless no earlier landing in the phase changed one.
+#   With ``--train`` every changed file is a judging path and the package is
+#   first in its stack; its landing carries ``Train: yes``.
+#
+# They run git for real, in temporary repositories (``Repo``), with gh the
+# fake below. Each phase starts at a commit pushed to ``rust-core`` (the
+# epic branch), and the phase head is a landing commit with its trailers, as
+# the ratchet reads them. Listed in land_selftest-pending.json until land.py
+# does what they hold it to.
+
+T30_ROOT = Path(__file__).resolve().parents[2]
+#: The top's green run, and the prefix's.
+TOP_RUN = 9301
+PREFIX_RUN = 9302
+#: A path no judging tool reads, and one every judging-path list names.
+PRODUCT_FILE = 'notes/p{k}.txt'
+JUDGING_FILE = 'scripts/rust_core/compare.py'
+RUST_FILE = 'rust/crates/demo/src/lib.rs'
+
+
+def t30_jobs(run_id: int, failing: Sequence[str]) -> list[dict[str, Any]]:
+    """The jobs of a run: those named fail, the rest pass."""
+    names = sorted({*failing, 'lint', 'rust-test', 'contract-python'})
+    return [
+        {
+            'databaseId': run_id * 100 + n,
+            'id': run_id * 100 + n,
+            'name': name,
+            'status': 'completed',
+            'conclusion': 'failure' if name in failing else 'success',
+            'steps': [
+                {
+                    'name': 'the step',
+                    'number': 1,
+                    'status': 'completed',
+                    'conclusion': 'failure' if name in failing else 'success',
+                }
+            ],
+        }
+        for n, name in enumerate(names)
+    ]
+
+
+class StackGh:
+    """gh for the stack cases: the runs on each SHA, and each run's jobs,
+    through ``gh run list``, ``gh run view`` and ``gh api``."""
+
+    def __init__(self, runs: dict[str, list[dict[str, Any]]]) -> None:
+        self.runs = runs
+        #: The failing jobs of each run, by id.
+        self.failing: dict[int, list[str]] = {}
+
+    def by_id(self, run_id: int) -> dict[str, Any] | None:
+        for runs in self.runs.values():
+            for run in runs:
+                if run['databaseId'] == run_id:
+                    return run
+        return None
+
+    def __call__(self, args: list[str]) -> land.Completed:
+        if args[:2] == ['run', 'list']:
+            return Fake(runs=self.runs).gh(args)
+        numbers = [int(n) for a in args for n in re.findall(r'\b(\d{4,})\b', a)]
+        run = next((r for n in numbers if (r := self.by_id(n))), None)
+        if run is None:
+            return land.Completed(1, '', f'no such run: {args}')
+        jobs = t30_jobs(
+            run['databaseId'], self.failing.get(run['databaseId'], [])
+        )
+        if any('jobs' in a for a in args):
+            return land.Completed(
+                0, json.dumps({**run, 'total_count': len(jobs), 'jobs': jobs})
+            )
+        if args[:2] == ['run', 'view']:
+            return land.Completed(0, json.dumps(run))
+        if args[:1] == ['api']:
+            return land.Completed(
+                0,
+                json.dumps(
+                    {
+                        'id': run['databaseId'],
+                        'head_sha': run['headSha'],
+                        'head_branch': run['headBranch'],
+                        'event': run['event'],
+                        'status': run['status'],
+                        'conclusion': run['conclusion'] or None,
+                        'html_url': run['url'],
+                        'created_at': run['createdAt'],
+                    }
+                ),
+            )
+        return land.Completed(1, '', f'unexpected gh {args}')
+
+
+class StackReal:
+    """land.py's git against a real repository; gh against ``StackGh``."""
+
+    def __init__(self, gh: StackGh) -> None:
+        self.gh = gh
+
+    def __call__(
+        self, argv: Sequence[str], *args: Any, **kw: Any
+    ) -> land.Completed:
+        if argv[0] == 'gh':
+            return self.gh(list(argv[1:]))
+        return land.run_command(argv, *args, **kw)
+
+
+def t30_topic(k: int) -> str:
+    return f'{PHASE}-t1.9{k}'
+
+
+def t30_package(k: int) -> str:
+    return f'T1.9{k}'
+
+
+class Stack:
+    """A phase with landings, in a real repository: the epic branch's
+    commit, an earlier package (its change ``earlier``) and its landing
+    commit, the phase head ``h``. Packages are built on it one at a time,
+    each on its own topic branch, and stacked or landed with land.py."""
+
+    def __init__(
+        self, tmp: Path, earlier: dict[str, str | None] | None = None
+    ) -> None:
+        self.tmp = tmp
+        self.r = Repo(tmp)
+        self.log = tmp / 'origin-updates.log'
+        hook = self.r.origin / 'hooks' / 'update'
+        hook.write_text(f'#!/bin/sh\necho "$1 $2 $3" >> "{self.log}"\n')
+        hook.chmod(0o755)
+        self.gh = StackGh({})
+        self.lines: list[str] = []
+        self.codes: list[int | str | None] = []
+        self.r.git('checkout', '-q', '-b', 'start')
+        judging = T30_ROOT / 'scripts/rust_core/judging-paths.txt'
+        listed = (
+            judging.read_text(encoding='utf-8')
+            if judging.is_file()
+            else 'scripts/rust_core/**\n'
+        )
+        epic = self.write_commit(
+            'Merge Phase 0 into rust-core',
+            {
+                'base.txt': 'base\n',
+                'scripts/rust_core/judging-paths.txt': listed,
+                JUDGING_FILE: '# the comparator\n',
+            },
+        )
+        self.r.git('push', '-q', 'origin', f'{epic}:refs/heads/rust-core')
+        before = self.write_commit(
+            'T1.89: the earlier package', earlier or {'base.txt': 'base 2\n'}
+        )
+        self.h = self.landing('T1.89', 'the earlier package', epic, before)
+        self.r.git('push', '-q', 'origin', f'{self.h}:refs/heads/{PHASE}')
+        self.r.git('fetch', '-q', 'origin')
+        #: The stack's tail: the last landing made, the phase head at first.
+        self.tail = self.h
+        self.candidates: dict[int, str] = {}
+        self.landings: dict[int, str] = {}
+
+    def write_commit(self, subject: str, files: dict[str, str | None]) -> str:
+        for name, text in files.items():
+            path = self.r.work / name
+            if text is None:
+                path.unlink()
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text)
+            self.r.git('add', '-A', name)
+        self.r.git('commit', '-q', '--allow-empty', '-m', subject)
+        return self.r.git('rev-parse', 'HEAD')
+
+    def landing(self, package: str, summary: str, base: str, on: str) -> str:
+        """A landing commit as land.py makes one, on ``on``."""
+        self.r.git('checkout', '-q', '--detach', on)
+        self.r.git(
+            'commit', '-q', '--allow-empty', '-m',
+            f'Land {package}: {summary}\n\nBoth reviews approve it.\n\n'
+            f'Reviewed-by: two reviewers, {package}\n'
+            'Protected-paths: none (a test)\n'
+            f'Base-SHA: {base}\nCheckpoint-SHA: {base}',
+        )  # fmt: skip
+        return self.r.git('rev-parse', 'HEAD')
+
+    def build(self, k: int, files: dict[str, str | None] | None = None) -> str:
+        """Package k's candidate on the stack's tail, on its topic branch,
+        pushed there."""
+        self.r.git('checkout', '-q', '-b', t30_topic(k), self.tail)
+        sha = self.write_commit(
+            f'{t30_package(k)}: package {k}',
+            files or {PRODUCT_FILE.format(k=k): f'package {k}\n'},
+        )
+        self.r.git('push', '-q', 'origin', f'{sha}:refs/heads/{t30_topic(k)}')
+        self.candidates[k] = sha
+        return sha
+
+    def reviews(self, k: int) -> list[str]:
+        sha = self.candidates[k]
+        out = []
+        for name, text in (
+            ('a', f'APPROVE\n\nReviewed {sha[:7]}; no findings.\n'),
+            ('b', f'APPROVE\nCandidate {sha}.\n'),
+        ):
+            path = self.tmp / f'review-{t30_package(k)}-{name}.md'
+            path.write_text(text)
+            out.append(str(path))
+        return out
+
+    def call(self, argv: list[str]) -> int | str | None:
+        tools = land.Tools(
+            run=StackReal(self.gh), sleep=lambda _: None, repo='o/r'
+        )
+        lines: list[str] = []
+        try:
+            with (
+                in_repo(self.r),
+                contextlib.redirect_stderr(io.StringIO()) as err,
+            ):
+                code: int | str | None = land.main(argv, tools, lines.append)
+        except SystemExit as error:  # argparse: an option it lacks
+            code = f'SystemExit({error.code})'
+            lines.append(err.getvalue().strip()[-400:])
+        self.lines = lines
+        self.codes.append(code)
+        return code
+
+    def land_args(self, k: int, *extra: str) -> list[str]:
+        argv = [
+            '--candidate', self.candidates[k],
+            '--topic-branch', t30_topic(k),
+            '--title', f'{t30_package(k)}: package {k}',
+            '--protected-paths', 'none (a test)',
+            '--phase-branch', PHASE,
+        ]  # fmt: skip
+        for path in self.reviews(k):
+            argv += ['--review', path]
+        return [*argv, *extra]
+
+    def stack(self, k: int, *extra: str) -> int | str | None:
+        """``land.py --stack`` for package k, from its topic branch; on
+        ``STACKED`` the landing commit becomes the stack's tail."""
+        code = self.call(['--stack', *self.land_args(k, *extra)])
+        head = self.r.git('rev-parse', 'HEAD')
+        if code == 0 and f'STACKED {head}' in self.text:
+            self.landings[k] = head
+            self.tail = head
+        return code
+
+    def stack_land(self, k: int, *extra: str) -> int | str | None:
+        self.r.git('checkout', '-q', t30_topic(k))
+        return self.call(
+            [
+                'stack-land', '--tip', self.landings[k],
+                '--topic-branch', t30_topic(k),
+                '--phase-branch', PHASE, *extra,
+            ]
+        )  # fmt: skip
+
+    def green(self, k: int, run_id: int = TOP_RUN, **kw: Any) -> None:
+        sha = self.candidates[k]
+        self.gh.runs.setdefault(sha, []).insert(
+            0, ci_run(sha, t30_topic(k), run_id=run_id, **kw)
+        )
+
+    @property
+    def text(self) -> str:
+        return '\n'.join(self.lines)
+
+    def remote_phase(self) -> str | None:
+        return self.r.remote(PHASE)
+
+    def updates(self) -> list[tuple[str, str]]:
+        """The phase branch's updates on the remote, (old, new), in order."""
+        if not self.log.exists():
+            return []
+        out = []
+        for line in self.log.read_text().splitlines():
+            ref, old, new = line.split()
+            if ref == f'refs/heads/{PHASE}':
+                out.append((old, new))
+        return out
+
+    def trailers(self, sha: str) -> dict[str, str]:
+        text = self.r.git('log', '-1', '--format=%(trailers:only,unfold)', sha)
+        return {
+            key.strip(): value.strip()
+            for key, sep, value in (
+                line.partition(': ') for line in text.splitlines()
+            )
+            if sep
+        }
+
+    def tree(self, rev: str) -> str:
+        return self.r.git('rev-parse', f'{rev}^{{tree}}')
+
+    def ratchet_checkpoint(self, tip: str, before: str) -> tuple[int, str]:
+        """``ratchet.py checkpoint --phase-push BEFORE`` on ``tip``, as CI's
+        phase check runs it, in a clone of the remote."""
+        where = self.tmp / f'check-{tip[:8]}'
+        self.r.run_git(self.tmp, 'clone', '-q', str(self.r.origin), str(where))
+        self.r.run_git(where, 'checkout', '-q', '--detach', tip)
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(T30_ROOT / 'scripts/rust_core/ratchet.py'),
+                'checkpoint', '--repo', str(where), '--phase-push', before,
+            ],
+            env={**self.r.env, 'SDM_PHASE_BRANCH': PHASE},
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )  # fmt: skip
+        return proc.returncode, proc.stdout + proc.stderr
+
+
+def t30_stacked(tmp: Path, n: int = 4, files: Any = None) -> Stack:
+    """A stack of n packages, each stacked with ``land.py --stack``."""
+    s = Stack(tmp)
+    for k in range(1, n + 1):
+        s.build(k, (files or {}).get(k))
+        code = s.stack(k)
+        if k not in s.landings:
+            raise AssertionError(
+                f'--stack of {t30_package(k)}: exit {code}: {s.text[-600:]}'
+            )
+    return s
+
+
+def t30_detail(s: Stack, ok: bool, good: str) -> tuple[bool, str]:
+    return ok, good if ok else f'exits {s.codes}: {s.text[-700:]}'
+
+
+@case(
+    'T3.0 stack: four packages land on one green run on the top, a landing '
+    'commit each, in order, in one push'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp)
+    s.green(4)
+    before = len(s.updates())
+    code = s.stack_land(4)
+    tip = s.landings[4]
+    if code != 0 or f'LANDED {tip}' not in s.text:
+        return t30_detail(s, False, '')
+    lands = [
+        line.split('\x00')
+        for line in s.r.git(
+            'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+            f'{s.h}..{tip}',
+        ).splitlines()
+    ]  # fmt: skip
+    landed = [
+        (sha, subject) for sha, subject in lands if subject.startswith('Land ')
+    ]
+    problems = []
+    if [subject.split(':')[0] for _, subject in landed] != [
+        f'Land {t30_package(k)}' for k in range(1, 5)
+    ]:
+        problems.append(f'landing commits {[t for _, t in landed]}')
+    previous = s.h
+    for k, (sha, _) in enumerate(landed, start=1):
+        trailers = s.trailers(sha)
+        if s.tree(sha) != s.tree(f'{sha}^') or s.tree(sha) != s.tree(
+            s.candidates.get(k, '')
+        ):
+            problems.append(
+                f'Land {t30_package(k)} is not its candidate, empty'
+            )
+        if (
+            trailers.get('Base-SHA') != previous
+            or trailers.get('Checkpoint-SHA') != previous
+            or trailers.get('Stack-base') != s.h
+        ):
+            problems.append(f'Land {t30_package(k)} trailers {trailers}')
+        previous = sha
+    if s.remote_phase() != tip:
+        problems.append(f'the phase branch is at {s.remote_phase()}')
+    if s.updates()[before:] != [(s.h, tip)]:
+        problems.append(f'phase updates {s.updates()[before:]}, not one push')
+    if problems:
+        return False, '; '.join(problems) + ' | ' + s.text[-300:]
+    return True, 'four landings in order, one push'
+
+
+@case(
+    "T3.0 stack: the ratchet's phase check accepts the stack's push, each "
+    'landing checkpointed on the one before it'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp)
+    s.green(4)
+    before = len(s.updates())
+    if s.stack_land(4) != 0:
+        return t30_detail(s, False, '')
+    problems = []
+    for old, new in s.updates()[before:]:
+        code, out = s.ratchet_checkpoint(new, old)
+        wanted = s.trailers(new).get('Checkpoint-SHA', '')
+        first = out.split()[0] if code == 0 and out.split() else ''
+        if code != 0 or first != wanted:
+            problems.append(
+                f'{old[:8]}..{new[:8]}: exit {code}, checkpoint {first[:12]} '
+                f'not {wanted[:12]}: {out[-300:]}'
+            )
+    landed = [s.landings[k] for k in range(1, 5)]
+    for k, sha in enumerate(landed):
+        wanted = landed[k - 1] if k else s.h
+        if s.trailers(sha).get('Checkpoint-SHA') != wanted:
+            problems.append(f'Land {t30_package(k + 1)} not on the one before')
+    if not s.updates()[before:]:
+        problems.append('nothing pushed')
+    return (not problems), '; '.join(
+        problems
+    ) or 'each checkpoint the landing before'
+
+
+@case('T3.0 stack: a fifth package is refused by default, nothing made')
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp)
+    c5 = s.build(5)
+    code = s.stack(5)
+    ok = (
+        code == 2
+        and 'REFUSED' in s.text
+        and 5 not in s.landings
+        and 'STACKED' not in s.text
+        and '4' in s.text
+        and s.r.git('rev-parse', 'HEAD') == c5
+        and s.remote_phase() == s.h
+    )
+    return t30_detail(s, ok, 'refused past 4')
+
+
+@case(
+    'T3.0 stack: plain land.py on a candidate stacked on an unlanded landing '
+    'is refused, naming stack-land'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp, n=1)
+    s.build(2)
+    s.green(2)
+    code = s.call(s.land_args(2))
+    ok = (
+        code == 2
+        and 'stack-land' in s.text.partition('REFUSED:')[2]
+        and s.remote_phase() == s.h
+        and s.r.git('rev-parse', 'HEAD') == s.candidates[2]
+    )
+    return t30_detail(s, ok, 'refused naming stack-land')
+
+
+@case(
+    'T3.0 stack: a red top names the implicated commit and the green '
+    'prefix, which then lands on its own run'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = t30_stacked(tmp, files={3: {RUST_FILE: 'pub fn demo() {}\n'}})
+    s.green(4, conclusion='failure')
+    s.gh.failing[TOP_RUN] = ['rust-test']
+    code = s.stack_land(4)
+    lines = s.lines
+    implicated = [
+        line for line in lines if line.startswith('IMPLICATED rust-test:')
+    ]
+    prefix = [
+        line.split('--tip', 1)[1].split()[0]
+        for line in lines
+        if line.startswith('GREEN PREFIX:') and '--tip' in line
+    ]
+    problems = []
+    if code != 1:
+        problems.append(f'exit {code}')
+    if not any(
+        'T1.93' in line or s.candidates[3][:7] in line for line in implicated
+    ):
+        problems.append(f'T1.93 not implicated by rust-test: {implicated}')
+    if not prefix or not s.landings[2].startswith(prefix[0]):
+        problems.append(f'green prefix {prefix}, not Land T1.92')
+    if not any(line.startswith('PREFIX RUN:') for line in lines):
+        problems.append('no PREFIX RUN line')
+    if s.remote_phase() != s.h:
+        problems.append('something landed on a red run')
+    if problems:
+        return False, '; '.join(problems) + ' | ' + s.text[-500:]
+    s.green(2, run_id=PREFIX_RUN)
+    code = s.stack_land(2)
+    ok = (
+        code == 0
+        and f'LANDED {s.landings[2]}' in s.text
+        and s.remote_phase() == s.landings[2]
+    )
+    return t30_detail(s, ok, 'implicated T1.93; the prefix landed')
+
+
+@case(
+    'T3.0 train: a judging-path change outside the train is refused, naming '
+    'land.py --stack --train'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s.build(1, {JUDGING_FILE: '# the comparator, changed\n'})
+    s.green(1)
+    code = s.call(s.land_args(1))
+    why = s.text.partition('REFUSED:')[2]
+    ok = (
+        code == 2
+        and 'land.py --stack --train' in ' '.join(why.split())
+        and s.remote_phase() == s.h
+        and s.r.git('rev-parse', 'HEAD') == s.candidates[1]
+    )
+    return t30_detail(s, ok, 'refused, naming the train')
+
+
+@case(
+    'T3.0 train: a judging-only package first in its stack lands as the '
+    'train, with Train: yes, before the product package'
+)
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s.build(1, {JUDGING_FILE: '# the comparator, changed\n'})
+    if s.stack(1, '--train') != 0 or 1 not in s.landings:
+        return t30_detail(s, False, '')
+    s.build(2)
+    if s.stack(2) != 0 or 2 not in s.landings:
+        return t30_detail(s, False, '')
+    s.green(2)
+    code = s.stack_land(2)
+    ok = (
+        code == 0
+        and s.remote_phase() == s.landings[2]
+        and s.trailers(s.landings[1]).get('Train') == 'yes'
+        and 'Train' not in s.trailers(s.landings[2])
+        and s.trailers(s.landings[2]).get('Base-SHA') == s.landings[1]
+    )
+    return t30_detail(s, ok, 'the train landed first')
+
+
+@case('T3.0 train: a --train package not first in its stack is refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s.build(1)
+    if s.stack(1) != 0 or 1 not in s.landings:
+        return t30_detail(s, False, '')
+    s.build(2, {JUDGING_FILE: '# the comparator, changed\n'})
+    code = s.stack(2, '--train')
+    ok = (
+        code == 2
+        and 'REFUSED' in s.text
+        and 2 not in s.landings
+        and s.r.git('rev-parse', 'HEAD') == s.candidates[2]
+    )
+    return t30_detail(s, ok, 'refused')
+
+
+@case('T3.0 train: a --train package changing a product file is refused')
+def _(tmp: Path) -> tuple[bool, str]:
+    s = Stack(tmp, earlier={JUDGING_FILE: '# the comparator, earlier\n'})
+    s.build(
+        1,
+        {JUDGING_FILE: '# the comparator, changed\n', 'notes/p1.txt': 'p1\n'},
+    )
+    code = s.stack(1, '--train')
+    ok = (
+        code == 2
+        and 'REFUSED' in s.text
+        and 1 not in s.landings
+        and s.r.git('rev-parse', 'HEAD') == s.candidates[1]
+    )
+    return t30_detail(s, ok, 'refused')
+
+
 # --- the pending list -----------------------------------------------------------
 
 PENDING = Path(__file__).with_name('land_selftest-pending.json')
