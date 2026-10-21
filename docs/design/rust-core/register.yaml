@@ -2987,8 +2987,10 @@ entries:
     source, under a forced core route, answered with JSON text holding a
     lone surrogate escape; widened at T2.16 to a raw lone surrogate too,
     each refused INVALID_RESPONSE where the reference reads the answer: in
-    an answer encoded as UTF-16 or UTF-32 (category encoding); in UTF-8
-    bytes Python's reader takes with surrogatepass (category syntax); and
+    an answer encoded as UTF-16 or as UTF-32, a surrogate code unit or
+    code point standing alone (category encoding); in UTF-8, the
+    surrogate's three bytes (for example ED A0 80), which Python's reader
+    takes with surrogatepass (category syntax); and
     in a Databricks serving answer's text, which the core's transport
     encodes with surrogatepass (category syntax), where the reference
     answers successfully, so on Databricks the core refuses an answer the
