@@ -310,9 +310,11 @@ enum Json {
     Bool(bool),
     Int(String),
     Float(f64),
-    Text(String),
+    /// Text as UTF-16 code units, as Python holds a JSON string, a lone
+    /// surrogate an escape names among them (T2.14b fix 1).
+    Text(Vec<u16>),
     List(Vec<Json>),
-    Object(Vec<(String, Json)>),
+    Object(Vec<(Vec<u16>, Json)>),
 }
 
 /// The reference's text of the JSON value `text` holds, a JSON null none;
@@ -334,7 +336,9 @@ fn reference_text(text: &str, float_text: fn(f64) -> String) -> Option<Option<St
         Json::Bool(false) => Some("False".to_owned()),
         Json::Int(digits) => Some(digits),
         Json::Float(f) => Some(float_text(f)),
-        Json::Text(s) => Some(s),
+        // Text as Python's `str` of it; one holding a lone surrogate has no
+        // UTF-8 form, and is not read.
+        Json::Text(units) => Some(String::from_utf16(&units).ok()?),
         nested => {
             let mut out = String::new();
             write(&nested, float_text, &mut out);
@@ -381,27 +385,22 @@ fn write(value: &Json, float_text: fn(f64) -> String, out: &mut String) {
 }
 
 /// A string as the reference's writer quotes one, ASCII only: `"` and `\`
-/// escaped, the named control characters by name, every other character
-/// outside space to `~` as `\u` and four lowercase hexadecimal digits, one
-/// past the first plane as its two surrogates.
-fn quoted(text: &str, out: &mut String) {
+/// escaped, the named control characters by name, every other code unit
+/// outside space to `~` as `\u` and four lowercase hexadecimal digits (one
+/// past the first plane as its two surrogates, a lone surrogate as itself).
+fn quoted(units: &[u16], out: &mut String) {
     out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            ' '..='~' => out.push(c),
-            _ => {
-                let mut units = [0u16; 2];
-                for unit in c.encode_utf16(&mut units) {
-                    out.push_str(&format!("\\u{unit:04x}"));
-                }
-            }
+    for &unit in units {
+        match unit {
+            0x22 => out.push_str("\\\""),
+            0x5C => out.push_str("\\\\"),
+            0x0A => out.push_str("\\n"),
+            0x0D => out.push_str("\\r"),
+            0x09 => out.push_str("\\t"),
+            0x08 => out.push_str("\\b"),
+            0x0C => out.push_str("\\f"),
+            0x20..=0x7E => out.push(char::from(u8::try_from(unit).unwrap_or(b'?'))),
+            _ => out.push_str(&format!("\\u{unit:04x}")),
         }
     }
     out.push('"');
@@ -467,8 +466,8 @@ impl Reader<'_> {
             }
             b'{' => {
                 self.at += 1;
-                let mut members: Vec<(String, Json)> = Vec::new();
-                let mut named: BTreeMap<String, usize> = BTreeMap::new();
+                let mut members: Vec<(Vec<u16>, Json)> = Vec::new();
+                let mut named: BTreeMap<Vec<u16>, usize> = BTreeMap::new();
                 self.space();
                 if self.eat("}") {
                     return Some(Json::Object(members));
@@ -550,9 +549,16 @@ impl Reader<'_> {
         })
     }
 
-    fn text(&mut self) -> Option<String> {
+    /// A JSON string as Python's reader holds it: its UTF-16 code units,
+    /// each `\u` escape one unit, so a lone surrogate is kept as Python
+    /// keeps it.
+    fn text(&mut self) -> Option<Vec<u16>> {
         self.at += 1;
-        let mut out = String::new();
+        let mut out: Vec<u16> = Vec::new();
+        let push = |out: &mut Vec<u16>, c: char| {
+            let mut units = [0u16; 2];
+            out.extend_from_slice(c.encode_utf16(&mut units));
+        };
         loop {
             let c = self.text.get(self.at..)?.chars().next()?;
             self.at += c.len_utf8();
@@ -562,35 +568,20 @@ impl Reader<'_> {
                     let escape = *self.bytes.get(self.at)?;
                     self.at += 1;
                     match escape {
-                        b'"' => out.push('"'),
-                        b'\\' => out.push('\\'),
-                        b'/' => out.push('/'),
-                        b'b' => out.push('\u{8}'),
-                        b'f' => out.push('\u{c}'),
-                        b'n' => out.push('\n'),
-                        b'r' => out.push('\r'),
-                        b't' => out.push('\t'),
-                        b'u' => {
-                            let high = self.hex4()?;
-                            let c = if (0xD800..0xDC00).contains(&high) {
-                                if !self.eat("\\u") {
-                                    return None;
-                                }
-                                let low = self.hex4()?;
-                                if !(0xDC00..0xE000).contains(&low) {
-                                    return None;
-                                }
-                                char::from_u32(0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00))?
-                            } else {
-                                char::from_u32(high)?
-                            };
-                            out.push(c);
-                        }
+                        b'"' => push(&mut out, '"'),
+                        b'\\' => push(&mut out, '\\'),
+                        b'/' => push(&mut out, '/'),
+                        b'b' => push(&mut out, '\u{8}'),
+                        b'f' => push(&mut out, '\u{c}'),
+                        b'n' => push(&mut out, '\n'),
+                        b'r' => push(&mut out, '\r'),
+                        b't' => push(&mut out, '\t'),
+                        b'u' => out.push(u16::try_from(self.hex4()?).ok()?),
                         _ => return None,
                     }
                 }
                 c if (c as u32) < 0x20 => return None,
-                c => out.push(c),
+                c => push(&mut out, c),
             }
         }
     }

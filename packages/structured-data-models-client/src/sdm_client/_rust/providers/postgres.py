@@ -304,11 +304,12 @@ def _is_json(field: Any) -> bool:
 
 
 def _json_text(value: Any) -> str | None:
-    r"""The JSON text of a value the driver read; what the reference makes
-    of it is the core's."""
+    r"""The JSON text of a value the driver read, ASCII only, so a lone
+    surrogate a document escapes (which Python's reader keeps) travels as
+    its escape; what the reference makes of it is the core's."""
     if value is None:
         return None
-    return json.dumps(value, separators=(',', ':'), ensure_ascii=False)
+    return json.dumps(value, separators=(',', ':'))
 
 
 def _array(values: Any, field: Any) -> Any:
@@ -322,9 +323,7 @@ def _array(values: Any, field: Any) -> Any:
         # is itself a JSON array stays one value (never flattened).
         return pa.array(
             [
-                None
-                if value is None
-                else [_json_text(item) for item in value]
+                None if value is None else [_json_text(item) for item in value]
                 for value in values
             ],
             type=kind,

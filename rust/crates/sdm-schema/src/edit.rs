@@ -355,9 +355,8 @@ fn stype_of(
             Given::Value(text) => refused
                 .with_field("reason", Detail::text("not_a_semantic_type"))
                 .with_field("given_text", Detail::text(text)),
-            Given::Spelled(text) => refused
-                .with_field("reason", Detail::text("not_a_semantic_type_spelled"))
-                .with_field("given", Detail::text(text)),
+            Given::Spelled(text) => with_given(refused, Some(text))
+                .with_field("reason", Detail::text("not_a_semantic_type_spelled")),
             Given::Unreadable => refused,
         });
     };

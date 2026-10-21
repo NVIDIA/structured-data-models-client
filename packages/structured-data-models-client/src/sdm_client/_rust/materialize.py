@@ -51,6 +51,7 @@ T1.24b, a schema changed in a way no edit it takes says
 
 from __future__ import annotations
 
+import datetime
 import json
 import math
 from collections.abc import Sequence
@@ -289,9 +290,28 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
             written.append({'value': {'t': 'f64', 'v': repr(value)}})
         elif type(value) is str:
             written.append({'value': {'t': 'utf8', 'v': value}})
+        elif isinstance(value, (datetime.date, datetime.time)):
+            # A date, a time of day or a timestamp (pandas' among them), with
+            # its kind, so the core holds two of one kind and text one
+            # candidate, as Python's equality does (T2.14b fix 1).
+            written.append(
+                {'typed': {'text': str(value), 'type': _kind(value)}}
+            )
         else:
             written.append({'spelled': str(value)})
     return written
+
+
+def _kind(value: Any) -> str:
+    r"""The kind of a date, a time of day or a timestamp, as the contract's
+    typed candidate names it: ``datetime`` for a timestamp (a
+    ``datetime.datetime``, a ``pandas.Timestamp`` among them), which
+    Python holds unequal to a date of the same day."""
+    if isinstance(value, datetime.datetime):
+        return 'datetime'
+    if isinstance(value, datetime.date):
+        return 'date'
+    return 'time'
 
 
 def _text(value: Any) -> str:

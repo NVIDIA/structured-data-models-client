@@ -4103,6 +4103,18 @@ impl Labelling<'_> {
                     {
                         warn_float32_overflow(self.asker);
                     }
+                    // The columns its filter reads, which the executor casts
+                    // to float32 too (`execute_column`).
+                    if let Some(filter) = &windowed.filter {
+                        let mut read = BTreeSet::new();
+                        filter.entity_columns(&mut read);
+                        for column in read {
+                            if float32_overflows(named(&rows.rows, &column)?) {
+                                warn_float32_overflow(self.asker);
+                                break;
+                            }
+                        }
+                    }
                     rows
                 },
                 &self.examples.anchors,

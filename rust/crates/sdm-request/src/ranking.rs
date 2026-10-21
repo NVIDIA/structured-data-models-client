@@ -109,6 +109,13 @@ pub enum Candidate {
     /// into its question, which the core holds equal to no other candidate
     /// (`GivenCandidate::Spelled`).
     Spelled(String),
+    /// A value of a type no scalar holds, by its text and its kind's name
+    /// (`GivenCandidate::Typed`): written as [`Candidate::Spelled`] is,
+    /// and equal to another of one kind and one text.
+    Typed {
+        text: String,
+        kind: String,
+    },
     /// A value the host holds equal to one given before it, left out
     /// (`GivenCandidate::Repeat`).
     Repeat,
@@ -198,6 +205,7 @@ impl Candidate {
                 Some(format!("n{}", trimmed(decimal_text(unscaled, *scale))))
             }
             Candidate::Text(text) => Some(format!("s{text}")),
+            Candidate::Typed { text, kind } => Some(format!("t{kind}\u{0}{text}")),
             Candidate::Spelled(_)
             | Candidate::Repeat
             | Candidate::Other(_)
@@ -224,6 +232,12 @@ pub fn read(given: &GivenCandidate) -> Candidate {
             );
         }
         GivenCandidate::Spelled(text) => return Candidate::Spelled(text.clone()),
+        GivenCandidate::Typed(typed) => {
+            return Candidate::Typed {
+                text: typed.text.clone(),
+                kind: typed.kind.clone(),
+            };
+        }
         GivenCandidate::Repeat => return Candidate::Repeat,
         GivenCandidate::Unreadable => return Candidate::Unreadable,
     };
@@ -283,7 +297,7 @@ pub fn json_text(candidate: &Candidate, float_repr: fn(f64) -> String) -> Option
         Candidate::Int(n) => Some(n.whole_text()),
         Candidate::Float(f) if f.is_finite() => Some(float_repr(*f)),
         Candidate::Decimal { unscaled, scale } => Some(decimal_text(unscaled, *scale)),
-        Candidate::Text(text) | Candidate::Spelled(text) => Some(
+        Candidate::Text(text) | Candidate::Spelled(text) | Candidate::Typed { text, .. } => Some(
             String::from_utf8_lossy(&sdm_wire::json::Value::text(text).to_bytes()).into_owned(),
         ),
         _ => None,
@@ -496,7 +510,7 @@ pub fn literal(
             Err(refused("candidate_not_whole", position))
         }
         Candidate::Float(f) => Ok(whole_text(f)),
-        Candidate::Text(text) | Candidate::Spelled(text) => {
+        Candidate::Text(text) | Candidate::Spelled(text) | Candidate::Typed { text, .. } => {
             if text.chars().any(|c| "\"'\\,()".contains(c)) || text.chars().all(is_space) {
                 return Err(refused("candidate_unwritable", position));
             }

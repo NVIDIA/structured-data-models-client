@@ -682,6 +682,11 @@ impl<T> Given<T> {
 /// - `{"spelled": "<text>"}`: a value of a type no scalar holds, by the
 ///   text the reference writes into its question (in Python, `str` of it);
 ///   it is no text candidate, and the core holds it equal to no other.
+/// - `{"typed": {"text": "<text>", "type": "<name>"}}`: a value of a type
+///   no scalar holds, as `spelled` is, with the name of the kind of value it
+///   is (`date`, `datetime`, `time`), so that two of one kind and one text
+///   are one candidate, as the host's language holds them equal and the
+///   reference's `dict.fromkeys` keeps the first (T2.14b fix 1).
 /// - `repeat`: a value the host's own language holds equal to one given
 ///   before it, left out as the reference's `dict.fromkeys` leaves it out.
 ///   A host whose candidates are all scalars sends none, the core keeping
@@ -696,8 +701,19 @@ pub enum GivenCandidate {
     Integer(String),
     Decimal(String),
     Spelled(String),
+    Typed(TypedCandidate),
     Repeat,
     Unreadable,
+}
+
+/// A candidate of a type no scalar holds, by its text and the name of its
+/// kind (`GivenCandidate::Typed`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TypedCandidate {
+    pub text: String,
+    #[serde(rename = "type")]
+    pub kind: String,
 }
 
 /// Build a request for a query over a described source.

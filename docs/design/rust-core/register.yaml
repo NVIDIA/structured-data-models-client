@@ -5330,6 +5330,10 @@ entries:
     warnings and the host says them in the reference's words (M4,
     KO2-32), so the difference it records is gone; the orchestrator's
     decision at T2.14b's round 1 (a tightening).
+    Naming the data's earliest and latest timestamps in these warnings and
+    in the anchor and context refusals, and inf or -inf in a non-finite
+    value's refusal, is KO2-89's (the orchestrator, under the owner's
+    overnight delegation, KO2-88), beside KO2-86.
 
 - id: P1B-76
   title: A BOOLEAN[] or STRUCT of BOOLEAN DuckDB hands over losslessly is refused by name where the reference fails unnamed
@@ -6770,6 +6774,37 @@ entries:
     Approver: reviewer, a named error in place of a crash (E66(b)). The
     call answers nothing on either route. Measured by the implementer's
     probe of the ranking's inputs (tracker-T2.8.md, Probes).
+
+- id: P2D-2
+  title: A refusal names a value of the caller's own call by its repr only up to 2,000 characters
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source and schema setters refuse a primary
+    key or a time column given as a value that is not a name (a number, a
+    set, a date) with its repr in the message, at any length ("a primary
+    key names a column or a sequence of them, got {key!r}", "table ... has
+    no column {name!r}").
+  new_behavior: >-
+    On the core route the Python host gives such a value to the core as
+    its repr (Given::Spelled, KO2-86) only where the repr is at most 2,000
+    characters (codec.SPELLED_MOST), so a control message stays within its
+    cap; a longer one is given as a bare unreadable and the refusal, the
+    same code, rule and class, is said without the value.
+  affected_inputs: >-
+    Schema.from_source's primary_keys or time_columns, and the schema's
+    primary_key, time_column, stype, column and relationship setters, on
+    the core route, given a value no contract type holds whose repr is
+    longer than 2,000 characters.
+  cases: [T2.14b]
+  refs: [T2.14b, KO2-86, E101]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Approver: reviewer; only a message's text differs, never the outcome,
+    code or class. The ID is from lane D's block, beside P2D-1; the
+    orchestrator may renumber. Found by T2.14b's round 1 review (Claude,
+    P3-7).
 
 # --- lane E entries (P2E-1..19) ---
 

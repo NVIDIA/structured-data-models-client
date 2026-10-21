@@ -75,3 +75,20 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 - Round 1 (KO2-86, the owner's "Echo own args"): an error may name a value of the caller's own call, so twelve of the thirteen keys first left pending now pass: the date literal and the query (`date_literal_packed`'s `literal` and `query`), the keys a ranking's question asked that the entity table lacks (`not_in_table`'s `keys`), and a key or time column no contract type holds, given spelled (`Given::Spelled`, contract 27's working version) and named as `given`.
   `key.uint64-above-int64-max` stays pending: the value its reference message names (row 0's `9223372036854775810`) is a context example's key read from the data, not one the caller passed, which H17 still keeps out.
 - P1B-75 (the sampler's two warnings in the core's words) is retired by the orchestrator's decision, the core now saying them in the reference's words.
+
+### Fix 1 (round 1 reviews)
+
+- Claude P2-1: a declared `numeric`'s unreadable text is refused naming the column only, never the cell (`pg_values.rs`); no other message in `sdm-data` or the three providers formats a value read from data.
+- Codex P2-1: a date, a time of day or a timestamp candidate is given as `{"typed": {"text", "type"}}` (`GivenCandidate::Typed`), so the core holds two of one kind and text one candidate, as Python's equality and `dict.fromkeys` do; repeated dates make the reference's parts and calls.
+- Codex P2-2: KO2-89 (the orchestrator, under the owner's overnight delegation) lets M4's warnings and refusals name the data's earliest and latest times, and a non-finite value's refusal `inf` or `-inf`; noted on P1B-75.
+- Codex P2-3: a Postgres `json` document escaping a lone surrogate is kept as the reference keeps it: the provider writes the driver's value as ASCII JSON, and `sdm-data` holds JSON text as UTF-16 code units, writing each unit back as the reference's writer escapes it.
+- Codex P3-1: `stype = 5` is said as "5 is not a semantic type", the spelled refusal now carrying its variant.
+- Claude P3-2: FX-1 also warns where an aggregation's `WHERE` reads a double past float32's range (the entity filter and ASSUMING already did, through the labels' build).
+- Claude P3-6: a `json[]` column's elements are marked as JSON and handed over as JSON text, so `sdm-data`'s list rule reads them.
+- Claude P3-7: the 2,000-character cap on a spelled value is registered (P2D-2, proposed; the ID is from lane D's block).
+
+### Carried to Phase 3 (P3)
+
+- Decimal stype on Postgres: inference reads a scaled decimal by Arrow's `ToDouble`, where the reference's Postgres double is `float(Decimal)`, correctly rounded (0.700 as 0.7000000000000001 here, 0.7 there); distinct counts agree but near collisions (Claude r1 P3-3).
+- `core/transport.py`'s `predict_body` still decodes each answer to keep the transport's not-a-JSON-object refusal and the depth check, so an answer is parsed twice; the core could own that refusal (Claude r1 P3-4).
+- A custom transport with no `predict_body` is served through `json.dumps`, which recurses: a very deep answer raises `RecursionError` there rather than the core's `too_deep` (Claude r1 P3-5).
