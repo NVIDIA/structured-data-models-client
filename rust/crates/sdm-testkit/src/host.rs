@@ -94,6 +94,13 @@ pub struct Observed {
     /// columns and rows, as a predicted answer's, and the rows those calls
     /// score. In process only; no observation writes it yet.
     pub answered: Option<Value>,
+    /// The explanation of `predict`'s result (T2.13), where the core gave
+    /// one: its Arrow schema's `explanation` metadata, the JSON text the
+    /// core wrote. Apart from the answer, whose shape a gate's checkpoint
+    /// fixes; the observation writes it as `core.predicted.result`'s
+    /// `explanation` (T2.16a), and an item's explanation and metadata are
+    /// the result's own columns, among the rows.
+    pub explanation: Option<String>,
 }
 
 /// The core's answer to the case's operation.
@@ -351,6 +358,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         driver: None,
         edits: vec![],
         answered: None,
+        explanation: None,
     })
 }
 
@@ -1021,6 +1029,7 @@ fn describe_on(
         driver: None,
         edits: Vec::new(),
         answered: None,
+        explanation: None,
     };
     let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
@@ -1849,6 +1858,7 @@ pub fn materialize_repeatedly_holding(
             driver: None,
             edits: Vec::new(),
             answered: None,
+            explanation: None,
         };
         materialize(
             case,
@@ -1945,15 +1955,7 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
             rows.push(Value::Array(cells));
         }
     }
-    let mut recorded = json!({"columns": columns, "rows": rows});
-    // The result's explanation (T2.13), on the schema's metadata as the JSON
-    // text the core wrote, recorded as text so the hosts are held to the
-    // same bytes (T2.16a); an item's explanation and metadata are the
-    // result's own columns, among the rows.
-    if let Some(explanation) = data.schema.metadata().get("explanation") {
-        recorded["explanation"] = Value::String(explanation.clone());
-    }
-    Ok(recorded)
+    Ok(json!({"columns": columns, "rows": rows}))
 }
 
 /// A list cell's members as [`result_rows`] records a cell: an integer,
@@ -2201,6 +2203,7 @@ fn predict(
                 else {
                     bail!("{}: the metadata is not attached", case.id);
                 };
+                observed.explanation = result.schema.metadata().get("explanation").cloned();
                 let mut answer = json!({
                     "body": sent,
                     "model": predicted.model,
