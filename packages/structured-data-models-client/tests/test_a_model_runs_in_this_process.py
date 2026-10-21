@@ -448,6 +448,24 @@ def test_a_model_this_client_was_not_opened_with_is_a_configuration(tabular):
     assert 'kumo-tabular' in error.message
 
 
+def test_a_model_this_process_has_no_reader_for_is_a_configuration(
+    relational, monkeypatch
+):
+    """A model the client can send but this process cannot run is refused
+    like one it was not opened with, rather than as the model failing."""
+    from sdm_client.in_process import backend
+
+    gathered = PredictiveQuery(COUNT, graph()).materialize(
+        indices=[0, 1], model=KumoRelational()
+    )
+    with SDMClient.in_process(relational) as client:
+        monkeypatch.delitem(backend._SERVED, 'kumo-relational')
+        error = refused(
+            lambda: client.predict(gathered, model=KumoRelational())
+        )
+    assert error.code == 'INVALID_CONFIGURATION'
+
+
 def tampered(change) -> Request:
     """A gathered request with its payload changed, as one passed to
     ``Request.materialized`` by hand may be."""

@@ -291,15 +291,23 @@ def _check_target(task: Mapping[str, Any]) -> None:
 
 
 def _check_declared(schema: Mapping[str, Any]) -> None:
-    r"""Refuse a relationship joining on a column its table does not declare.
+    r"""Refuse a join on a column its table does not declare.
 
     A join on an undeclared column reads whatever the table holds under that
     name, if anything, so the neighbourhood it builds is not the one stated.
+    Every join also matches on ``instance_id``, so every table declares it.
     """
     tables = {
         INSTANCE_TABLE: schema['instance_table'],
         **(schema.get('related_tables') or {}),
     }
+    for name, table in tables.items():
+        if INSTANCE_ID not in (table.get('columns') or {}):
+            raise StructuredDataError(
+                f'{name!r} does not declare {INSTANCE_ID!r}, which every '
+                f'join matches on',
+                code='INVALID_SCHEMA',
+            )
     for relationship in schema.get('relationships') or ():
         for side in ('source', 'target'):
             name = relationship.get(f'{side}_table', INSTANCE_TABLE)

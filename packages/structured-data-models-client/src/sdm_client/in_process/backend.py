@@ -227,15 +227,15 @@ class InProcessBackend:
         releasing a session should not wait for that, and a client closed
         while it ran does not keep what it loaded.
         """
-        served = _SERVED[model_id]
+        served = _SERVED.get(model_id)
         with self._state:
             model = self._models.get(model_id)
-        if model is None and self._loads:
+        if model is None and self._loads and served is not None:
             model = _loaded(served, self._device)
             with self._state:
                 self._require_open()
                 self._models[model_id] = model
-        if model is None:
+        if model is None or served is None:
             raise StructuredDataError(
                 f'{model_id} is not served by this client, which was opened '
                 f'with {self.list_models()} only',

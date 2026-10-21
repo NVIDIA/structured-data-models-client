@@ -435,6 +435,18 @@ def _without(table: dict, column: str) -> None:
         del row[position]
 
 
+def _undeclared(payload: dict, name: str, column: str) -> None:
+    r"""``column`` taken out of table ``name`` everywhere: from its rows in
+    both halves and from its schema."""
+
+    def holding(part: dict) -> dict:
+        return part if name == 'instance_table' else part['related_tables']
+
+    for half in ('context', 'predict'):
+        _without(holding(payload[half])[name], column)
+    del holding(payload['schema'])[name]['columns'][column]
+
+
 @pytest.mark.parametrize(
     ('change', 'code'),
     [
@@ -466,6 +478,11 @@ def _without(table: dict, column: str) -> None:
             ],
             'INVALID_SCHEMA',
         ),
+        (
+            lambda p: _undeclared(p, 'instance_table', 'instance_id'),
+            'INVALID_SCHEMA',
+        ),
+        (lambda p: _undeclared(p, 'users', 'instance_id'), 'INVALID_SCHEMA'),
         (
             lambda p: _without(p['predict']['related_tables']['orders'], 'ts'),
             'INVALID_SCHEMA',
