@@ -102,3 +102,18 @@ def test_a_scenario_the_core_stopped_early_is_not_judged(tmp_path):
     assert '- judged: 1' in text
     assert '| done |' in text and '| demo |' not in text
     assert 'median core-to-reference ratio: 0.900' in text
+
+
+def test_a_provider_reading_duckdb_s_frame_uses_pandas(tmp_path):
+    sys.path.insert(0, str(L7.parent))
+    try:
+        import l7
+    finally:
+        sys.path.pop(0)
+    providers = tmp_path / '_rust' / 'providers'
+    providers.mkdir(parents=True)
+    (providers / 'clean.py').write_text('table = result.fetch_arrow_table()\n')
+    assert l7.providers_with_pandas(tmp_path) == []
+    (providers / 'frame.py').write_text('rows = connection.sql(q).df()\n')
+    assert l7.providers_with_pandas(tmp_path) == ['frame.py']
+    assert l7.providers_with_pandas(CLIENT) == []

@@ -406,12 +406,13 @@ if [ ${#failed[@]} -gt 1 ]; then
 fi
 partial=()
 [ ${#failed[@]} -eq 0 ] || partial=(--missing "${failed[0]}=the leg failed")
-do_ "${heldout[@]}" report "$out" --prefix "$prefix" \
+do_ "${heldout[@]}" report "$out" --prefix "$prefix" --databases "$databases" \
   "${partial[@]+"${partial[@]}"}"
 # The counts' own exit (no-go before any approval is listed) is not the
 # run's: the executor gives no verdict. The run's exit says only whether it
 # ran whole (0) or with one leg missing (3).
 do_ "${heldout[@]}" counts "$out" --prefix "$prefix" --threshold "$threshold" \
+  --databases "$databases" \
   "${partial[@]+"${partial[@]}"}" || true
 echo '   then: list the cases approved before the run, from'
 echo '   register-at-run-start.yaml only, fill report.md'"'"'s last column and'

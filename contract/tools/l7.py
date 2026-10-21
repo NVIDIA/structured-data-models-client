@@ -100,7 +100,9 @@ CALLS = (
 )
 #: pandas in a provider's source: an import or a conversion call.
 PANDAS = re.compile(
-    r'^\s*(import\s+pandas|from\s+pandas\b)|\bto_pandas\(|\bfrom_pandas\(',
+    r'^\s*(import\s+pandas|from\s+pandas\b)|\bto_pandas\(|\bfrom_pandas\('
+    # DuckDB's own frames (T2.16a fix 3, the Claude review's P3).
+    r'|\.(df|fetchdf|fetch_df|fetch_df_chunk)\(',
     re.M,
 )
 IMPORT_PROBE = (

@@ -602,9 +602,15 @@ fi
 made="${out:-$scratch/observations}"
 mkdir -p "$made"
 observe() {
-  local tree=$candidate runner
+  local tree=$candidate runner target=$candidate/rust/target
   if [ "$differs" = 1 ]; then
     tree="$scratch/judge"
+    # The overlaid test kit is built into a target directory of its own:
+    # in the candidate's, Cargo (judging freshness by modification times)
+    # would take it for the candidate's build afterwards, and the
+    # candidate's later runs would write with the checkpoint's writer
+    # (T2.16a, CI 39541060875's cross-host on SQLite and Postgres).
+    target=$candidate/rust/target/gate-judge
     git -C "$candidate" worktree add --quiet --detach "$tree" "$head" || return 1
     worktrees+=("$tree")
     for path in "${overlay[@]}"; do cp "$here/$path" "$tree/$path" || return 1; done
@@ -616,21 +622,13 @@ observe() {
         "$PYTHON" -I "$tree/contract/runners/run_python.py" --mode "$runner" \
           --out "$made/$runner.jsonl" "$tree/contract/cases" || return 1 ;;
       rust-host)
-        (cd "$tree/rust" && CARGO_TARGET_DIR="$candidate/rust/target" cargo run -q \
+        (cd "$tree/rust" && CARGO_TARGET_DIR="$target" cargo run -q \
           -p sdm-testkit --bin sdm-contract-run --locked -- \
           --out "$made/rust-host.jsonl" ../contract/cases) || return 1 ;;
       *) echo "no runner $runner"; return 1 ;;
     esac
     echo "$runner: $made/$runner.jsonl"
   done
-  if [ "$differs" = 1 ]; then
-    # The judging tree's test kit, the checkpoint's writer overlaid, was
-    # built into the candidate's target directory; Cargo judges freshness
-    # by modification times, so the candidate's next build would take it
-    # for its own. Its sources are marked newer, so that build is redone
-    # (T2.16a).
-    find "$candidate/rust/crates/sdm-testkit/src" -name '*.rs' -exec touch {} +
-  fi
 }
 refuse() {
   echo "the given observations were made by the candidate's own runner, and"

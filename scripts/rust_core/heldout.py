@@ -52,6 +52,9 @@ heldout-author.md). ``heldout_run.sh`` drives the run; these are its steps.
   (exit 1); a missing runner leg makes the counts partial (exit 3).
   ``--approved`` names what was approved before the run, one a line: a
   case id approves every leg of the case, ``<id>@<database>`` that leg.
+  ``--databases`` (``report`` too) names the databases the run ran on, so
+  a leg there that no file observed is counted, as missing; without it
+  the legs are those the observations hold.
 - ``convert``: a set in the held-out format (c8075715, T2.1j's landing)
   written into the empty OUT_DIR in the head's case format
   (:data:`FORMAT_MOVES`), each case held to the head's case schema.
@@ -425,12 +428,17 @@ def _legs(run: Path, gone: str | None) -> dict[str, dict[str, dict]]:
 
 
 def leg_keys(
-    cases: list[str], *observed: dict[str, Any]
+    cases: list[str],
+    *observed: dict[str, Any],
+    expected: dict[str, set[str]] | None = None,
 ) -> dict[str, list[str]]:
     r"""Each case's legs: every key of the case any of ``observed`` holds
-    (python-ref's and each runner's lines), its DuckDB leg (the bare id)
-    where none holds one, in :data:`DATABASES` order."""
-    found: dict[str, set[str]] = {c: set() for c in cases}
+    (python-ref's and each runner's lines) and every key ``expected``
+    names for it (the databases the run named, ``--databases``), its
+    DuckDB leg (the bare id) where none is, in :data:`DATABASES` order."""
+    found: dict[str, set[str]] = {
+        c: set((expected or {}).get(c, ())) for c in cases
+    }
     for lines in observed:
         for key in lines:
             if case_of(key) in found:
@@ -469,6 +477,36 @@ def _class(o: dict | None) -> str:
     if out['result'] == 'success':
         return 'success'
     return f'refusal {out.get("code") or out.get("error")}'
+
+
+def expected_legs(
+    run: Path, prefix: str, databases: list[str] | None
+) -> dict[str, set[str]] | None:
+    r"""Each case's legs on ``databases`` (the run's ``--databases``), as
+    far as its file's ``databases`` lets it run there; None where the run
+    named none, the legs then known from the observations alone."""
+    if databases is None:
+        return None
+    out: dict[str, set[str]] = {}
+    for path in case_files(run / 'cases', prefix):
+        case = json.loads(path.read_text(encoding='utf-8'))
+        runs_on = case.get('databases', list(DATABASES))
+        out[case['id']] = {
+            case['id'] if d == 'duckdb' else f'{case["id"]}@{d}'
+            for d in databases
+            if d in runs_on
+        }
+    return out
+
+
+def _databases(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    named = [d for d in value.split(',') if d]
+    unknown = sorted(set(named) - set(DATABASES))
+    if unknown or not named:
+        raise SystemExit(f'--databases: {value!r} is not of {DATABASES}')
+    return named
 
 
 def _case_ids(run: Path, prefix: str) -> list[str]:
@@ -512,7 +550,12 @@ def cmd_report(args: argparse.Namespace) -> int:
     cases = _case_ids(run, args.prefix)
     ref = _observations(run / 'python-ref.jsonl')
     obs = _legs(run, gone)
-    legs = leg_keys(cases, ref, *obs.values())
+    legs = leg_keys(
+        cases,
+        ref,
+        *obs.values(),
+        expected=expected_legs(run, args.prefix, _databases(args.databases)),
+    )
     diffs = _differences(run / 'compare.txt', args.prefix)
     rows = []
     for c in cases:
@@ -562,7 +605,12 @@ def cmd_counts(args: argparse.Namespace) -> int:
     cases = _case_ids(run, args.prefix)
     ref = _observations(run / 'python-ref.jsonl')
     obs = _legs(run, gone)
-    legs = leg_keys(cases, ref, *obs.values())
+    legs = leg_keys(
+        cases,
+        ref,
+        *obs.values(),
+        expected=expected_legs(run, args.prefix, _databases(args.databases)),
+    )
     every = [k for c in cases for k in legs[c]]
     approved = _approved(args.approved)
 
@@ -916,6 +964,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument('run_dir', type=Path)
     prefix(p)
     p.add_argument('--missing', metavar='RUNNER=REASON')
+    p.add_argument('--databases', metavar='LIST')
 
     p = command('counts', cmd_counts)
     p.add_argument('run_dir', type=Path)
@@ -924,6 +973,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument('--approved', type=Path)
     p.add_argument('--header', type=Path)
     p.add_argument('--missing', metavar='RUNNER=REASON')
+    p.add_argument('--databases', metavar='LIST')
 
     p = command('convert', cmd_convert)
     p.add_argument('orig_dir', type=Path)
