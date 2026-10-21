@@ -87,6 +87,35 @@ CANDIDATES: dict[str, tuple[str, Any]] = {
             dt.datetime(2023, 1, 2, tzinfo=UTC),
         ],
     ),
+    # Codex r3: a zone's repeated hour (fold 0 and fold 1 of New York's
+    # 2023-11-05 01:30, which Python holds equal), the same wall time
+    # against the UTC instant of its fold 0 (which Python holds unequal),
+    # and aware times of day at two offsets (equal). Their keys are the
+    # candidates' own texts (``literal``).
+    'zone-fold': (
+        'literal',
+        lambda: [
+            dt.datetime(2023, 11, 5, 1, 30, tzinfo=_zone(), fold=0),
+            dt.datetime(2023, 11, 5, 1, 30, tzinfo=_zone(), fold=1),
+            dt.datetime(2023, 11, 6, 1, 30, tzinfo=_zone()),
+        ],
+    ),
+    'zone-against-utc': (
+        'literal',
+        lambda: [
+            dt.datetime(2023, 11, 5, 1, 30, tzinfo=_zone(), fold=0),
+            dt.datetime(2023, 11, 5, 5, 30, tzinfo=UTC),
+            dt.datetime(2023, 11, 6, 1, 30, tzinfo=_zone()),
+        ],
+    ),
+    'times-one-instant': (
+        'literal',
+        lambda: [
+            dt.time(0, tzinfo=UTC),
+            dt.time(1, tzinfo=PLUS_ONE),
+            dt.time(2, tzinfo=UTC),
+        ],
+    ),
     'naive-beside-aware': (
         'stamp',
         lambda: [
@@ -108,6 +137,12 @@ DOCUMENTS = (
 JSON_TABLE = 't214b_json_lone_surrogate'
 #: The code a core warning's text is prefixed with on python-core.
 CODE_PREFIX = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
+
+
+def _zone() -> Any:
+    from zoneinfo import ZoneInfo
+
+    return ZoneInfo('America/New_York')
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -140,14 +175,24 @@ def _refusal(error: BaseException) -> dict[str, Any]:
     }
 
 
-def _keyed(kind: str) -> Any:
-    r"""The shop, the ranking's items keyed by text of ``kind``."""
+def _keyed(kind: str, given: list[Any]) -> Any:
+    r"""The shop, the ranking's items keyed by text of ``kind``, or, for
+    ``literal``, items 0 to 2 keyed by the ``str`` of the candidates
+    given, in order (Codex r3's reproducer), the fourth ``other``."""
     connection = host()._connection()
-    text = KEY_TEXT[kind]
     for table in ('items', 'buys'):
+        if kind == 'literal':
+            cases = ' '.join(
+                f"WHEN {at} THEN '{value}'" for at, value in enumerate(given)
+            )
+            using = f"CASE item_id {cases} ELSE 'other' END"
+        else:
+            using = (
+                "strftime(DATE '2023-01-01' + item_id::INTEGER, "
+                f"'{KEY_TEXT[kind]}')"
+            )
         connection.execute(
-            f'ALTER TABLE {table} ALTER item_id TYPE VARCHAR USING '
-            f"strftime(DATE '2023-01-01' + item_id::INTEGER, '{text}')"
+            f'ALTER TABLE {table} ALTER item_id TYPE VARCHAR USING {using}'
         )
     return connection
 
@@ -156,7 +201,7 @@ def candidates() -> dict[str, Any]:
     r"""Each candidate list's parts, questions and rankings."""
     out = {}
     for name, (kind, made) in CANDIDATES.items():
-        connection = _keyed(kind)
+        connection = _keyed(kind, made())
         try:
             schema = host()._schema(connection)
             try:

@@ -128,7 +128,7 @@ NAMED: dict[str, list[str]] = {
     'date.day-first-then-packed': ['99999-01-01'],
     'empty.indices': ['indices'],
     # The value past int64 is a context example's key read from the data,
-    # which the core keeps out (KO2-86, register P2A-2): the column, the
+    # which the core keeps out (KO2-86, register P2D-4): the column, the
     # row and the remedy, as the reference names them.
     'key.uint64-above-int64-max': [
         "Column 'instance_table.__kumo_entity_ref_0' row 0",

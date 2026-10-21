@@ -2,7 +2,7 @@
  "format": "sdm-t214b-regression-vectors/1",
  "about": "What the reference's public calls give for T2.14b's fix-round regressions: repeated and equal temporal ranking candidates, a column's meaning set to a number, an aggregation's filter reading a double past float32's range, and Postgres json documents escaping lone surrogates through predict. contract/tests/test_t214b_regressions.py holds python-core to them, observed by the same code (observe).",
  "recorded_by": "contract/tools/t214b_regressions_record.py",
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "candidates": {
   "dates-repeated": {
    "parts": 2,
@@ -165,6 +165,133 @@
       "candidate": {
        "type": "datetime",
        "text": "2023-01-01 00:00:00+00:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "zone-fold": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-05 01:30:00-04:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-06 01:30:00-05:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-06 01:30:00-05:00"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 01:30:00-04:00"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-06 01:30:00-05:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 01:30:00-04:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "zone-against-utc": {
+   "parts": 3,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-05 01:30:00-04:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-05 05:30:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-06 01:30:00-05:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-06 01:30:00-05:00"
+      },
+      "score": 0.7
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 05:30:00+00:00"
+      },
+      "score": 0.4
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 05:30:00+00:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 01:30:00-04:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
+  "times-one-instant": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"00:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"02:00:00+00:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "time",
+       "text": "02:00:00+00:00"
+      },
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "time",
+       "text": "00:00:00+00:00"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "time",
+       "text": "02:00:00+00:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "time",
+       "text": "00:00:00+00:00"
       },
       "score": 0.6
      }

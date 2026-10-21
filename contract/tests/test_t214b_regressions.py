@@ -140,6 +140,9 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
         'dates-distinct': 2,
         'aware-one-instant': 2,
         'aware-distinct': 2,
+        'zone-fold': 2,
+        'zone-against-utc': 3,
+        'times-one-instant': 2,
         'naive-beside-aware': 3,
     }
     assert document['stype']['refusal']['message'].startswith(
