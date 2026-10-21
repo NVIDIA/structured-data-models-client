@@ -163,8 +163,13 @@ def _requests_but_their_bytes(answer: dict[str, Any]) -> list[dict[str, Any]]:
 
 #: The vectors whose python-core is recorded again under a later candidate
 #: (``python_core_candidate``): T2.8 lifts ``target_filter``, T2.13b
-#: ``entity_filter``.
-RECANDIDATED = {'count-filtered-3', 'sum-entity-filter-3'}
+#: ``entity_filter``, and T2.14b words a forecast step outrunning the data
+#: as the old route does (fix 7).
+RECANDIDATED = {
+    'count-filtered-3',
+    'sum-entity-filter-3',
+    'refuse.step-outruns-data',
+}
 
 
 def _held_before_and_now(
@@ -232,7 +237,8 @@ def test_python_old_answers_as_the_reference_and_as_before(
 
 # --- the refusals around a forecast -------------------------------------------
 
-#: Today's wording of each refusal, on both routes (measured at fc2c0e2b).
+#: Each refusal's wording, on both routes, the reference's (measured at
+#: fc2c0e2b, and for a step outrunning the data at 43e55f4f, from T2.14b).
 TOP_K = (
     '[INVALID_REQUEST] top_k is how many candidates a ranking keeps, and a '
     'forecast ranks nothing; it gives back one value per step'
@@ -248,12 +254,11 @@ ZERO = (
     "TIMEFRAMES FOR EACH users.user_id' is not a query a relational model can "
     'answer: FORECAST value must be at least 1, got 0.'
 )
-#: A step's window reaching before the data: said of the step that failed.
-OUTRAN_CORE = (
-    '[INVALID_REQUEST] the request is not one the core accepts. This is '
-    'forecast step 2 of 3.'
-)
-OUTRAN_OLD = (
+#: A step's window reaching before the data: said of the step that failed,
+#: in the reference's words (python-ref at 43e55f4f, and python-old), which
+#: the core gives from T2.14b (M4, KO2-32 and KO2-89) in place of its
+#: generic sentence.
+OUTRAN = (
     '[INVALID_REQUEST] Context anchor timestamp is too early or aggregation '
     'time range is too large. To make this prediction, we would need data '
     "back to '2022-12-27 00:00:00', however, your data only contains data "
@@ -272,22 +277,47 @@ OUTRAN_OLD = (
         ('refuse.past-most-parts', False, PAST_MOST_PARTS),
         ('refuse.zero-steps', True, ZERO),
         ('refuse.zero-steps', False, ZERO),
-        ('refuse.step-outruns-data', True, OUTRAN_CORE),
-        ('refuse.step-outruns-data', False, OUTRAN_OLD),
+        ('refuse.step-outruns-data', True, OUTRAN),
+        ('refuse.step-outruns-data', False, OUTRAN),
     ],
 )
-def test_a_forecast_refusal_is_worded_as_before(
+def test_a_forecast_refusal_is_worded_as_the_reference(
     vector_id: str,
     core: bool,
     message: str,
     core_runs: dict[str, Any],
     old_runs: dict[str, Any],
 ) -> None:
-    got = (core_runs if core else old_runs)[vector_id]['outcome']
-    assert got['result'] == 'refusal'
-    assert got['stage'] == 'materialize'
-    assert got['message'] == message
-    assert (core_runs if core else old_runs)[vector_id]['payloads'] == []
+    r"""Each refusal around a forecast, on both routes, in the reference's
+    words. The core's words for a step outrunning the data are gated by
+    T2.14b's pending list (``forecast-words:refuse.step-outruns-data``)
+    while they lack the reference's closing sentence."""
+
+    def check() -> None:
+        got = (core_runs if core else old_runs)[vector_id]['outcome']
+        assert got['result'] == 'refusal'
+        assert got['stage'] == 'materialize'
+        assert got['message'] == message
+        assert (core_runs if core else old_runs)[vector_id]['payloads'] == []
+
+    name = f'forecast-words:{vector_id}'
+    gating = json.loads(
+        (ROOT / 'contract/tests/t214b-pending.json').read_text(encoding='utf-8')
+    )
+    if not core or name not in gating['authored']:
+        check()
+        return
+    if name not in gating['pending']:
+        check()
+        return
+    try:
+        check()
+    except AssertionError:
+        return
+    raise AssertionError(
+        f'{name} passes now: take it out of '
+        'contract/tests/t214b-pending.json pending'
+    )
 
 
 @pytest.mark.parametrize(

@@ -24,8 +24,9 @@ what python-core gives (``python_core``) under a later candidate, whose
 commit it keeps beside them (``python_core_candidate``), and each one's
 ``rust_host`` as :data:`RUST_HOST` says now: a vector a later package
 changed on the core by design (T2.8's ``count-filtered-3``, whose
-``target_filter`` refusal it lifts, and T2.13b's ``sum-entity-filter-3``,
-whose ``entity_filter`` refusal it lifts).
+``target_filter`` refusal it lifts, T2.13b's ``sum-entity-filter-3``,
+whose ``entity_filter`` refusal it lifts, and T2.14b's
+``refuse.step-outruns-data``, which fix 7 words as the old route does).
 
 ``candidate`` runs each vector through this checkout, forced onto the core
 (``python-core``) and on the default routes (``python-old``), and keeps
