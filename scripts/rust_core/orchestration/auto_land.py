@@ -58,6 +58,16 @@ no reviewer re-run and no serial re-CI after a clean move). Opt-in per entry, "m
     the candidate's own CI run is rerun if it was cancelled (cancel_superseded.sh cancels it
     while X's run is the evidence). Any other refusal fails the entry as before.
 
+Stacks (T3.0, land.py --stack and stack-land; the owner's "every N packages before CI is
+mandatory", 2026-10-21). An entry with "stack": true is stacked at approval: land.py --stack
+makes its landing commit on the stack tail (its "checkpoint"; "train": true for the tooling
+train) with no CI wait, the file becomes <pkg>.stacked with "landing", and it prints
+  STACKED <title> <landing sha>
+An entry {"stack_tip": SHA, "worktree": ..., "title": ..., "branch" or "lane"} lands the stack up
+to SHA with land.py stack-land once the run on its top is green, printing LANDED as above; while
+that run is unfinished or missing it waits; a red run fails it with the implicated commits and
+the green prefix (FAILED <title>: RED ... | IMPLICATED ... | GREEN PREFIX ...).
+
 Environment:
   SDM_ORCH_STATE      state directory (default ~/.local/share/sdm-orchestration): holds
                       land-queue/, logs/ and the lock that keeps one lander at a time
@@ -413,6 +423,78 @@ def protected_from_ratchet(worktree, checkpoint):
     return None
 
 
+def land_py(q, *args):
+    return sh(
+        'python3', 'scripts/rust_core/land.py', *args, '--phase-branch', PHASE,
+        cwd=q['worktree'],
+    )  # fmt: skip
+
+
+def process_stack(f, q, branch):
+    """A "stack": true entry (T3.0): land.py --stack makes the package's
+    landing commit on the stack at once, with no CI wait; the stack lands
+    later, on its top's run, through a "stack_tip" entry."""
+    named = protected_from_ratchet(q['worktree'], q['checkpoint'])
+    if named is None:
+        print(
+            f"FAILED {q['title']}: could not read the ratchet's protected paths"
+        )
+        f.rename(f.with_suffix('.failed'))
+        return
+    queued = [p.strip() for p in q['protected_paths'].split(';') if p.strip()]
+    args = [
+        '--stack',
+        '--candidate', q['candidate'],
+        '--topic-branch', branch,
+        '--title', q['title'],
+        '--checkpoint', q['checkpoint'],
+        '--protected-paths', '; '.join(sorted(set(queued) | set(named))) or 'none',
+        '--summary', q['summary'],
+    ]  # fmt: skip
+    if q.get('train') is True:
+        args.append('--train')
+    for r in q['reviews']:
+        args += ['--review', r]
+    res = land_py(q, *args)
+    out = res.stdout + res.stderr
+    stacked = [ln for ln in out.splitlines() if ln.startswith('STACKED ')]
+    if stacked:
+        q['landing'] = stacked[0].split()[1]
+        write_as(f, q, '.stacked')
+        print(f'STACKED {q["title"]} {q["landing"]}')
+    else:
+        tail = ' | '.join(out.strip().splitlines()[-3:])
+        print(f'FAILED {q["title"]}: land.py --stack refused: {tail[:300]}')
+        f.rename(f.with_suffix('.failed'))
+
+
+def process_stack_land(f, q, branch):
+    """A "stack_tip" entry (T3.0): land.py stack-land lands the stack once
+    the run on its top is green; while that run is unfinished or missing it
+    waits, and a red run fails the entry with the implicated commits."""
+    args = ['stack-land', '--tip', q['stack_tip']]
+    if q.get('branch') or q.get('lane'):
+        args += ['--topic-branch', branch]
+    res = land_py(q, *args)
+    out = res.stdout + res.stderr
+    landed = [ln for ln in out.splitlines() if ln.startswith('LANDED ')]
+    if landed:
+        print(f'LANDED {q.get("title", f.stem)} {landed[0].split()[1]}')
+        f.rename(f.with_suffix('.landed'))
+    elif 'not finished' in out or 'no CI run on the stack top' in out:
+        return
+    else:
+        lines = [
+            ln
+            for ln in out.splitlines()
+            if ln.startswith(
+                ('RED', 'IMPLICATED', 'PREFIX RUN', 'GREEN PREFIX', 'REFUSED')
+            )
+        ]
+        print(f'FAILED {q.get("title", f.stem)}: ' + ' | '.join(lines)[:600])
+        f.rename(f.with_suffix('.failed'))
+
+
 def process(f):
     q = json.loads(f.read_text())
     if not isinstance(q, dict):
@@ -423,6 +505,10 @@ def process(f):
         print(f'FAILED {q.get("title", f.stem)}: {e}')
         f.rename(f.with_suffix('.failed'))
         return
+    if q.get('stack_tip'):
+        return process_stack_land(f, q, branch)
+    if q.get('stack') is True:
+        return process_stack(f, q, branch)
     # A moved candidate is judged on X's run (E130: no re-CI after a clean move).
     x = q.get('moved_from')
     runs = runs_for(x or q['candidate'], branch)

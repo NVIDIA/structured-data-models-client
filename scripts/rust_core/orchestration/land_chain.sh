@@ -3,7 +3,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Land a CI3 stack in order (owner decision 28). Waits until every stacked run has COMPLETED
+# Land a CI3 chain in order, each package on its own run (owner decision 28). Since T3.0 a
+# stack of up to 4 packages lands on one run instead: auto_land.py's "stack" and "stack_tip"
+# entries (land.py --stack and stack-land); prefer those. Waits until every stacked run has COMPLETED
 # (a landing mid-run breaks later jobs' checkpoint, 2026-10-14), then queues one package at a
 # time and runs the watchdog checks every 2 minutes. Exits (printing why) on: any stack run
 # not green, a package failing / needing confirmation, a blocked agent, a rule violation, or
