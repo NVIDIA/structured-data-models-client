@@ -25,6 +25,7 @@ fn column(name: &str, unique: bool) -> InferredColumn {
         received: ColumnType::Int64,
         nullable: true,
         unique,
+        exact_number: None,
     }
 }
 
@@ -39,7 +40,8 @@ fn table(name: &str, key: &str, others: &[&str], declared: bool) -> InferredTabl
         left_out: vec![],
         unread_times: vec![],
         day_first: vec![],
-        primary_key: Some(key.into()),
+        tied_keys: vec![],
+        primary_key: vec![key.into()],
         time: TimeChoice::default(),
         time_column: None,
         unique: if declared {
@@ -55,7 +57,7 @@ fn counted(rows: u64, distinct: u64, missing: u64) -> Counted {
         rows,
         distinct,
         missing,
-        example: (rows > distinct + missing).then_some(Scalar::Int64(7)),
+        example: (rows > distinct + missing).then(|| vec![Scalar::Int64(7)]),
     }
 }
 
@@ -71,11 +73,11 @@ fn none() -> BTreeSet<String> {
 fn an_inferred_key_is_kept_at_99_percent_and_declined_under_it() {
     let mut tables = vec![table("payments", "payment_id", &[], false)];
     let held = keys::hold(&mut tables, &[(0, counted(1_000, 990, 0))], &none(), true).unwrap();
-    assert_eq!(tables[0].primary_key.as_deref(), Some("payment_id"));
+    assert_eq!(tables[0].primary_key, ["payment_id"]);
     assert_eq!(held.duplicates, [10]);
     assert_eq!(codes(&held), ["KEY_REPEATS"]);
     let held = keys::hold(&mut tables, &[(0, counted(1_000, 989, 0))], &none(), true).unwrap();
-    assert_eq!(tables[0].primary_key, None);
+    assert!(tables[0].primary_key.is_empty());
     assert_eq!(held.duplicates, [0]);
     // Nobody else names the column: declined without a word.
     assert!(held.warnings.is_empty());
@@ -83,10 +85,10 @@ fn an_inferred_key_is_kept_at_99_percent_and_declined_under_it() {
     // drop it.
     let mut tables = vec![table("payments", "payment_id", &[], false)];
     let held = keys::hold(&mut tables, &[(0, counted(200, 198, 2))], &none(), true).unwrap();
-    assert_eq!(tables[0].primary_key.as_deref(), Some("payment_id"));
+    assert_eq!(tables[0].primary_key, ["payment_id"]);
     assert_eq!(codes(&held), ["KEY_NO_VALUE"]);
     keys::hold(&mut tables, &[(0, counted(200, 190, 10))], &none(), true).unwrap();
-    assert_eq!(tables[0].primary_key, None);
+    assert!(tables[0].primary_key.is_empty());
 }
 
 #[test]
@@ -125,11 +127,49 @@ fn a_named_key_with_a_null_or_too_many_repeats_is_refused() {
     assert_eq!(err.fields["repeats"], Detail::Scalar(Scalar::UInt64(11)));
 }
 
+/// A key of several columns, which only a caller names, is held as a
+/// named key of one is: a row missing any part of it refused, repeats said
+/// within 1% and refused past it, each naming its columns in order and
+/// showing a repeated value's parts.
+#[test]
+fn a_named_key_of_several_columns_is_held_as_a_named_key_of_one() {
+    let stated = BTreeSet::from(["lines".to_owned()]);
+    let lines = || {
+        let mut table = table("lines", "order_id", &["line"], false);
+        table.primary_key = vec!["order_id".into(), "line".into()];
+        vec![table]
+    };
+    let parts = Detail::List(vec![
+        Scalar::Utf8("order_id".into()),
+        Scalar::Utf8("line".into()),
+    ]);
+    let mut two = counted(1_000, 995, 0);
+    two.example = Some(vec![Scalar::Int64(0), Scalar::Int64(1)]);
+    let mut tables = lines();
+    let held = keys::hold(&mut tables, &[(0, two.clone())], &stated, true).unwrap();
+    assert_eq!(tables[0].primary_key, ["order_id", "line"]);
+    assert_eq!(codes(&held), ["KEY_REPEATS"]);
+    let fields = &held.warnings[0].fields;
+    assert_eq!(fields["columns"], parts);
+    assert!(!fields.contains_key("column"));
+    assert_eq!(
+        fields["example"],
+        Detail::List(vec![Scalar::Int64(0), Scalar::Int64(1)])
+    );
+    two.distinct = 980;
+    let err = keys::hold(&mut lines(), &[(0, two)], &stated, true).unwrap_err();
+    assert_eq!(err.fields["columns"], parts);
+    assert_eq!(err.fields["repeats"], Detail::Scalar(Scalar::UInt64(20)));
+    let err = keys::hold(&mut lines(), &[(0, counted(60, 57, 3))], &stated, true).unwrap_err();
+    assert_eq!(err.fields["missing"], Detail::Scalar(Scalar::UInt64(3)));
+    assert_eq!(err.fields["columns"], parts);
+}
+
 #[test]
 fn a_declared_key_with_nulls_is_said_and_its_repeats_held() {
     let mut tables = vec![table("payments", "payment_id", &[], true)];
     let held = keys::hold(&mut tables, &[(0, counted(200, 150, 50))], &none(), true).unwrap();
-    assert_eq!(tables[0].primary_key.as_deref(), Some("payment_id"));
+    assert_eq!(tables[0].primary_key, ["payment_id"]);
     assert_eq!(codes(&held), ["KEY_NO_VALUE"]);
     let err = keys::hold(&mut tables, &[(0, counted(1_000, 900, 0))], &none(), true).unwrap_err();
     assert_eq!(err.fields["field"], Detail::text("keys"));
@@ -154,7 +194,7 @@ fn a_repeated_value_is_read_from_its_answer() {
     };
     assert_eq!(
         keys::example(&[batch(Arc::new(StringArray::from(vec!["k1"])))]),
-        Some(Scalar::Utf8("k1".into()))
+        Some(vec![Scalar::Utf8("k1".into())])
     );
     assert_eq!(
         keys::example(&[batch(Arc::new(Int64Array::from(Vec::<i64>::new())))]),
@@ -171,5 +211,9 @@ fn a_repeated_value_is_read_from_its_answer() {
         ],
     )
     .unwrap();
-    assert_eq!(keys::example(&[two]), None);
+    // A key of several columns: its parts, in order.
+    assert_eq!(
+        keys::example(&[two]),
+        Some(vec![Scalar::Int64(1), Scalar::Int64(2)])
+    );
 }

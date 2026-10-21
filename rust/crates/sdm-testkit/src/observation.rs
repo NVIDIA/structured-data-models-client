@@ -104,8 +104,17 @@ pub fn write(
         Answer::Predicted(answer) => {
             // `core.predicted` holds python-core's shape: its `body` the
             // last call's (T1.36 fix 22) and, where there were several
-            // calls, `calls`, every call's body in order (T2.1g).
-            (observed.accepted, answer.clone(), Value::Null)
+            // calls, `calls`, every call's body in order (T2.1g); its
+            // result's explanation where the core gave one, the JSON text
+            // it wrote (T2.16a), as python-core records it.
+            let mut predicted = answer.clone();
+            if let (Some(explanation), Some(result)) = (
+                &observed.explanation,
+                predicted.get_mut("result").and_then(Value::as_object_mut),
+            ) {
+                result.insert("explanation".into(), Value::String(explanation.clone()));
+            }
+            (observed.accepted, predicted, Value::Null)
         }
         Answer::Error { kind, code, .. } => (
             observed.accepted,

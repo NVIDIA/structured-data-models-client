@@ -26,12 +26,19 @@ It holds the file, as ``--root``'s tree has it, to:
   whose case part is a corpus case, but for a case it records as
   ``removed``;
 - each ``decision_ref`` a row of the decisions file it names;
-- each ``more_exact`` item's case a line's key (``X``, ``X@sqlite`` or
-  ``X@postgres``, T2.1d) that is one of its entry's ``cases``, or whose
-  case part is (T2.0g);
+- each ``more_exact`` and ``fewer_deprecations`` item's case a line's
+  key (``X``, ``X@sqlite`` or ``X@postgres``, T2.1d) that is one of its
+  entry's ``cases``, or whose case part is (T2.0g, T2.1s);
 - a ``case_outcomes`` row's ``statements_differ`` the one call refused,
   on a move from the old outcome's refusal there to a success or from a
-  success to the new outcome's refusal there (T2.1e);
+  success to the new outcome's refusal there (T2.1e), on a row keeping
+  the old outcome's refusal there, its code the same (KO2-68), or on a
+  move of the old outcome's refusal to the new outcome's at an earlier
+  call, its own code, that call named (T2.1r), which only the owner
+  approves: the old outcome's call stated, or the committed reference's
+  on a line with no baseline yet (``old: none``), and a row whose new
+  outcome names no call (rust-host's) only beside its entry's
+  python-core row for the line naming the same call;
 - an approved entry whose ``case_outcomes`` turn a success into a refusal,
   or refuse a case the committed reference accepts, approved by the owner;
   and no entry accepting ``INTERNAL_ERROR``, the code a contained panic
@@ -74,6 +81,8 @@ OUTCOME = re.compile(
 )
 #: The code a contained panic answers with; no entry accepts it.
 PANIC = 'INTERNAL_ERROR'
+#: The public calls, in the order a case makes them (compare.py's).
+STAGES = ('from_source', 'materialize', 'predict')
 #: The decision rows that approve only until a package lands (T2.1a's
 #: temporary-approval rule; Phase 2 design, T2.1a's row), named here and
 #: nowhere else in the harness: the locked run's ratchet step
@@ -137,15 +146,40 @@ def inventory_ids(root: Path) -> set[str]:
 def reference_outcomes(root: Path) -> dict[str, str]:
     r"""Each case's outcome in the committed reference (``success`` or
     ``refusal``), by case."""
-    found: dict[str, str] = {}
+    return {
+        case: str(outcome['result'])
+        for case, outcome in _reference_lines(root).items()
+    }
+
+
+def reference_refusals(root: Path) -> dict[str, str]:
+    r"""The call each line the committed reference refuses stopped at, by
+    the line's key: a row whose old outcome is ``none`` (a line with no
+    baseline yet) moves the reference's own (T2.1r)."""
+    return {
+        case: outcome['stage']
+        for case, outcome in _reference_lines(root).items()
+        if outcome.get('result') == 'refusal'
+        and isinstance(outcome.get('stage'), str)
+    }
+
+
+def _reference_lines(root: Path) -> dict[str, dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = {}
     for path in sorted((root / REFERENCE).glob('*.jsonl')):
         for line in path.read_text(encoding='utf-8').splitlines():
             try:
                 observation = json.loads(line)
-                found[observation['case']] = observation['outcome']['result']
+                case, outcome = observation['case'], observation['outcome']
             except (ValueError, RecursionError, KeyError, TypeError):
                 # The reference's own test refuses such a line by name.
                 continue
+            if (
+                isinstance(case, str)
+                and isinstance(outcome, dict)
+                and 'result' in outcome
+            ):
+                found[case] = outcome
     return found
 
 
@@ -228,6 +262,7 @@ def problems(
     corpus = case_ids(root)
     inventory = inventory_ids(root)
     accepted = reference_outcomes(root)
+    refused = reference_refusals(root)
     for entry in entries:
         where = entry['id']
         for case in entry['cases']:
@@ -262,17 +297,89 @@ def problems(
                             f'of {ref["file"]}'
                         )
         for outcome in entry.get('case_outcomes', []):
-            found += _outcome_problems(entry, outcome, corpus, accepted)
-        for item in entry.get('more_exact', []):
-            # A line's key: the case, or the case and its database (T2.1d).
-            if (
-                item['case'] not in entry['cases']
-                and item['case'].partition('@')[0] not in entry['cases']
-            ):
-                found.append(
-                    f'{where}: more_exact: {item["case"]} is not one of its cases'
-                )
+            found += _outcome_problems(
+                entry, outcome, corpus, accepted, refused
+            )
+        for key in ('more_exact', 'fewer_deprecations'):
+            for item in entry.get(key, []):
+                # A line's key: the case, or the case and its database
+                # (T2.1d).
+                if (
+                    item['case'] not in entry['cases']
+                    and item['case'].partition('@')[0] not in entry['cases']
+                ):
+                    found.append(
+                        f'{where}: {key}: {item["case"]} is not one of its cases'
+                    )
     return found
+
+
+def _statements_differ_form(
+    old: dict[str, str | None] | None,
+    new: dict[str, str | None] | None,
+    calls: Any,
+) -> str | None:
+    r"""How a ``case_outcomes`` row's ``statements_differ`` names the one
+    call refused: ``same``, on a move between the old outcome's refusal
+    there and a success either way (T2.1e), or on a row keeping that
+    refusal, its code the same (KO2-68); ``earlier``, on a move of the old
+    outcome's refusal at a call it names to the new outcome's at the
+    earlier call it names, with its own code (T2.1r), the reference's
+    later calls never made; None otherwise."""
+    if old is None or new is None or not isinstance(calls, list):
+        return None
+    if len(calls) != 1:
+        return None
+    call = calls[0]
+    if (
+        (
+            old['result'] == 'refusal'
+            and new['result'] == 'success'
+            and old['stage'] in (None, call)
+        )
+        or (
+            old['result'] == 'success'
+            and new['result'] == 'refusal'
+            and new['stage'] in (None, call)
+        )
+        or (
+            old['result'] == new['result'] == 'refusal'
+            and old['code'] == new['code']
+            and old['stage'] in (None, call)
+            and new['stage'] in (None, call)
+        )
+    ):
+        return 'same'
+    if (
+        old['result'] == new['result'] == 'refusal'
+        and call in STAGES[:-1]
+        and new['stage'] == call
+        and old['stage'] in STAGES
+        and STAGES.index(old['stage']) > STAGES.index(call)
+    ):
+        return 'earlier'
+    return None
+
+
+def _earlier_call(
+    outcome: dict[str, Any], refused: dict[str, str] | None
+) -> str | None:
+    r"""The earlier call a ``case_outcomes`` row moves its old refusal to
+    and names under ``statements_differ`` (T2.1r), its old outcome's call
+    stated, or, on a line with no baseline yet (``old: none``), the
+    committed reference's; None for any other row."""
+    old, new = (
+        parse_outcome(str(outcome.get('old'))),
+        parse_outcome(str(outcome.get('new'))),
+    )
+    stage = (refused or {}).get(str(outcome.get('case')))
+    if outcome.get('old') == 'none' and stage is not None:
+        old = {'result': 'refusal', 'code': None, 'stage': stage}
+    calls = outcome.get('statements_differ')
+    if _statements_differ_form(old, new, calls) != 'earlier':
+        return None
+    assert isinstance(calls, list)
+    return str(calls[0])
 
 
 def _outcome_problems(
@@ -280,6 +387,7 @@ def _outcome_problems(
     outcome: dict[str, Any],
     corpus: dict[str, Any],
     accepted: dict[str, str],
+    refused: dict[str, str] | None = None,
 ) -> list[str]:
     where = f'{entry["id"]}: {outcome["case"]} on {outcome["runner"]}'
     found = []
@@ -292,30 +400,49 @@ def _outcome_problems(
     if new is not None and new['code'] == PANIC:
         found.append(f'{where}: no entry accepts {PANIC}, a panic')
     calls = outcome.get('statements_differ')
-    if calls is not None and not (
-        old is not None
+    form = _statements_differ_form(old, new, calls)
+    if form is None and _earlier_call(outcome, refused) is not None:
+        form = 'earlier'
+    if (
+        form is None
         and new is not None
+        and new['result'] == 'refusal'
+        and new['stage'] is None
+        and isinstance(calls, list)
         and len(calls) == 1
-        and (
-            (
-                old['result'] == 'refusal'
-                and new['result'] == 'success'
-                and old['stage'] in (None, calls[0])
-            )
-            or (
-                old['result'] == 'success'
-                and new['result'] == 'refusal'
-                and new['stage'] in (None, calls[0])
-            )
+        and any(
+            isinstance(other, dict)
+            and other.get('case') == outcome['case']
+            and other.get('runner') == 'python-core'
+            and _earlier_call(other, refused) == calls[0]
+            for other in entry.get('case_outcomes') or []
         )
     ):
+        # A runner whose outcome names no call (rust-host) moves the
+        # refusal earlier only beside its entry's python-core row for the
+        # line, which names the call it is refused at (T2.1r).
+        form = 'earlier'
+    if calls is not None and form is None:
         # The call whose statements differ is the one refused: the
         # reference's, on a move from that refusal to an answer, or the
         # runner's, on a move from the reference's answer to that refusal
-        # (rust-host's outcome names no stage; T2.1e).
+        # (rust-host's outcome names no stage; T2.1e), or both's, on a row
+        # keeping the reference's refusal there (KO2-68), or the runner's,
+        # on a move of the reference's refusal to an earlier call (T2.1r).
         found.append(
             f'{where}: statements_differ names other than the one call '
-            'refused, on a move between that refusal and a success'
+            'refused, on a move between that refusal and a success, on '
+            'a row keeping that refusal or on a move of a refusal to an '
+            'earlier call'
+        )
+    if (
+        form == 'earlier'
+        and entry['status'] == 'approved'
+        and entry['approved_by'] != 'owner'
+    ):
+        found.append(
+            f"{where}: statements_differ moves the reference's refusal to "
+            'an earlier call, so only the owner approves it'
         )
     refuses = new is not None and new['result'] == 'refusal'
     newly = refuses and (

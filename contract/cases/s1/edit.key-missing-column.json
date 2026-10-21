@@ -1,9 +1,11 @@
 {
   "format": "sdm-case/1",
   "id": "edit.key-missing-column",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
   "routes": [
     "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb"
@@ -49,5 +51,5 @@
     "code": "INVALID_REQUEST"
   },
   "why": "A key named for a column the table does not hold is refused at the assignment",
-  "source": "T1.24b: the schema's edit semantics, a refused edit's parity across the hosts (decision E67)"
+  "source": "T1.24b: the schema's edit semantics, a refused edit's parity across the hosts (decision E67); admitted as an acceptance case by T2.12 (the design row: the nine edit.* S1 cases, reached on both core hosts, admitted as acceptance)"
 }

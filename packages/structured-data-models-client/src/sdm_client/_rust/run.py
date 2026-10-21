@@ -74,6 +74,24 @@ class TransportFailed(Exception):
     the core as a transport error. It carries no text."""
 
 
+class Refused(Exception):  # noqa: N818 - says what happened to the call
+    r"""The call failed in a way the caller sees as ``raised``: the
+    endpoint's refusal, as the client's transport reports it, another
+    failure of the transport, or any other exception the transport raised
+    (the Databricks SDK's ``ValueError`` for a failed OAuth refresh, which
+    the reference's client carries the answers on too). Raised by a
+    :data:`Model`. The core is told only that the call failed, its
+    ``status`` where the endpoint answered with one, else as a transport
+    error, so it ends the run carrying the answers of the calls before it
+    (T2.8c); then ``raised`` is raised with them in its ``details``,
+    keeping its own type, code and text."""
+
+    def __init__(self, raised: Exception, status: int | None = None) -> None:
+        super().__init__()
+        self.raised = raised
+        self.status = status
+
+
 def native() -> ModuleType:
     r"""``sdm_client._native``, imported here and nowhere else.
 
@@ -145,6 +163,7 @@ def run(
     given: set[str] | None = None,
     kept: list[dict[str, Any]] | None = None,
     state: dict[str, Any] | None = None,
+    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> Finished:
     r"""Runs ``operation`` to its result, with the attachments its fields name.
 
@@ -152,6 +171,9 @@ def run(
     it already, or decides once the run ends whether to show it, from
     ``kept``, which then receives it (``errors.warn_held``). ``given``
     collects the code of every warning the run gave, shown or not.
+    ``words`` says the warnings of the codes it names, from their fields,
+    in place of :mod:`.errors`' table: the caller's words for a warning
+    naming what only it holds, as a ranking's candidates by position (T2.8).
 
     ``state``, for a ``materialize``, is where its materializer keeps the
     sampler state (decision E52): the state held there (``'held'``) is
@@ -190,7 +212,7 @@ def run(
             state.pop('held', None)
         errors.raise_from_core(refused.control, refused.attachments)
     try:
-        return _steps(core, handle, provider, model, quiet, given, kept)
+        return _steps(core, handle, provider, model, quiet, given, kept, words)
     finally:
         if state is not None:
             _keep(core, handle, state)
@@ -235,18 +257,31 @@ def _steps(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
+    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
+    refused: Refused | None = None
     while True:
+        error: StructuredDataError | None = None
         try:
             control, sent = handle.next()
         except core.CoreError as failed:
-            _warn(handle, quiet, given, kept)
-            errors.raise_from_core(
+            _warn(handle, quiet, given, kept, words)
+            error = errors.error_from_core(
                 failed.control, failed.attachments, driver_class=driver_class
             )
-        _warn(handle, quiet, given, kept)
+            _answered(handle, failed, error)
+        if error is not None:
+            # Raised outside the handler, so nothing is its context.
+            if refused is not None:
+                # The call's own failure, as the caller sees it, carrying
+                # what the core carried on its end of the run.
+                _carried(error, refused.raised)
+                _of_the_part(error, refused.raised)
+                raise refused.raised
+            raise error from None
+        _warn(handle, quiet, given, kept, words)
         step = codec.read(control, sent)
         if step['message'] != 'step':
             raise StructuredDataError(
@@ -256,7 +291,7 @@ def _steps(
         if step['step'] == 'done':
             return Finished(step['result'], handle)
         if step['step'] == 'call_model' and model is not None:
-            _call(core, handle, step, model)
+            refused = _call(core, handle, step, model)
             continue
         if step['step'] != 'fetch' or provider is None:
             handle.cancel()
@@ -311,20 +346,39 @@ def _steps(
                 )
 
 
-def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
+def _call(
+    core: Any, handle: Any, step: dict[str, Any], model: Model
+) -> Refused | None:
     r"""Answers one model call with ``model``: its answer as a 200, or, when
-    the transport failed, the contract's transport error."""
+    the transport failed, the contract's transport error; a refused call
+    (:class:`Refused`) as its status, or as a transport error where it has
+    none, and returned, for the run's end to raise."""
     body = handle.take_attachment(step['body'])
     attached: dict[int, Any] = {}
+    refused: Refused | None = None
+    transport_error: dict[str, Any] = {
+        'outcome': 'transport_error',
+        'kind': 'model_endpoint',
+        # The client's transport has already retried what it retries.
+        'retryable': False,
+    }
     try:
         answer = model(body)
     except TransportFailed:
-        outcome: dict[str, Any] = {
-            'outcome': 'transport_error',
-            'kind': 'model_endpoint',
-            # The client's transport has already retried what it retries.
-            'retryable': False,
-        }
+        outcome: dict[str, Any] = transport_error
+    except Refused as failed:
+        refused = failed
+        status = failed.status
+        if isinstance(status, int) and 300 <= status <= 599:
+            attached[1] = b'{}'
+            outcome = {
+                'outcome': 'response',
+                'status': status,
+                'content_type': 'application/json',
+                'body': 1,
+            }
+        else:
+            outcome = transport_error
     except BaseException:
         # The endpoint's refusal, made safe to show by the caller, or an
         # interrupt: the run ends here, and the caller sees it as is.
@@ -343,8 +397,72 @@ def _call(core: Any, handle: Any, step: dict[str, Any], model: Model) -> None:
     )
     try:
         handle.reply(reply, attached)
-    except core.CoreError as refused:
-        errors.raise_from_core(refused.control, refused.attachments)
+    except core.CoreError as failed:
+        errors.raise_from_core(failed.control, failed.attachments)
+    return refused
+
+
+def _answered(handle: Any, failed: Any, error: StructuredDataError) -> None:
+    r"""The answers the core carried on its error (``answered``, T2.8c),
+    taken from the run and kept on ``error`` as ``_answered``: the Arrow
+    result and the rows it scores, which the predict bridge reads."""
+    try:
+        message = codec.read(failed.control, failed.attachments)
+        answered = message['error'].get('answered')
+    except (codec.CodecError, KeyError, TypeError, AttributeError):
+        return
+    if not isinstance(answered, dict):
+        return
+    stream = handle.take_attachment(answered['result'])
+    if stream is not None:
+        error._answered = (stream, answered['rows'])  # type: ignore[attr-defined]
+
+
+#: The core's fields that say what a failed request had answered (T2.8c).
+_ANSWERED_FIELDS = ('calls_answered', 'parts_answered')
+#: The core's fields that say which part of a question asked in parts a
+#: failed call was (a forecast's step, a ranking's candidate by its position
+#: among those given, and how many questions the ranking is asked as),
+#: which the client says the refusal of (T2.14b).
+_PART_FIELDS = ('forecast_step', 'ranking_candidate', 'ranking_parts')
+
+
+def _carried(error: StructuredDataError, raised: Exception) -> None:
+    r"""Puts on ``raised`` what the core carried on ``error``: how many calls
+    or parts were answered before it, and their answers where the core
+    carried them (a ranking's are counted, never kept, T2.8), beside any
+    ``details`` it holds, whatever exception it is, as the reference's
+    client does."""
+    answered = getattr(error, '_answered', None)
+    counts = {
+        name: error.details[name]
+        for name in _ANSWERED_FIELDS
+        if name in (error.details or {})
+    }
+    if answered is None and not counts:
+        return
+    held = getattr(raised, 'details', None)
+    details = held if isinstance(held, dict) else {}
+    details.update(counts)
+    raised.details = details  # type: ignore[attr-defined]
+    if answered is not None:
+        raised._answered = answered  # type: ignore[attr-defined]
+
+
+def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
+    r"""Puts on ``raised``, a refusal the client raises, which part of a
+    question asked in parts the core said ``error`` happened in
+    (:data:`_PART_FIELDS`), which the client says it of (T2.14b)."""
+    if not isinstance(raised, StructuredDataError):
+        return
+    named = {
+        name: error.details[name]
+        for name in _PART_FIELDS
+        if name in (error.details or {})
+    }
+    if named:
+        held = raised.details
+        raised.details = {**(held if isinstance(held, dict) else {}), **named}
 
 
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
@@ -366,10 +484,11 @@ def _warn(
     quiet: frozenset[str],
     given: set[str] | None,
     kept: list[dict[str, Any]] | None = None,
+    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> None:
     taken = handle.take_warnings()
     if taken is not None:
         control, sent = taken
         errors.warn_from_core(
-            control, sent, quiet=quiet, given=given, held=kept
+            control, sent, quiet=quiet, given=given, held=kept, words=words
         )

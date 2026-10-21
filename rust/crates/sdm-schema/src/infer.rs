@@ -18,13 +18,14 @@
 use std::collections::BTreeSet;
 
 use arrow_array::RecordBatch;
-use arrow_schema::{DataType, Schema};
-use sdm_contract::data::Relation;
-use sdm_contract::ops::{Dtype, Stype};
+use arrow_schema::{DataType, Field, Schema};
+use sdm_contract::data::{EXACT_NUMBER_MARKED, EXACT_NUMBER_MARKER, Relation};
+use sdm_contract::ops::{Dtype, ExactNumber, Stype};
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar, Unit};
 
 use crate::names;
 use crate::not_yet;
+pub use crate::values::Floats;
 use crate::values::{self, Value};
 use sdm_contract::catalog::{CatalogColumn, CatalogKey, KeyKind};
 
@@ -77,6 +78,38 @@ pub struct InferredColumn {
     /// Whether the catalog declares a primary or unique key of this one
     /// column.
     pub unique: bool,
+    /// For a column of numbers handed over as their exact text, whether
+    /// the catalog declares it a key ([`exact_number`]); `None` otherwise.
+    pub exact_number: Option<ExactNumber>,
+}
+
+/// What `field`, of a table whose catalog declares `constraints`, is as a
+/// column of numbers the host provider handed over as their exact text
+/// (marked [`EXACT_NUMBER_MARKER`], whatever type it was read in since): a
+/// key its catalog declares, the one column of a primary, unique or
+/// foreign key, as the reference's Postgres table reads a column's role
+/// (`relational_keys`), or any other; `None` for an unmarked column.
+pub fn exact_number(field: &Field, constraints: &[CatalogKey]) -> Option<ExactNumber> {
+    if field
+        .metadata()
+        .get(EXACT_NUMBER_MARKER)
+        .map(String::as_str)
+        != Some(EXACT_NUMBER_MARKED)
+    {
+        return None;
+    }
+    let declared = constraints.iter().any(|key| {
+        matches!(
+            key.kind,
+            KeyKind::Primary | KeyKind::Unique | KeyKind::Foreign
+        ) && key.columns.len() == 1
+            && key.columns[0] == *field.name()
+    });
+    Some(if declared {
+        ExactNumber::DeclaredKey
+    } else {
+        ExactNumber::Other
+    })
 }
 
 /// Why inference passed a timestamp over for the time column, as the
@@ -217,7 +250,12 @@ pub struct InferredTable {
     /// The text columns whose dates the engine's reading guessed a format
     /// for that puts the day first, with the format, in table order.
     pub day_first: Vec<(String, String)>,
-    pub primary_key: Option<String>,
+    /// The columns that tied for the best score when the key was guessed,
+    /// in table order, which left the table without one (empty otherwise).
+    pub tied_keys: Vec<String>,
+    /// The key's columns, in order: none, one, or several a caller named
+    /// (`crate::assemble::apply_keys_and_times`).
+    pub primary_key: Vec<String>,
     /// How inference chose the time column, before the links settle a
     /// lone edit stamp (`crate::assemble`).
     pub time: TimeChoice,
@@ -265,7 +303,8 @@ fn invalid_request(refusal: CoreError) -> CoreError {
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
 /// admitted), which holds the catalog's columns in order, reading text as
-/// times by `times`: [`preview`], then [`finish`] with no whole-table read,
+/// times by `times` and floats as Arrow-backed pandas holds them:
+/// [`preview`], then [`finish`] with no whole-table read,
 /// for a preview that holds every row. A preview of [`PREVIEW_ROWS`] rows
 /// that leaves the choice of the time column to the whole table
 /// ([`Previewed::whole_table_columns`]) is an internal error here: the
@@ -280,7 +319,16 @@ pub fn table(
     times: &dyn TextTimes,
 ) -> Result<InferredTable, CoreError> {
     finish(
-        preview(name, source, catalog, constraints, schema, batches, times)?,
+        preview(
+            name,
+            source,
+            catalog,
+            constraints,
+            schema,
+            batches,
+            times,
+            Floats::NanValue,
+        )?,
         None,
     )
 }
@@ -314,7 +362,7 @@ impl Previewed {
         if (self.rows as u64) < PREVIEW_ROWS {
             return vec![];
         }
-        candidates(&self.table.columns, self.table.primary_key.as_deref())
+        candidates(&self.table.columns, &self.table.primary_key)
             .into_iter()
             .map(|i| &self.table.columns[i].name)
             .filter(|name| !names::is_load_stamp(name) && !names::is_birth_date(name))
@@ -382,7 +430,7 @@ fn choose(
             firsts: &firsts,
         },
         rows,
-        table.primary_key.as_deref(),
+        &table.primary_key,
         whole,
         failed,
     )?;
@@ -394,9 +442,14 @@ fn choose(
 /// Infers table `name`, read as `source` in the source, from its catalog
 /// columns and constraints and its preview (`schema` and `batches`, as
 /// admitted), which holds the catalog's columns in order, reading text as
-/// times by `times`, all but its time column ([`finish`] chooses it).
+/// times by `times` and floats as the reference's frame of this source
+/// holds them (`floats`), all but its time column ([`finish`] chooses it).
 /// Inference reads the table by the name the schema gives it, as the
 /// reference's engine does (its key's guess is by that name).
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the table, its catalog, its preview and the source's two readings"
+)]
 pub fn preview(
     name: &str,
     source: &Relation,
@@ -405,6 +458,7 @@ pub fn preview(
     schema: &Schema,
     batches: &[RecordBatch],
     times: &dyn TextTimes,
+    floats: Floats,
 ) -> Result<Previewed, CoreError> {
     let rows: usize = batches.iter().map(RecordBatch::num_rows).sum();
     if rows == 0 {
@@ -467,7 +521,7 @@ pub fn preview(
             });
             continue;
         }
-        let sample = values::column(batches, index)?;
+        let sample = values::column(batches, index, floats)?;
         if dtype == Dtype::Time {
             // The engine reads a time of day's values as times, which none
             // is, and says how many it dropped.
@@ -500,6 +554,7 @@ pub fn preview(
             // (SQLite's, not its rowid alias): its catalog says.
             nullable: !declared.not_null && (!is_primary || declared.key_nullable),
             unique: declared_unique.contains(&declared.name),
+            exact_number: exact_number(field, constraints),
         });
         let text_time = dtype == Dtype::String && stype == Stype::Timestamp;
         instants.push(if dtype == Dtype::Time {
@@ -552,10 +607,14 @@ pub fn preview(
         .filter(|n| declared_unique.contains(*n))
         .filter(held)
         .collect();
-    let key = match (primary.as_slice(), unique_columns.as_slice()) {
-        ([one], _) => Some(one.clone()),
-        (_, [one]) => Some((*one).clone()),
-        _ => guess_key(name, &columns, &samples)?,
+    let (key, tied_keys) = match (primary.as_slice(), unique_columns.as_slice()) {
+        ([one], _) => (Some(one.clone()), Vec::new()),
+        (_, [one]) => (Some((*one).clone()), Vec::new()),
+        _ => match guess_key(name, &columns, &samples) {
+            Guess::Key(key) => (Some(key), Vec::new()),
+            Guess::None => (None, Vec::new()),
+            Guess::Tied(tied) => (None, tied),
+        },
     };
     if let Some(key) = &key {
         let column = columns
@@ -576,7 +635,8 @@ pub fn preview(
             left_out,
             unread_times,
             day_first,
-            primary_key: key,
+            tied_keys,
+            primary_key: key.into_iter().collect(),
             time: TimeChoice::default(),
             time_column: None,
             unique,
@@ -803,17 +863,24 @@ fn text_holds_categories(sample: &[Option<Value>]) -> bool {
     2 * values.len() > 3 * parts.len() && parts.len() <= MOST_CATEGORIES
 }
 
+/// What guessing a table's key found.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Guess {
+    Key(String),
+    None,
+    /// Several columns tied for the best score, in table order: the table
+    /// gets no key, and the reference warns, naming them.
+    Tied(Vec<String>),
+}
+
 /// The table's key among its identifiers, or, with none, among the columns
-/// named as the table is, by the reference's score: a name that is the
-/// table's (in its singular, plural, snake or camel forms) followed by
-/// `id`, `hash`, `key`, `code` or `uuid`, or the table's name itself, and
-/// how distinct its values are. A score of 4 or more counts; a tie for the
-/// best is refused.
-fn guess_key(
-    table: &str,
-    columns: &[InferredColumn],
-    samples: &[Vec<Option<Value>>],
-) -> Result<Option<String>, CoreError> {
+/// named as the table is, by the reference's score (`infer_primary_key`):
+/// a name that is the table's (in its singular, plural, snake or camel
+/// forms) followed by `id`, `hash`, `key`, `code` or `uuid`, or the table's
+/// name itself, and how distinct its values are. A score of 4 or more
+/// counts; a tie for the best leaves the table without a key, the tied
+/// columns named.
+fn guess_key(table: &str, columns: &[InferredColumn], samples: &[Vec<Option<Value>>]) -> Guess {
     let mut candidates: Vec<usize> = (0..columns.len())
         .filter(|&i| columns[i].stype == Stype::Id)
         .collect();
@@ -828,7 +895,7 @@ fn guess_key(
             .collect();
     }
     if candidates.is_empty() {
-        return Ok(None);
+        return Guess::None;
     }
     let variants = table_name_variants(table);
     let mut scores: Vec<(usize, f64)> = Vec::new();
@@ -837,36 +904,16 @@ fn guess_key(
         let lowered = name.to_lowercase();
         let mut score: u32 = if lowered == "id" { 4 } else { 0 };
         let named = |variant: &str| -> u32 {
-            let mut add = 0;
-            for suffix in ["id", "hash", "key", "code", "uuid"] {
-                if !lowered.ends_with(suffix) {
-                    continue;
-                }
-                if lowered == format!("{variant}_{suffix}")
-                    || lowered == format!("{variant}{suffix}")
-                {
-                    add += 5;
-                    break;
-                }
-                if lowered.ends_with(&format!("{variant}_{suffix}")) {
-                    add += 2;
-                }
-                if lowered.ends_with(&format!("{variant}{suffix}")) {
-                    add += 2;
-                }
-            }
-            if table == "studies" && name == "nct_id" {
-                add += 1;
-            }
-            add
+            suffix_score(&lowered, variant) + u32::from(table == "studies" && name == "nct_id")
         };
         if variants.contains(&lowered) {
             // The reference stops at the form the name equals, having
             // added what the forms it met first gave, in an order that
-            // varies by run; only a name no other form scores is ported.
-            if variants.iter().any(|v| v != &lowered && named(v) > 0) {
-                return Err(not_yet("key_name_order"));
-            }
+            // varies by run. No form scores a name equal to another form:
+            // the forms differ only by their endings (`s`, `ies` for `y`,
+            // `ing`, `info`) and underscores, none of them a key's suffix,
+            // so what the forms met first add is always nothing and the
+            // order never shows (`a_name_equal_to_a_form_scores_four`).
             score += 4;
         } else {
             score += variants.iter().map(|v| named(v)).sum::<u32>();
@@ -879,11 +926,41 @@ fn guess_key(
     // Stable, so a tie keeps the columns' order.
     scores.sort_by(|a, b| b.1.total_cmp(&a.1));
     match scores.as_slice() {
-        [] => Ok(None),
-        [(i, _)] => Ok(Some(columns[*i].name.clone())),
-        [(i, best), (_, next), ..] if best != next => Ok(Some(columns[*i].name.clone())),
-        _ => Err(not_yet("key_tie")),
+        [] => Guess::None,
+        [(i, _)] => Guess::Key(columns[*i].name.clone()),
+        [(i, best), (_, next), ..] if best != next => Guess::Key(columns[*i].name.clone()),
+        [(_, best), ..] => Guess::Tied(
+            scores
+                .iter()
+                .filter(|(_, score)| score == best)
+                .map(|(i, _)| columns[*i].name.clone())
+                .collect(),
+        ),
     }
+}
+
+/// What one form of the table's name, `variant`, gives a column named
+/// `lowered` (lowercased) by its key suffix: 5 for the form followed by the
+/// suffix, with or without an underscore, and stopping there; else 2 for
+/// each way the name ends so.
+fn suffix_score(lowered: &str, variant: &str) -> u32 {
+    let mut add = 0;
+    for suffix in ["id", "hash", "key", "code", "uuid"] {
+        if !lowered.ends_with(suffix) {
+            continue;
+        }
+        if lowered == format!("{variant}_{suffix}") || lowered == format!("{variant}{suffix}") {
+            add += 5;
+            break;
+        }
+        if lowered.ends_with(&format!("{variant}_{suffix}")) {
+            add += 2;
+        }
+        if lowered.ends_with(&format!("{variant}{suffix}")) {
+            add += 2;
+        }
+    }
+    add
 }
 
 /// The table's name in the forms a key's name may take it in: as given and
@@ -1027,7 +1104,7 @@ pub fn first_values_past_the_years(
     clocks: &dyn WallClocks,
 ) -> Result<(), CoreError> {
     let table = &previewed.table;
-    for i in candidates(&table.columns, table.primary_key.as_deref()) {
+    for i in candidates(&table.columns, &table.primary_key) {
         let name = &table.columns[i].name;
         if names::is_load_stamp(name) || names::is_birth_date(name) {
             continue;
@@ -1061,9 +1138,9 @@ pub fn first_values_past_the_years(
 
 /// The timestamps a table's time column is chosen among, in table order:
 /// every column of a timestamp's meaning but the key.
-fn candidates(columns: &[InferredColumn], key: Option<&str>) -> Vec<usize> {
+fn candidates(columns: &[InferredColumn], key: &[String]) -> Vec<usize> {
     (0..columns.len())
-        .filter(|&i| columns[i].stype == Stype::Timestamp && Some(columns[i].name.as_str()) != key)
+        .filter(|&i| columns[i].stype == Stype::Timestamp && !key.contains(&columns[i].name))
         .collect()
 }
 
@@ -1129,7 +1206,7 @@ pub fn whole_table(
     }
     let one = std::slice::from_ref(batch);
     let count = |index: usize| -> Result<usize, CoreError> {
-        match values::column(one, index)?.first() {
+        match values::column(one, index, Floats::NanValue)?.first() {
             Some(Some(Value::Int(n))) => usize::try_from(*n)
                 .map_err(|_| internal("a count of the whole table's reading is negative")),
             _ => Err(internal("a count of the whole table's reading is not one")),
@@ -1139,8 +1216,8 @@ pub fn whole_table(
     let mut read = Vec::with_capacity(columns.len());
     for (at, name) in columns.iter().enumerate() {
         let (low, high, held) = (1 + 3 * at, 2 + 3 * at, 3 + 3 * at);
-        let lows = values::column(one, low)?;
-        let highs = values::column(one, high)?;
+        let lows = values::column(one, low, Floats::NanValue)?;
+        let highs = values::column(one, high, Floats::NanValue)?;
         let data_type = batch.column(low).data_type();
         let (scalar, start) = match (data_type, lows.first()) {
             (_, Some(None) | None) => (None, None),
@@ -1155,7 +1232,7 @@ pub fn whole_table(
                 (values::times_of_day(one, low, 1).into_iter().next(), None)
             }
             _ => (
-                values::first_temporal(one, low),
+                values::first_temporal(one, low).map(infinity_as_read),
                 values::instants(one, low).first().copied().flatten(),
             ),
         };
@@ -1173,6 +1250,28 @@ pub fn whole_table(
         rows,
         columns: read,
     })
+}
+
+/// A whole table's smallest timestamp as the reference reads it: DuckDB's
+/// infinity (Arrow's `i64::MAX`, its negative `-i64::MAX`, of any unit) is
+/// the largest or smallest `datetime` its `fetchall` hands over, without a
+/// zone, which the reference shows as it is (FX-4); any other value as it
+/// is.
+fn infinity_as_read(value: Scalar) -> Scalar {
+    match value {
+        Scalar::Timestamp { value, .. } if value == i64::MAX || value == -i64::MAX => {
+            Scalar::Timestamp {
+                unit: Unit::Us,
+                zone: None,
+                value: if value > 0 {
+                    DATETIME_MAX_US
+                } else {
+                    DATETIME_MIN_US
+                },
+            }
+        }
+        other => other,
+    }
 }
 
 /// The time column among the timestamps, as the reference chooses it
@@ -1201,7 +1300,7 @@ fn choose_time_column(
     columns: &[InferredColumn],
     read: &Read<'_>,
     rows: usize,
-    key: Option<&str>,
+    key: &[String],
     whole: Option<&WholeTable>,
     failed: bool,
 ) -> Result<TimeChoice, CoreError> {
@@ -1417,5 +1516,41 @@ mod tests {
         assert_eq!(snake_case("UserInfo"), "User_Info");
         assert_eq!(snake_case("HTTPRequest2Go"), "HTTP_Request2_Go");
         assert_eq!(snake_case("already_snake"), "already_snake");
+    }
+
+    /// The reference adds, for a column named as one form of the table's
+    /// name, what the forms it meets before that one give, in an order
+    /// that varies by run; no other form ever gives such a name anything,
+    /// so the core's score of 4 is the reference's in every order. Held
+    /// over every table name of up to three characters from an alphabet of
+    /// the forms' endings, the suffixes' letters, an underscore and
+    /// characters whose lowercase differs in length or kind.
+    #[test]
+    fn a_name_equal_to_a_form_scores_four() {
+        let alphabet: Vec<char> = "aisdgnfoyuehkcIDSKY_\u{130}\u{212a}\u{3a3}"
+            .chars()
+            .collect();
+        let mut names = vec![String::new()];
+        let mut checked = 0;
+        for _ in 0..3 {
+            names = names
+                .iter()
+                .flat_map(|name| alphabet.iter().map(move |c| format!("{name}{c}")))
+                .collect();
+            for table in &names {
+                let variants = table_name_variants(table);
+                for form in &variants {
+                    for other in variants.iter().filter(|v| *v != form) {
+                        assert_eq!(
+                            suffix_score(form, other),
+                            0,
+                            "{table:?}: {form:?} by {other:?}"
+                        );
+                    }
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 12_000, "{checked}");
     }
 }

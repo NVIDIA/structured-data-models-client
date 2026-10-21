@@ -4,21 +4,25 @@
 
 //! A column of numbers handed over as their exact decimal text, its field
 //! marked [`MARKER`] by the host provider (a Postgres `numeric` declared
-//! without a precision, which fixes no Arrow decimal), read as the
-//! reference's reads such a column, by its role: a key, the one column of
-//! a primary, unique or foreign key the table declares, as that text, so
-//! no two keys a double cannot tell apart merge; any other column as a
-//! double. The role is settled once, from the preview and the table's
-//! declared keys, when the table is described ([`settle`]), and every later
-//! fetch of the column is held to the type described ([`conform`]). A
-//! source that marks no column is read as before.
+//! without a precision, which fixes no Arrow decimal). The table is read
+//! for inference as the reference reads such a column, by the role its
+//! catalog declares: a key, the one column of a primary, unique or foreign
+//! key, as that text, any other column as a double ([`settle`]). The
+//! described schema then reads the column by its role in the schema as it
+//! stands, the keys and links the caller named or edited included
+//! (`sdm_schema::assemble::read_exact_numbers`, T2.21), so a key no catalog
+//! declares stays its exact text too and no two keys a double cannot tell
+//! apart merge; every later fetch of the column is held to the type
+//! described ([`conform`]). A source that marks no column is read as
+//! before.
 
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
 use arrow_array::{ArrayRef, Float64Array, RecordBatch};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::catalog::{CatalogKey, KeyKind};
+use sdm_contract::catalog::CatalogKey;
+use sdm_contract::ops::ExactNumber;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
 
 use crate::ArrowData;
@@ -32,19 +36,6 @@ pub const MARKED: &str = sdm_contract::data::EXACT_NUMBER_MARKED;
 pub fn is_marked(field: &Field) -> bool {
     field.metadata().get(MARKER).map(String::as_str) == Some(MARKED)
         && field.data_type() == &DataType::Utf8
-}
-
-/// Whether `name` is a key of a table declaring `keys`: the one column of
-/// a primary, unique or foreign key, as the reference reads a column's
-/// role.
-fn is_key(name: &str, keys: &[CatalogKey]) -> bool {
-    keys.iter().any(|key| {
-        matches!(
-            key.kind,
-            KeyKind::Primary | KeyKind::Unique | KeyKind::Foreign
-        ) && key.columns.len() == 1
-            && key.columns[0] == name
-    })
 }
 
 /// `array`, text of numbers, as doubles; a text that is no number is the
@@ -76,14 +67,17 @@ fn retyped(field: &Field, to: DataType) -> Field {
     Field::new(field.name(), to, field.is_nullable()).with_metadata(field.metadata().clone())
 }
 
-/// `preview`, a table declaring `keys`, with each marked column that is no
-/// key read as doubles; a key stays its text.
+/// `preview`, a table declaring `keys`, with each marked column its
+/// catalog declares no key of read as doubles; a declared key stays its
+/// text ([`sdm_schema::infer::exact_number`]).
 pub fn settle(preview: ArrowData, keys: &[CatalogKey]) -> Result<ArrowData, CoreError> {
     let doubled: Vec<String> = preview
         .schema
         .fields()
         .iter()
-        .filter(|f| is_marked(f) && !is_key(f.name(), keys))
+        .filter(|f| {
+            is_marked(f) && sdm_schema::infer::exact_number(f, keys) == Some(ExactNumber::Other)
+        })
         .map(|f| f.name().clone())
         .collect();
     if doubled.is_empty() {
@@ -160,6 +154,7 @@ pub fn conform(
 #[cfg(test)]
 mod tests {
     use arrow_array::{Array, StringArray};
+    use sdm_contract::catalog::KeyKind;
 
     use super::*;
 

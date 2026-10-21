@@ -1,0 +1,97 @@
+{
+  "format": "sdm-case/1",
+  "id": "rule.float-nan-aggregated",
+  "status": "acceptance",
+  "slice": "S1",
+  "databases": [
+    "duckdb",
+    "postgres"
+  ],
+  "exclusion": "KO2-65",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, CASE WHEN order_id = 8 THEN 'NaN'::DOUBLE ELSE price END AS price, ts FROM orders"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c on DuckDB and Postgres: answered through predict, the target summed over a window holding the NaN"
+  },
+  "why": "A NaN in the aggregated column (orders.price of order 8, user 0's, in the context's windows), which both the preview and the target's sum read: rule float_nan. Not on SQLite, as rule.float-nan-feature",
+  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+}

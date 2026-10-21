@@ -27,6 +27,12 @@ use crate::random::Pcg64;
 /// (`_by_fkey`'s `__kumo_time__`), and the start and end of its window
 /// (`_by_time`'s `__kumo_start__` and `__kumo_end__`).
 pub const SEED_TIME: &str = "time";
+/// An example's anchor where its entity's own time is missing
+/// (`anchor_time='entity'` over a null time, T2.11): pandas' `NaT` as the
+/// reference's anchors hold it, `i64::MIN` nanoseconds, distinct from the
+/// no-anchor sentinel (`pd.Timestamp.min`). It anchors no window: a read by
+/// time reaches no row for it, and the payload sends it as null.
+pub const MISSING_ANCHOR: i64 = i64::MIN;
 pub const SEED_START: &str = "start";
 pub const SEED_END: &str = "end";
 
@@ -52,6 +58,187 @@ pub fn shift(time: i64, span: i128, field: &str) -> Result<i64, CoreError> {
 pub struct Examples {
     pub index: Vec<usize>,
     pub anchors: Vec<i64>,
+}
+
+/// A static query's examples anchored at each entity's own time
+/// (`anchor_time='entity'`, `sample_target`'s shared draw): every entity,
+/// shuffled, then ordered by its time, latest first, as the reference's
+/// `sort_values(ascending=False)` orders a `datetime64[ns]` column
+/// ([`descending_order`]), each anchored at its time; an entity with no
+/// time last, anchored at `missing`.
+pub fn entity_examples(
+    rng: &mut Pcg64,
+    entities: usize,
+    entity_time: &[Option<i64>],
+    missing: i64,
+) -> Examples {
+    let mut index: Vec<usize> = (0..entities).collect();
+    rng.shuffle(&mut index);
+    let times: Vec<Option<i64>> = index
+        .iter()
+        .map(|&i| entity_time.get(i).copied().flatten())
+        .collect();
+    let index: Vec<usize> = descending_order(&times)
+        .into_iter()
+        .map(|at| index[at])
+        .collect();
+    let anchors = index
+        .iter()
+        .map(|&i| entity_time.get(i).copied().flatten().unwrap_or(missing))
+        .collect();
+    Examples { index, anchors }
+}
+
+/// The order pandas' `Series.sort_values(ascending=False)` gives the
+/// positions of `values`, a `datetime64[ns]` column (`nargsort`): the
+/// values present, reversed, sorted ascending by NumPy's default
+/// `argsort` (`kind='quicksort'`, [`introsort_argsort`]), the result reversed;
+/// then the missing ones (`NaT`), in order.
+pub fn descending_order(values: &[Option<i64>]) -> Vec<usize> {
+    let present: Vec<usize> = (0..values.len())
+        .filter(|&i| values[i].is_some())
+        .rev()
+        .collect();
+    let keys: Vec<i64> = present.iter().filter_map(|&i| values[i]).collect();
+    let mut order: Vec<usize> = introsort_argsort(&keys)
+        .into_iter()
+        .map(|k| present[k])
+        .collect();
+    order.reverse();
+    order.extend((0..values.len()).filter(|&i| values[i].is_none()));
+    order
+}
+
+/// NumPy's generic `aquicksort` (`npysort/quicksort.cpp`), which its
+/// `argsort(kind='quicksort')` runs on a `datetime64` array (no SIMD path
+/// takes that type): introsort, a median-of-three quicksort partitioning
+/// down to 16 elements or fewer, then insertion sort, and heapsort past a
+/// depth of twice the length's highest bit. Unstable, and deterministic:
+/// equal values come out in the order this exact algorithm leaves them.
+pub fn introsort_argsort(v: &[i64]) -> Vec<usize> {
+    const SMALL_QUICKSORT: usize = 16;
+    let num = v.len();
+    let mut t: Vec<usize> = (0..num).collect();
+    if num < 2 {
+        return t;
+    }
+    let less = |a: usize, b: usize, t: &[usize]| v[t[a]] < v[t[b]];
+    let mut stack: Vec<(usize, usize, i64)> = Vec::new();
+    let (mut pl, mut pr) = (0usize, num - 1);
+    let mut cdepth = 2 * i64::from(usize::BITS - 1 - num.leading_zeros());
+    loop {
+        if cdepth < 0 {
+            heapsort_indices(v, &mut t[pl..=pr]);
+        } else {
+            while pr - pl > SMALL_QUICKSORT - 1 {
+                let pm = pl + ((pr - pl) >> 1);
+                if less(pm, pl, &t) {
+                    t.swap(pm, pl);
+                }
+                if less(pr, pm, &t) {
+                    t.swap(pr, pm);
+                }
+                if less(pm, pl, &t) {
+                    t.swap(pm, pl);
+                }
+                let vp = v[t[pm]];
+                let mut pi = pl;
+                let mut pj = pr - 1;
+                t.swap(pm, pj);
+                loop {
+                    pi += 1;
+                    while v[t[pi]] < vp {
+                        pi += 1;
+                    }
+                    pj -= 1;
+                    while vp < v[t[pj]] {
+                        pj -= 1;
+                    }
+                    if pi >= pj {
+                        break;
+                    }
+                    t.swap(pi, pj);
+                }
+                t.swap(pi, pr - 1);
+                cdepth -= 1;
+                // The larger part waits on the stack.
+                if pi - pl < pr - pi {
+                    stack.push((pi + 1, pr, cdepth));
+                    pr = pi - 1;
+                } else {
+                    stack.push((pl, pi - 1, cdepth));
+                    pl = pi + 1;
+                }
+            }
+            for pi in pl + 1..=pr {
+                let vi = t[pi];
+                let vp = v[vi];
+                let mut pj = pi;
+                while pj > pl && vp < v[t[pj - 1]] {
+                    t[pj] = t[pj - 1];
+                    pj -= 1;
+                }
+                t[pj] = vi;
+            }
+        }
+        let Some((l, r, d)) = stack.pop() else {
+            break;
+        };
+        pl = l;
+        pr = r;
+        cdepth = d;
+    }
+    t
+}
+
+/// NumPy's generic `aheapsort` (`npysort/heapsort.cpp`) over the indices
+/// `a`, which [`introsort_argsort`] falls back to past its depth limit.
+fn heapsort_indices(v: &[i64], a: &mut [usize]) {
+    let n = a.len();
+    if n < 2 {
+        return;
+    }
+    // One-based, as NumPy indexes its heap.
+    let at = |a: &[usize], k: usize| a[k - 1];
+    let mut l = n >> 1;
+    while l > 0 {
+        let tmp = at(a, l);
+        let (mut i, mut j) = (l, l << 1);
+        while j <= n {
+            if j < n && v[at(a, j)] < v[at(a, j + 1)] {
+                j += 1;
+            }
+            if v[tmp] < v[at(a, j)] {
+                a[i - 1] = at(a, j);
+                i = j;
+                j += j;
+            } else {
+                break;
+            }
+        }
+        a[i - 1] = tmp;
+        l -= 1;
+    }
+    let mut n = n;
+    while n > 1 {
+        let tmp = at(a, n);
+        a[n - 1] = at(a, 1);
+        n -= 1;
+        let (mut i, mut j) = (1usize, 2usize);
+        while j <= n {
+            if j < n && v[at(a, j)] < v[at(a, j + 1)] {
+                j += 1;
+            }
+            if v[tmp] < v[at(a, j)] {
+                a[i - 1] = at(a, j);
+                i = j;
+                j += j;
+            } else {
+                break;
+            }
+        }
+        a[i - 1] = tmp;
+    }
 }
 
 /// `sample_target`'s walk back in time for a temporal query: at each
@@ -134,12 +321,20 @@ pub fn seeds(keys: ArrayRef, times: Vec<(&str, Vec<i64>)>) -> Result<RecordBatch
     let mut columns: Vec<ArrayRef> =
         vec![keys, Arc::new(Int64Array::from_iter_values(0..rows as i64))];
     for (name, values) in times {
+        // A missing anchor (`MISSING_ANCHOR`, an entity's own time null) is
+        // a null bound, which no window holds (the reference's
+        // `time <= NULL`): the column is nullable only where one is.
+        let missing = values.contains(&MISSING_ANCHOR);
         fields.push(Field::new(
             name,
             DataType::Timestamp(ArrowUnit::Nanosecond, None),
-            false,
+            missing,
         ));
-        columns.push(Arc::new(TimestampNanosecondArray::from(values)));
+        columns.push(Arc::new(TimestampNanosecondArray::from_iter(
+            values
+                .into_iter()
+                .map(|v| (v != MISSING_ANCHOR).then_some(v)),
+        )));
     }
     RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).map_err(|_| {
         CoreError::new(
@@ -344,4 +539,33 @@ fn typed(mut seeds: KeySet, table: &Table, key: &str) -> KeySet {
         }
     }
     seeds
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::random::{Entropy, default_rng};
+
+    #[test]
+    fn a_missing_anchor_is_a_null_bound_and_the_column_nullable_only_then() {
+        use arrow_array::Array;
+        let keys: ArrayRef = Arc::new(Int64Array::from(vec![1, 2]));
+        let none = seeds(Arc::clone(&keys), vec![(SEED_TIME, vec![5, 6])]).unwrap();
+        assert!(!none.schema().field(2).is_nullable());
+        let one = seeds(keys, vec![(SEED_TIME, vec![5, MISSING_ANCHOR])]).unwrap();
+        assert!(one.schema().field(2).is_nullable());
+        assert!(one.column(2).is_null(1) && !one.column(2).is_null(0));
+    }
+
+    #[test]
+    fn entity_examples_are_every_entity_latest_first_at_its_own_time() {
+        let times = [Some(5), None, Some(9), Some(5), Some(1)];
+        let mut rng = default_rng(&Entropy::from_hex("2a").unwrap());
+        let examples = entity_examples(&mut rng, times.len(), &times, -7);
+        assert_eq!(examples.index.len(), 5);
+        assert_eq!(examples.anchors, vec![9, 5, 5, 1, -7]);
+        assert_eq!(examples.index[0], 2);
+        assert_eq!(examples.index[3], 4);
+        assert_eq!(examples.index[4], 1);
+    }
 }

@@ -19,6 +19,8 @@ heldout-author.md). ``heldout_run.sh`` drives the run; these are its steps.
     heldout.py report   RUN_DIR --prefix P [--missing RUNNER=REASON]
     heldout.py counts   RUN_DIR --prefix P --threshold N [--approved FILE]
                             [--header FILE] [--missing RUNNER=REASON]
+    heldout.py convert  ORIG_DIR OUT_DIR --prefix P [--contract DIR]
+    heldout.py dummy    KIND OUT_DIR --prefix P [--threshold N]
 
 - ``validate``: every case file holds to ``contract/case.schema.json``, its
   id is under the prefix, unique and its file's name, its indices are
@@ -42,20 +44,40 @@ heldout-author.md). ``heldout_run.sh`` drives the run; these are its steps.
   to ``report.md`` and ``differences.json``. One runner leg may be missing
   (``--missing python-old='exit 1'``): its column says so, and the counts
   are partial.
-- ``counts``: per core runner, the panics (an ``INTERNAL_ERROR`` or a case
+- ``counts``: per core runner, the panics (an ``INTERNAL_ERROR`` or a leg
   with no observation), the new refusals of an input the reference accepts
-  and the cases whose outcome differs from the reference's, written to
+  and the legs whose outcome differs from the reference's, written to
   ``counts.md``, against ``--threshold``: more than N differing cases with
   no approval, any panic or any unapproved new refusal is a no-go
-  (exit 1); a missing leg makes the counts partial (exit 3). ``--approved``
-  names the case ids approved before the run, one a line.
+  (exit 1); a missing runner leg makes the counts partial (exit 3).
+  ``--approved`` names what was approved before the run, one a line: a
+  case id approves every leg of the case, ``<id>@<database>`` that leg.
+  ``--databases`` (``report`` too) names the databases the run ran on, so
+  a leg there that no file observed is counted, as missing; without it
+  the legs are those the observations hold.
+- ``convert``: a set in the held-out format (c8075715, T2.1j's landing)
+  written into the empty OUT_DIR in the head's case format
+  (:data:`FORMAT_MOVES`), each case held to the head's case schema.
+- ``dummy``: a synthetic run directory ``counts`` must find a no-go
+  (check 9's two dummy bundles): ``panic`` or ``over-threshold``.
+
+A case runs on each database its file names (all three by default): its
+observation on DuckDB is keyed by its bare id, elsewhere by
+``<id>@<database>`` (``run_python.case_key``); each key is a leg of the
+case. H11's threshold reads per case (T2.16a, the orchestrator's reading
+of 2026-10-21): a case counts once however many of its legs differ; it
+differs when any leg's outcome class differs from python-ref's line of the
+same key, and it is approved only when every differing leg is; any leg's
+panic, a leg python-ref observed and a core runner did not among them,
+and any leg's unapproved new refusal is a no-go.
 
 Nothing here prints a case's contents: ``validate`` prints ids and the
 place of each problem (``--verbose`` adds the message, which may quote the
-case), ``digests`` digests, ``expect`` counts; ``report`` and ``counts``
-print outcomes, which is the point of the run. Nothing deletes a file, and
-nothing writes into a case directory but ``expect`` (into an empty one) and
-``digests --write`` (its two files, once).
+case), ``digests`` digests, ``expect`` and ``convert`` counts and the place
+of each problem; ``report`` and ``counts`` print outcomes, which is the
+point of the run. Nothing deletes a file, and nothing writes into a case
+directory but ``expect``, ``convert`` and ``dummy`` (each into an empty
+one) and ``digests --write`` (its two files, once).
 """
 
 from __future__ import annotations
@@ -65,6 +87,7 @@ import hashlib
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -354,6 +377,30 @@ def cmd_same(args: argparse.Namespace) -> int:
 
 # --- report and counts -------------------------------------------------------
 
+#: The databases a leg may be on, in the order a case's legs are listed:
+#: DuckDB's leg keyed by the bare case id, every other ``<id>@<database>``
+#: (``run_python.case_key``).
+DATABASES = ('duckdb', 'sqlite', 'postgres')
+#: The runners that run on DuckDB alone (the old client, T2.1a fix 4): their
+#: legs elsewhere are not expected.
+DUCKDB_ONLY = ('python-old',)
+
+
+def case_of(key: str) -> str:
+    r"""The case id of a leg's key, ``<id>`` or ``<id>@<database>``."""
+    return key.partition('@')[0]
+
+
+def database_of(key: str) -> str:
+    r"""The database of a leg's key: DuckDB's is the bare case id."""
+    return key.partition('@')[2] or 'duckdb'
+
+
+def _leg_order(key: str) -> tuple[int, str]:
+    database = database_of(key)
+    known = DATABASES.index(database) if database in DATABASES else 99
+    return known, key
+
 
 def _missing(value: str | None) -> tuple[str | None, str]:
     if value is None:
@@ -380,17 +427,46 @@ def _legs(run: Path, gone: str | None) -> dict[str, dict[str, dict]]:
     return legs
 
 
+def leg_keys(
+    cases: list[str],
+    *observed: dict[str, Any],
+    expected: dict[str, set[str]] | None = None,
+) -> dict[str, list[str]]:
+    r"""Each case's legs: every key of the case any of ``observed`` holds
+    (python-ref's and each runner's lines) and every key ``expected``
+    names for it (the databases the run named, ``--databases``), its
+    DuckDB leg (the bare id) where none is, in :data:`DATABASES` order."""
+    found: dict[str, set[str]] = {
+        c: set((expected or {}).get(c, ())) for c in cases
+    }
+    for lines in observed:
+        for key in lines:
+            if case_of(key) in found:
+                found[case_of(key)].add(key)
+    return {c: sorted(keys or {c}, key=_leg_order) for c, keys in found.items()}
+
+
+def _expected(runner: str, key: str) -> bool:
+    r"""Whether ``runner`` is expected to observe the leg ``key``."""
+    return runner not in DUCKDB_ONLY or database_of(key) == 'duckdb'
+
+
 def _differences(compare_log: Path, prefix: str) -> dict[str, list[str]]:
-    case = re.compile(rf'(?<![\w.-]){re.escape(prefix)}[A-Za-z0-9_.-]+')
+    leg = re.compile(
+        rf'(?<![\w.-]){re.escape(prefix)}[A-Za-z0-9_.-]+(?:@[a-z]+)?'
+    )
     found: dict[str, list[str]] = {}
     if not compare_log.is_file():
         return found
     for line in compare_log.read_text(encoding='utf-8').splitlines():
         if not line.startswith(('DIFFERS ', 'diagnostic')):
             continue
-        m = case.search(line)
+        m = leg.search(line)
         if m:
-            found.setdefault(m.group(0).rstrip('.:'), []).append(line)
+            key = m.group(0)
+            if '@' not in key:
+                key = key.rstrip('.:')
+            found.setdefault(key, []).append(line)
     return found
 
 
@@ -401,6 +477,36 @@ def _class(o: dict | None) -> str:
     if out['result'] == 'success':
         return 'success'
     return f'refusal {out.get("code") or out.get("error")}'
+
+
+def expected_legs(
+    run: Path, prefix: str, databases: list[str] | None
+) -> dict[str, set[str]] | None:
+    r"""Each case's legs on ``databases`` (the run's ``--databases``), as
+    far as its file's ``databases`` lets it run there; None where the run
+    named none, the legs then known from the observations alone."""
+    if databases is None:
+        return None
+    out: dict[str, set[str]] = {}
+    for path in case_files(run / 'cases', prefix):
+        case = json.loads(path.read_text(encoding='utf-8'))
+        runs_on = case.get('databases', list(DATABASES))
+        out[case['id']] = {
+            case['id'] if d == 'duckdb' else f'{case["id"]}@{d}'
+            for d in databases
+            if d in runs_on
+        }
+    return out
+
+
+def _databases(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    named = [d for d in value.split(',') if d]
+    unknown = sorted(set(named) - set(DATABASES))
+    if unknown or not named:
+        raise SystemExit(f'--databases: {value!r} is not of {DATABASES}')
+    return named
 
 
 def _case_ids(run: Path, prefix: str) -> list[str]:
@@ -421,28 +527,56 @@ def _partial_note(gone: str | None, why: str) -> list[str]:
     ]
 
 
+def _per_database(keys: list[str]) -> str:
+    count = Counter(database_of(k) for k in keys)
+    order = sorted(
+        count, key=lambda d: (DATABASES.index(d) if d in DATABASES else 99, d)
+    )
+    return ', '.join(f'{d} {count[d]}' for d in order)
+
+
+def _cell(runner: str, key: str, gone: str | None, obs: dict) -> str:
+    r"""A runner's cell of a leg's row in ``report.md``."""
+    if runner == gone:
+        return 'NOT RUN'
+    if key not in obs[runner] and not _expected(runner, key):
+        return 'not run there'
+    return _class(obs[runner].get(key))
+
+
 def cmd_report(args: argparse.Namespace) -> int:
     run: Path = args.run_dir
     gone, why = _missing(args.missing)
     cases = _case_ids(run, args.prefix)
     ref = _observations(run / 'python-ref.jsonl')
     obs = _legs(run, gone)
+    legs = leg_keys(
+        cases,
+        ref,
+        *obs.values(),
+        expected=expected_legs(run, args.prefix, _databases(args.databases)),
+    )
     diffs = _differences(run / 'compare.txt', args.prefix)
     rows = []
     for c in cases:
-        cells = (
-            'NOT RUN' if w == gone else _class(obs[w].get(c)) for w in RUNNERS
-        )
-        rows.append((c, _class(ref.get(c)), *cells, len(diffs.get(c, []))))
-    differing = [c for c in cases if diffs.get(c)]
+        for key in legs[c]:
+            cells = (_cell(w, key, gone, obs) for w in RUNNERS)
+            rows.append(
+                (key, _class(ref.get(key)), *cells, len(diffs.get(key, [])))
+            )
+    differing = sorted({case_of(k) for k in diffs if case_of(k) in legs})
+    every = [k for c in cases for k in legs[c]]
     lines = [
         *_partial_note(gone, why),
-        '| case | python-ref | ' + ' | '.join(RUNNERS) + ' | compare lines '
+        '| case (leg) | python-ref | '
+        + ' | '.join(RUNNERS)
+        + ' | compare lines '
         '| entry approved before the run |',
         '|---' * (len(RUNNERS) + 4) + '|',
         *('| ' + ' | '.join(str(x) for x in row) + ' | |' for row in rows),
         '',
-        f'cases: {len(cases)}; with a compare line: {len(differing)}',
+        f'cases: {len(cases)}; legs: {len(every)} ({_per_database(every)}); '
+        f'cases with a compare line: {len(differing)}',
         'Fill the last column from the register as it was at the run start '
         'only; counts.md holds the outcome counts.',
     ]
@@ -455,18 +589,34 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _approved(path: Path | None) -> set[str]:
+    approved = set()
+    if path:
+        for line in path.read_text(encoding='utf-8').splitlines():
+            line = line.split('#', 1)[0].strip()
+            if line:
+                approved.add(line)
+    return approved
+
+
 def cmd_counts(args: argparse.Namespace) -> int:
     run: Path = args.run_dir
     gone, why = _missing(args.missing)
     cases = _case_ids(run, args.prefix)
     ref = _observations(run / 'python-ref.jsonl')
     obs = _legs(run, gone)
-    approved = set()
-    if args.approved:
-        for line in args.approved.read_text(encoding='utf-8').splitlines():
-            line = line.split('#', 1)[0].strip()
-            if line:
-                approved.add(line)
+    legs = leg_keys(
+        cases,
+        ref,
+        *obs.values(),
+        expected=expected_legs(run, args.prefix, _databases(args.databases)),
+    )
+    every = [k for c in cases for k in legs[c]]
+    approved = _approved(args.approved)
+
+    def ok(key: str) -> bool:
+        return key in approved or case_of(key) in approved
+
     compare_log = run / 'compare.txt'
     gating = []
     if compare_log.is_file():
@@ -479,9 +629,10 @@ def cmd_counts(args: argparse.Namespace) -> int:
     out = [header, ''] if header else []
     out += [*_partial_note(gone, why)]
     out += [
-        f'cases: {len(cases)}; gating DIFFERS lines in compare.txt: '
-        f'{len(gating)} (held-out cases are not baselined, so outcome '
-        'differences are counted here from the observations)',
+        f'cases: {len(cases)}; legs: {len(every)} ({_per_database(every)}); '
+        f'gating DIFFERS lines in compare.txt: {len(gating)} (held-out '
+        'cases are not baselined, so outcome differences are counted here '
+        'from the observations)',
         '',
     ]
     panics, new_refusals, differing = set(), set(), set()
@@ -490,20 +641,21 @@ def cmd_counts(args: argparse.Namespace) -> int:
             out += [f'## {name}', f'- not run: {why}', '']
             continue
         o = obs[name]
+        mine = [k for k in every if k in o or _expected(name, k)]
         crash = [
-            c
-            for c in cases
-            if c not in o or o[c]['outcome'].get('code') == 'INTERNAL_ERROR'
+            k
+            for k in mine
+            if k not in o or o[k]['outcome'].get('code') == 'INTERNAL_ERROR'
         ]
         diff = [
-            c for c in cases if c in o and _class(o[c]) != _class(ref.get(c))
+            k for k in mine if k in o and _class(o[k]) != _class(ref.get(k))
         ]
         newref = [
-            c
-            for c in diff
-            if c in ref
-            and ref[c]['outcome']['result'] == 'success'
-            and o[c]['outcome']['result'] == 'refusal'
+            k
+            for k in diff
+            if k in ref
+            and ref[k]['outcome']['result'] == 'success'
+            and o[k]['outcome']['result'] == 'refusal'
         ]
         title = name
         if name in CORE_RUNNERS:
@@ -514,27 +666,32 @@ def cmd_counts(args: argparse.Namespace) -> int:
             title += ' (the old client: reported, not counted)'
         out += [
             f'## {title}',
+            f'- legs: {len(mine)} ({_per_database(mine)})',
             f'- panics / INTERNAL_ERROR / missing: {len(crash)} {crash}',
             f'- new refusals of an input the reference accepts: '
             f'{len(newref)} {newref}',
             f'- outcome class differs from the reference: {len(diff)}',
             *(
-                f'  - {c}: reference `{_class(ref.get(c))}`, '
-                f'{name} `{_class(o[c])}`'
-                + (' (approved before the run)' if c in approved else '')
-                for c in diff
+                f'  - {k}: reference `{_class(ref.get(k))}`, '
+                f'{name} `{_class(o[k])}`'
+                + (' (approved before the run)' if ok(k) else '')
+                for k in diff
             ),
             '',
         ]
-    unapproved = sorted(differing - approved)
-    refusals = sorted(new_refusals - approved)
+    cases_differing = sorted({case_of(k) for k in differing})
+    unapproved = sorted({case_of(k) for k in differing if not ok(k)})
+    refusals = sorted((k for k in new_refusals if not ok(k)), key=_leg_order)
+    crashed = sorted(panics, key=_leg_order)
     nogo = bool(panics) or bool(refusals) or len(unapproved) > args.threshold
     summary = [
-        'On either core runner (python-core, rust-host):',
-        f'- panics: {len(panics)} {sorted(panics)}',
+        'On either core runner (python-core, rust-host), on every database '
+        '(a case counts once, however many of its legs differ):',
+        f'- panics: {len(crashed)} {crashed}',
         f'- new refusals with no approval: {len(refusals)} {refusals}',
-        f'- cases differing from the reference: {len(differing)}; with no '
-        f'approval: {len(unapproved)} {unapproved}',
+        f'- cases differing from the reference: {len(cases_differing)} '
+        f'({len(differing)} legs); with no approval: {len(unapproved)} '
+        f'{unapproved}',
         f'- threshold: more than {args.threshold} differing cases with no '
         'approval, any panic, or any new refusal with no approval = no-go',
         '',
@@ -556,6 +713,206 @@ def cmd_counts(args: argparse.Namespace) -> int:
     if gone in CORE_RUNNERS:
         return 3
     return 1 if nogo else 0
+
+
+# --- convert -----------------------------------------------------------------
+
+#: The commit whose case format the held-out set was written in (T2.1j's
+#: landing, heldout-record.md).
+FORMAT_COMMIT = 'c80757150ab6daae04e94b1455fb9a5e912779e4'
+#: Each field of the held-out format that the head's case format moved
+#: since :data:`FORMAT_COMMIT`, as (where it was, where it is now), a path
+#: of object keys from the case's top level. Empty at the head (T2.16a):
+#: every field added since (T2.1m's ``lag_timesteps``, ``outputs`` and
+#: ``quantiles``, T2.1n's ``explanation`` and ``item_metadata``, T2.1t's
+#: sampling options, ``context_anchor_time`` and ``embeddings``) is
+#: optional, its absence the call as the held-out format made it, and the
+#: ranking and multi-call fields (``candidates``, ``top_k``,
+#: ``rows_per_call``) are still ``input.materialize``'s. A move added here
+#: is applied by :func:`converted`.
+FORMAT_MOVES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
+
+
+def converted(
+    case: dict[str, Any],
+    moves: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = FORMAT_MOVES,
+) -> tuple[dict[str, Any], int]:
+    r"""``case`` in the head's format, and how many moves applied: each
+    field at a move's old path taken to its new one (made where it is not
+    there), never over a field already at the new path."""
+    out = json.loads(json.dumps(case))
+    applied = 0
+    for old, new in moves:
+        holder = out
+        for key in old[:-1]:
+            holder = holder.get(key) if isinstance(holder, dict) else None
+        if not isinstance(holder, dict) or old[-1] not in holder:
+            continue
+        value = holder.pop(old[-1])
+        target = out
+        for key in new[:-1]:
+            target = target.setdefault(key, {})
+            if not isinstance(target, dict):
+                raise ValueError(f'{"/".join(new)}: not an object on the way')
+        if new[-1] in target:
+            raise ValueError(f'{"/".join(new)}: already given')
+        target[new[-1]] = value
+        applied += 1
+    return out, applied
+
+
+def _head_loader(contract: Path) -> Any:
+    r"""The head's case loader (``run_python.load_cases``): the case schema
+    and the checks past it, as every runner reads a case."""
+    import importlib.util
+
+    path = contract / 'runners' / 'run_python.py'
+    spec = importlib.util.spec_from_file_location('heldout_run_python', path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f'{path}: cannot be loaded')
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def cmd_convert(args: argparse.Namespace) -> int:
+    orig: Path = args.orig_dir
+    out: Path = args.out_dir
+    if orig.resolve() == out.resolve():
+        raise SystemExit('convert writes a new directory, never the original')
+    out.mkdir(parents=True, exist_ok=True)
+    if any(out.iterdir()):
+        raise SystemExit(f'{out} holds files; write into an empty directory')
+    runner = _head_loader(args.contract)
+    cases = case_files(orig, args.prefix)
+    moved = problems = 0
+    for path in sorted(orig.iterdir(), key=lambda p: p.name.encode()):
+        if not path.is_file() or path.name in DIGEST_FILES:
+            continue
+        data = path.read_bytes()
+        if path not in cases:
+            (out / path.name).write_bytes(data)
+            continue
+        try:
+            case, applied = converted(json.loads(data))
+        except ValueError as error:
+            print(f'MOVE {path.name}: {error}')
+            problems += 1
+            continue
+        if applied:
+            moved += 1
+            data = (
+                json.dumps(case, indent=2, ensure_ascii=False) + '\n'
+            ).encode()
+        (out / path.name).write_bytes(data)
+        try:
+            runner.load_cases([out / path.name])
+        except runner.RunnerFailure as error:
+            # The loader names the place and the rule, never a value.
+            print(f'HEAD {error}')
+            problems += 1
+    print(
+        f'cases {len(cases)}; moved {moved} (format {FORMAT_COMMIT[:8]} to '
+        f'the head, {len(FORMAT_MOVES)} moves); problems {problems}'
+    )
+    for name, value in (
+        ('BUNDLE_SHA256', bundle_digest(out)),
+        ('INPUTS_SHA256', inputs_digest(out, args.prefix)),
+    ):
+        print(f'{name} {value} (converted)')
+    for name, value in (
+        ('BUNDLE_SHA256', bundle_digest(orig)),
+        ('INPUTS_SHA256', inputs_digest(orig, args.prefix)),
+    ):
+        print(f'{name} {value} (original)')
+    return 0 if problems == 0 and cases else 1
+
+
+# --- dummy -------------------------------------------------------------------
+
+DUMMY_KINDS = ('panic', 'over-threshold')
+
+
+def _line(runner: str, key: str, outcome: dict[str, Any]) -> str:
+    return json.dumps(
+        {'case': key, 'identity': {'runner': runner}, 'outcome': outcome},
+        sort_keys=True,
+    )
+
+
+def cmd_dummy(args: argparse.Namespace) -> int:
+    r"""A synthetic run directory (check 9's dummy bundles): cases on DuckDB
+    and SQLite, every leg as python-ref observed it but for the fault its
+    kind holds. ``panic``: rust-host's SQLite leg of one case an
+    ``INTERNAL_ERROR``. ``over-threshold``: python-core differs from the
+    reference on one leg of each of threshold + 1 cases (DuckDB and SQLite
+    in turn), each an input the reference refuses and it accepts, so
+    neither a panic nor a new refusal: only the threshold makes it a no-go.
+    One more case differs nowhere."""
+    out: Path = args.out_dir
+    out.mkdir(parents=True, exist_ok=True)
+    if any(out.iterdir()):
+        raise SystemExit(f'{out} holds files; write into an empty directory')
+    (out / 'cases').mkdir()
+    count = args.threshold + 2
+    ids = [f'{args.prefix}dummy-{n:02d}' for n in range(count)]
+    refused = {
+        'result': 'refusal',
+        'stage': 'materialize',
+        'error': 'ValidationError',
+        'code': 'INVALID_INPUT',
+    }
+    accepted = {'result': 'success', 'stage': 'predict'}
+    lines: dict[str, list[str]] = {r: [] for r in ('python-ref', *RUNNERS)}
+    for n, cid in enumerate(ids):
+        (out / 'cases' / f'{cid}.json').write_text(
+            json.dumps(
+                {
+                    'format': 'sdm-case/1',
+                    'id': cid,
+                    'why': f'a synthetic {args.kind} bundle (check 9)',
+                },
+                indent=2,
+            )
+            + '\n'
+        )
+        for database in ('duckdb', 'sqlite'):
+            key = cid if database == 'duckdb' else f'{cid}@{database}'
+            ref = refused
+            lines['python-ref'].append(_line('python-ref', key, ref))
+            for runner in RUNNERS:
+                if runner in DUCKDB_ONLY and database != 'duckdb':
+                    continue
+                mine = ref
+                if (
+                    args.kind == 'panic'
+                    and runner == 'rust-host'
+                    and n == 0
+                    and database == 'sqlite'
+                ):
+                    mine = {
+                        'result': 'refusal',
+                        'stage': 'materialize',
+                        'error': 'StructuredDataError',
+                        'code': 'INTERNAL_ERROR',
+                    }
+                if (
+                    args.kind == 'over-threshold'
+                    and runner == 'python-core'
+                    and n <= args.threshold
+                    and database == ('duckdb', 'sqlite')[n % 2]
+                ):
+                    mine = accepted
+                lines[runner].append(_line(runner, key, mine))
+    for runner, written in lines.items():
+        (out / f'{runner}.jsonl').write_text('\n'.join(written) + '\n')
+    print(f'written: a synthetic {args.kind} run of {count} cases in {out}')
+    print(
+        f'then: heldout.py counts {out} --prefix {args.prefix} '
+        f'--threshold {args.threshold} (a no-go exits 1)'
+    )
+    return 0
 
 
 # --- command line ------------------------------------------------------------
@@ -607,6 +964,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument('run_dir', type=Path)
     prefix(p)
     p.add_argument('--missing', metavar='RUNNER=REASON')
+    p.add_argument('--databases', metavar='LIST')
 
     p = command('counts', cmd_counts)
     p.add_argument('run_dir', type=Path)
@@ -615,6 +973,19 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument('--approved', type=Path)
     p.add_argument('--header', type=Path)
     p.add_argument('--missing', metavar='RUNNER=REASON')
+    p.add_argument('--databases', metavar='LIST')
+
+    p = command('convert', cmd_convert)
+    p.add_argument('orig_dir', type=Path)
+    p.add_argument('out_dir', type=Path)
+    prefix(p)
+    p.add_argument('--contract', type=Path, default=ROOT / 'contract')
+
+    p = command('dummy', cmd_dummy)
+    p.add_argument('kind', choices=DUMMY_KINDS)
+    p.add_argument('out_dir', type=Path)
+    prefix(p)
+    p.add_argument('--threshold', type=int, default=4)
     return parser
 
 

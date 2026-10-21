@@ -151,7 +151,7 @@ while IFS='|' read -r cell py pins; do
     $pins "$DUCKDB" pyyaml jsonschema pytest pytest-xdist pytest-timeout \
     "structured-data-models-api @ file://$API" \
     "structured-data-models-pql @ file://$PQL" \
-    "structured-data-models-connectors[duckdb] @ file://$CONNECTORS" \
+    "structured-data-models-connectors[duckdb,sqlite,postgres] @ file://$CONNECTORS" \
     "structured-data-models-relational-engine @ file://$ENGINE" \
     "structured-data-models-client[test] @ file://$CLIENT"
   "$V/bin/python" -I - "$SRC/contract/runners" "$cell" <<'PY'

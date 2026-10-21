@@ -358,19 +358,30 @@ def _filtered(condition: str) -> str:
 
 
 def _assert_refused_as_packed(
-    refused: StructuredDataError, literal: str
+    refused: StructuredDataError, literal: str, query: str
 ) -> None:
     r"""T1.6c's refusal by name: ``INVALID_REQUEST`` naming ``operation``
     ``validate_query`` and ``rule`` ``date_literal_packed``, with the
-    literal's place, and never its text."""
+    literal's place. From KO2-86 (an error may name a value of the caller's
+    own call) it names the query given (``query``) and its packed literal
+    (``literal``), exactly, and its message names the literal; no other
+    detail holds the literal's text."""
     assert type(refused) is StructuredDataError
     assert refused.code == 'INVALID_REQUEST'
     assert refused.details['rule'] == 'date_literal_packed', refused.details
     assert refused.details['operation'] == 'validate_query'
+    assert refused.details['field'] == 'query', refused.details
     for name in ('start_row', 'start_col', 'end_row', 'end_col'):
         assert isinstance(refused.details[name], int), (name, refused.details)
-    assert literal not in str(refused)
-    assert literal not in repr(refused.details)
+    assert refused.details['literal'] == literal, refused.details
+    assert refused.details['query'] == query, refused.details
+    assert literal in str(refused), str(refused)
+    rest = {
+        name: value
+        for name, value in refused.details.items()
+        if name not in ('literal', 'query')
+    }
+    assert literal not in repr(rest)
 
 
 @pytest.mark.parametrize(
@@ -387,12 +398,12 @@ def test_a_packed_date_literal_is_refused_by_name_on_the_core(
     schema = _orders_schema()
     with pytest.raises(StructuredDataError) as validated:
         PredictiveQuery(text, schema)._resolve(RELATIONAL)
-    _assert_refused_as_packed(validated.value, literal)
+    _assert_refused_as_packed(validated.value, literal, text)
     assert validated.value.details['start_row'] == 1
     assert validated.value.details['start_col'] == 41
     with pytest.raises(StructuredDataError) as materialized:
         PredictiveQuery(text, schema).materialize(indices=[1])
-    _assert_refused_as_packed(materialized.value, literal)
+    _assert_refused_as_packed(materialized.value, literal, text)
     assert core == [text, text]
 
 
@@ -402,7 +413,7 @@ def test_a_packed_date_in_an_array_is_refused_by_name_on_the_core(
     text = _filtered('orders.ts IN (2024-01-01, 20240101-01-01)')
     with pytest.raises(StructuredDataError) as refused:
         PredictiveQuery(text, _orders_schema()).materialize(indices=[1])
-    _assert_refused_as_packed(refused.value, '20240101-01-01')
+    _assert_refused_as_packed(refused.value, '20240101-01-01', text)
 
 
 def test_the_old_route_still_reads_a_packed_date_literal(
@@ -527,12 +538,10 @@ def test_an_earlier_refusal_wins_over_a_packed_date_on_the_core(
         )._resolve(RELATIONAL)
     assert refused.value.code == 'INVALID_REQUEST'
     assert 'rule' not in refused.value.details
+    text = _filtered('orders.ts > 20240101-01-01 AND orders.ts < 2023-02-29')
     with pytest.raises(StructuredDataError) as packed:
-        PredictiveQuery(
-            _filtered('orders.ts > 20240101-01-01 AND orders.ts < 2023-02-29'),
-            schema,
-        )._resolve(RELATIONAL)
-    _assert_refused_as_packed(packed.value, '20240101-01-01')
+        PredictiveQuery(text, schema)._resolve(RELATIONAL)
+    _assert_refused_as_packed(packed.value, '20240101-01-01', text)
 
 
 def test_a_packed_date_needs_no_local_zone_on_the_core(
@@ -546,12 +555,11 @@ def test_a_packed_date_needs_no_local_zone_on_the_core(
     monkeypatch.setattr(
         facts, 'local_zone', lambda *_: {'iana': 'Mars/Olympus'}
     )
+    text = _filtered('orders.ts > 760101-01-01')
     with pytest.raises(StructuredDataError) as refused:
-        PredictiveQuery(
-            _filtered('orders.ts > 760101-01-01'), _orders_schema()
-        )._resolve(RELATIONAL)
-    _assert_refused_as_packed(refused.value, '760101-01-01')
-    assert 'field' not in refused.value.details
+        PredictiveQuery(text, _orders_schema())._resolve(RELATIONAL)
+    # The query's own refusal (field query), not the local zone's.
+    _assert_refused_as_packed(refused.value, '760101-01-01', text)
 
 
 def _shown(text: str, schema: Any) -> tuple[list[str], str | None]:

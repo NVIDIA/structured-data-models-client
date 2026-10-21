@@ -2,7 +2,10 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+import hashlib
 import os
+import sys
+import tempfile
 
 from setuptools import setup
 
@@ -15,6 +18,23 @@ if bool(int(os.getenv('WITH_RELATIONALLIB', '1'))):
     kwargs = dict(cmake_source_dir='.')
 else:
     kwargs = dict()
+
+if sys.platform == 'win32':
+    # MSBuild tracks file access through `.tlog` files written beneath the
+    # build directory, and their names are long. Under this package's own path
+    # they pass Windows' 260-character limit, and the compiler check fails
+    # before any source here is read. Build somewhere short instead.
+    #
+    # Named for where it is building from, because `build/` is per checkout
+    # and this is not: without the digest, two checkouts on one machine would
+    # share a CMake cache and a set of `.tlog` files.
+    _here = os.path.dirname(os.path.abspath(__file__))
+    _tag = hashlib.sha256(_here.encode('utf-8')).hexdigest()[:8]
+    kwargs['options'] = {
+        'build': {
+            'build_base': os.path.join(tempfile.gettempdir(), f'sdm-{_tag}')
+        }
+    }
 
 setup(
     install_requires=[

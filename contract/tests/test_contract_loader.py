@@ -16,6 +16,7 @@ import json
 import re
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 from types import ModuleType
 
@@ -79,9 +80,17 @@ def _duck(case: dict[str, object]) -> object:
 )
 def test_every_s1_case_loads_on_sqlite(path: Path, tmp_path: Path) -> None:
     r"""Each table, its columns declared by the map and its rows in
-    DuckDB's order, every value kept (a JSON or ISO text read back)."""
-    duck = _duck(json.loads(path.read_text()))
+    DuckDB's order, every value kept (a JSON or ISO text read back). A case
+    whose ``databases`` leave SQLite out (T2.12's float cases, under their
+    exclusion) holds a value SQLite cannot store, which the loader refuses
+    by name."""
+    case = json.loads(path.read_text())
+    duck = _duck(case)
     target = tmp_path / 'case.sqlite'
+    if 'sqlite' not in runner.case_databases(case):
+        with pytest.raises(databases.Unloadable):
+            databases.load(duck, 'sqlite', target)
+        return
     databases.load(duck, 'sqlite', target)
     connection = sqlite3.connect(target)
     try:
@@ -290,6 +299,37 @@ def test_a_nan_sqlite_cannot_hold_is_refused_by_name(tmp_path: Path) -> None:
     assert databases.TYPE_MAP['float64']['sqlite_refuses'] == 'NaN'
     with pytest.raises(databases.Unloadable, match=r't\.v: a NaN'):
         _sqlite_rows(tmp_path, "CREATE TABLE t AS SELECT 'NaN'::DOUBLE AS v")
+
+
+def test_a_negative_zero_sqlite_cannot_hold_is_refused_by_name(
+    tmp_path: Path,
+) -> None:
+    r"""T2.12: SQLite stores a REAL -0.0 as 0.0, so the loader refuses it,
+    naming the column, rather than load another value; 0.0 still loads."""
+    for name in ('minus', 'minus32', 'plus'):
+        (tmp_path / name).mkdir()
+    with pytest.raises(databases.Unloadable, match=r't\.v: -0\.0'):
+        _sqlite_rows(
+            tmp_path / 'minus', "CREATE TABLE t AS SELECT '-0.0'::DOUBLE AS v"
+        )
+    with pytest.raises(databases.Unloadable, match=r't\.v: -0\.0'):
+        _sqlite_rows(
+            tmp_path / 'minus32', "CREATE TABLE t AS SELECT '-0.0'::FLOAT AS v"
+        )
+    assert _sqlite_rows(
+        tmp_path / 'plus', 'CREATE TABLE t AS SELECT 0.0::DOUBLE AS v'
+    ) == [(0.0,)]
+    # A caller that reads the zeros as SQLite stores them (the provider
+    # kit) loads -0.0 as 0.0.
+    import duckdb
+
+    duck = duckdb.connect()
+    duck.execute("CREATE TABLE t AS SELECT '-0.0'::DOUBLE AS v")
+    target = tmp_path / 'kept.sqlite'
+    databases.load(duck, 'sqlite', target, refuse_negative_zero=False)
+    duck.close()
+    with closing(sqlite3.connect(target)) as connection:
+        assert connection.execute('SELECT v FROM t').fetchall() == [(0.0,)]
 
 
 def test_nested_composites_load_on_postgres() -> None:

@@ -192,51 +192,47 @@ fn base_multiclass_s_classification_payload_and_leakage_are_the_reference_s() {
 }
 
 #[test]
-fn more_entities_than_the_core_takes_are_refused_by_its_limit() {
-    // The entity count's limit (1,000), on base.regression with 1,001
-    // entities. The reference at 6298913c (main's 1fc5a686) has no such
-    // limit and refuses these indices INVALID_REQUEST for another reason;
-    // the core's own limit refuses them first, UNSUPPORTED_REQUEST naming
-    // `indices` (register P2B-3, until T2.8c, which takes up to 10,000).
+fn more_entities_than_one_materialize_holds_are_refused_by_its_limit() {
+    // The entity count, on base.regression. From T2.8c the core takes up to
+    // 100,000 entities, in calls of at most 10,000, as the reference at
+    // 6298913c (main's 1fc5a686): 1,001 entities are refused INVALID_REQUEST
+    // for the reference's reason (the base holds 8 users), never by a limit
+    // (register P2B-3, retired).
     let want = expected("base.regression.entities-1001");
     assert_eq!(want["outcome"], "refused");
     assert_eq!(want["code"], "INVALID_REQUEST");
-    let (mut case, bases) = the_case("base.regression");
-    let materialize = case
-        .core
-        .as_mut()
-        .and_then(|core| core.materialize.as_mut())
-        .unwrap();
-    materialize.indices = (0..1001)
-        .map(|i| json!({"t": "i64", "v": i.to_string()}))
-        .collect();
-    let observed = host::run(&case, &bases).unwrap();
-    assert!(observed.materialized.is_none(), "1,001 entities were taken");
+    let with = |n: u64| {
+        let (mut case, bases) = the_case("base.regression");
+        let materialize = case
+            .core
+            .as_mut()
+            .and_then(|core| core.materialize.as_mut())
+            .unwrap();
+        materialize.indices = (0..n)
+            .map(|i| json!({"t": "i64", "v": i.to_string()}))
+            .collect();
+        host::run(&case, &bases).unwrap()
+    };
+    let observed = with(1001);
     let Answer::Error { code, fields, .. } = &observed.answer else {
         panic!("not refused: {:?}", observed.answer);
     };
-    // The core's own limit, not a rule it does not hold yet (`not_yet`
-    // names one), which would refuse with the same code for another reason.
-    assert_eq!(fields.get("rule"), None, "refused by a rule not held yet");
-    assert_eq!(code, "UNSUPPORTED_REQUEST");
+    assert_eq!(code, "INVALID_REQUEST");
     assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
-    // At the limit itself the core takes them: 1,000 of base.regression's
-    // entities are not refused by the limit.
-    let (mut case, bases) = the_case("base.regression");
-    let materialize = case
-        .core
-        .as_mut()
-        .and_then(|core| core.materialize.as_mut())
-        .unwrap();
-    materialize.indices = (0..1000)
-        .map(|i| json!({"t": "i64", "v": i.to_string()}))
-        .collect();
-    let observed = host::run(&case, &bases).unwrap();
-    if let Answer::Error { code, fields, .. } = &observed.answer {
-        assert!(
-            !(code == "UNSUPPORTED_REQUEST"
-                && fields.get("field").map(String::as_str) == Some("indices")),
-            "1,000 entities refused by the limit"
-        );
-    }
+    // Past 100,000 the core's own limit refuses them before anything is
+    // read, naming it (`most_entities`), not a rule it does not hold yet.
+    let observed = with(100_001);
+    assert!(
+        observed.materialized.is_none(),
+        "100,001 entities were taken"
+    );
+    let Answer::Error { code, fields, .. } = &observed.answer else {
+        panic!("not refused: {:?}", observed.answer);
+    };
+    assert_eq!(code, "UNSUPPORTED_REQUEST");
+    assert_eq!(
+        fields.get("rule").map(String::as_str),
+        Some("most_entities")
+    );
+    assert_eq!(fields.get("field").map(String::as_str), Some("indices"));
 }

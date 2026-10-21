@@ -37,7 +37,12 @@ from sdm_client.base import (
 )
 from sdm_client.core.transport import Transport, WireTransport, redact_url
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
-from sdm_client.decompose import RANKING, Decomposition, about_the_part
+from sdm_client.decompose import (
+    RANKING,
+    Decomposition,
+    _reworded,
+    about_the_part,
+)
 from sdm_client.errors import (
     StructuredDataError,
     UnknownModelError,
@@ -482,6 +487,24 @@ class SDMClient:
         rewritten = request._decomposition
         assert rewritten is not None
         ranking = rewritten.kind == RANKING
+        on_the_core = (
+            None
+            if not request.parts
+            or getattr(request.parts[0], '_core_state', None) is None
+            else _predicts_on_the_core(request.parts[0])
+        )
+        if on_the_core is not None:
+            # A forecast or a ranking the core gathered, which the core
+            # predicts part by part and puts together (T1.36 fix 21, T2.8),
+            # its refusals said of the part they name, as each part's is
+            # below.
+            try:
+                merged = on_the_core.predict(self, request, model, outputs)
+            except StructuredDataError as error:
+                raise _said_of_the_part(error, request) from error
+            if ranking:
+                return merged
+            return _report_absent(merged, outputs, spec_for(model).model_id)
         unscored: frozenset[int] = frozenset()
         if ranking:
             _refuse_outputs_a_ranking_cannot_give(outputs)
@@ -493,26 +516,6 @@ class SDMClient:
         # of a forecast is an ordinary regression, so the caller's fields are
         # what each part is asked for.
         wanted = _RANKING_PARTS if ranking else outputs
-        on_the_core = (
-            None
-            if ranking
-            or not request.parts
-            or getattr(request.parts[0], '_core_state', None) is None
-            else _predicts_on_the_core(request.parts[0])
-        )
-        if on_the_core is not None:
-            # A forecast the core gathered, which the core predicts step by
-            # step and puts together (T1.36 fix 21); a refusal is said of
-            # the step it names, as each part's is below.
-            try:
-                merged = on_the_core.predict(self, request, model, outputs)
-            except StructuredDataError as error:
-                step = getattr(error, '_forecast_step', None)
-                details = getattr(error, 'details', None)
-                if step is None and isinstance(details, dict):
-                    step = details.pop('forecast_step', None)
-                raise about_the_part(error, rewritten, step or 1) from error
-            return _report_absent(merged, outputs, spec_for(model).model_id)
         answers: list[PredictionResult] = []
         answered: list[int] = []
         for position, (part, (_, about)) in enumerate(
@@ -634,19 +637,24 @@ class SDMClient:
                 raise
             raise explained from error
 
-    def _send_body(self, adapter: Any, body: bytes) -> dict[str, Any]:
+    def _send_body(self, adapter: Any, body: bytes) -> bytes:
         r"""Post one call already written (the core's, on its route), its
         bytes unchanged where the transport sends bytes as they are, as the
         HTTP transport does, so the bytes the core's size limit counted are
-        the bytes sent (register PD-2, T1.28a); a transport that writes its
-        own body (a Databricks serving endpoint's envelope) is handed the
-        call decoded. A refusal the adapter explains as :meth:`_send`
-        does."""
+        the bytes sent (register PD-2, T1.28a), and give back the answer as
+        the bytes the endpoint sent, which the core reads (T2.14b); a
+        transport that writes its own body (a Databricks serving endpoint's
+        envelope) is handed the call decoded and gives back the answer's
+        text. A transport with no ``predict_body`` answers decoded, which is
+        written back as JSON text. A refusal the adapter explains as
+        :meth:`_send` does."""
         send = getattr(self._transport, 'predict_body', None)
         try:
             if send is not None:
-                return send(body)
-            return self._transport.predict(json.loads(body))
+                return bytes(send(body))
+            return json.dumps(
+                self._transport.predict(json.loads(body))
+            ).encode()
         except StructuredDataError as error:
             explained = adapter.explain_error(error, json.loads(body))
             if explained is error:
@@ -854,6 +862,89 @@ def _predicts_on_the_core(request: Request) -> Any | None:
     from sdm_client._rust import predict as on_the_core
 
     return on_the_core
+
+
+def _said_of_the_part(
+    error: StructuredDataError, request: Request
+) -> StructuredDataError:
+    r"""A refusal of a question the core predicted in parts, said of the
+    part it happened in, as :meth:`SDMClient._answer_in_parts` says each
+    part's: a forecast's step (the core's ``forecast_step``), or a
+    ranking's candidate (the core's ``ranking_candidate``), named as the
+    caller gave it; a ranking's
+    refusal naming candidates by their position among those given names
+    them as given."""
+    rewritten = request._decomposition
+    assert rewritten is not None
+    details = getattr(error, 'details', None)
+    if not isinstance(details, dict):
+        details = {}
+    if rewritten.kind != RANKING:
+        step = details.pop('forecast_step', None)
+        return about_the_part(error, rewritten, step or 1)
+    state: dict[str, Any] = getattr(request, '_core_state', None) or {}
+    positions = state['ranking']['positions']
+    by_position = dict(
+        zip(positions, (about for _, about in rewritten.parts), strict=True)
+    )
+    if isinstance(details.get('candidates'), list):
+        details['candidates'] = [
+            by_position.get(at, at) for at in details['candidates']
+        ]
+    if 'candidate' in details:
+        details['candidate'] = by_position.get(
+            details['candidate'], details['candidate']
+        )
+    position = details.pop('ranking_candidate', None)
+    details.pop('ranking_parts', None)
+    if position is not None:
+        return about_the_part(error, rewritten, by_position[position])
+    said = _ranking_said(details)
+    return error if said is None else _reworded(error, said)
+
+
+def _ranking_said(details: dict[str, Any]) -> str | None:
+    r"""The words of a ranking's refusal the core gave at predict, by its
+    rule or field, as the client says it (its candidates already named as
+    given); none for any other."""
+    rule = details.get('rule')
+    if rule == 'ranking_outputs':
+        unknown = details.get('unsupported') or []
+        if not unknown:
+            return 'outputs must name at least one field'
+        return (
+            f'a ranking gives back {", ".join(_RANKING_OUTPUTS)}, and '
+            f'{", ".join(repr(name) for name in unknown)} '
+            f'{"are" if len(unknown) > 1 else "is"} not among them. The '
+            f'per-candidate questions it is asked as are classifications; ask '
+            f'one of those directly for the fields a classification gives.'
+        )
+    if rule == 'ranking_unscored':
+        cold = list(details.get('candidates') or [])
+        if not cold:
+            return None
+        named = ', '.join(repr(candidate) for candidate in cold[:-1])
+        which = (
+            f'the contexts gathered for candidates {named} and '
+            f'{cold[-1]!r} each hold'
+            if len(cold) > 1
+            else f'the context gathered for candidate {cold[0]!r} holds'
+        )
+        return (
+            f'{which} one answer only, and a classification needs at least '
+            f'two classes to learn from, so there is nothing to rank and '
+            f'nothing was sent. {_SCORE_THE_UNSCORED}'
+        )
+    if details.get('field') == 'probabilities' and 'candidate' in details:
+        given = details.get('classes') or []
+        return (
+            f'the endpoint answered the question about candidate '
+            f'{details["candidate"]!r} without saying how sure it was, and a '
+            f'ranking is only the order of those. It gave back '
+            f'{sorted(given) or "no probabilities"}, and this client knows a '
+            f'positive class spelled "true", "True", "TRUE" or "1".'
+        )
+    return None
 
 
 def _numbered_across_calls(

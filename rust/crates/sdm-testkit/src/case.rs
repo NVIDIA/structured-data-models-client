@@ -138,6 +138,27 @@ pub struct Input {
     /// for probabilities with them (T2.8's ranking cases), a JSON boolean.
     #[serde(default, deserialize_with = "present")]
     pub probabilities: Option<bool>,
+    /// Whether the scripted endpoint answers a regression call asking for
+    /// quantiles with them (T2.9's forecast cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub quantiles: Option<bool>,
+    /// The output fields `predict` asks for (the public call's
+    /// `outputs=`), as written (T2.9's quantile cases); absent, the
+    /// model's defaults for the task.
+    #[serde(default, deserialize_with = "present")]
+    pub outputs: Option<Vec<String>>,
+    /// Whether the scripted endpoint answers a call asking for an
+    /// explanation with one (T2.13's cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub explanation: Option<bool>,
+    /// Whether the scripted endpoint gives each item it answers its
+    /// metadata (T2.13's cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub item_metadata: Option<bool>,
+    /// Whether the scripted endpoint answers a call asking for embeddings
+    /// with one on each item (T2.11's cases), a JSON boolean.
+    #[serde(default, deserialize_with = "present")]
+    pub embeddings: Option<bool>,
 }
 
 /// Keyword arguments to `Schema.from_source`, each as the case gives it.
@@ -431,8 +452,12 @@ pub struct Materialize {
     pub indices: Vec<Index>,
     #[serde(default, deserialize_with = "present")]
     pub indices_as: Option<IndicesAs>,
+    /// An ISO timestamp, or `entity`: each entity at its own time (T2.11).
     #[serde(default, deserialize_with = "present")]
     pub anchor_time: Option<String>,
+    /// The context's anchor time (T2.11), written as `anchor_time` is.
+    #[serde(default, deserialize_with = "present")]
+    pub context_anchor_time: Option<String>,
     /// The inference options passed, kept as written, free-form (T1.21b).
     #[serde(default, deserialize_with = "some_options")]
     pub inference_config: Option<serde_json::Map<String, Value>>,
@@ -449,6 +474,45 @@ pub struct Materialize {
     /// refuses is the case's input.
     #[serde(default, deserialize_with = "present")]
     pub rows_per_call: Option<Written>,
+    /// How many past steps of the target are added as lagged features
+    /// (T2.9), kept as written, whatever JSON scalar it is, as
+    /// `rows_per_call` is, so a value the reference refuses is the case's
+    /// input.
+    #[serde(default, deserialize_with = "present")]
+    pub lag_timesteps: Option<Written>,
+    /// The sampling options (T2.11), each kept as the text the case wrote,
+    /// any JSON value, `null` included (`Some(AsWritten("null"))`, the
+    /// public call's `None`: an unseeded sample for `random_seed`), so a
+    /// value the reference refuses is the case's input and no number of
+    /// any size passes through a double; absent, `None`.
+    #[serde(default, deserialize_with = "present")]
+    pub random_seed: Option<AsWritten>,
+    #[serde(default, deserialize_with = "present")]
+    pub num_hops: Option<AsWritten>,
+    #[serde(default, deserialize_with = "present")]
+    pub num_neighbors: Option<AsWritten>,
+    #[serde(default, deserialize_with = "present")]
+    pub max_pq_iterations: Option<AsWritten>,
+    #[serde(default, deserialize_with = "present")]
+    pub use_prediction_time: Option<AsWritten>,
+    #[serde(default, deserialize_with = "present")]
+    pub return_embeddings: Option<AsWritten>,
+    #[serde(default, deserialize_with = "present")]
+    pub exclude_cols_dict: Option<AsWritten>,
+}
+
+/// Any JSON value, `null`, a list and an object included, kept as the
+/// exact text the case wrote (whitespace around it trimmed): a number of
+/// any size or form, nested or not, passes through nothing that would
+/// change it (T2.11's sampling options).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AsWritten(pub String);
+
+impl<'de> Deserialize<'de> for AsWritten {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<AsWritten, D::Error> {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        Ok(AsWritten(raw.get().trim().to_owned()))
+    }
 }
 
 /// A JSON scalar other than `null` (a number, a bool or a string), kept as

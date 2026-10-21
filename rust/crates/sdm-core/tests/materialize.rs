@@ -80,6 +80,7 @@ fn column(
         nullable: !unique,
         unique,
         declared_type: None,
+        exact_number: None,
     }
 }
 
@@ -206,6 +207,7 @@ fn materialize_start(
         most_parts: None,
         most_entities: None,
         most_calls: None,
+        candidates: None,
         sampler_state: None,
     });
     let indices = RecordBatch::try_new(
@@ -520,24 +522,6 @@ fn without_the_capability_no_invalid_request_is_given() {
     assert!(!err.fields.contains_key("max_seed"));
 }
 
-/// The error `run` ends with, answering the catalog requests it asks
-/// first: the index check comes before the task is read, as the
-/// reference builds its sampler before its task table.
-fn refusal(run: &mut Run) -> CoreError {
-    loop {
-        match run.next() {
-            Err(err) => return err,
-            Ok(Step::Fetch { requests }) => {
-                for asked in requests {
-                    let answer = catalog(&asked.request).expect("a catalog request");
-                    run.submit_fetch(asked.id, answer).unwrap();
-                }
-            }
-            Ok(other) => panic!("{other:?}"),
-        }
-    }
-}
-
 fn rule(err: &CoreError) -> String {
     assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{err:?}");
     assert_eq!(err.fields["operation"], Detail::text("materialize"));
@@ -549,31 +533,17 @@ fn rule(err: &CoreError) -> String {
 
 #[test]
 fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
-    for (query, wanted) in [
-        (
-            "PREDICT SUM(orders.price, 0, 30, days) > 1 AND COUNT(orders.*, 0, 30, days) > 2 \
-             FOR EACH users.user_id",
-            "logical_target",
-        ),
-        (
-            "PREDICT COUNT(orders.* WHERE orders.price > 10, 0, 30, days) FOR EACH users.user_id",
-            "target_filter",
-        ),
-        (
-            "PREDICT users.country = 'US' FOR EACH users.user_id",
-            "condition",
-        ),
-        (
-            "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'",
-            "entity_filter",
-        ),
+    // An entity filter and an assumption are lifted (T2.13b): the run
+    // reaches its first read.
+    for query in [
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id WHERE users.country = 'US'",
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING COUNT(orders.*, 0, 7, days) > 1",
     ] {
         let mut run = materialize(host(), &shop(), query, None).unwrap();
-        let err = refusal(&mut run);
-        assert_eq!(err.code, ErrorCode::UnsupportedRequest, "{query}: {err:?}");
-        assert_eq!(rule(&err), wanted, "{query}");
+        assert!(matches!(run.next(), Ok(Step::Fetch { .. })), "{query}");
     }
-    // A table the entity table refers to, which this build does not sample.
+    // A table the entity table refers to is sampled from T2.11: the run
+    // reaches its first read.
     let mut parent = shop();
     parent.tables[1].columns.push(column(
         "country_code",
@@ -608,12 +578,41 @@ fn what_the_core_does_not_materialize_yet_is_refused_by_name() {
         },
     ]);
     let mut run = materialize(host(), &parent, QUERY, None).unwrap();
-    assert_eq!(rule(&refusal(&mut run)), "parent_table");
-    // A key of several columns, of a table no link refers to.
+    assert!(matches!(run.next(), Ok(Step::Fetch { .. })));
+    // A key of several columns, of a table no link refers to: refused as
+    // the reference's SQL samplers refuse every such table, before anything
+    // is read, where the reference first reads the source's fold of it
+    // (KO2-68), an invalid request naming the table and its key's columns.
     let mut composite = shop();
     composite.tables[0].primary_key = vec!["order_id".into(), "user_id".into()];
     let mut run = materialize(host(), &composite, QUERY, None).unwrap();
-    assert_eq!(rule(&refusal(&mut run)), "composite_key");
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    assert_eq!(err.fields["field"], Detail::text("schema"));
+    assert_eq!(err.fields["table"], Detail::text("orders"));
+    assert_eq!(
+        err.fields["columns"],
+        Detail::List(vec![
+            Scalar::Utf8("order_id".into()),
+            Scalar::Utf8("user_id".into())
+        ])
+    );
+    assert!(!err.fields.contains_key("rule"), "{err:?}");
+    // A float among the key's columns is refused before anything is read.
+    let mut composite = shop();
+    composite.tables[0].primary_key = vec!["order_id".into(), "price".into()];
+    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
+    // A query whose entity's table is keyed so is refused as the
+    // reference's language refuses it, with no key, before anything is
+    // read.
+    let mut composite = shop();
+    composite.tables[1].primary_key = vec!["user_id".into(), "age".into()];
+    composite.links.clear();
+    let mut run = materialize(host(), &composite, QUERY, None).unwrap();
+    let err = run.next().unwrap_err();
+    assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     // One a link refers to is the reference's refusal of a relationship
     // that cannot join, before anything is read (decision E55).
     let mut composite = shop();
@@ -949,7 +948,6 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
             materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
         run.next()
     };
-    let refused = |change: &dyn Fn(&mut Materialize)| rule(&with(change).unwrap_err());
     // With the call's option values (T1.28a): `values`, and the options
     // named.
     let valued = |values: &str, names: &[&str]| {
@@ -967,12 +965,16 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
             materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
         run.next()
     };
-    assert_eq!(
-        refused(&|m| m.options = vec!["num_neighbors".into(), "lag_timesteps".into()]),
-        "lag_timesteps"
-    );
-    assert_eq!(refused(&|m| m.unseeded = true), "unseeded");
-    assert_eq!(refused(&|m| m.anchor_entity = true), "anchor_entity");
+    // An unseeded sample and an anchor at each entity's own time are taken
+    // from T2.11: the run reaches its first read.
+    assert!(matches!(
+        with(&|m| m.unseeded = true),
+        Ok(Step::Fetch { .. })
+    ));
+    assert!(matches!(
+        with(&|m| m.anchor_entity = true),
+        Ok(Step::Fetch { .. })
+    ));
     // From T1.28a the context size is the core's: bounded first, before
     // the options, as the client bounds it before anything else.
     for (asked, code) in [
@@ -987,72 +989,206 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
     ] {
         let err = valued(
             &format!(r#"{{"num_context_samples": {asked}}}"#),
-            &["top_k"],
+            &["return_embeddings"],
         )
         .unwrap_err();
         assert_eq!(err.code, code, "{asked}");
         assert_eq!(err.fields["field"], Detail::text("num_context_samples"));
     }
-    // The hops the options ask, bounded before they are refused by name;
-    // an unseeded sample named by the values; a negative seed refused.
+    // The hops the options ask, bounded as the client bounds them; a
+    // negative seed refused.
     for (values, field) in [
         (r#"{"num_hops": 0}"#, "num_hops"),
         (r#"{"num_neighbors": []}"#, "num_neighbors"),
         (r#"{"random_seed": -1}"#, "seed"),
     ] {
-        let names: &[&str] = if field == "seed" { &[] } else { &["num_hops"] };
-        let err = valued(values, names).unwrap_err();
+        let err = valued(values, &[]).unwrap_err();
         assert_eq!(err.code, ErrorCode::InvalidRequest, "{values}");
         assert_eq!(err.fields["field"], Detail::text(field), "{values}");
     }
-    let past = valued(r#"{"num_hops": 7}"#, &["num_hops"]).unwrap_err();
+    let past = valued(r#"{"num_hops": 7}"#, &[]).unwrap_err();
     assert_eq!(past.code, ErrorCode::UnsupportedRequest);
     assert_eq!(past.fields["field"], Detail::text("num_hops"));
     assert!(!past.fields.contains_key("rule"), "the bound, not the rule");
-    assert_eq!(
-        rule(&valued(r#"{"num_hops": 2}"#, &["num_hops"]).unwrap_err()),
-        "num_hops"
-    );
-    assert_eq!(
-        rule(&valued(r#"{"random_seed": null}"#, &[]).unwrap_err()),
-        "unseeded"
-    );
+    // The sampling options taken from T2.11 reach the first read.
+    for values in [
+        r#"{"num_hops": 3}"#,
+        r#"{"num_neighbors": [4, 0]}"#,
+        r#"{"random_seed": null}"#,
+        r#"{"max_pq_iterations": 2, "use_prediction_time": true}"#,
+        r#"{"return_embeddings": "yes", "exclude_cols_dict": {"orders": ["price"]}}"#,
+        r#"{"context_anchor_time": {"t": "ts", "v": "1704067200000000000", "unit": "ns", "zone": null}}"#,
+    ] {
+        assert!(
+            matches!(valued(values, &[]), Ok(Step::Fetch { .. })),
+            "{values}"
+        );
+    }
     assert!(matches!(
         valued(r#"{"random_seed": 7, "num_context_samples": 5}"#, &[]),
         Ok(Step::Fetch { .. })
     ));
-    // The options before the seed, as the bridge refused them.
-    assert_eq!(
-        refused(&|m| {
-            m.unseeded = true;
-            m.options = vec!["top_k".into()];
-        }),
-        "top_k"
-    );
-    assert_eq!(
-        refused(&|m| {
-            m.unseeded = true;
-            m.anchor_entity = true;
-        }),
-        "unseeded"
-    );
+
     // A name that is not one of the reference's options is the host's
     // fault.
     let err = with(&|m| m.options = vec!["no_such_option".into()]).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest, "{err:?}");
     assert_eq!(err.fields["field"], Detail::text("options"));
+    // Every sampling option's value travels in `values` from T2.11 (with
+    // T2.8's top_k and T2.9's lag_timesteps): none is a name the host
+    // passes.
     for name in [
-        "context_anchor_time",
-        "exclude_cols_dict",
         "lag_timesteps",
-        "max_pq_iterations",
         "num_hops",
-        "return_embeddings",
         "use_prediction_time",
+        "context_anchor_time",
     ] {
-        assert_eq!(refused(&|m| m.options = vec![name.into()]), name);
+        let err = with(&|m| m.options = vec![name.into()]).unwrap_err();
+        assert_eq!(err.fields["field"], Detail::text("options"), "{name}");
     }
     assert!(matches!(with(&|_| {}), Ok(Step::Fetch { .. })));
+}
+
+/// The run of `materialize` over the shop with the call's `values`.
+fn valued_run(values: &str) -> Run {
+    let (mut operation, mut attachments) = materialize_start(host(), &shop(), QUERY, None);
+    let Operation::Materialize(request) = &mut operation else {
+        unreachable!()
+    };
+    request.values = Some(AttachmentId(9));
+    attachments.insert(
+        AttachmentId(9),
+        Attachment::Bytes(values.as_bytes().to_vec()),
+    );
+    materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap()
+}
+
+#[test]
+fn the_sampling_options_the_engine_reads_late_are_refused_where_it_reads_them() {
+    // T2.11: the options the reference's engine reads after its sampler is
+    // built are refused after the index check and its warning, as there:
+    // the context's anchor and max_pq_iterations with the task, the
+    // excluded columns and a num_hops of none as the subgraph is sampled,
+    // the two booleans as the request is built.
+    for (values, field, last) in [
+        (r#"{"max_pq_iterations": 0}"#, "max_pq_iterations", "task"),
+        (r#"{"max_pq_iterations": "3"}"#, "max_pq_iterations", "task"),
+        (
+            r#"{"context_anchor_time": "unreadable"}"#,
+            "context_anchor_time",
+            "task",
+        ),
+        (
+            r#"{"context_anchor_time": "entity"}"#,
+            "context_anchor_time",
+            "task",
+        ),
+        (
+            r#"{"exclude_cols_dict": ["orders"]}"#,
+            "exclude_cols_dict",
+            "labels",
+        ),
+        (
+            r#"{"exclude_cols_dict": {"orders": ["order_id"]}}"#,
+            "exclude_cols_dict",
+            "labels",
+        ),
+        (
+            r#"{"exclude_cols_dict": {"nowhere": []}}"#,
+            "exclude_cols_dict",
+            "labels",
+        ),
+        (r#"{"num_hops": null}"#, "num_hops", "labels"),
+        (
+            r#"{"use_prediction_time": null}"#,
+            "use_prediction_time",
+            "request",
+        ),
+        (
+            r#"{"return_embeddings": "x"}"#,
+            "return_embeddings",
+            "request",
+        ),
+    ] {
+        let mut run = valued_run(values);
+        let mut seen = Vec::new();
+        let mut warned = Vec::new();
+        let err = loop {
+            let step = match run.next() {
+                Ok(step) => step,
+                Err(err) => break err,
+            };
+            warned.extend(run.take_warnings().into_iter().map(|w| w.code));
+            let Step::Fetch { requests } = step else {
+                panic!("{values}: {step:?}")
+            };
+            for asked in requests {
+                seen.push(asked.request.name());
+                let answer = match &asked.request {
+                    DataRequest::Describe { .. } => indexes(&[]),
+                    DataRequest::TimeBounds { .. } => catalog(&asked.request).unwrap(),
+                    DataRequest::SampleEntities { columns, .. } => {
+                        let keys: ArrayRef = Arc::new(Int64Array::from(vec![0, 1, 2, 3]));
+                        data(
+                            columns
+                                .iter()
+                                .map(|c| {
+                                    let given = (c == "user_id").then(|| Arc::clone(&keys));
+                                    (c.as_str(), shop_column(c, 4, given))
+                                })
+                                .collect(),
+                        )
+                    }
+                    DataRequest::Neighbors { columns, .. } => {
+                        let mut answer: Vec<(&str, ArrayRef)> = columns
+                            .iter()
+                            .map(|c| (c.as_str(), shop_column(c, 0, None)))
+                            .collect();
+                        answer.push((BATCH_COLUMN, Arc::new(Int64Array::from(Vec::<i64>::new()))));
+                        data(answer)
+                    }
+                    DataRequest::Lookup { columns, seeds, .. } => {
+                        let Some(Attachment::Arrow(seeds)) = run.take_attachment(seeds.attachment)
+                        else {
+                            panic!("the lookup's seeds are attached");
+                        };
+                        let seeds = &seeds.batches[0];
+                        let n = seeds.num_rows();
+                        let mut answer: Vec<(&str, ArrayRef)> = columns
+                            .iter()
+                            .map(|c| {
+                                let given = (c == "user_id").then(|| Arc::clone(seeds.column(0)));
+                                (c.as_str(), shop_column(c, n, given))
+                            })
+                            .collect();
+                        let rows: Vec<i64> = (0..n as i64).collect();
+                        answer.push((BATCH_COLUMN, Arc::new(Int64Array::from(rows))));
+                        answer.push((MATCHES_COLUMN, Arc::new(Int64Array::from(vec![1_i64; n]))));
+                        data(answer)
+                    }
+                    other => panic!("{other:?}"),
+                };
+                run.submit_fetch(asked.id, answer).unwrap();
+            }
+        };
+        warned.extend(run.take_warnings().into_iter().map(|w| w.code));
+        assert_eq!(err.code, ErrorCode::InvalidRequest, "{values}: {err:?}");
+        assert_eq!(err.fields["field"], Detail::text(field), "{values}");
+        assert_eq!(seen.first().copied(), Some("describe"), "{values}");
+        // Refused with the task: no entity sampled; as the subgraph is
+        // sampled: the labels read, no entity row looked up; as the request
+        // is built: the subgraph walked.
+        let sampled = seen.contains(&"sample_entities");
+        let walked = seen.contains(&"lookup");
+        let at = match (sampled, walked) {
+            (false, false) => "task",
+            (true, false) => "labels",
+            (true, true) => "request",
+            _ => "neither",
+        };
+        assert_eq!(at, last, "{values}: {seen:?}");
+        assert!(warned.contains(&"MISSING_INDICES".to_owned()), "{values}");
+    }
 }
 
 // --- the times a source returns (T1.25) -------------------------------------
@@ -1769,11 +1905,13 @@ fn each_materializer_checks_once() {
 
 #[test]
 fn a_failure_before_the_check_leaves_it_to_the_next_run() {
-    // Refused before anything is read (an option it does not take): the
-    // state left says nothing was read, and the next run checks and warns.
-    let mut refused = handing_back(&shop(), None, &["num_hops"], vec![Some(0), Some(1)]).unwrap();
+    // Refused before anything is read (a name that is no option the core
+    // reads): the state left says nothing was read, and the next run
+    // checks and warns.
+    let mut refused =
+        handing_back(&shop(), None, &["no_such_option"], vec![Some(0), Some(1)]).unwrap();
     let err = refused.next().unwrap_err();
-    assert_eq!(rule(&err), "num_hops");
+    assert_eq!(err.fields["field"], Detail::text("options"), "{err:?}");
     let held = left(&mut refused).unwrap();
     assert!(!memo(&held).indexes_checked);
     assert!(memo(&held).bounds.is_empty());

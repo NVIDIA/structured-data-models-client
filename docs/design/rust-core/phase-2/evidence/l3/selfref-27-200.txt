@@ -1,0 +1,6 @@
+sr-entity-nulls: approved:P1B-13: the corrected reference's request is the core's; then the same request and result
+sr-nullable: approved:P1B-13: the corrected reference's request is the core's; then the same request and result
+sr-nullable-static: approved:P1B-13: the corrected reference's request is the core's; then the same request and result
+sr-text-nullable: approved:P1B-13: the corrected reference's request is the core's; then the same request and result
+sr-two-links-nulls: approved:P1B-13: the corrected reference's request is the core's; then the same request and result
+classes {"agree": 4, "approved:P1B-13": 5}

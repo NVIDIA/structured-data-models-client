@@ -108,10 +108,12 @@ def _duck() -> Any:
 
 def load_sqlite(out: Path) -> None:
     r"""The dataset in a new SQLite file at ``out``, by the contract
-    loader."""
+    loader. ``zeros`` holds -0.0 and 0.0, and the kit's expected answers
+    read them as one value, as SQLite stores them, so the loader keeps
+    -0.0 as SQLite does (0.0) rather than refuse it."""
     duck = _duck()
     try:
-        _loader().load(duck, 'sqlite', out)
+        _loader().load(duck, 'sqlite', out, refuse_negative_zero=False)
     finally:
         duck.close()
 

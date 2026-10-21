@@ -1,0 +1,213 @@
+{
+  "format": "sdm-case/1",
+  "id": "sample.parent-table.relbench-avito",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "int32/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE Location AS SELECT i::BIGINT AS LocationID, (i % 2)::BIGINT AS RegionID FROM range(4) t(i)",
+      "CREATE TABLE Category AS SELECT i::BIGINT AS CategoryID, (i % 2)::INTEGER AS Level FROM range(3) t(i)",
+      "CREATE TABLE AdsInfo AS SELECT i::BIGINT AS AdID, (i % 4)::BIGINT AS LocationID, (i % 3)::BIGINT AS CategoryID, (100 + 10 * i)::DOUBLE AS Price FROM range(8) t(i)",
+      "CREATE TABLE SearchInfo AS SELECT i::BIGINT AS SearchID, TIMESTAMP '2015-05-01' + to_hours((i * 8)::INTEGER) AS SearchDate FROM range(60) t(i)",
+      "CREATE TABLE SearchStream AS SELECT (i % 60)::BIGINT AS SearchID, ((i * i) % 8)::BIGINT AS AdID, ((i * 7) % 5 = 0)::INTEGER AS IsClick, TIMESTAMP '2015-05-01' + to_hours((i * 4)::INTEGER) AS SearchDate FROM range(120) t(i)"
+    ],
+    "from_source": {
+      "primary_keys": {
+        "AdsInfo": "AdID",
+        "Category": "CategoryID",
+        "Location": "LocationID",
+        "SearchInfo": "SearchID"
+      },
+      "time_columns": {
+        "SearchInfo": "SearchDate",
+        "SearchStream": "SearchDate"
+      },
+      "relationships": [
+        {
+          "source_table": "AdsInfo",
+          "source_column": "LocationID",
+          "target_table": "Location",
+          "target_column": "LocationID"
+        },
+        {
+          "source_table": "AdsInfo",
+          "source_column": "CategoryID",
+          "target_table": "Category",
+          "target_column": "CategoryID"
+        },
+        {
+          "source_table": "SearchStream",
+          "source_column": "SearchID",
+          "target_table": "SearchInfo",
+          "target_column": "SearchID"
+        },
+        {
+          "source_table": "SearchStream",
+          "source_column": "AdID",
+          "target_table": "AdsInfo",
+          "target_column": "AdID"
+        }
+      ]
+    },
+    "pql": "PREDICT SUM(SearchStream.IsClick, 0, 4, days) FOR EACH AdsInfo.AdID",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2015-05-14"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {
+          "AdsInfo": {
+            "value": [
+              "AdID"
+            ]
+          },
+          "Category": {
+            "value": [
+              "CategoryID"
+            ]
+          },
+          "Location": {
+            "value": [
+              "LocationID"
+            ]
+          },
+          "SearchInfo": {
+            "value": [
+              "SearchID"
+            ]
+          }
+        },
+        "time_columns": {
+          "SearchInfo": {
+            "value": "SearchDate"
+          },
+          "SearchStream": {
+            "value": "SearchDate"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "AdsInfo",
+              "column": "LocationID"
+            },
+            {
+              "table": "Location",
+              "column": "LocationID"
+            }
+          ],
+          [
+            {
+              "table": "AdsInfo",
+              "column": "CategoryID"
+            },
+            {
+              "table": "Category",
+              "column": "CategoryID"
+            }
+          ],
+          [
+            {
+              "table": "SearchStream",
+              "column": "SearchID"
+            },
+            {
+              "table": "SearchInfo",
+              "column": "SearchID"
+            }
+          ],
+          [
+            {
+              "table": "SearchStream",
+              "column": "AdID"
+            },
+            {
+              "table": "AdsInfo",
+              "column": "AdID"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1431561600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "RelBench rel-avito's avito-ad-clicks-4d (contract/tools/relbench.py), a few dozen rows of its shape: AdsInfo as the entity table, no time column, linked to its parents Location and Category, clicks summed per ad over 4 days from a keyless event table, CamelCase names",
+  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+}

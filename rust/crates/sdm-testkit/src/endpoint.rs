@@ -24,6 +24,27 @@
 //! `(10 - d) / 10`, the last `d / 10` and any other `0.0`, the prediction
 //! the last class where `d > 5`, else the first.
 //!
+//! Told to answer quantiles ([`answer_as_asked`]; T2.9's forecast cases, as
+//! a model answers the spread of a regression), a regression call whose
+//! `output.fields` names `quantiles` is answered with them beside the
+//! rule's prediction: for row `i` of call `k`, with `d` as above,
+//! `{"0.1": d - 1, "0.5": d, "0.9": d + 1}`, each a float.
+//!
+//! Told to answer explanations ([`answer_told`]; T2.13's cases, as a model
+//! explains the entity it is asked about), a call whose `output.fields`
+//! names `explanation` is answered with one on each item: for row `i` of
+//! call `k`, with `d` as above, `{"format": "scripted", "summary": "row <i>
+//! of call <k>", "score": d / 10, "rank": d, "path": [k, i], "detail":
+//! {"call": k, "row_index": i, "note": null}}`. Told to answer item
+//! metadata, each item of every call answered by the rule carries
+//! `"metadata": {"call": k, "row_index": i, "source": "scripted"}`.
+//!
+//! Told to answer embeddings ([`answer_told`]; T2.11's cases, as a model
+//! answers the vector it holds of each entity), a call whose
+//! `output.fields` names `embeddings` is answered with one on each item:
+//! for row `i` of call `k`, with `d` as above, `[d / 10, (10 - d) / 10, k,
+//! i]`, each a float.
+//!
 //! Calls are numbered from zero in the order received, and an endpoint
 //! told to fail a call answers that one `500` with `{"error":
 //! "scripted_failure", "call": <its number>}` and every other call by the
@@ -33,9 +54,64 @@
 //! The pure-Rust host calls the rule in process ([`answer`]): it has no
 //! transport of its own to exercise, so no HTTP server or client is built
 //! into the test kit (decision E46).
+//!
+//! A test may stand a script of its own in for the rule on its thread
+//! ([`answered_by`]): each model call the host makes there is then
+//! answered by the script, given the call's number (from zero) and body,
+//! with a status and the answer's bytes as they travel, so an answer the
+//! rule never gives (probabilities, a `NaN` token, a failed call) reaches
+//! the core as a recorded answer does (T2.8's ranking vectors).
+
+use std::cell::RefCell;
 
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
+
+/// A script answering a model call: its number, from zero, and body, to a
+/// status and the answer's bytes.
+type Script = Box<dyn FnMut(u64, &[u8]) -> (u16, Vec<u8>)>;
+
+thread_local! {
+    /// The script answering this thread's model calls, and how many it has
+    /// answered, while [`answered_by`] runs.
+    static SCRIPT: RefCell<Option<(Script, u64)>> = const { RefCell::new(None) };
+}
+
+/// Takes the script off the thread when [`answered_by`]'s run ends,
+/// whether it returns or panics.
+struct Unset;
+
+impl Drop for Unset {
+    fn drop(&mut self) {
+        SCRIPT.with(|script| script.borrow_mut().take());
+    }
+}
+
+/// Runs `run` with each model call the host makes on this thread answered
+/// by `script` (the call's number, from zero, and body, to a status and
+/// the answer's bytes) in place of the rule; afterwards the rule answers
+/// again.
+pub fn answered_by<T>(
+    script: impl FnMut(u64, &[u8]) -> (u16, Vec<u8>) + 'static,
+    run: impl FnOnce() -> T,
+) -> T {
+    SCRIPT.with(|slot| *slot.borrow_mut() = Some((Box::new(script), 0)));
+    let _unset = Unset;
+    run()
+}
+
+/// The answer to a model call with `body` from the script this thread
+/// runs under ([`answered_by`]), numbering the call; none where it runs
+/// under none, and the rule answers.
+pub fn scripted(body: &[u8]) -> Option<(u16, Vec<u8>)> {
+    SCRIPT.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let (script, calls) = slot.as_mut()?;
+        let call = *calls;
+        *calls += 1;
+        Some(script(call, body))
+    })
+}
 
 /// The path the client posts a prediction to.
 pub const PREDICTIONS: &str = "/v1/predictions";
@@ -99,22 +175,72 @@ pub fn answer_call(
     answer(method, path, body)
 }
 
+/// What an endpoint is told to answer beside the rule's prediction (a
+/// case's `input.probabilities`, `input.quantiles`, `input.explanation`,
+/// `input.item_metadata` and `input.embeddings`); the default is none of
+/// them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Told {
+    /// A classification asking for probabilities is given them.
+    pub probabilities: bool,
+    /// A regression asking for quantiles is given them.
+    pub quantiles: bool,
+    /// A call asking for an explanation is given one on each item.
+    pub explanation: bool,
+    /// Each item answered carries its metadata.
+    pub item_metadata: bool,
+    /// A call asking for embeddings is given one on each item (T2.11).
+    pub embeddings: bool,
+}
+
 /// The rule: the status and JSON body answering one request.
 pub fn answer(method: &str, path: &str, body: &[u8]) -> (u16, Value) {
-    answered(method, path, body, None)
+    answered(method, path, body, 0, Told::default())
 }
 
 /// The rule answering call number `call` of an endpoint told to answer
 /// probabilities: a classification asking for them is given them.
 pub fn answer_with_probabilities(method: &str, path: &str, body: &[u8], call: u64) -> (u16, Value) {
-    answered(method, path, body, Some(call))
+    answer_as_asked(method, path, body, call, true, false)
 }
 
-fn answered(method: &str, path: &str, body: &[u8], sure: Option<u64>) -> (u16, Value) {
+/// The rule answering call number `call` of an endpoint told whether to
+/// answer probabilities and whether to answer quantiles (a case's
+/// `input.probabilities` and `input.quantiles`): a classification asking
+/// for probabilities is given them where `probabilities` says so, and a
+/// regression asking for quantiles is given them where `quantiles` does.
+pub fn answer_as_asked(
+    method: &str,
+    path: &str,
+    body: &[u8],
+    call: u64,
+    probabilities: bool,
+    quantiles: bool,
+) -> (u16, Value) {
+    answer_told(
+        method,
+        path,
+        body,
+        call,
+        Told {
+            probabilities,
+            quantiles,
+            ..Told::default()
+        },
+    )
+}
+
+/// The rule answering call number `call` of an endpoint told what
+/// [`Told`] says to answer beside the rule's prediction.
+pub fn answer_told(method: &str, path: &str, body: &[u8], call: u64, told: Told) -> (u16, Value) {
+    answered(method, path, body, call, told)
+}
+
+fn answered(method: &str, path: &str, body: &[u8], call: u64, told: Told) -> (u16, Value) {
     if method != "POST" || path != PREDICTIONS {
         return (404, json!({"error": "not_found"}));
     }
-    match predictions(body, sure) {
+    match predictions(body, call, told) {
         Ok(predictions) => (
             200,
             json!({
@@ -129,7 +255,7 @@ fn answered(method: &str, path: &str, body: &[u8], sure: Option<u64>) -> (u16, V
     }
 }
 
-fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static str> {
+fn predictions(body: &[u8], call: u64, told: Told) -> Result<Vec<Value>, &'static str> {
     // serde_json, as JSON itself, refuses NaN and Infinity.
     let payload: Value = serde_json::from_slice(body).map_err(|_| "not_json")?;
     let Value::Object(payload) = payload else {
@@ -159,11 +285,13 @@ fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static st
     let p = prediction(payload.get("task"))?;
     // The call's number where the endpoint answers a classification's
     // probabilities and this call asks for them.
-    let asks = payload
-        .get("output")
-        .and_then(|o| o.get("fields"))
-        .and_then(Value::as_array)
-        .is_some_and(|fields| fields.iter().any(|f| f == "probabilities"));
+    let asks = |field: &str| {
+        payload
+            .get("output")
+            .and_then(|o| o.get("fields"))
+            .and_then(Value::as_array)
+            .is_some_and(|fields| fields.iter().any(|f| f == field))
+    };
     let classes: Vec<String> = payload
         .get("task")
         .and_then(|t| t.get("target"))
@@ -176,7 +304,17 @@ fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static st
                 .collect()
         })
         .unwrap_or_default();
-    let sure = sure.filter(|_| asks && p.is_string() && !classes.is_empty());
+    let sure =
+        (told.probabilities && asks("probabilities") && p.is_string() && !classes.is_empty())
+            .then_some(call);
+    // The call's number where the endpoint answers a regression's quantiles
+    // and this call asks for them.
+    let spread = (told.quantiles && asks("quantiles") && !p.is_string()).then_some(call);
+    // Whether the endpoint answers an explanation and this call asks for
+    // one.
+    let explains = told.explanation && asks("explanation");
+    // Whether the endpoint answers embeddings and this call asks for them.
+    let embeds = told.embeddings && asks("embeddings");
     // The rows again, each cell its text as written, so an id is answered
     // as its token; the body is JSON, so this reading cannot fail.
     let rows = raw_rows(body).ok_or("not_json")?;
@@ -198,6 +336,18 @@ fn predictions(body: &[u8], sure: Option<u64>) -> Result<Vec<Value>, &'static st
             item["prediction"] = prediction;
             item["probabilities"] = given;
         }
+        if let Some(call) = spread {
+            item["quantiles"] = quantiles(call, index);
+        }
+        if explains {
+            item["explanation"] = explained(call, index);
+        }
+        if embeds {
+            item["embeddings"] = embedded(call, index);
+        }
+        if told.item_metadata {
+            item["metadata"] = json!({"call": call, "row_index": index, "source": "scripted"});
+        }
         answered.push(item);
     }
     Ok(answered)
@@ -218,6 +368,43 @@ fn how_sure(classes: &[String], call: u64, index: usize) -> (Value, Value) {
     given.insert(last.clone(), json!(f64::from(d) / 10.0));
     let prediction = if d > 5 { last } else { first };
     (Value::String(prediction.clone()), Value::Object(given))
+}
+
+/// Row `index` of call `call`'s quantiles, as an endpoint told to answer
+/// quantiles gives them.
+fn quantiles(call: u64, index: usize) -> Value {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = f64::from(u32::try_from(d).unwrap_or(1));
+    json!({"0.1": d - 1.0, "0.5": d, "0.9": d + 1.0})
+}
+
+/// Row `index` of call `call`'s embedding, as an endpoint told to answer
+/// embeddings gives it.
+fn embedded(call: u64, index: usize) -> Value {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = f64::from(u32::try_from(d).unwrap_or(1));
+    // A call's number and a row's index as the floats JSON writes them.
+    #[allow(clippy::cast_precision_loss)]
+    let (k, i) = (call as f64, index as f64);
+    json!([d / 10.0, (10.0 - d) / 10.0, k, i])
+}
+
+/// Row `index` of call `call`'s explanation, as an endpoint told to answer
+/// explanations gives it.
+fn explained(call: u64, index: usize) -> Value {
+    let index = u64::try_from(index).unwrap_or(u64::MAX);
+    let d = (3 * u128::from(call) + 5 * u128::from(index)) % 9 + 1;
+    let d = u32::try_from(d).unwrap_or(1);
+    json!({
+        "format": "scripted",
+        "summary": format!("row {index} of call {call}"),
+        "score": f64::from(d) / 10.0,
+        "rank": d,
+        "path": [call, index],
+        "detail": {"call": call, "row_index": index, "note": null},
+    })
 }
 
 fn prediction(task: Option<&Value>) -> Result<Value, &'static str> {

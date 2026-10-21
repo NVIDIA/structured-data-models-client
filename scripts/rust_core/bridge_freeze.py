@@ -10,15 +10,17 @@ lands in Rust, not in the Python bridge. This guard holds it over the files
 that keep a row of the design's "Host-held semantics" ledger:
 
 - the ``_rust/`` bridges, ``_rust/schema.py``, ``_rust/materialize.py`` and
-  ``_rust/predict.py``, whole: every function and method;
+  ``_rust/predict.py``, with what they share, ``_rust/codec.py``,
+  ``_rust/edits.py``, ``_rust/errors.py`` and ``_rust/providers/postgres.py``
+  (T2.14a, FR P3-2), whole: every function and method;
 - the files shared with the old route, for the functions ``COVERED`` names:
   in ``client.py``, ``query.py`` and ``materializers/relational.py`` the
-  ledgered functions and those the core route reaches through them; in
-  ``schema.py``, ``adapters/relational.py``, ``base.py``, ``result.py`` and
-  ``decompose.py`` the ledgered rules' own bodies; and the entry points
-  (``SDMClient.predict``, ``PredictiveQuery.materialize``,
+  functions the core route enters (T2.14c measured them); in ``schema.py``
+  and ``adapters/relational.py`` the ledgered rules' own bodies; and the
+  entry points (``SDMClient.predict``, ``PredictiveQuery.materialize``,
   ``RelationalMaterializer.materialize``, ``Schema.from_source``) with
-  ``RelationalMaterializer.__init__``;
+  ``RelationalMaterializer.__init__``; and a few the core route no longer
+  enters, which the self-tests seed;
 - ``_rust/__init__.py``, the bridges' package, for its skeleton only;
 - and every frozen file's skeleton, as ``<module>``: the whole module in
   order and in scope, each function's body (covered or not) replaced by
@@ -106,7 +108,24 @@ deleted.
 Missing or malformed evidence fails: no baseline or declarations, either in
 another format, a field missing or retyped, an unreadable base, no merge
 base. A base that predates the baseline has nothing to compare, and the
-declarations must then be empty.
+declarations must then be empty. A baseline entry for a file outside
+``FROZEN`` is ignored, not refused: only the frozen files are compared, so
+nothing frozen loosens, and a later landing can widen the freeze while the
+gate judges it with its checkpoint's copy (T2.1v). On the same
+principle this copy judges only what it freezes: a baseline entry for a
+name of a frozen file it does not cover, and a declaration of an entry it
+does not measure, are ignored; every entry it freezes is judged as before.
+And the other way (T2.16a): a function it covers, or a frozen file whole,
+that the tree's baseline leaves out is taken when the tree declares each
+``gone`` in ``bridge_changes.json``, since a tree that lowers the freeze
+cannot hold a baseline entry its own copy refuses; the ratchet still
+holds each such declaration to the base.
+Those tolerances are for a copy judging another tree's lists, the gate's
+checkpoint copy. A copy judging its own tree (strict: the tree's
+``bridge_freeze.py`` is this file, byte for byte, as where ``prepush.sh``
+and CI's ``rust-lint`` run it) keeps every refusal: a baseline entry for a
+file or name it does not freeze, so the baseline holds what ``--write``
+writes, and a declaration of an entry it does not freeze, stale (T2.14a).
 
 Threat model (decision E56, checkpoint 4): the threat is honest drift by
 cooperating agents, a rule added to the bridge by ordinary means and not
@@ -218,27 +237,34 @@ WHOLE = (
     _CLIENT / '_rust/schema.py',
     _CLIENT / '_rust/materialize.py',
     _CLIENT / '_rust/predict.py',
+    _CLIENT / '_rust/codec.py',
+    _CLIENT / '_rust/edits.py',
+    _CLIENT / '_rust/errors.py',
+    _CLIENT / '_rust/providers/postgres.py',
 )
 #: The files shared with the old route, covered for the functions named
 #: here and for their module statements: the ledgered rules and what the
 #: core route reaches through them, its entry points among them.
+#: T2.14c measured which of them the core route still enters (python-core
+#: on every case and database under coverage, each call on the core route)
+#: and took out those it no longer enters, with ``base.py``, ``result.py``
+#: and ``decompose.py``, which then held none; the old route keeps them.
+#: Kept though not entered: those the self-tests seed (``selftest.py``),
+#: each marked.
 COVERED: dict[Path, tuple[str, ...]] = {
     _CLIENT / 'client.py': (
         'SDMClient._answer_in_parts',
+        # Not entered on the core route; the self-tests seed it.
         'SDMClient._prepare',
-        'SDMClient._send',
-        'SDMClient._spec',
+        'SDMClient._send_body',
         'SDMClient.predict',
         '_adapter_for',
-        '_empty_answer',
-        '_names_its_rows',
         '_predicts_on_the_core',
         '_report_absent',
         '_require_a_request',
         '_require_output_names',
     ),
     _CLIENT / 'query.py': (
-        'PredictiveQuery._in_parts',
         'PredictiveQuery._refusal',
         'PredictiveQuery._resolve',
         'PredictiveQuery._validate_materialize_args',
@@ -247,33 +273,15 @@ COVERED: dict[Path, tuple[str, ...]] = {
     ),
     _CLIENT / 'materializers/relational.py': (
         'RelationalMaterializer.__init__',
+        # Not entered on the core route; the self-tests seed it.
         'RelationalMaterializer._check_limits',
-        'RelationalMaterializer._check_shape',
-        'RelationalMaterializer._gather',
-        'RelationalMaterializer._refuse_a_name_the_wire_reserves',
-        'RelationalMaterializer._run_mode_for',
-        'RelationalMaterializer._unreserved',
-        'RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities',
         'RelationalMaterializer.materialize',
-        '_columns_to_leave_out',
-        '_drop_context_that_answers_the_question',
-        '_entities_at_anchors',
-        '_instances_matching',
-        '_joins_nothing',
-        '_positions',
-        '_record_the_statistic',
-        '_remove_instances',
-        '_statistic_asked_for',
+        # Not entered on the core route; the self-tests seed it.
         '_tables_linked_to',
-        '_tables_sent',
-        '_warn_of_a_context_the_default_mode_capped',
-        '_warn_of_columns_the_model_does_not_read',
-        '_warn_of_relationships_that_join_nothing',
-        '_warn_of_tables_left_out',
-        '_warn_the_filter_chose_only_the_examples',
     ),
     # The ledgered rules' own bodies (T1.28's _preflight, model check and
-    # merge, the decomposition), and Schema.from_source, the describe
+    # merge, the decomposition: the core route no longer enters them, and
+    # T2.14c took out all but _preflight), and Schema.from_source, the describe
     # route's entry point. T1.21d moved the schema rows into sdm-schema and
     # took out the helpers the core route no longer reaches; what building a
     # Schema still runs on it stays (its key marking, its two-ways warning,
@@ -300,10 +308,8 @@ COVERED: dict[Path, tuple[str, ...]] = {
         '_require_joinable',
         '_warn_two_ways_to_reach_one_table',
     ),
+    # Not entered on the core route; the self-tests seed it.
     _CLIENT / 'adapters/relational.py': ('RelationalAdapter._preflight',),
-    _CLIENT / 'base.py': ('check_request_against_model',),
-    _CLIENT / 'result.py': ('PredictionResult.merge',),
-    _CLIENT / 'decompose.py': ('parts_of',),
     # The bridges' package: its module statements run on every core route.
     _CLIENT / '_rust/__init__.py': (),
 }
@@ -468,6 +474,19 @@ def _covered(rel: Path, measured: Measured) -> list[str]:
     return sorted(name for name in names if name in measured)
 
 
+def _freezes(rel: Path, name: str, strict: bool = False) -> bool:
+    """Whether this copy freezes ``name`` of ``rel``: what it judges. A later
+    copy may freeze more (T2.1v): the gate judges a candidate with its
+    checkpoint's copy, which ignores the entries and declarations of what it
+    does not freeze and judges everything it does freeze as before. A
+    ``strict`` run, a copy judging its own tree, judges every entry."""
+    return (
+        strict
+        or rel in FROZEN
+        and (rel in WHOLE or name == MODULE or name in COVERED.get(rel, ()))
+    )
+
+
 def entries(measured: Mapping[Path, Measured | None]) -> Baseline:
     """The covered functions' fingerprints, by file and name."""
     return {
@@ -503,14 +522,21 @@ def _json(text: str, where: str) -> tuple[Any, list[str]]:
 
 
 def load(
-    text: str | None, where: str, *, base: bool = False
+    text: str | None,
+    where: str,
+    *,
+    base: bool = False,
+    strict: bool = False,
+    gone: frozenset[str] = frozenset(),
 ) -> tuple[Baseline | None, list[str]]:
     """A baseline read and checked, or the problems that stop it: its
     fingerprints, from format 3 or format 2 (whose counts are ignored, each
     entry still holding exactly the fields its format names). The base's is
     read whole: a file it froze that is no longer frozen keeps its entries,
     each of which is then gone and declared; a file frozen since holds
-    nothing there."""
+    nothing there. A copy judging another tree (not ``strict``) takes a
+    frozen file with no entry when the tree declares its ``<module>`` gone
+    (``gone``; T2.16a)."""
     if text is None:
         return None, [f'{where}: the baseline is missing']
     data, problems = _json(text, where)
@@ -538,9 +564,12 @@ def load(
     expected = {str(rel) for rel in FROZEN}
     if not base:
         for name in sorted(expected - set(files)):
+            if not strict and f'{name}::{MODULE}' in gone:
+                continue
             problems.append(f'{where}: no entry for the frozen file {name}')
-        for name in sorted(set(files) - expected):
-            problems.append(f'{where}: {name} is not a frozen bridge file')
+        if strict:
+            for name in sorted(set(files) - expected):
+                problems.append(f'{where}: {name} is not a frozen bridge file')
     out: Baseline = {}
     for rel in sorted(set(files) if base else expected & set(files)):
         functions = files[rel]
@@ -611,10 +640,18 @@ def exactness(
     code: Mapping[Path, Measured | None],
     baseline: Baseline,
     deleted_by_main: frozenset[str] = frozenset(),
+    *,
+    strict: bool = False,
+    gone: frozenset[str] = frozenset(),
 ) -> list[str]:
     """Where the code differs from the baseline. A covered name the file no
     longer defines is excused only when ``deleted_by_main`` holds its key
-    (declared ``main``, a reason :func:`ratchet` judges)."""
+    (declared ``main``, a reason :func:`ratchet` judges). A copy judging
+    another tree (not ``strict``) takes covered code the baseline does not
+    hold when the tree declares it gone (``gone``): the tree no longer
+    freezes it, and its own copy refuses a baseline entry for it, so no
+    one baseline would satisfy both copies; :func:`ratchet` still holds
+    the declaration to the base (T2.16a)."""
     problems = []
     covered = entries(code)
     remedy = 'rewrite the baseline (bridge_freeze.py --write)'
@@ -633,11 +670,17 @@ def exactness(
                     'commit that deleted it'
                 )
         now = covered[str(rel)]
-        for name in sorted(set(recorded) - set(now)):
+        for name in sorted(
+            name
+            for name in set(recorded) - set(now)
+            if _freezes(rel, name, strict)
+        ):
             problems.append(
                 f'{rel}::{name}: in the baseline but not covered code: {remedy}'
             )
         for name in sorted(set(now) - set(recorded)):
+            if not strict and f'{rel}::{name}' in gone:
+                continue
             problems.append(
                 f'{rel}::{name}: covered code the baseline does not hold: '
                 f'{remedy}, and declare the change'
@@ -686,6 +729,7 @@ def ratchet(
     declared: Mapping[str, tuple[str, str]],
     spent: Mapping[str, tuple[str, str]],
     main: Callable[[str, str, str | None], str | None] | None = None,
+    strict: bool = False,
 ) -> list[str]:
     """The tripwire against the merge base: every entry changed, new or
     gone is declared, once, with a reason that fits; ``main`` judges a
@@ -699,6 +743,8 @@ def ratchet(
         now = baseline.get(name_of, {})
         held = base.get(name_of, {})
         for name in sorted(set(now) | set(held)):
+            if name not in held and not _freezes(rel, name, strict):
+                continue
             key = f'{rel}::{name}'
             current[key] = now.get(name)
             if name not in held:
@@ -749,6 +795,9 @@ def ratchet(
                     f'candidate merged from main: {why}'
                 )
     for key in sorted(set(declared) - set(changed)):
+        rel_of, _, name = key.partition('::')
+        if key not in current and not _freezes(Path(rel_of), name, strict):
+            continue
         if spent.get(key) != declared[key]:
             problems.append(
                 f'{key}: declared in {CHANGES}, but unchanged against the base '
@@ -757,18 +806,22 @@ def ratchet(
     return problems
 
 
-def check(root: Path, base: Base | str) -> list[str]:
+def check(root: Path, base: Base | str, *, strict: bool = False) -> list[str]:
     """Every problem of the tree at ``root``. ``base`` is what the merge
-    base holds, or why there is no base."""
-    path = root / BASELINE
-    text = path.read_text(encoding='utf-8') if path.is_file() else None
-    baseline, problems = load(text, str(BASELINE))
+    base holds, or why there is no base; ``strict`` keeps the refusals a
+    copy judging its own tree keeps (:func:`own_tree`)."""
     path = root / CHANGES
-    declared, unreadable = load_changes(
+    declared, problems = load_changes(
         path.read_text(encoding='utf-8') if path.is_file() else None,
         str(CHANGES),
     )
-    problems += unreadable
+    gone = frozenset(
+        key for key, (kind, _) in (declared or {}).items() if kind == 'gone'
+    )
+    path = root / BASELINE
+    text = path.read_text(encoding='utf-8') if path.is_file() else None
+    baseline, unreadable = load(text, str(BASELINE), strict=strict, gone=gone)
+    problems = unreadable + problems
     if baseline is None or declared is None:
         return problems
     try:
@@ -781,6 +834,8 @@ def check(root: Path, base: Base | str) -> list[str]:
         code,
         baseline,
         frozenset(key for key, (kind, _) in declared.items() if kind == 'main'),
+        strict=strict,
+        gone=gone,
     )
     problems += shadowing(root)
     if isinstance(base, str):
@@ -814,8 +869,16 @@ def check(root: Path, base: Base | str) -> list[str]:
         declared=declared,
         spent=spent,
         main=base.main,
+        strict=strict,
     )
     return problems
+
+
+def own_tree(root: Path) -> bool:
+    """Whether this copy judges its own tree: the tree's ``bridge_freeze.py``
+    is this file, byte for byte, so the lists it judges by are the tree's."""
+    path = root / SCRIPT
+    return path.is_file() and path.read_bytes() == Path(__file__).read_bytes()
 
 
 # --- git and the command line --------------------------------------------------
@@ -1026,7 +1089,7 @@ def problems(root: Path = REPO_ROOT, ref: str | None = None) -> list[str]:
         return [f'the base branch: {error}']
     if not ref.strip():
         return [f'the base branch is blank (--base or {BASE_ENV}): name one']
-    return check(root, base_baseline(root, ref))
+    return check(root, base_baseline(root, ref), strict=own_tree(root))
 
 
 def write(root: Path) -> list[str]:

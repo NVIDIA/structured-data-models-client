@@ -20,8 +20,11 @@ pub use admission::{OFFSET_CAPACITY, admit, admit_from, admit_with_capacity, adm
 pub use codec::{CONTROL_CAP, Outgoing, decode, encode, read, write, write_error};
 pub use runs::{Failure, HostRun, Unreadable, Unreadables, contain, is_posix_zone};
 /// The types a binding hands across, so a binding depends on `sdm-host`
-/// and on `sdm-contract` for types, never on `sdm-core` (decision E21).
-pub use sdm_core::{ArrowData, Attachment, Attachments, warning_codes};
+/// and on `sdm-contract` for types, never on `sdm-core` (decision E21);
+/// `CompositionRoot` too, so a host composes its own data layer
+/// (`CompositionRoot::new`) where it does not take [`default_root`]'s, as
+/// the dev-only test host swaps one in (T2.7).
+pub use sdm_core::{ArrowData, Attachment, Attachments, CompositionRoot, warning_codes};
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource};
 
 /// The databases the data layer of [`default_root`] provides for
@@ -39,6 +42,6 @@ pub fn normalized_query(query: &str) -> Option<String> {
 /// The composition root a binding starts its runs with: the one data layer,
 /// `sdm-data`'s, built here where every binding reaches it (decisions E21,
 /// H14, E30).
-pub fn default_root() -> sdm_core::CompositionRoot {
-    sdm_core::CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::new()))
+pub fn default_root() -> CompositionRoot {
+    CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::new()))
 }

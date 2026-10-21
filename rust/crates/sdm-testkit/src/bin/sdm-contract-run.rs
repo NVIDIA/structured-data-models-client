@@ -9,11 +9,13 @@
 //! sdm-contract-run --providers
 //! sdm-contract-run --replay RECORDING --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --database sqlite --out FILE CASE_OR_DIRECTORY...
+//! sdm-contract-run --database memory [--layer default] --out FILE CASE_OR_DIRECTORY...
 //! sdm-contract-run --kit DATABASE [--fault truncate|silent_capability] --out REPORT
 //! ```
 //!
 //! `--kit` runs the provider conformance kit on this host's provider for
-//! DATABASE, `duckdb` or `sqlite` ([`sdm_testkit::kit`], T2.5): it writes
+//! DATABASE, `duckdb`, `sqlite` or `memory` ([`sdm_testkit::kit`], T2.5;
+//! `memory` the minimal non-SQL test provider, T2.7): it writes
 //! REPORT and exits 0 when every case passes, 1 when any fails, and 2
 //! when it cannot run.
 //!
@@ -22,6 +24,15 @@
 //! through the dev-only `rusqlite` provider ([`sdm_testkit::sqlite`]),
 //! every call the case makes through its `until` (T2.1d), each observation
 //! keyed `<case>@sqlite`.
+//!
+//! `--database memory` (T2.7) runs each case that reads data over its
+//! DuckDB base copied into the minimal non-SQL test provider
+//! ([`sdm_testkit::memory`]), through the second data layer swapped in at
+//! the composition root ([`sdm_testkit::layer`]), each observation keyed
+//! `<case>@memory`; a case that reads no data is not run there. With
+//! `--layer default` the same provider runs through
+//! `sdm_host::default_root()`'s layer (`sdm-data`'s) instead, keyed the
+//! same, so the two runs differ in their data layer alone.
 //!
 //! `--replay` runs each case that runs on Postgres there, its fetches
 //! answered from a recording of a Postgres server's answers
@@ -52,17 +63,45 @@ use std::process::ExitCode;
 use anyhow::{Result, bail};
 use sdm_testkit::{bases, case, host, observation, pre_given, replay};
 
+/// Whether `case`'s operations read data: it names `describe_source`.
+fn reads_data(case: &case::Case) -> bool {
+    case.core
+        .as_ref()
+        .is_some_and(|core| core.describe_source.is_some())
+}
+
 fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
     let (pre_given_specs, arguments) = match arguments {
         [flag, rest @ ..] if flag == "--pre-given-specs" => (true, rest),
         _ => (false, arguments),
     };
-    let (sqlite, arguments) = match arguments {
-        [flag, database, rest @ ..] if flag == "--database" && database == "sqlite" => (true, rest),
-        [flag, database, ..] if flag == "--database" => {
-            bail!("--database {database}: this host runs DuckDB, SQLite or a Postgres replay")
+    let (database, arguments) = match arguments {
+        [flag, database, rest @ ..]
+            if flag == "--database" && (database == "sqlite" || database == "memory") =>
+        {
+            (Some(database.as_str()), rest)
         }
-        _ => (false, arguments),
+        [flag, database, ..] if flag == "--database" => {
+            bail!(
+                "--database {database}: this host runs DuckDB, SQLite, the non-SQL memory provider or a Postgres replay"
+            )
+        }
+        _ => (None, arguments),
+    };
+    let sqlite = database == Some("sqlite");
+    // The data layer a `--database memory` run composes: the second one
+    // (T2.7), or, with `--layer default`, the default root's.
+    let (root, arguments) = match arguments {
+        [flag, layer, rest @ ..] if flag == "--layer" && layer == "default" => {
+            if database != Some("memory") {
+                bail!("--layer default: only with --database memory");
+            }
+            (sdm_host::default_root(), rest)
+        }
+        [flag, layer, ..] if flag == "--layer" => {
+            bail!("--layer {layer}: the one layer to name is `default`")
+        }
+        _ => (sdm_testkit::layer::root(), arguments),
     };
     let (recording, arguments) = match arguments {
         [flag, path, rest @ ..] if flag == "--replay" => (
@@ -77,7 +116,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             cases.iter().map(PathBuf::from).collect::<Vec<_>>(),
         ),
         _ => bail!(
-            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
+            "usage: sdm-contract-run [--pre-given-specs] [--database sqlite | --database memory [--layer default] | --replay RECORDING] --out FILE CASE_OR_DIRECTORY..."
         ),
     };
     let mut partial = out.clone().into_os_string();
@@ -119,6 +158,14 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
                 let observed = host::run_sqlite(&each.case, &bases, &repository)?;
                 (observed, keyed)
             }
+            None if database == Some("memory") => {
+                if !reads_data(&each.case) {
+                    continue;
+                }
+                let mut keyed = each.clone();
+                keyed.case.id = format!("{}@memory", each.case.id);
+                (host::run_memory(&each.case, &bases, &root)?, keyed)
+            }
             None => (host::run(&each.case, &bases)?, each.clone()),
             Some(recording) => {
                 if !each.case.databases().contains(&case::Database::Postgres) {
@@ -126,6 +173,9 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
                 }
                 let mut keyed = each.clone();
                 keyed.case.id = format!("{}@postgres", each.case.id);
+                // A diagnostic case whose core asks past what python-core
+                // recorded is observed refused (`replay::PAST_THE_RECORDING`);
+                // an acceptance case's fails the run (T2.8 fixes 3 and 4).
                 (host::run_replayed(&each.case, recording)?, keyed)
             }
         };
@@ -133,12 +183,7 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
         count += 1;
         // On SQLite every case reads data, its calls made through its
         // until (T2.1d).
-        let read_bases = sqlite
-            || each
-                .case
-                .core
-                .as_ref()
-                .is_some_and(|core| core.describe_source.is_some());
+        let read_bases = sqlite || reads_data(&each.case);
         let digest = read_bases.then_some(bases_digest.as_str());
         lines.push_str(&observation::write(&identity, each, &observed, digest).to_string());
         lines.push('\n');

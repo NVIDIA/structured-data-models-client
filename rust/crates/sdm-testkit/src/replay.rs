@@ -17,7 +17,14 @@
 //! the recording's end, fails the run by name (a runner failure, never a
 //! provider error the core could take for the source's), so a change to
 //! what the core asks or how the dialect renders it shows as a recording
-//! to make again, never as stale rows answering another question.
+//! to make again, never as stale rows answering another question. A fetch
+//! past the recording's end is its own error, [`PastTheRecording`]; for a
+//! diagnostic case it is instead answered as the provider's error,
+//! [`PAST_THE_RECORDING`] its vendor code ([`Replay::past_the_end`], T2.8
+//! fix 4), so the case is observed, refused, and its difference reported:
+//! python-core records only the fetches it made, and on a case the Python
+//! host fails before the core reads (`s0.boundary.depth-999`, whose query
+//! Python's parser cannot read), the core asks more.
 //!
 //! Each recorded fetch names the text of every statement the Postgres
 //! driver ran for it, in order, as python-core's driver capture recorded
@@ -43,6 +50,7 @@ use std::path::Path;
 use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use duckdb::arrow::record_batch::RecordBatch;
+use sdm_contract::ErrorKind;
 use sdm_contract::data::ProviderError;
 use sdm_contract::run::FetchStep;
 use serde::Deserialize;
@@ -148,18 +156,57 @@ impl Recording {
             case: case.to_owned(),
             fetches,
             next: Cell::new(0),
+            past_the_end: false,
         })
     }
 }
+
+/// A fetch the core asked past the end of the case's recording: its
+/// position, and how many were recorded. The runner fails the run on it,
+/// but for a diagnostic case, which it leaves unobserved.
+#[derive(Debug)]
+pub struct PastTheRecording {
+    pub case: String,
+    pub position: usize,
+    pub recorded: usize,
+}
+
+impl std::fmt::Display for PastTheRecording {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: the core asked fetch {}, past the {} recorded",
+            self.case, self.position, self.recorded
+        )
+    }
+}
+
+impl std::error::Error for PastTheRecording {}
+
+/// The vendor code of the provider error a diagnostic case's fetch past
+/// its recording is answered with.
+pub const PAST_THE_RECORDING: &str = "past the recording";
 
 /// One case's recorded fetches, answered in order.
 pub struct Replay<'a> {
     case: String,
     fetches: &'a [Recorded],
     next: Cell<usize>,
+    past_the_end: bool,
 }
 
 impl Replay<'_> {
+    /// The replay, a fetch past the recording answered as the provider's
+    /// error ([`PAST_THE_RECORDING`]) rather than failing the run: for a
+    /// diagnostic case.
+    #[must_use]
+    pub fn past_the_end(self) -> Self {
+        Replay {
+            past_the_end: true,
+            ..self
+        }
+    }
+
     /// The recorded answer to `step`, which must be the next fetch
     /// recorded: the statements run for it, and its rows or the provider's
     /// error recorded; a fetch other than the one recorded is this host's
@@ -173,11 +220,29 @@ impl Replay<'_> {
             answer,
         }) = self.fetches.get(position)
         else {
-            bail!(
-                "{}: the core asked fetch {position}, past the {} recorded",
-                self.case,
-                self.fetches.len()
-            );
+            if self.past_the_end {
+                eprintln!(
+                    "rust-host: {}: the core asked fetch {position}, past the {} recorded: a \
+                     diagnostic case, answered as the provider's error",
+                    self.case,
+                    self.fetches.len()
+                );
+                return Ok(Replayed {
+                    statements: &[],
+                    answer: Err(ProviderError {
+                        kind: ErrorKind::DataSource,
+                        retryable: false,
+                        sqlstate: None,
+                        vendor_code: Some(PAST_THE_RECORDING.to_owned()),
+                    }),
+                });
+            }
+            return Err(PastTheRecording {
+                case: self.case.clone(),
+                position,
+                recorded: self.fetches.len(),
+            }
+            .into());
         };
         if serde_json::to_value(&step.request)? != *request
             || serde_json::to_value(&step.plan)? != *plan

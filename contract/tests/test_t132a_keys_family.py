@@ -62,7 +62,13 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-CASES = sorted((ROOT / 'contract/cases/s1').glob('key.*.json'))
+#: The family is the inventory's keys seam; later packages' ``key.*`` cases
+#: outside it (T2.21's ``key.past-2-53.*``, no seam) are not.
+CASES = sorted(
+    path
+    for path in (ROOT / 'contract/cases/s1').glob('key.*.json')
+    if json.loads(path.read_text(encoding='utf-8')).get('seam') == 'keys'
+)
 IDS = [path.stem for path in CASES]
 #: The phase head T1.32a started from (the brief: 1efd5882, "Land T1.20
 #: part 2").

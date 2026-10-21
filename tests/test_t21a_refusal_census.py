@@ -166,9 +166,9 @@ def _copy(tmp_path: Path) -> Path:
 
 def test_the_oracle_finds_the_sites_the_design_names() -> None:
     r"""Control: the oracle is not vacuous: E92's class of rules (61 at
-    T1.32d, fewer as packages lift them), and calls of all three
-    rule-less constructors."""
-    assert len(named_rules(ROOT)) >= 30
+    T1.32d, fewer as packages lift them: 23 after T2.11's ten), and calls
+    of all three rule-less constructors."""
+    assert len(named_rules(ROOT)) >= 20
     calls = ruleless_calls(ROOT)
     for relative in RULELESS:
         assert any(call.startswith(f'{relative}:') for call in calls), relative

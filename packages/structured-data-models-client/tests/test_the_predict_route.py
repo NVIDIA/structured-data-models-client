@@ -404,6 +404,62 @@ def test_distinct_answers_out_of_order_land_on_their_own_entities(
     assert [item.row_index for item in core.items] == [2, 1, 0]
 
 
+@pytest.mark.parametrize(
+    'outputs', [['quantiles'], ['prediction', 'quantiles']]
+)
+def test_quantiles_with_no_prediction_are_the_old_route_s_on_the_core(
+    monkeypatch: pytest.MonkeyPatch, outputs: list[str]
+) -> None:
+    # T2.9: a model asked for quantiles may leave the prediction out (the
+    # reference's _report_absent says kumo-relational does when both are
+    # asked): each item's quantiles are kept as keyed, no prediction column
+    # is made up, and a prediction the caller named and the answer left out
+    # is said as the old route says it.
+    request = _materialized(monkeypatch)
+    rows = request.payloads[0]['predict']['instance_table']['rows']
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r9',
+        'model': 'kumo-relational',
+        'metadata': {},
+        'predictions': [
+            {
+                'id': str(instances[index]),
+                'row_index': index,
+                'quantiles': {'0.1': 1.0 + index, '0.5': 2.5, '0.90': 4.0},
+            }
+            for index in (1, 0)
+        ],
+    }
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        with warnings.catch_warnings(record=True) as core_said:
+            warnings.simplefilter('always')
+            monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+            core = _predict(url, request, outputs=outputs)
+        monkeypatch.delenv(_routing.ENVIRONMENT)
+        with warnings.catch_warnings(record=True) as old_said:
+            warnings.simplefilter('always')
+            old = _predict(url, request, outputs=outputs)
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert list(core.to_pandas().columns) == [
+        'row_index',
+        'id',
+        'quantile_0.1',
+        'quantile_0.5',
+        'quantile_0.90',
+    ]
+    assert core.items == old.items
+    assert [item.prediction for item in core.items] == [None, None]
+    assert core.absent(outputs) == old.absent(outputs)
+    # The same class and sentence; the core route's leads with its code.
+    assert [type(w.message) for w in core_said] == [
+        type(w.message) for w in old_said
+    ]
+    for said, was in zip(core_said, old_said, strict=True):
+        assert str(said.message).endswith(str(was.message))
+    assert len(core_said) == (1 if 'prediction' in outputs else 0)
+
+
 def test_an_overflowing_prediction_is_the_old_route_s_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -464,12 +520,14 @@ def test_an_answer_too_deep_for_python_s_reader_is_too_deep_on_the_core(
     )
 
 
-def test_a_lone_surrogate_in_an_answer_is_refused_on_the_core(
+def test_a_lone_surrogate_in_an_answer_is_u_fffd_on_the_core(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Diagnostic, register P1B-24 (proposed): Python's reader takes a
-    # lone surrogate escape in text, and the old route passes it on; the
-    # core's reader, which holds text as UTF-8, refuses the answer.
+    # Diagnostic, register P1B-24 (the owner's rule of 2026-10-21): Python's
+    # reader takes a lone surrogate escape in text, and the old route passes
+    # it on; the core's reader, which holds text as UTF-8, reads it as
+    # U+FFFD and answers. Every encoding of it is
+    # contract/tests/test_t216_response_encoding.py's.
     request = _materialized(monkeypatch)
     answer = (
         '{"id": "r1", "model": "kumo-relational", "metadata": {"note": '
@@ -481,9 +539,9 @@ def test_a_lone_surrogate_in_an_answer_is_refused_on_the_core(
         core, old = _both(monkeypatch, request, url)
     assert not isinstance(old, Exception), old
     assert old.metadata['note'] == '\ud800'
-    assert isinstance(core, StructuredDataError)
-    assert core.code == 'INVALID_RESPONSE'
-    assert core.details['field'] == 'response'
+    assert not isinstance(core, Exception), core
+    assert core.metadata == {'note': '\ufffd'}
+    assert core.to_pandas().equals(old.to_pandas())
 
 
 def test_a_failed_transport_is_named_for_what_failed(
@@ -785,3 +843,42 @@ def test_the_bytes_sent_are_the_core_s_and_held_to_the_limit(
     assert past.value.code == 'INVALID_REQUEST'
     assert past.value.details['field'] == 'payload'
     assert past.value.details['bytes'] == limit + 1
+
+
+def test_embeddings_are_the_old_route_s_on_the_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T2.11: an answer's embeddings, asked for among the outputs, read as
+    # the client's bindings read them and given back as the old route
+    # gives them: one list per row, the items holding each as a tuple.
+    request = _materialized(monkeypatch)
+    [rows] = [request.payloads[0]['predict']['instance_table']['rows']]
+    instances = [row[0] for row in rows]
+    answer = {
+        'id': 'r9',
+        'model': 'kumo-relational',
+        'metadata': {},
+        'predictions': [
+            {
+                'id': str(instance),
+                'row_index': index,
+                'prediction': 1.5 + index,
+                'embeddings': [0.25 * index, '-1.5', 3],
+            }
+            for index, instance in enumerate(instances)
+        ],
+    }
+    outputs = ['prediction', 'embeddings']
+    with _answering(200, json.dumps(answer).encode()) as (url, received):
+        core, old = _both(monkeypatch, request, url, outputs=outputs)
+    assert not isinstance(core, Exception), core
+    pd.testing.assert_frame_equal(core.to_pandas(), old.to_pandas())
+    assert core.items == old.items
+    assert core.items[1].embeddings == (0.25, -1.5, 3.0)
+    assert json.loads(received[0])['output']['fields'] == outputs
+    # Not an array of numbers: the response is not the contract's, on both.
+    answer['predictions'][0]['embeddings'] = 'x'
+    with _answering(200, json.dumps(answer).encode()) as (url, _):
+        core, old = _both(monkeypatch, request, url, outputs=outputs)
+    assert (type(core), core.code) == (type(old), old.code)
+    assert core.code == 'INVALID_RESPONSE'

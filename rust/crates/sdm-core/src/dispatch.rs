@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use sdm_contract::ops::{
-    HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
+    GivenCandidate, HeldSchema, Operation, OperationResult, QuerySchema, REQUEST_STATE_VERSION,
     SAMPLER_STATE_VERSION, SamplerMemo, SchemaEdit, SourceDescription, SourceSpec,
 };
 use sdm_contract::run::StartRun;
@@ -71,12 +71,13 @@ pub fn start(
             Run::new(move |asker| async move {
                 let profile = Profile::resolve(&request.profile);
                 let (validation, warnings) =
-                    crate::pql::validate(&query, &schema, &profile, &facts, &*zones)?;
-                // D4's warning, on the run's warnings channel.
+                    crate::pql::validate_warned(&query, &schema, &profile, &facts, &*zones);
+                // D4's warning, on the run's warnings channel, given also
+                // when the run then ends with an error (U1).
                 for warning in warnings {
                     asker.warn(warning);
                 }
-                Ok(OperationResult::ValidateQuery(validation))
+                Ok(OperationResult::ValidateQuery(validation?))
             })
         }
         Operation::DescribeSource(request) => {
@@ -116,18 +117,11 @@ pub fn start(
                 .with_field(
                     "version",
                     Detail::Scalar(Scalar::UInt32(request.state.version)),
-                ));
-            }
-            // A request asked in several model calls (contract v26's
-            // `batches`, `main`'s multi-call predict) is T2.8c's: refused by
-            // name until then, never predicted as its first call alone.
-            if request.state.batches.is_some() {
-                return Err(CoreError::new(
-                    ErrorKind::Unsupported,
-                    ErrorCode::UnsupportedRequest,
-                    "a request asked in several model calls is not predicted by this core yet",
                 )
-                .with_field("field", Detail::text("state.batches")));
+                .with_field(
+                    "reads",
+                    Detail::Scalar(Scalar::UInt32(REQUEST_STATE_VERSION)),
+                ));
             }
             let Some(Attachment::Bytes(payload)) = attachments.remove(&request.state.payload)
             else {
@@ -162,6 +156,100 @@ pub fn start(
                     Some(later)
                 }
             };
+            // A ranking's later questions, each as the first is (T2.8): the
+            // first asks after the first candidate given, at position 0.
+            let ranking = match &request.state.ranking {
+                None => None,
+                Some(ranking) => {
+                    // Each candidate named by its position, the first's the
+                    // state's own, every later one's past the one before:
+                    // a state that names them otherwise would give the
+                    // answers back under other candidates' names.
+                    let positions = std::iter::once(ranking.candidate)
+                        .chain(ranking.parts.iter().map(|part| part.candidate));
+                    if !positions.clone().zip(positions.skip(1)).all(|(a, b)| a < b) {
+                        return Err(CoreError::new(
+                            ErrorKind::InvalidRequest,
+                            ErrorCode::InvalidRequest,
+                            "a ranking's questions do not name its candidates in the order given",
+                        )
+                        .with_field("field", Detail::text("state.ranking.candidate")));
+                    }
+                    let mut questions = vec![(
+                        ranking.candidate,
+                        ranking.value.clone(),
+                        Vec::new(),
+                        String::new(),
+                        String::new(),
+                    )];
+                    for part in &ranking.parts {
+                        let Some(Attachment::Bytes(payload)) = attachments.remove(&part.payload)
+                        else {
+                            return Err(internal("the payload is not the bytes named"));
+                        };
+                        let query: String = take_json(&mut attachments, part.query)?;
+                        let Some(request_id) = part.request_id.clone() else {
+                            return Err(CoreError::new(
+                                ErrorKind::InvalidRequest,
+                                ErrorCode::InvalidRequest,
+                                "a ranking's later question names no request id",
+                            )
+                            .with_field("field", Detail::text("state.ranking.request_id")));
+                        };
+                        questions.push((
+                            part.candidate,
+                            part.value.clone(),
+                            payload,
+                            query,
+                            request_id,
+                        ));
+                    }
+                    Some((questions, ranking.top_k))
+                }
+            };
+            let ranking = ranking.map(|(mut questions, top_k)| {
+                questions[0].2.clone_from(&payload);
+                questions[0].3.clone_from(&query);
+                questions[0].4.clone_from(&request.request_id);
+                (questions, top_k)
+            });
+            // A request asked in several model calls (`main`'s multi-call
+            // `predict`): each later call's payload, the rows it scores and
+            // the id it carries, which the host draws for each call as for
+            // a forecast's step.
+            let batches = match &request.state.batches {
+                None => None,
+                Some(batches) => {
+                    if request.state.forecast.is_some() {
+                        return Err(CoreError::new(
+                            ErrorKind::InvalidRequest,
+                            ErrorCode::InvalidRequest,
+                            "a forecast's request is one call per step, never batched",
+                        )
+                        .with_field("field", Detail::text("state.batches")));
+                    }
+                    let mut later = Vec::with_capacity(batches.len());
+                    for batch in batches {
+                        let Some(Attachment::Bytes(payload)) = attachments.remove(&batch.payload)
+                        else {
+                            return Err(internal("the payload is not the bytes named"));
+                        };
+                        let Some(request_id) = batch.request_id.clone() else {
+                            return Err(CoreError::new(
+                                ErrorKind::InvalidRequest,
+                                ErrorCode::InvalidRequest,
+                                "a later call of a request names no request id",
+                            )
+                            .with_field("field", Detail::text("state.batches.request_id")));
+                        };
+                        later.push(crate::predict::LaterCall {
+                            payload,
+                            request_id,
+                        });
+                    }
+                    Some(later)
+                }
+            };
             let inputs = crate::predict::Inputs {
                 payload,
                 query,
@@ -171,6 +259,8 @@ pub fn start(
                 default_outputs: request.default_outputs,
                 inference_asked: request.inference_asked,
                 forecast,
+                ranking,
+                batches,
             };
             Run::new(move |asker| crate::predict::run(asker, inputs))
         }
@@ -209,6 +299,8 @@ pub(crate) fn materialize(
                 },
                 None => None,
             };
+            let candidates: Option<Vec<GivenCandidate>> =
+                take_json_if(&mut attachments, request.candidates)?;
             // The decoder takes a seed of any size and sign; which seeds a
             // run takes is the core's rule (decision H7): not a negative
             // one, and none past the largest the provider declares (RS-7),
@@ -220,7 +312,12 @@ pub(crate) fn materialize(
                     ErrorCode::InvalidRequest,
                     "a sampling seed cannot be negative",
                 )
-                .with_field("field", Detail::text("seed")));
+                .with_field("field", Detail::text("seed"))
+                .with_field("reason", Detail::text("negative"))
+                .with_field(
+                    "given",
+                    Detail::text(crate::materialize::seed_text(request.seed.as_ref())),
+                ));
             }
             // The sampler state's version first, by name, before anything of
             // the state is read, as a request state's (decision H23); then
@@ -279,6 +376,7 @@ pub(crate) fn materialize(
                 description,
                 query,
                 indices,
+                candidates,
                 anchor_time: request.anchor_time,
                 seed: request.seed,
                 unseeded: request.unseeded,
@@ -286,6 +384,8 @@ pub(crate) fn materialize(
                 values,
                 options: request.options,
                 most_parts: request.most_parts,
+                most_entities: request.most_entities,
+                most_calls: request.most_calls,
                 facts,
                 zones: Arc::clone(&zones),
                 #[cfg(feature = "test-ops")]

@@ -47,6 +47,14 @@ From the review of fix 21:
   N distinct request ids, each ``sdm-`` and twelve hex digits, as the
   reference draws them.
 
+From T2.8, which lifts ``target_filter``: ``count-filtered-3`` (a target
+with ``WHERE``) is answered as the reference answers it on both core hosts;
+its ``python_core`` is recorded again under T2.8's candidate (the
+recorder's ``recandidate``, ``python_core_candidate``), and it is no longer
+among the refusals worded as before. From T2.13b, which lifts
+``entity_filter``: ``sum-entity-filter-3`` (an entity filter) likewise,
+its ``python_core`` recorded again under T2.13b's candidate.
+
 ``sdm-testkit``'s ``tests/t136_forecast.rs`` holds ``rust-host`` to the same
 vectors. The implementer changes nothing of this file, the vectors or the
 recorder.
@@ -119,6 +127,11 @@ def test_the_vector_file_is_the_recorder_s() -> None:
         assert vector['rust_host'] == R.RUST_HOST.get(
             written['id'], 'reference'
         )
+    # Recorded again under a later candidate: only what that package
+    # changed by design.
+    assert {
+        v['id'] for v in RECORDED['vectors'] if 'python_core_candidate' in v
+    } == RECANDIDATED
 
 
 def test_the_vectors_are_not_vacuous() -> None:
@@ -148,8 +161,22 @@ def _requests_but_their_bytes(answer: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+#: The vectors whose python-core is recorded again under a later candidate
+#: (``python_core_candidate``): T2.8 lifts ``target_filter``, T2.13b
+#: ``entity_filter``, and T2.14b words a forecast step outrunning the data
+#: as the old route does (fix 7).
+RECANDIDATED = {
+    'count-filtered-3',
+    'sum-entity-filter-3',
+    'refuse.step-outruns-data',
+}
+
+
 def _held_before_and_now(
-    got: dict[str, Any], vector: dict[str, Any], before: dict[str, Any]
+    got: dict[str, Any],
+    vector: dict[str, Any],
+    before: dict[str, Any],
+    again: bool = False,
 ) -> None:
     r"""What a route sent at fc2c0e2b, held but for the bytes main's
     26ecdd28 moved on both routes (no inference config the caller did not
@@ -165,6 +192,12 @@ def _held_before_and_now(
         assert [p['digest'] for p in got['payloads']] == [
             p['digest'] for p in reference['payloads']
         ], "each request is the reference's under the payload rule"
+    if again:
+        # Recorded after 26ecdd28, under the later candidate: its bytes too.
+        assert [p['masked_sha256'] for p in got['payloads']] == [
+            p['masked_sha256'] for p in before['payloads']
+        ]
+        return
     # Not vacuous: where it sent requests, fc2c0e2b's bytes were the
     # Python decomposition's with the engine's inference config, which no
     # route sends now.
@@ -177,7 +210,12 @@ def test_python_core_sends_what_it_sent_before_the_move(
     vector_id: str, core_runs: dict[str, Any]
 ) -> None:
     vector = BY_ID[vector_id]
-    _held_before_and_now(core_runs[vector_id], vector, vector['python_core'])
+    _held_before_and_now(
+        core_runs[vector_id],
+        vector,
+        vector['python_core'],
+        again='python_core_candidate' in vector,
+    )
 
 
 @pytest.mark.parametrize('vector_id', AS_THE_REFERENCE)
@@ -199,7 +237,8 @@ def test_python_old_answers_as_the_reference_and_as_before(
 
 # --- the refusals around a forecast -------------------------------------------
 
-#: Today's wording of each refusal, on both routes (measured at fc2c0e2b).
+#: Each refusal's wording, on both routes, the reference's (measured at
+#: fc2c0e2b, and for a step outrunning the data at 43e55f4f, from T2.14b).
 TOP_K = (
     '[INVALID_REQUEST] top_k is how many candidates a ranking keeps, and a '
     'forecast ranks nothing; it gives back one value per step'
@@ -215,22 +254,17 @@ ZERO = (
     "TIMEFRAMES FOR EACH users.user_id' is not a query a relational model can "
     'answer: FORECAST value must be at least 1, got 0.'
 )
-#: A step's window reaching before the data: said of the step that failed.
-OUTRAN_CORE = (
-    '[INVALID_REQUEST] the request is not one the core accepts. This is '
-    'forecast step 2 of 3.'
-)
-OUTRAN_OLD = (
+#: A step's window reaching before the data: said of the step that failed,
+#: in the reference's words (python-ref at 43e55f4f, and python-old), which
+#: the core gives from T2.14b (M4, KO2-32 and KO2-89) in place of its
+#: generic sentence.
+OUTRAN = (
     '[INVALID_REQUEST] Context anchor timestamp is too early or aggregation '
     'time range is too large. To make this prediction, we would need data '
     "back to '2022-12-27 00:00:00', however, your data only contains data "
     "back to '2023-01-01 00:00:00'. This is forecast step 2 of 3. The window "
     "named above is that step's rather than the one written; ask for fewer "
     'than 2 steps if the data does not reach that far.'
-)
-FILTER_CORE = (
-    '[UNSUPPORTED_REQUEST] the request is valid, and not one the core '
-    'supports yet. This is forecast step 1 of 3.'
 )
 
 
@@ -243,24 +277,47 @@ FILTER_CORE = (
         ('refuse.past-most-parts', False, PAST_MOST_PARTS),
         ('refuse.zero-steps', True, ZERO),
         ('refuse.zero-steps', False, ZERO),
-        ('refuse.step-outruns-data', True, OUTRAN_CORE),
-        ('refuse.step-outruns-data', False, OUTRAN_OLD),
-        ('count-filtered-3', True, FILTER_CORE),
-        ('sum-entity-filter-3', True, FILTER_CORE),
+        ('refuse.step-outruns-data', True, OUTRAN),
+        ('refuse.step-outruns-data', False, OUTRAN),
     ],
 )
-def test_a_forecast_refusal_is_worded_as_before(
+def test_a_forecast_refusal_is_worded_as_the_reference(
     vector_id: str,
     core: bool,
     message: str,
     core_runs: dict[str, Any],
     old_runs: dict[str, Any],
 ) -> None:
-    got = (core_runs if core else old_runs)[vector_id]['outcome']
-    assert got['result'] == 'refusal'
-    assert got['stage'] == 'materialize'
-    assert got['message'] == message
-    assert (core_runs if core else old_runs)[vector_id]['payloads'] == []
+    r"""Each refusal around a forecast, on both routes, in the reference's
+    words. The core's words for a step outrunning the data are gated by
+    T2.14b's pending list (``forecast-words:refuse.step-outruns-data``)
+    while they lack the reference's closing sentence."""
+
+    def check() -> None:
+        got = (core_runs if core else old_runs)[vector_id]['outcome']
+        assert got['result'] == 'refusal'
+        assert got['stage'] == 'materialize'
+        assert got['message'] == message
+        assert (core_runs if core else old_runs)[vector_id]['payloads'] == []
+
+    name = f'forecast-words:{vector_id}'
+    gating = json.loads(
+        (ROOT / 'contract/tests/t214b-pending.json').read_text(encoding='utf-8')
+    )
+    if not core or name not in gating['authored']:
+        check()
+        return
+    if name not in gating['pending']:
+        check()
+        return
+    try:
+        check()
+    except AssertionError:
+        return
+    raise AssertionError(
+        f'{name} passes now: take it out of '
+        'contract/tests/t214b-pending.json pending'
+    )
 
 
 @pytest.mark.parametrize(

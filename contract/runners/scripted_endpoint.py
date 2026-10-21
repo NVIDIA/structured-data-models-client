@@ -48,15 +48,47 @@ last ``d / 10`` and any other ``0.0``, and its prediction is the last
 class where ``d > 5``, else the first. Every other call, and every call of
 an endpoint not told to, is answered by the rule above.
 
+An endpoint told to answer quantiles (T2.9's forecast cases, as a model
+answers the spread of a regression) answers a regression call whose
+``output.fields`` names ``quantiles`` with them: for row ``i`` of call
+``k``, with ``d`` as above, the item carries ``quantiles`` ``{"0.1": d - 1,
+"0.5": d, "0.9": d + 1}``, each a float, beside the rule's prediction.
+Every other call, and every call of an endpoint not told to, is answered
+by the rules above.
+
+An endpoint told to answer explanations (T2.13's cases, as a model
+explains the one entity it is asked to) answers a call whose
+``output.fields`` names ``explanation`` with one on each item: for row
+``i`` of call ``k``, with ``d`` as above, ``{"format": "scripted",
+"summary": "row <i> of call <k>", "score": d / 10, "rank": d, "path": [k,
+i], "detail": {"call": k, "row_index": i, "note": null}}``, beside what
+the rules above answer.
+
+An endpoint told to answer item metadata (T2.13's cases, as a model
+reports something of each answer) gives each item of every call it
+answers by the rules above ``"metadata": {"call": k, "row_index": i,
+"source": "scripted"}``.
+
+An endpoint told to answer embeddings (T2.11's cases, as a model answers
+the vector it holds of each entity) answers a call whose ``output.fields``
+names ``embeddings`` with one on each item: for row ``i`` of call ``k``,
+with ``d`` as above, ``[d / 10, (10 - d) / 10, k, i]``, each a float,
+beside what the rules above answer.
+
 Numbers are read as the tokens the request wrote, never through a float,
 so an id past 2**53 is answered as it was asked.
+
+Every answer's JSON text is sent as UTF-8, unless the endpoint is told how
+to write it (T2.16's tests, as an endpoint may answer UTF-16 or with a byte
+order mark, which the reference's reader takes); the text is the rule's
+either way.
 """
 
 from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -135,10 +167,38 @@ def _instance_id(value: Any) -> str:
     raise _Refused('bad_instance_id')
 
 
-def _asks_probabilities(payload: dict[str, Any]) -> bool:
+def _asks(payload: dict[str, Any], field: str) -> bool:
     output = payload.get('output')
     fields = output.get('fields') if isinstance(output, dict) else None
-    return isinstance(fields, list) and 'probabilities' in fields
+    return isinstance(fields, list) and field in fields
+
+
+def _spread(call: int, index: int) -> dict[str, float]:
+    r"""Row ``index`` of call ``call``'s quantiles, as an endpoint told to
+    answer quantiles gives them."""
+    d = (3 * call + 5 * index) % 9 + 1
+    return {'0.1': float(d - 1), '0.5': float(d), '0.9': float(d + 1)}
+
+
+def _explained(call: int, index: int) -> dict[str, Any]:
+    r"""Row ``index`` of call ``call``'s explanation, as an endpoint told
+    to answer explanations gives it."""
+    d = (3 * call + 5 * index) % 9 + 1
+    return {
+        'format': 'scripted',
+        'summary': f'row {index} of call {call}',
+        'score': d / 10,
+        'rank': d,
+        'path': [call, index],
+        'detail': {'call': call, 'row_index': index, 'note': None},
+    }
+
+
+def _embedded(call: int, index: int) -> list[float]:
+    r"""Row ``index`` of call ``call``'s embedding, as an endpoint told to
+    answer embeddings gives it."""
+    d = (3 * call + 5 * index) % 9 + 1
+    return [d / 10, (10 - d) / 10, float(call), float(index)]
 
 
 def _sure(task: dict[str, Any], call: int, index: int) -> tuple[Any, dict]:
@@ -153,7 +213,13 @@ def _sure(task: dict[str, Any], call: int, index: int) -> tuple[Any, dict]:
 
 
 def _predictions(
-    payload: Any, call: int = 0, probabilities: bool = False
+    payload: Any,
+    call: int = 0,
+    probabilities: bool = False,
+    quantiles: bool = False,
+    explanation: bool = False,
+    item_metadata: bool = False,
+    embeddings: bool = False,
 ) -> list[dict[str, Any]]:
     payload = _object(payload, 'not_an_object')
     predict = payload.get('predict')
@@ -176,8 +242,15 @@ def _predictions(
     sure = (
         probabilities
         and task.get('kind') != 'regression'
-        and _asks_probabilities(payload)
+        and _asks(payload, 'probabilities')
     )
+    spread = (
+        quantiles
+        and task.get('kind') == 'regression'
+        and _asks(payload, 'quantiles')
+    )
+    explains = explanation and _asks(payload, 'explanation')
+    embeds = embeddings and _asks(payload, 'embeddings')
     answered = []
     for index, row in enumerate(rows):
         if not isinstance(row, list) or len(row) <= at:
@@ -189,6 +262,18 @@ def _predictions(
         }
         if sure:
             item['prediction'], item['probabilities'] = _sure(task, call, index)
+        if spread:
+            item['quantiles'] = _spread(call, index)
+        if explains:
+            item['explanation'] = _explained(call, index)
+        if embeds:
+            item['embeddings'] = _embedded(call, index)
+        if item_metadata:
+            item['metadata'] = {
+                'call': call,
+                'row_index': index,
+                'source': 'scripted',
+            }
         answered.append(item)
     return answered
 
@@ -205,16 +290,31 @@ def answer(
     call: int = 0,
     fail_call: int | None = None,
     probabilities: bool = False,
+    quantiles: bool = False,
+    explanation: bool = False,
+    item_metadata: bool = False,
+    embeddings: bool = False,
 ) -> tuple[int, dict[str, Any]]:
     r"""The rule: the status and JSON body answering the request that is
     call number ``call``, the call numbered ``fail_call`` failed, with a
-    classification's probabilities where ``probabilities`` says so."""
+    classification's probabilities where ``probabilities`` says so, a
+    regression's quantiles where ``quantiles`` does, an explanation where
+    ``explanation`` does, each item's metadata where ``item_metadata``
+    does and each item's embedding where ``embeddings`` does."""
     if call == fail_call:
         return _failed(call)
     if method != 'POST' or path != PREDICTIONS:
         return 404, {'error': 'not_found'}
     try:
-        predictions = _predictions(_read(body), call, probabilities)
+        predictions = _predictions(
+            _read(body),
+            call,
+            probabilities,
+            quantiles,
+            explanation,
+            item_metadata,
+            embeddings,
+        )
     except _Refused as refused:
         return 400, {'error': refused.reason}
     return 200, {
@@ -234,6 +334,11 @@ class Received:
     requests: list[tuple[str, str, bytes]] = field(default_factory=list)
     fail_call: int | None = None
     probabilities: bool = False
+    quantiles: bool = False
+    explanation: bool = False
+    item_metadata: bool = False
+    embeddings: bool = False
+    encode: Callable[[str], bytes] = str.encode
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def take(self, method: str, path: str, body: bytes) -> int:
@@ -245,6 +350,10 @@ class Received:
 
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
+    # The reply's headers and body go out as two writes on a kept-alive
+    # connection; with Nagle's algorithm the body waits for the client's
+    # delayed acknowledgement, about 40 ms a call (T2.1l).
+    disable_nagle_algorithm = True
 
     def log_message(self, *args: object) -> None:
         pass
@@ -256,8 +365,16 @@ class _Handler(BaseHTTPRequestHandler):
         call = received.take(self.command, self.path, body)
         # The chosen call fails here, and every other is the rule's, called
         # as one request is with the call's number and whether to answer
-        # probabilities as keywords (a test may stand a rule of its own in
-        # for it, taking the same arguments).
+        # probabilities and quantiles as keywords (a test may stand a rule
+        # of its own in for it, taking the same arguments). Whether to
+        # answer explanations, item metadata and embeddings is passed only
+        # when the endpoint is told to, so a stand-in written to take the
+        # keywords above still stands in for an endpoint told none of them.
+        told = {
+            name: True
+            for name in ('explanation', 'item_metadata', 'embeddings')
+            if getattr(received, name)
+        }
         status, reply = (
             _failed(call)
             if call == received.fail_call
@@ -267,9 +384,11 @@ class _Handler(BaseHTTPRequestHandler):
                 body,
                 call=call,
                 probabilities=received.probabilities,
+                quantiles=received.quantiles,
+                **told,
             )
         )
-        out = json.dumps(reply).encode()
+        out = received.encode(json.dumps(reply))
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(out)))
@@ -284,14 +403,32 @@ class _Handler(BaseHTTPRequestHandler):
 
 @contextmanager
 def serve(
-    fail_call: int | None = None, probabilities: bool = False
+    fail_call: int | None = None,
+    probabilities: bool = False,
+    quantiles: bool = False,
+    explanation: bool = False,
+    item_metadata: bool = False,
+    embeddings: bool = False,
+    encode: Callable[[str], bytes] = str.encode,
 ) -> Iterator[tuple[str, Received]]:
     r"""The endpoint on a free localhost port: its base URL, and what it
-    receives; the call numbered ``fail_call`` is failed, and a
-    classification answered with its probabilities where ``probabilities``
-    says so."""
+    receives; the call numbered ``fail_call`` is failed, a classification
+    answered with its probabilities where ``probabilities`` says so, a
+    regression with its quantiles where ``quantiles`` does, a call asking
+    for an explanation with one where ``explanation`` does, each item with
+    its metadata where ``item_metadata`` does, and a call asking for
+    embeddings with one on each item where ``embeddings`` does; each
+    answer's JSON text written to bytes by ``encode``, UTF-8 unless told."""
     server = ThreadingHTTPServer(('127.0.0.1', 0), _Handler)
-    received = Received(fail_call=fail_call, probabilities=probabilities)
+    received = Received(
+        fail_call=fail_call,
+        probabilities=probabilities,
+        quantiles=quantiles,
+        explanation=explanation,
+        item_metadata=item_metadata,
+        embeddings=embeddings,
+        encode=encode,
+    )
     server.received = received  # type: ignore[attr-defined]
     thread = threading.Thread(
         target=lambda: server.serve_forever(poll_interval=0.01), daemon=True

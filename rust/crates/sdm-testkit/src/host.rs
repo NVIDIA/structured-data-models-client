@@ -20,25 +20,31 @@
 //! no schema for it, and its loader refuses one (decision E50).
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow, bail};
 use std::sync::Arc;
 
 use duckdb::arrow::array::{ArrayRef, RecordBatch};
+use duckdb::arrow::compute::concat_batches;
 use duckdb::arrow::datatypes::{Field, Schema};
-use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, KeySet, ProviderChoice, SqlParam};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
-    DescribeSource, Dtype, EditSchema, ForecastStep, Materialize, Operation, OperationResult,
-    Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, RequestBatch, RequestState,
-    SamplerState, Seed, SourceDescription, SourceSpec, ValidateQuery,
+    DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, Materialize, Operation,
+    OperationResult, Predict, ProfileSpec, QueryColumn, QuerySchema, QueryTable, Ranking,
+    RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription, SourceSpec,
+    ValidateQuery,
 };
 use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
-    CONTRACT_VERSION, ControlMessage, CoreError, Detail, HostFacts, Scalar, Step, Unit,
+    CONTRACT_VERSION, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar,
+    Step, Unit,
 };
-use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, read};
+use sdm_host::{
+    ArrowData, Attachment, CompositionRoot, HostRun, Outgoing, default_root, encode, read,
+};
 use serde_json::{Value, json};
 
 use crate::bases::Bases;
@@ -48,6 +54,7 @@ use crate::case::{
 };
 use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
+use crate::memory::Memory;
 use crate::replay::{Recording, Replay, Replayed};
 use crate::sqlite::Sqlite;
 use crate::{duck, endpoint};
@@ -87,6 +94,13 @@ pub struct Observed {
     /// columns and rows, as a predicted answer's, and the rows those calls
     /// score. In process only; no observation writes it yet.
     pub answered: Option<Value>,
+    /// The explanation of `predict`'s result (T2.13), where the core gave
+    /// one: its Arrow schema's `explanation` metadata, the JSON text the
+    /// core wrote. Apart from the answer, whose shape a gate's checkpoint
+    /// fixes; the observation writes it as `core.predicted.result`'s
+    /// `explanation` (T2.16a), and an item's explanation and metadata are
+    /// the result's own columns, among the rows.
+    pub explanation: Option<String>,
 }
 
 /// The core's answer to the case's operation.
@@ -205,6 +219,85 @@ fn answered_of(handle: &HostRun, out: &Outgoing) -> Result<Option<Value>> {
     })))
 }
 
+/// A JSON scalar a case wrote, as the Python host sends it on: read as
+/// Python's `json.loads` reads it, then written as its `json.dumps` writes
+/// it (`_rust/codec.py`'s `attachment`): text as its decoded characters
+/// (`"\u0033"` is `"3"`), `true` and `false` as themselves, a whole number
+/// as its digits of any size (`-0` is `0`), and a number with a fraction or
+/// an exponent as Python's `repr` of the double it reads as (`3.0`,
+/// `1e+16`). None for a number past a double's range, which Python reads as
+/// an infinity and its host refuses to send (INVALID_REQUEST).
+pub fn as_python_sends(written: &str) -> Result<Option<String>> {
+    let text = written.trim();
+    match text.as_bytes().first() {
+        Some(b'"') => {
+            let decoded: String = serde_json::from_str(text)?;
+            Ok(Some(serde_json::to_string(&decoded)?))
+        }
+        _ if text == "true" || text == "false" => Ok(Some(text.to_owned())),
+        Some(b'-' | b'0'..=b'9') if !text.contains(['.', 'e', 'E']) => {
+            let (negative, digits) = match text.strip_prefix('-') {
+                Some(digits) => (true, digits),
+                None => (false, text),
+            };
+            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                bail!("rows_per_call is not a JSON number: {text}");
+            }
+            let zero = digits.bytes().all(|b| b == b'0');
+            Ok(Some(if negative && !zero {
+                text.to_owned()
+            } else {
+                digits.to_owned()
+            }))
+        }
+        Some(b'-' | b'0'..=b'9') => {
+            let read: f64 = text
+                .parse()
+                .map_err(|_| anyhow!("rows_per_call is not a JSON number: {text}"))?;
+            Ok(read.is_finite().then(|| python_repr(read)))
+        }
+        _ => bail!("rows_per_call is not a JSON scalar: {text}"),
+    }
+}
+
+/// A finite double as Python's `repr` writes it: the shortest digits that
+/// read back as it, positional from `1e-4` to below `1e16` (always with a
+/// fraction, `3.0`), and otherwise with an exponent of a sign and at least
+/// two digits (`1e+16`, `1e-05`).
+fn python_repr(value: f64) -> String {
+    let shortest = format!("{value:e}");
+    let (mantissa, exponent) = shortest
+        .split_once('e')
+        .map_or((shortest.as_str(), 0_i32), |(m, e)| {
+            (m, e.parse().unwrap_or(0))
+        });
+    let (negative, mantissa) = match mantissa.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", mantissa),
+    };
+    let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
+    if (-4..16).contains(&exponent) {
+        let point = i64::from(exponent) + 1;
+        let positional = if point <= 0 {
+            format!(
+                "0.{}{digits}",
+                "0".repeat(usize::try_from(-point).unwrap_or(0))
+            )
+        } else {
+            let point = usize::try_from(point).unwrap_or(0);
+            if digits.len() <= point {
+                format!("{digits}{}.0", "0".repeat(point - digits.len()))
+            } else {
+                format!("{}.{}", &digits[..point], &digits[point..])
+            }
+        };
+        format!("{negative}{positional}")
+    } else {
+        let sign = if exponent < 0 { '-' } else { '+' };
+        format!("{negative}{mantissa}e{sign}{:02}", exponent.unsigned_abs())
+    }
+}
+
 /// The error an `error` control message carries.
 fn error_of(out: &Outgoing) -> Result<Answer> {
     match read(out).map_err(|_| anyhow!("the host wrote an unreadable message"))? {
@@ -252,7 +345,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
             case.id
         );
     };
-    let (input, answer) = validate(case, spec)?;
+    let (input, answer) = validate(case, spec, &default_root())?;
     Ok(Observed {
         operations: vec!["validate_query".into()],
         inputs: vec![input],
@@ -265,6 +358,7 @@ pub fn run_edited(case: &Case, bases: &Bases, edits: &[SchemaEdit]) -> Result<Ob
         driver: None,
         edits: vec![],
         answered: None,
+        explanation: None,
     })
 }
 
@@ -416,10 +510,11 @@ pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
     }
     let given = &case.input.materialize;
     if case.until != Until::FromSource && core.materialize.is_none() {
+        // A ranking's candidates and `top_k` are read from the case's
+        // input, as on DuckDB (T2.8).
         if given.indices_as.is_some()
             || given.inference_config.is_some()
-            || given.candidates.is_some()
-            || given.top_k.is_some()
+            || given.rows_per_call.is_some()
         {
             return Err(not_derived("materialize's options"));
         }
@@ -460,7 +555,11 @@ pub fn through_until(case: &Case, dialect: &str) -> Result<Case> {
 
 /// S0's `validate_query` with the case's query, schema and profile: what
 /// this host sent, as it recorded it, and the core's answer.
-fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
+fn validate(
+    case: &Case,
+    spec: &ValidateQueryInput,
+    root: &CompositionRoot,
+) -> Result<(Value, Answer)> {
     let profile: ProfileSpec = serde_json::from_value(spec.profile.clone()).map_err(|_| {
         anyhow!(
             "{}: core.validate_query.profile is not a ProfileSpec",
@@ -496,7 +595,7 @@ fn validate(case: &Case, spec: &ValidateQueryInput) -> Result<(Value, Answer)> {
         (AttachmentId(2), Attachment::Bytes(schema_bytes)),
     ]);
     let message = encode(&start).map_err(|_| anyhow!("{}: its start does not encode", case.id))?;
-    let answer = match HostRun::start(&default_root(), &message, attachments) {
+    let answer = match HostRun::start(root, &message, attachments) {
         Err(refused) => error_of(&refused)?,
         Ok(handle) => match handle.next() {
             Err(failed) => error_of(&failed)?,
@@ -520,6 +619,8 @@ enum Source<'a> {
     Duck(&'a duckdb::Connection),
     Sqlite(&'a Sqlite),
     Replay(&'a Replay<'a>),
+    /// The non-SQL provider, through the composition root given.
+    Memory(&'a Memory, &'a CompositionRoot),
 }
 
 impl Source<'_> {
@@ -535,6 +636,20 @@ impl Source<'_> {
             Source::Replay(_) => ProviderChoice::Sql {
                 dialect: Dialect::new(Database::Postgres.name()),
             },
+            // The non-SQL provider, a host provider, as it declares itself.
+            Source::Memory(..) => ProviderChoice::Host {
+                capabilities: Memory::capabilities(),
+            },
+        }
+    }
+
+    /// The composition root a run over this source starts with: the one
+    /// the non-SQL provider's run was given (T2.7); `sdm-data`'s for every
+    /// other.
+    fn root(self) -> CompositionRoot {
+        match self {
+            Source::Memory(_, root) => root.clone(),
+            _ => default_root(),
         }
     }
 }
@@ -616,7 +731,14 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
         edits.push(made);
     }
     let key = format!("{}@{}", case.id, Database::Postgres.name());
+    // A diagnostic case's fetch past the recording is answered as the
+    // provider's error, so the case is observed (T2.8 fix 4).
     let replay = recording.replay(&key)?;
+    let replay = if case.status == crate::case::Status::Diagnostic {
+        replay.past_the_end()
+    } else {
+        replay
+    };
     let mut log = DriverLog::default();
     let mut observed = describe_on(case, spec, Source::Replay(&replay), &mut log, &edits)?;
     if !replay.finished() {
@@ -626,6 +748,44 @@ pub fn run_replayed(case: &Case, recording: &Recording) -> Result<Observed> {
     // run, as the Postgres driver's own log gave them to python-core.
     observed.driver = Some(log.record(&replay.ran()));
     Ok(observed)
+}
+
+/// Runs `case` as [`run`] runs it on DuckDB, over its DuckDB base copied
+/// into the minimal non-SQL test provider ([`crate::memory`], T2.7), every
+/// run started with `root`: the second data layer's
+/// ([`crate::layer::root`]) to run it swapped, or `default_root()`, over
+/// `sdm-data`, to run the same provider on the default layer. Every
+/// operation the case names, its fetches answered from in-memory Arrow
+/// tables, never by a statement; its run records no driver.
+pub fn run_memory(case: &Case, bases: &Bases, root: &CompositionRoot) -> Result<Observed> {
+    // The base built once on DuckDB and copied out, the connection then
+    // closed: the run reads the copy alone.
+    let memory = Memory::from_duckdb(&database(case, bases)?)?;
+    run_memory_over(case, &memory, root)
+}
+
+/// Runs `case` as [`run_memory`] does, over `memory` as given in place of
+/// the case's base: a source a test built or changed (T2.21: a column
+/// handed over as a host provider hands it, such as Postgres's exact
+/// numbers as their marked text).
+pub fn run_memory_over(case: &Case, memory: &Memory, root: &CompositionRoot) -> Result<Observed> {
+    let Some(spec) = case.core.as_ref().and_then(|c| c.describe_source.as_ref()) else {
+        bail!("{}: reads no data (names no describe_source)", case.id);
+    };
+    let mut edits: Vec<SchemaEdit> = Vec::new();
+    for edit in case.input.edits.iter().flatten() {
+        let Some(made) = SchemaEdit::from_case(edit) else {
+            bail!("{}: an edit this host does not convert yet", case.id);
+        };
+        edits.push(made);
+    }
+    describe_on(
+        case,
+        spec,
+        Source::Memory(memory, root),
+        &mut DriverLog::default(),
+        &edits,
+    )
 }
 
 /// What the driver ran for a replayed fetch, recorded as run: each
@@ -705,25 +865,31 @@ fn drive(
                     observed
                         .fetches
                         .push(json!({"request": step.request, "plan": step.plan}));
+                    // The key sets the step names: a SQL plan's parameters,
+                    // or, for a host provider, the request's own.
+                    let sets: Vec<&KeySet> = match &step.plan {
+                        FetchPlan::Sql { statements, .. } => statements
+                            .iter()
+                            .flat_map(|s| &s.params)
+                            .filter_map(|param| match param {
+                                SqlParam::KeySet { keys, .. } => Some(keys),
+                                SqlParam::Value { .. } => None,
+                            })
+                            .collect(),
+                        FetchPlan::Host { .. } => Memory::key_sets(&step.request),
+                    };
                     let mut keys = BTreeMap::new();
-                    if let FetchPlan::Sql { statements, .. } = &step.plan {
-                        for param in statements.iter().flat_map(|s| &s.params) {
-                            if let SqlParam::KeySet { keys: set, .. } = param
-                                && !keys.contains_key(&set.attachment)
-                            {
-                                let Ok(Some(Attachment::Arrow(data))) =
-                                    handle.take_attachment(set.attachment)
-                                else {
-                                    bail!("{}: a key set is not attached", case.id);
-                                };
-                                keys.insert(
-                                    set.attachment,
-                                    duck::Fetched {
-                                        schema: data.schema,
-                                        batches: data.batches,
-                                    },
-                                );
-                            }
+                    for set in sets {
+                        if let Entry::Vacant(entry) = keys.entry(set.attachment) {
+                            let Ok(Some(Attachment::Arrow(data))) =
+                                handle.take_attachment(set.attachment)
+                            else {
+                                bail!("{}: a key set is not attached", case.id);
+                            };
+                            entry.insert(duck::Fetched {
+                                schema: data.schema,
+                                batches: data.batches,
+                            });
                         }
                     }
                     let answered = match source {
@@ -735,6 +901,21 @@ fn drive(
                             let replayed = replay.answer(step)?;
                             log_replayed(log, &replayed);
                             replayed.answer
+                        }
+                        Source::Memory(memory, _) => {
+                            let mut sets = BTreeMap::new();
+                            for (id, fetched) in &keys {
+                                sets.insert(
+                                    *id,
+                                    concat_batches(&fetched.schema, &fetched.batches)?,
+                                );
+                            }
+                            memory
+                                .answer(&step.request, &sets)
+                                .map(|batch| duck::Fetched {
+                                    schema: batch.schema(),
+                                    batches: vec![batch],
+                                })
                         }
                     };
                     let (outcome, attachments) = match answered {
@@ -848,8 +1029,9 @@ fn describe_on(
         driver: None,
         edits: Vec::new(),
         answered: None,
+        explanation: None,
     };
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
             observed.answer = error_of(&refused)?;
@@ -910,7 +1092,7 @@ fn describe_on(
         } else {
             validating
         };
-        let (input, answer) = validate(case, given)?;
+        let (input, answer) = validate(case, given, &source.root())?;
         observed.operations.push("validate_query".into());
         observed.inputs.push(input);
         let accepted = matches!(answer, Answer::Validated(true));
@@ -932,7 +1114,7 @@ fn describe_on(
     };
     if let Some(spec) = case.core.as_ref().and_then(|c| c.predict.as_ref()) {
         log.stage = "predict";
-        predict(case, spec, state, &mut observed)?;
+        predict(case, spec, state, &mut observed, &source.root())?;
     }
     Ok(observed)
 }
@@ -975,7 +1157,7 @@ fn edit_schema(
         (AttachmentId(2), Attachment::Bytes(held_bytes)),
         (AttachmentId(3), Attachment::Bytes(edit_bytes)),
     ]);
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => return Ok(Err(error_of(&refused)?)),
     };
@@ -991,6 +1173,38 @@ fn edit_schema(
         }
         Ok(_) => bail!("{}: edit_schema answered another operation", case.id),
     }
+}
+
+/// A ranking's candidates as the case names them, each the contract scalar
+/// the Python host writes of the same value, as a given value (T2.8): an integer an `i64`, a
+/// `u64` past it, and past both a decimal of scale 0; text `utf8`.
+fn candidates_of(given: &[Index]) -> Result<Vec<GivenCandidate>> {
+    given
+        .iter()
+        .map(|index| -> Result<Scalar> {
+            match index {
+                Index::Text(text) => Ok(Scalar::Utf8(text.clone())),
+                Index::Integer(digits) => {
+                    if let Ok(value) = digits.parse::<i64>() {
+                        return Ok(Scalar::Int64(value));
+                    }
+                    if let Ok(value) = digits.parse::<u64>() {
+                        return Ok(Scalar::UInt64(value));
+                    }
+                    let value: i128 = digits
+                        .parse()
+                        .map_err(|_| anyhow!("a candidate past 38 digits, which no case writes"))?;
+                    let precision = u8::try_from(digits.trim_start_matches('-').len())?;
+                    Ok(Scalar::Decimal128 {
+                        precision,
+                        scale: 0,
+                        value,
+                    })
+                }
+            }
+        })
+        .map(|scalar| scalar.map(GivenCandidate::Value))
+        .collect()
 }
 
 /// One Arrow column of contract scalars, all of one type, nulls among
@@ -1151,6 +1365,20 @@ pub struct HeldState {
     /// A request asked in several calls (`RequestState.batches`, contract
     /// v26): each later call's payload and the rows it scores, in order.
     pub batches: Option<Vec<HeldBatch>>,
+    /// A ranking's state (T2.8), as the core answered it.
+    pub ranking: Option<HeldRanking>,
+}
+
+/// A ranking's state as this host holds it: how many candidates a row
+/// keeps, the first candidate by its position and as the result names it,
+/// and each later
+/// question's candidate, by its position and as the result names it, and
+/// its payload's and query's bytes.
+pub struct HeldRanking {
+    pub top_k: Option<u32>,
+    pub candidate: u32,
+    pub value: String,
+    pub parts: Vec<(u32, String, Vec<u8>, Vec<u8>)>,
 }
 
 /// A later call of a request asked in several, as this host holds it: its
@@ -1221,12 +1449,31 @@ fn materialize(
                 }
                 batches = Some(later);
             }
+            let mut ranking = None;
+            if let Some(ranked) = &state.ranking {
+                let mut parts = Vec::new();
+                for part in &ranked.parts {
+                    parts.push((
+                        part.candidate,
+                        part.value.clone(),
+                        bytes(part.payload)?,
+                        bytes(part.query)?,
+                    ));
+                }
+                ranking = Some(HeldRanking {
+                    top_k: ranked.top_k,
+                    candidate: ranked.candidate,
+                    value: ranked.value.clone(),
+                    parts,
+                });
+            }
             let held = HeldState {
                 version: state.version,
                 payload: bytes(state.payload)?,
                 query: bytes(state.query)?,
                 forecast,
                 batches,
+                ranking,
             };
             let recorded = json!({
                 "version": held.version,
@@ -1312,7 +1559,91 @@ fn start_materialize(
             Value::Object(options.clone()),
         );
     }
-    let values_bytes = serde_json::to_vec(&Value::Object(values))?;
+    // The sampling options the case's call gives (T2.11), as the Python
+    // host passes them (`VALUED`), spliced in below as the case wrote them;
+    // `context_anchor_time` as that host writes it (a `ts` scalar, or the
+    // literal `entity`).
+    let given = &case.input.materialize;
+    if let Some(context) = &given.context_anchor_time {
+        let written = if context == "entity" {
+            Value::from("entity")
+        } else {
+            let ns = iso_date_ns(context)
+                .ok_or_else(|| anyhow!("{}: context_anchor_time is not a date", case.id))?;
+            json!({"t": "ts", "v": ns.to_string(), "unit": "ns", "zone": null})
+        };
+        values.insert("context_anchor_time".to_owned(), written);
+    }
+    // An anchor at each entity's own time, which the Python host passes as
+    // `anchor_entity` beside no anchor time.
+    let anchor_entity = given.anchor_time.as_deref() == Some("entity");
+    let mut values_bytes = serde_json::to_vec(&Value::Object(values))?;
+    for (name, value) in [
+        ("random_seed", &given.random_seed),
+        ("num_hops", &given.num_hops),
+        ("num_neighbors", &given.num_neighbors),
+        ("max_pq_iterations", &given.max_pq_iterations),
+        ("use_prediction_time", &given.use_prediction_time),
+        ("return_embeddings", &given.return_embeddings),
+        ("exclude_cols_dict", &given.exclude_cols_dict),
+    ] {
+        if let Some(written) = value {
+            values_bytes.pop();
+            values_bytes.extend_from_slice(format!(r#","{name}":{}}}"#, written.0).as_bytes());
+        }
+    }
+    // `rows_per_call` as the case wrote it (T2.8c's cases), whatever JSON
+    // scalar it is, read as the Python host reads and hands the caller's
+    // value over (`as_python_sends`): the core holds its type and size to
+    // what the reference takes. Spliced in as text, so a whole number past
+    // 64 bits is not read through a double. A value the Python host cannot
+    // send as JSON (a number past a double's range, read as an infinity)
+    // is refused before the run, as that host refuses it.
+    if let Some(written) = &case.input.materialize.rows_per_call {
+        let Some(sent) = as_python_sends(&written.0)? else {
+            observed.answer = Answer::Error {
+                kind: spelled(ErrorKind::InvalidRequest)?,
+                code: spelled(ErrorCode::InvalidRequest)?,
+                fields: BTreeMap::from([("field".to_owned(), "rows_per_call".to_owned())]),
+            };
+            return Ok(None);
+        };
+        values_bytes.pop();
+        values_bytes.extend_from_slice(format!(r#","rows_per_call":{sent}}}"#).as_bytes());
+    }
+    // A ranking's `top_k` as the case wrote it (T2.8), whatever integer it
+    // is, as the Python host hands the caller's value over: the core holds
+    // it to what the reference takes. Spliced in as text, so an integer
+    // past 64 bits is not read through a double.
+    if let Some(top_k) = &case.input.materialize.top_k {
+        values_bytes.pop();
+        values_bytes.extend_from_slice(format!(r#","top_k":{}}}"#, top_k.0).as_bytes());
+    }
+    // A ranking's candidates, as the Python host hands them over (T2.8).
+    let candidates = case
+        .input
+        .materialize
+        .candidates
+        .as_ref()
+        .map(|given| candidates_of(given))
+        .transpose()?;
+    // `lag_timesteps` as the case wrote it (T2.9's cases), as `rows_per_call`
+    // is, read as the Python host reads and hands the caller's value over
+    // (`as_python_sends`): the core holds its type and sign to what the
+    // reference's engine takes; one the Python host cannot send as JSON is
+    // refused before the run naming the option, as that host refuses it.
+    if let Some(written) = &case.input.materialize.lag_timesteps {
+        let Some(sent) = as_python_sends(&written.0)? else {
+            observed.answer = Answer::Error {
+                kind: spelled(ErrorKind::InvalidRequest)?,
+                code: spelled(ErrorCode::InvalidRequest)?,
+                fields: BTreeMap::from([("field".to_owned(), "lag_timesteps".to_owned())]),
+            };
+            return Ok(None);
+        };
+        values_bytes.pop();
+        values_bytes.extend_from_slice(format!(r#","lag_timesteps":{sent}}}"#).as_bytes());
+    }
     observed.operations.push("materialize".into());
     observed.edits.push(json!({
         "op": "materialize",
@@ -1336,10 +1667,11 @@ fn start_materialize(
             held: Some(AttachmentId(5)),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
+            candidates: candidates.as_ref().map(|_| AttachmentId(7)),
             anchor_time,
             seed,
             unseeded: false,
-            anchor_entity: false,
+            anchor_entity,
             values: Some(AttachmentId(6)),
             options: vec![],
             most_parts: None,
@@ -1368,7 +1700,13 @@ fn start_materialize(
     if let Some(Some((_, memo))) = sampler.as_ref().map(|held| held.as_ref()) {
         attachments.insert(AttachmentId(4), Attachment::Bytes(memo.clone()));
     }
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    if let Some(candidates) = &candidates {
+        attachments.insert(
+            AttachmentId(7),
+            Attachment::Bytes(serde_json::to_vec(candidates)?),
+        );
+    }
+    let handle = match HostRun::start(&source.root(), &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
             // The core's word on the sampler state handed to it (decision
@@ -1520,6 +1858,7 @@ pub fn materialize_repeatedly_holding(
             driver: None,
             edits: Vec::new(),
             answered: None,
+            explanation: None,
         };
         materialize(
             case,
@@ -1546,10 +1885,14 @@ pub const REQUEST_ID: &str = "sdm-000000000000";
 /// `{"f64_bits": 16 hex digits}`, so no text form of a float is compared,
 /// and text as `{"utf8": text}`; from T1.28b, which lays out a
 /// classification's answers, a boolean as `{"bool": value}` and a class's
-/// probabilities as `{"map": [[class, its bits], ...]}`, in order.
+/// probabilities as `{"map": [[class, its bits], ...]}`, in order; from
+/// T2.8, which lays out a ranking's `scores`, `rankings` and `candidates`
+/// (contract v27),
+/// a list as `{"list": [cell, ...]}`, each member a cell as above.
 pub fn result_rows(data: &ArrowData) -> Result<Value> {
     use duckdb::arrow::array::{
-        Array, BooleanArray, Float64Array, Int64Array, MapArray, StringArray,
+        Array, BooleanArray, Float64Array, Int64Array, LargeListArray, ListArray, MapArray,
+        StringArray,
     };
     use duckdb::arrow::datatypes::DataType;
     let columns: Vec<Value> = data
@@ -1563,6 +1906,7 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
                 DataType::Utf8 => "utf8",
                 DataType::Boolean => "bool",
                 DataType::Map(..) => "map",
+                DataType::List(..) | DataType::LargeList(..) => "list",
                 _ => "other",
             };
             json!({"name": f.name(), "type": kind})
@@ -1600,6 +1944,10 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
                         })
                         .collect();
                     cells.push(json!({"map": pairs}));
+                } else if let Some(a) = column.as_any().downcast_ref::<ListArray>() {
+                    cells.push(json!({"list": list_cells(a.value(row).as_ref())?}));
+                } else if let Some(a) = column.as_any().downcast_ref::<LargeListArray>() {
+                    cells.push(json!({"list": list_cells(a.value(row).as_ref())?}));
                 } else {
                     bail!("a result column of a type this host does not record");
                 }
@@ -1610,6 +1958,34 @@ pub fn result_rows(data: &ArrowData) -> Result<Value> {
     Ok(json!({"columns": columns, "rows": rows}))
 }
 
+/// A list cell's members as [`result_rows`] records a cell: an integer,
+/// a float's bits, text or a boolean, a missing member `null`.
+fn list_cells(values: &dyn duckdb::arrow::array::Array) -> Result<Vec<Value>> {
+    use duckdb::arrow::array::{
+        BooleanArray, Float64Array, Int64Array, LargeStringArray, StringArray,
+    };
+    let any = values.as_any();
+    (0..values.len())
+        .map(|i| {
+            if values.is_null(i) {
+                Ok(Value::Null)
+            } else if let Some(a) = any.downcast_ref::<Int64Array>() {
+                Ok(json!({"i64": a.value(i).to_string()}))
+            } else if let Some(a) = any.downcast_ref::<Float64Array>() {
+                Ok(json!({"f64_bits": format!("{:016x}", a.value(i).to_bits())}))
+            } else if let Some(a) = any.downcast_ref::<StringArray>() {
+                Ok(json!({"utf8": a.value(i)}))
+            } else if let Some(a) = any.downcast_ref::<LargeStringArray>() {
+                Ok(json!({"utf8": a.value(i)}))
+            } else if let Some(a) = any.downcast_ref::<BooleanArray>() {
+                Ok(json!({"bool": a.value(i)}))
+            } else {
+                bail!("a list member of a type this host does not record")
+            }
+        })
+        .collect()
+}
+
 /// `predict` of the state `materialize` answered, handed back as this host
 /// held it: its model call answered by the scripted endpoint, in process.
 fn predict(
@@ -1617,6 +1993,7 @@ fn predict(
     spec: &PredictInput,
     state: HeldState,
     observed: &mut Observed,
+    root: &CompositionRoot,
 ) -> Result<()> {
     observed.operations.push("predict".into());
     observed.inputs.push(json!({
@@ -1661,13 +2038,32 @@ fn predict(
                         })
                         .collect()
                 }),
+                // Each later question after the other attachments (none
+                // where there is a ranking), with this host's one constant
+                // id, as each step's (T2.8).
+                ranking: state.ranking.as_ref().map(|held| Ranking {
+                    top_k: held.top_k,
+                    candidate: held.candidate,
+                    value: held.value.clone(),
+                    parts: (0u32..)
+                        .zip(&held.parts)
+                        .map(|(at, (candidate, value, ..))| RankingPart {
+                            candidate: *candidate,
+                            value: value.clone(),
+                            payload: AttachmentId(3 + 2 * at),
+                            query: AttachmentId(4 + 2 * at),
+                            request_id: Some(REQUEST_ID.into()),
+                        })
+                        .collect(),
+                }),
             },
             model: spec.model.clone(),
             request_id: REQUEST_ID.into(),
-            // The case names no outputs: the task's default ones, as the
+            // The outputs the case's caller named, as the Python host
+            // hands them over; none named, the task's default ones, as the
             // client asks when its caller names none (T1.28b).
-            outputs: vec![],
-            default_outputs: true,
+            outputs: case.input.outputs.clone().unwrap_or_default(),
+            default_outputs: case.input.outputs.is_none(),
             // The inference options the case's caller set, which alone the
             // call sends (the reference's 26ecdd28, T2.0c), as the Python
             // host hands over the keys of the request's asked config.
@@ -1692,7 +2088,13 @@ fn predict(
     for (at, (payload, _)) in (0u32..).zip(state.batches.unwrap_or_default()) {
         attachments.insert(AttachmentId(3 + at), Attachment::Bytes(payload));
     }
-    let handle = match HostRun::start(&default_root(), &message, attachments) {
+    for (at, (_, _, payload, query)) in
+        (0u32..).zip(state.ranking.map(|held| held.parts).unwrap_or_default())
+    {
+        attachments.insert(AttachmentId(3 + 2 * at), Attachment::Bytes(payload));
+        attachments.insert(AttachmentId(4 + 2 * at), Attachment::Bytes(query));
+    }
+    let handle = match HostRun::start(root, &message, attachments) {
         Ok(handle) => handle,
         Err(refused) => {
             observed.answer = error_of(&refused)?;
@@ -1704,6 +2106,9 @@ fn predict(
     // records `core.predicted.body`, and every call's is kept in the
     // answer's `calls`, which the observation leaves out (T1.36 fix 22).
     let mut bodies: Vec<Value> = Vec::new();
+    // The scripted endpoint over the calls in order, failing the case's
+    // `fail_call` (T2.1a), as the Python runner serves it.
+    let mut scripted = endpoint::Endpoint::new(case.input.fail_call);
     let mut next = handle.next();
     take_warnings(&handle, &mut observed.warnings)?;
     loop {
@@ -1734,7 +2139,34 @@ fn predict(
             );
         }
         bodies.push(sent);
-        let (status, answered) = endpoint::answer("POST", endpoint::PREDICTIONS, &body);
+        // The test's script where one stands in for the rule on this thread
+        // (`endpoint::answered_by`), its bytes as they travel; else the
+        // scripted endpoint, failing the case's call, and answering beside
+        // the rule's prediction what the case tells it to (probabilities,
+        // quantiles, an explanation, item metadata, embeddings), as the
+        // Python runner serves it (T2.8, T2.9, T2.13, T2.11), by the call's
+        // number.
+        let (status, answered) = match endpoint::scripted(&body) {
+            Some(given) => given,
+            None => {
+                let call = scripted.calls();
+                let told = endpoint::Told {
+                    probabilities: case.input.probabilities.unwrap_or(false),
+                    quantiles: case.input.quantiles.unwrap_or(false),
+                    explanation: case.input.explanation.unwrap_or(false),
+                    item_metadata: case.input.item_metadata.unwrap_or(false),
+                    embeddings: case.input.embeddings.unwrap_or(false),
+                };
+                let (status, answered) = scripted.answer("POST", endpoint::PREDICTIONS, &body);
+                let (status, answered) =
+                    if told != endpoint::Told::default() && case.input.fail_call != Some(call) {
+                        endpoint::answer_told("POST", endpoint::PREDICTIONS, &body, call, told)
+                    } else {
+                        (status, answered)
+                    };
+                (status, serde_json::to_vec(&answered)?)
+            }
+        };
         let reply = encode(&ControlMessage::ModelReply(ModelReply {
             id: call.id,
             outcome: ModelOutcome::Response {
@@ -1744,10 +2176,7 @@ fn predict(
             },
         }))
         .map_err(|_| anyhow!("a reply does not encode"))?;
-        let answer = BTreeMap::from([(
-            AttachmentId(1),
-            Attachment::Bytes(serde_json::to_vec(&answered)?),
-        )]);
+        let answer = BTreeMap::from([(AttachmentId(1), Attachment::Bytes(answered))]);
         if let Err(failed) = handle.reply(&reply, answer) {
             observed.answer = error_of(&failed)?;
             return Ok(());
@@ -1774,6 +2203,7 @@ fn predict(
                 else {
                     bail!("{}: the metadata is not attached", case.id);
                 };
+                observed.explanation = result.schema.metadata().get("explanation").cloned();
                 let mut answer = json!({
                     "body": sent,
                     "model": predicted.model,
@@ -1844,4 +2274,77 @@ mod written_back_tests {
         // A query that does not parse is sent as it is.
         assert_eq!(written_back("PREDICT COUNT("), "PREDICT COUNT(");
     }
+}
+
+#[cfg(test)]
+mod rows_per_call_tests {
+    use super::as_python_sends;
+
+    /// What the Python host sends for each scalar a case may write, as
+    /// `json.loads` then `json.dumps` give it (T2.8c, its round 1 review).
+    #[test]
+    fn rows_per_call_is_sent_as_the_python_host_sends_it() {
+        for (written, sent) in [
+            (r#""3""#, Some(r#""3""#)),
+            (r#""\u0033""#, Some(r#""3""#)),
+            ("-0", Some("0")),
+            ("0", Some("0")),
+            ("-1", Some("-1")),
+            ("18446744073709551616", Some("18446744073709551616")),
+            ("3.0", Some("3.0")),
+            ("2.5", Some("2.5")),
+            ("3e0", Some("3.0")),
+            ("1E16", Some("1e+16")),
+            ("0.00001", Some("1e-05")),
+            ("-0.0", Some("-0.0")),
+            ("true", Some("true")),
+            ("false", Some("false")),
+            // Past a double's range: Python reads an infinity, which its
+            // host refuses to send.
+            ("1e400", None),
+            ("-1e400", None),
+        ] {
+            assert_eq!(
+                as_python_sends(written).unwrap().as_deref(),
+                sent,
+                "{written}"
+            );
+        }
+    }
+}
+
+/// A date or time the case writes (`YYYY-MM-DD`, with `THH:MM:SS` or a
+/// space before the time), in nanoseconds since the epoch, as
+/// `pd.Timestamp` reads it; `None` for any other text.
+fn iso_date_ns(text: &str) -> Option<i64> {
+    let (date, time) = match text.split_once(['T', ' ']) {
+        Some((date, time)) => (date, Some(time)),
+        None => (text, None),
+    };
+    let mut parts = date.splitn(3, '-');
+    let year: i64 = parts.next()?.parse().ok()?;
+    let month: i64 = parts.next()?.parse().ok()?;
+    let day: i64 = parts.next()?.parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    // Days from the civil date (Howard Hinnant's algorithm).
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (month + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    let seconds = match time {
+        None => 0,
+        Some(time) => {
+            let mut hms = time.splitn(3, ':');
+            let h: i64 = hms.next()?.parse().ok()?;
+            let m: i64 = hms.next()?.parse().ok()?;
+            let s: i64 = hms.next().map_or(Some(0), |s| s.parse().ok())?;
+            h * 3_600 + m * 60 + s
+        }
+    };
+    (days * 86_400 + seconds).checked_mul(1_000_000_000)
 }

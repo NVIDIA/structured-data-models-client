@@ -1,0 +1,136 @@
+{
+  "format": "sdm-case/1",
+  "id": "assuming.static",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.validate/accept/any",
+    "query.validate/refuse/any",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id ASSUMING users.age > 22",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-05-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "validate_query": {
+      "profile": {
+        "model": null,
+        "name": "RELATIONAL"
+      },
+      "schema": {
+        "links": [
+          [
+            {
+              "column": "user_id",
+              "table": "orders"
+            },
+            {
+              "column": "user_id",
+              "table": "users"
+            }
+          ]
+        ],
+        "tables": [
+          {
+            "columns": [
+              {
+                "dtype": "int",
+                "name": "order_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "int",
+                "name": "user_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "float",
+                "name": "price",
+                "stype": "numerical"
+              },
+              {
+                "dtype": "time",
+                "name": "ts",
+                "stype": "timestamp"
+              }
+            ],
+            "end_time_column": null,
+            "name": "orders",
+            "primary_key": "order_id",
+            "time_column": "ts"
+          },
+          {
+            "columns": [
+              {
+                "dtype": "int",
+                "name": "user_id",
+                "stype": "ID"
+              },
+              {
+                "dtype": "int",
+                "name": "age",
+                "stype": "numerical"
+              },
+              {
+                "dtype": "string",
+                "name": "country",
+                "stype": "categorical"
+              }
+            ],
+            "end_time_column": null,
+            "name": "users",
+            "primary_key": "user_id",
+            "time_column": null
+          }
+        ]
+      }
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "today": "refused by the validator: an assumption needs a temporal aggregation"
+  },
+  "why": "an assumption with no time range: a query the reference refuses",
+  "source": "written by T2.13's test author from the reference at 6298913c"
+}

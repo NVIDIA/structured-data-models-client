@@ -92,3 +92,105 @@ Sources: the owner's replies in the orchestrator's chat on 2026-10-17 to the tim
 | KO2-62 | An INTERVAL column on SQLite is described as text; the reference calls it an integer because its declared type contains "INT": a permanent registered difference | "E: Ok" | approved by owner 2026-10-17 |
 | KO2-63 | A one-part Postgres table name shadowed by a temporary or `pg_catalog` relation is refused by name as not found (INVALID_REQUEST), as the core plans each read without the schema's name; the reference qualifies every read with the schema it found and answers. The full fix needs a schema field in a later contract | "F: Sounds good" | approved by owner 2026-10-17 |
 | KO2-64 | A Postgres text time column holding text Postgres cannot read as a time is refused by name; the reference parses it in Python and answers | "G: Sounds good" | approved by owner 2026-10-17 |
+
+## T2.12's schema rules (2026-10-19)
+
+Sources: the owner's replies on 2026-10-19 to the orchestrator's questions H, J, K, L and M from T2.12's review rounds.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-65 | T2.12's cases holding a NaN or a -0.0 leave out SQLite, which stores a NaN as NULL and -0.0 as 0.0, and the two NaN-encoding cases also leave out Postgres | "J: Yes" | approved by owner 2026-10-19 |
+| KO2-66 | A timedelta or a time of day given as the entity for an integer key is refused as a type, as P1B-34 refuses an entity pandas coerces; the reference casts each to its count | "K: Yes" | approved by owner 2026-10-19 |
+| KO2-67 | A primary or foreign key of several columns a Postgres catalog declares is read as no key and the core answers, as DuckDB's and SQLite's references answer, where the reference's Postgres discovery fails with an unnamed ValueError | "L: Yes" (asked about a declared two-column primary key); "L2: Sure." (asked whether that yes also covers a declared two-column foreign key) | approved by owner 2026-10-19 |
+| KO2-68 | The core drops its read of the folded composite key (`folded_key`) and refuses a schema keyed by several columns at materialize without it, one statement fewer than the reference, whose read only chooses between two refusals of one code | "M: Yes" | approved by owner 2026-10-19 |
+| KO2-69 | A Postgres column holding a two-dimensional array is left out of the schema, as a one-dimensional one is, where the reference fails `Schema.from_source` with an unnamed RuntimeError (P2C-8) | "H: Yes" | approved by owner 2026-10-19 |
+| KO2-70 | Delegation for the overnight run that began at about 04:56 UTC on 2026-10-19, until the owner's morning reading (any later period only if the owner extends it): an owner-only product question (a refusal of input the reference accepts, a new acceptance, a difference only the owner may approve) is decided by the orchestrator, weighing what the old client did, whether the core can match or improve on it, and customer experience and usability; subagents may investigate; each decision cites this row, is listed for the owner's reading, and does not block completion | "A. Yes, continue. Make best judgment in those cases, can launch subagents for these questions. Important considerations are what the old client did, what the new core can do to improve on that behavior or match it, what can improve the customer experience and usability, and so on. In the morning, I will just read through these decisions that you make, but they shouldn't block completion" | approved by owner 2026-10-19 |
+| KO2-71 | A fifth product lane runs in parallel (the plan's cap was four), dropping back to four if the machine is overloaded | "B: Yes" | approved by owner 2026-10-19 |
+| KO2-72 | A logical target (AND, OR, NOT) over AVG, MIN or MAX where an example has no value: the core labels each example from its own values, where the reference shifts labels onto the wrong examples or fails with an IndexError (P2E-16) | "1. Yes" | approved by owner 2026-10-19 |
+| KO2-73 | Inside a target filter or a logical target (not a whole-target condition, which stays refused as the reference refuses it), an integer constant past a narrow integer column's type is compared exactly where the reference on DuckDB refuses it, and a float with a fraction in an `IN` list against an integer column is compared exactly (1.5 matches no row) where the reference takes it toward zero on DuckDB and SQLite and refuses it on Postgres (P2E-17) | "2. Sure" (first asked as one exact comparison); then, re-asked with the three choices for the fraction (toward zero, exact, or refuse), "Sure, go with option b." (exact) | approved by owner 2026-10-19 |
+| KO2-74 | A fractional float in an `IN` list against a whole-number decimal target is compared exactly (it matches no row) where the reference refuses it, under the exact decimals of KO2-35 (P2E-18) | "3. Hmm, sure but this might add friction in cases where approximation is sufficient", then, after the exact comparison was explained (it removes the reference's refusal; rounding would match wrong rows), "3. Ok" | approved by owner 2026-10-19 |
+| KO2-75 | A `LIST_DISTINCT` target over a foreign key (temporal link prediction) stays refused by name on the core route until Phase 4, as the migration plan places link prediction in slice S3; the old Python route keeps serving it until then (P2E-19) | "4. Keep it in phase 4 for now" | approved by owner 2026-10-19 |
+
+## The final gate's checks (MID2, 2026-10-20)
+
+Sources: the owner's answers on 2026-10-20 to the mid-phase checkpoint's finding P2-1 and to T2.21's question on exact large ids, and the owner's 2026-10-17 answer on P2B-8, whose row was to land with the next owner-row docs landing.
+Quotes are the owner's words; the Decision cell restates the question and the recommendation the owner answered.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-76 | Q (MID2 P2-1): the locked set still requires the census, coverage, L3, L7 and ci gate steps that KO2-53 turned into end-of-phase reports; KO2-25 (H24 Postgres common-input comparison stays gating) contradicts KO2-53; KO2-23's unseeded SQLite comparison on common inputs has no tool. As recommended: the census, coverage, L3, L7 and ci steps leave the locked gate and are judged as end-of-phase reports read by both reviewers; the CI-green parts of checks 1, 3, 4, 5, 8 and 10 are judged by `land.py`'s exact-SHA rule; the Postgres common-input comparison (H24) is a report, superseding KO2-25's "stays a gating check"; unseeded SQLite sampling (KO2-23) is judged by properties: row count, every row exists in the data, same rows when seeded | "re what the final gate checks: Sure, let's go with the recommendation." | approved by owner 2026-10-20 |
+| KO2-77 | P2B-8: on the four key-cast vectors where the reference rounds an entity onto a key it doesn't name, the core keeps refusing by name: a refusal of input the reference accepts | "keep refusing" | approved by owner 2026-10-17 |
+| KO2-78 | Q (T2.21): on Postgres, a numeric id past 2^53 that the caller names as a key, links by a foreign key, or links by an edit is refused by the reference (INVALID_REQUEST at materialize). As recommended: the core makes such an id work, keeping it exact, a lifted refusal with a register entry (T2.21 adds it and cites this row) | "regarding the id staying exact and the user getting their answer - sure, let's do what you recommend" | approved by owner 2026-10-20 |
+
+## The owner's overnight answers (2026-10-20)
+
+Sources: the owner's answers on 2026-10-20 (UTC), before the owner's night, to the orchestrator's overnight plan questions 1 to 8; each Decision cell restates the question and what the answer settles.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-79 | Questions 1, 2 and 4 (move T2.11 to Phase 3; T2.13b tonight or in Phase 3; CI7, the ARM and Databricks runtime install checks, tonight or carried to Phase 3): T2.11, T2.13b and CI7 stay in Phase 2 | "1. No, keep it in phase 2"; "2. No, don't just punt things over. Future phases build on this, so keep it"; "4. You should NOT be proposing how to just "move things to phase 3" because you can't find a better way. Get these working in phase 2." | approved by owner 2026-10-20 |
+| KO2-80 | Question 3: `land.py` confirms a clean identical move instead of a two-reviewer round | "3. Approved" | approved by owner 2026-10-20 |
+| KO2-81 | Question 5: `main`'s two new commits come into Phase 2 | "5. Sure, you can bring these commits in, should be minor" | approved by owner 2026-10-20 |
+| KO2-82 | Question 6: the overnight standing delegation (KO2-70) is renewed for tonight | "6. Yes" | approved by owner 2026-10-20 |
+| KO2-83 | Question 7: allow fewer repeats of an identical DeprecationWarning (`s0.boundary.escapes` on SQLite and Postgres, 2 against the reference's 5) | "7. Sure" | approved by owner 2026-10-20 |
+
+## The owner's reference answer (2026-10-20)
+
+Sources: the owner's answer on 2026-10-20 (UTC) to the orchestrator's question 1, whether the orchestrator merges `origin/main` into `rust-core-reference` and pushes it for T2.0i, after answer 5 of the overnight questions (KO2-81).
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-84 | Reference: `43e55f4f58924384c3cb52f67c8ed2e73ba45fa1`, origin/main f2ad8d61 merged into rust-core-reference for Phase 2's second update; the orchestrator made the merge and pushed the branch, and T2.0i re-records the reference and every file citing it at this commit | "5. Sure, you can bring these commits in, should be minor"; "1. Yes, you do it. Just be careful, and do it on latest main. These changes should be minor" | approved by owner 2026-10-20 |
+
+## The owner's T2.13b answer (2026-10-20)
+
+Sources: the owner's answer late on 2026-10-20 (UTC) to the orchestrator's question on T2.13b's aggregation differences in the entity filter and ASSUMING (A: the core answers and the differences are registered; B: the standalone case refused by name), relayed by the orchestrator.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-85 | A (T2.13b): an entity filter or an ASSUMING clause over a windowed AVG, MIN or MAX where some example has no value is answered from each example's own values, standing alone or inside NOT, AND or OR, where the reference picks examples by shifted values or fails (IndexError as INTERNAL_ERROR in a filter, a broadcast error as INVALID_REQUEST in an assumption); P2E-16 (KO2-72) is widened to both clauses | "T2.13b: Yes, keep the new behavior and record these as known" | approved by owner 2026-10-20 |
+
+## The owner's T2.14b answer (2026-10-21)
+
+Sources: the owner's answer on 2026-10-21 to the orchestrator's question "Should errors name the value you passed in your own call?" (T2.14b's thirteen wording keys)
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-86 | Narrows H17 and E79 (and E101's `unreadable`): an error may name a value the caller passed in that same call, as the reference words it (keys and key-like values given, a query's date literal, option values such as `num_hops True` or a seed of `-1`); a value read from data (row contents, driver messages, panic text) stays out, as H17 says. A value no contract type holds may be given spelled (`Given::Spelled`, the host's text of it) for the core to name | "Echo own args (Recommended)" | approved by owner 2026-10-21 |
+| KO2-89 | M4's warnings and refusals (`CONTEXT_BEFORE_DATA`, `ANCHOR_AFTER_DATA`, and the anchor and context refusals checked against the data's time range) may name the time column's earliest and latest timestamps, as the reference does; a refusal of a non-finite value may name `inf` or `-inf`, a category, not a value. KO2-86 still keeps row values, driver messages and panic text out | Orchestrator, under the owner's overnight delegation of 2026-10-21 (KO2-88); listed for the owner's reading | approved by orchestrator 2026-10-21 |
+
+## The owner's register and delegation answers (2026-10-21, later)
+
+Sources: the owner's answers on 2026-10-21 (UTC) to the orchestrator's two questions, whether to approve P2D-1, P2J-1 and P2J-2 as known differences, and whether the orchestrator may decide other owner-only product questions overnight as on 19 Oct (KO2-70), recording each and listing them for the morning, so they don't block the finish (the merge into `rust-core` excluded); relayed by the orchestrator.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-87 | Register entries P2D-1 (an unhashable ranking candidate: the reference raises a bare TypeError, the core refuses by name), P2J-1 (a `numpy.uint64` context size under NumPy 1: the reference crashes, the core takes it) and P2J-2 (a text date of the year 0001: the reference's code moves with pandas, the core gives VALUE_OUT_OF_RANGE) approved as known differences | "Approve all 3 (Recommended)" | approved by owner 2026-10-21 |
+| KO2-88 | Delegation for the overnight run of 2026-10-21, until the owner's morning reading: an owner-only product question is decided by the orchestrator as under KO2-70; each decision cites this row, is listed for the owner's reading, and does not block the finish. The merge of Phase 2 into `rust-core` is excluded and stays the owner's | "Yes, decide and list (Recommended)" | approved by owner 2026-10-21 |
+
+## The owner's kept-rules answer (2026-10-21)
+
+Sources: the owner's answer on 2026-10-21 (UTC) to the orchestrator's question whether it may accept the real-data counts for `model` and `text_time_rules` (kept until Phase 4, KO2-22) if each is hit by under 5% of real queries, stopping to ask only if one is higher (`owner-answers-2026-10-17.md`, "overnight finish"); the counts are T2.16a's (`phase-2/evidence/census/real-data.md`, held by `tests/test_census_real_data.py`); and KO2-92, the orchestrator's decision under KO2-88 on the third kept rule.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-90 | Check 2's two kept rules (KO2-22) are kept until Phase 4 at their real-data counts: `text_time_rules` 0 hits and `model` 0 hits (0 of the real-data benchmark's 6 tasks), on DuckDB, SQLite and Postgres 17, for both real datasets (AdventureWorks at full size and RelBench H&M), each 0%, under the owner's 5% condition; both counts are zero by construction (no provider reads text times by the client's rules, and every task asks `KumoRelational`), not from loading the data. | "Yes, under 5% (Recommended)" | approved by owner 2026-10-21 |
+| KO2-92 | Check 2's third kept rule, `aggregation`'s LIST_DISTINCT of a foreign key (KO2-75, Phase 4), is accepted by KO2-90's under-5% rule at its real-data count: 0 hits on DuckDB, SQLite and Postgres 17 for both real datasets (none of the benchmark's 6 tasks asks LIST_DISTINCT) | Orchestrator, under the owner's overnight delegation of 2026-10-21 (KO2-88); the owner's 5% answer named only `model` and `text_time_rules`; listed for the owner's reading | approved by orchestrator 2026-10-21 |
+
+## The owner's lean plan (2026-10-17), recorded at the phase end
+
+Sources: the owner's answer on 2026-10-17 (UTC) to the orchestrator's lean-plan proposal after the owner's note on setup and harness time ("We seem to be running into same issues as phase 1 i.e. too much time in setup, gates, random harnesses"), which asked for KO2 rows in the next owner-row docs landing; no landing carried them until T2.16, which records them here so the packages it closed have their decision on the phase branch.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-91 | The lean plan: exact decimals (T2.17's scope, `d > 1.5` included) fixed inside T2.0c instead of excused; T2.0g only the one-line bridge-freeze fix; CI5 and CI6 dropped; T2.0b shrunk to the watchdog and temp-cleanup fixes; T2.0d folded into T2.1a; tooling fixes get a minimal test (one per fix) and no seeded-fault suites; product packages keep real tests but no extra harness machinery; two reviewers per round stay | "Yes just fix these and do them. No need for so much per package testing harness bs" | approved by owner 2026-10-17 |
+
+## The owner's answers on the overnight decisions (2026-10-21, later afternoon)
+
+Sources: the owner's answers on 2026-10-21 (UTC), after the orchestrator explained the ten decisions taken under the overnight delegation (KO2-88), as the go or no-go packet lists them: "3. Ok", "4. Ok", "8. Ok" and the three rows below.
+
+| # | Decision | Reason | Status |
+|---|---|---|---|
+| KO2-93 | A lone surrogate in a model answer's text (escaped as `\ud800`, raw in UTF-16 or UTF-32, written in UTF-8 as Python's reader takes it with surrogatepass, and in Databricks answer text) is read as U+FFFD and the prediction returns, instead of the answer being refused; register P1B-24 is rewritten to it (supersedes E93's refusal for answers, and KO2-88's widening of it) | "6. Ok, sure switch it" | approved by owner 2026-10-21 |
+| KO2-94 | The three refusals kept until Phase 4, `model`, `text_time_rules` and `aggregation`'s LIST_DISTINCT of a foreign key (KO2-22, KO2-75, KO2-90, KO2-92), are tracked as explicit exits of Phase 4 in migration-plan.md section 8, each to be enabled there | "9. Hmm ok, but make sure these are tracked and get enabled" | approved by owner 2026-10-21 |
+| KO2-95 | CI's `sbom` job and the build's trial install test the candidate's own wheels, installing them first without their dependencies, and `tests/test_ci_workflow.py` catches any job that installs this repository's packages by version from an index without them | "10. Yes please, fix them asap" | approved by owner 2026-10-21 |

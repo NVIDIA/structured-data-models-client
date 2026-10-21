@@ -101,7 +101,9 @@ More exact than the reference (T2.0g, approved by the owner on
 core answers more exactly than the reference (the nearest double where the
 reference's cast is one unit in the last place off, an exact text id where
 it sends a float). Each field is a path as this prints a difference
-(``public.payloads/0/2/context/...``, ``core.predicted.body/0/...``), ``*``
+(``public.payloads/0/2/context/...``, ``core.predicted.body/0/...``, or
+on a request asked in several calls ``core.predicted.calls/<n>/...``,
+T2.1r), ``*``
 standing for any one key or index. For that case and runner, the
 ``schema``, ``result`` and ``payload`` rules leave out the value at each
 such path, on both sides, and compare everything else; a field present on
@@ -115,6 +117,23 @@ entry counts only when its ``decision_ref`` names a row of this harness's
 (the checkpoint's) decisions approved by the owner, as a policy relaxation
 does; an entry not approved so, or a field that is not such a path,
 excuses nothing.
+
+Fewer DeprecationWarnings (T2.1s, KO2-83, approved by the owner on
+2026-10-20): a register entry approved by the owner, its ``decision_ref``
+a row of this harness's (the checkpoint's) decisions the owner approved
+(as ``more_exact`` reads one), may list under ``fewer_deprecations`` a
+line's key (the bare case ID on DuckDB, ``<case>@sqlite`` or
+``<case>@postgres``) and the core runners. For that line and runner, the
+``warnings`` rule takes the runner's warnings as the reference's (or
+python-old's) with only repeats of a ``DeprecationWarning`` left out: the
+reference's list with some ``DeprecationWarning``s deleted and nothing
+else changed, each deleted one preceded in the reference's list by
+another, so the first is always kept and no class is added, dropped or
+moved. The observations record each
+warning's class only, so the rule works on classes; the entry carries, in
+text, the evidence that the repeats share one message and source line.
+Past the reference's stop nothing changes, and a line or runner no such
+entry lists is compared as before.
 
 Past the reference's stop (E112): for a case and runner whose effective
 expectation is an approved entry's move (``--expect``'s ``@moved``) of the
@@ -135,7 +154,15 @@ reference's are reported as diagnostic, nothing else; where the move is
 from the reference's answer to the runner's refusal at the call the row
 names, the reference's statements of that call are its only ones held,
 their ``sql.count`` and ``sql.result`` and the line's ``warnings``
-reported as diagnostic. A SQLite or
+reported as diagnostic; where the row keeps the reference's refusal at
+that call, its code the same (KO2-68), that call's ``sql.count`` and
+``sql.result`` are reported as diagnostic, nothing else; where the row
+moves the reference's refusal to the runner's at an earlier call, with
+its own code (T2.1r), the line is held to the calls up to that one on
+every database, as below: that call's ``sql.count`` and ``sql.result``
+and the line's ``warnings`` reported as diagnostic, and the reference's
+later calls (their operations, statements, ``result`` and ``payload``)
+no expectation of its own. A SQLite or
 Postgres line is held, by the ``route``, ``inputs`` and core-consistency
 rules, to the case's core operations of the calls before the one it stops
 at (its effective expectation's refusal, else the reference line's), and
@@ -156,7 +183,8 @@ columns taken out of the core side wherever they appear, and the links
 and key they make: the public schema's columns, its primary key and time
 column naming one and its links with one at either end; each payload
 table's columns and its rows' cells, its schema's column and key, and its
-relationships naming one; and each statement result's columns, types and
+relationships naming one, in every call's body where predict made several
+(T2.1s); and each statement result's columns, types and
 Arrow fields of that name where the reference's result lacks them (the
 reference reads a column it then leaves out). The reference's from_source warning that it
 leaves a column out, one ``SDMWarning`` per table the entry names, the
@@ -260,9 +288,12 @@ MORE_EXACT_RUNNERS = ('python-core', 'rust-host')
 #: A ``more_exact`` field: a path under one of the roots the host and
 #: payload rules compare, at least one key or index below it.
 _MORE_EXACT_FIELD = re.compile(
-    r'(public\.schema|public\.result|public\.payloads|core\.predicted\.body)'
-    r'(/[^/]+)+'
+    r'(public\.schema|public\.result|public\.payloads|core\.predicted\.body'
+    r'|core\.predicted\.calls)(/[^/]+)+'
 )
+#: The one warning class ``fewer_deprecations`` lets a core runner show
+#: fewer times than the reference (KO2-83).
+REPEATED_WARNING = 'DeprecationWarning'
 #: What stands for a value ``more_exact`` leaves out, on both sides.
 _MORE_EXACT = 'left out: more exact than the reference'
 #: How :func:`more_exact` marks a field of an item that also excuses a
@@ -336,6 +367,10 @@ class Report:
         #: The fields left out as more exact than the reference, by case
         #: and runner (:func:`more_exact`).
         self.more_exact: dict[tuple[str, str], tuple[str, ...]] = {}
+        #: The lines and core runners that may show fewer
+        #: DeprecationWarnings than the reference
+        #: (:func:`fewer_deprecations`, KO2-83).
+        self.fewer: frozenset[tuple[str, str]] = frozenset()
         #: The public calls whose statements an entry says differ from the
         #: reference's, by case and runner (:func:`statements_differ`).
         self.statements_differ: dict[tuple[str, str], tuple[str, ...]] = {}
@@ -785,9 +820,11 @@ def _core_consistent(
     description or an error, never both, and its error ends the call there,
     as a refusal with its code; a description lets the call go on, so the
     outcome is the later calls', the user's edits first (``edit_schema``,
-    from T1.24b), whose refusal ends it beside the description. Off DuckDB
-    an accepted query goes on through the case's ``until``, and a later
-    call's error is the outcome (:func:`_later_error`)."""
+    from T1.24b), whose refusal ends it beside the description, as a
+    ``validate_query`` error does where the case's core validates its
+    query and that call ended it (T2.1r, DT-5). Off DuckDB an accepted
+    query goes on through the case's ``until``, and a later call's error
+    is the outcome (:func:`_later_error`)."""
     core = observation['core']
     if core is None:
         return
@@ -854,13 +891,21 @@ def _core_consistent(
         # beside the description (decision E67).
         edits = core.get('edits') or []
         edited = bool(edits) and edits[-1].get('op') == 'edit_schema'
+        operations = observation['identity'].get('operations') or []
         if 'edits' not in core:
             # rust-host records no edits: its operations say the last call
             # was an edit (T2.1e, a line held to the calls it makes).
-            operations = observation['identity'].get('operations') or []
             edited = operations[-1:] == ['edit_schema']
+        # A validate_query error after the description ends the call
+        # beside it as a refused edit does (T2.1r; DT-5's packed date
+        # literal), where the case validates its query and that call was
+        # the last one made.
+        last = operations[-1:]
+        validated = 'validate_query' in case['core'] and last == [
+            'validate_query'
+        ]
         if (core['described'] is None) == (core['error'] is None) and not (
-            edited and core['described'] is not None
+            (edited or validated) and core['described'] is not None
         ):
             report.fail(
                 f'{where}: core: not one description or one error', 'outcome'
@@ -1411,6 +1456,17 @@ def _host_fields(
                 f'{where}: host.warnings: python-old alone shows the '
                 f"runtime's DeprecationWarnings ({RUNTIME_DEPRECATIONS})"
             )
+        elif (
+            stop is None
+            and (case['id'], who) in report.fewer
+            and _fewer_deprecations(
+                observation['host']['warnings'], reference['host']['warnings']
+            )
+        ):
+            report.note(
+                f'{where}: host.warnings: fewer DeprecationWarnings than '
+                f'{against} (KO2-83)'
+            )
         else:
             report.fail(f'{where}: host.warnings: differ', 'warnings')
     if stop is not None and stop != 'predict':
@@ -1477,6 +1533,30 @@ def _runtime_only(
         elif not _runtime(each):
             return False
     return held or at == len(mine)
+
+
+def _fewer_deprecations(mine: Any, theirs: Any) -> bool:
+    r"""Whether ``mine`` is ``theirs`` with only repeats of a
+    ``DeprecationWarning`` left out (KO2-83): ``theirs`` with some
+    ``DeprecationWarning``s deleted and nothing else changed, each deleted
+    one preceded in ``theirs`` by another ``DeprecationWarning``. So the
+    first is always kept, no other class is dropped, added or moved, a
+    ``DeprecationWarning`` never moves past another class, and ``mine``
+    never holds more of them than ``theirs``. Anything but two lists of
+    class names says no."""
+    if not (
+        isinstance(mine, list)
+        and isinstance(theirs, list)
+        and all(isinstance(x, str) for x in mine + theirs)
+    ):
+        return False
+    at = 0
+    for i, each in enumerate(theirs):
+        if at < len(mine) and each == mine[at]:
+            at += 1
+        elif not (each == REPEATED_WARNING and REPEATED_WARNING in theirs[:i]):
+            return False
+    return at == len(mine)
 
 
 def _runtime(warning: tuple[str, str | None]) -> bool:
@@ -1658,6 +1738,44 @@ def more_exact(register: Path) -> dict[tuple[str, str], tuple[str, ...]]:
                 if who in MORE_EXACT_RUNNERS:
                     found[case, who] = found.get((case, who), ()) + kept
     return found
+
+
+def fewer_deprecations(register: Path) -> frozenset[tuple[str, str]]:
+    r"""The lines and core runners each entry of ``register`` lists under
+    ``fewer_deprecations`` (T2.1s, KO2-83), from an entry approved by the
+    owner whose ``decision_ref`` names a row of this harness's (the
+    checkpoint's) decisions the owner approved, as :func:`more_exact` reads
+    one, so a candidate cannot invent an approval: only a core runner's;
+    anything else, and a file it cannot read, names nothing."""
+    import yaml
+
+    try:
+        loaded = yaml.safe_load(register.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, yaml.YAMLError, RecursionError):
+        return frozenset()
+    approved = _owner_rows()
+    entries = loaded.get('entries') if isinstance(loaded, dict) else None
+    found: set[tuple[str, str]] = set()
+    for entry in entries if isinstance(entries, list) else []:
+        if not (
+            isinstance(entry, dict)
+            and entry.get('status') == 'approved'
+            and entry.get('approved_by') == 'owner'
+            and isinstance(entry.get('decision_ref'), dict)
+            and isinstance(entry['decision_ref'].get('row'), str)
+            and entry['decision_ref']['row'] in approved
+            and isinstance(entry.get('fewer_deprecations'), list)
+        ):
+            continue
+        for item in entry['fewer_deprecations']:
+            if not isinstance(item, dict):
+                continue
+            case, runners = item.get('case'), item.get('runners')
+            if isinstance(case, str) and isinstance(runners, list):
+                found.update(
+                    (case, who) for who in runners if who in MORE_EXACT_RUNNERS
+                )
+    return frozenset(found)
 
 
 def core_only_columns(register: Path) -> dict[str, dict[str, frozenset[str]]]:
@@ -1884,7 +2002,9 @@ def without_core_only(
     observation: dict[str, Any], named: dict[str, frozenset[str]]
 ) -> dict[str, Any]:
     r"""A core runner's observation with the columns only the core keeps
-    taken out, as the reference never had them (T2.1f)."""
+    taken out, as the reference never had them (T2.1f): from its public
+    schema and payloads, the core's predicted body and each of several
+    calls' bodies (T2.1s), and its statements' results."""
     if not named:
         return observation
     found = copy.deepcopy(observation)
@@ -1897,6 +2017,12 @@ def without_core_only(
     predicted = (found.get('core') or {}).get('predicted')
     if isinstance(predicted, dict) and predicted.get('body') is not None:
         predicted['body'] = _without_in_payload(predicted['body'], named)
+    if isinstance(predicted, dict) and isinstance(predicted.get('calls'), list):
+        # Every call's body where predict made several (T2.1g), each as the
+        # single call's is (T2.1s).
+        predicted['calls'] = [
+            _without_in_payload(body, named) for body in predicted['calls']
+        ]
     capture = (found.get('driver') or {}).get('capture')
     if isinstance(capture, dict):
         capture['statements'] = [
@@ -2575,6 +2701,67 @@ def statements_refused(
     return stage if stage in calls else None
 
 
+def statements_earlier(
+    report: Report,
+    key: str,
+    who: str,
+    wanted: dict[str, Any] | None,
+    reference: dict[str, Any] | None,
+) -> str | None:
+    r"""The call ``who`` refuses at on the line ``key``, with its own code,
+    before the call the reference refused at, when the owner-approved
+    entry's row moving the refusal there names that call under
+    ``statements_differ`` (T2.1r): the line is compared up to that call,
+    its statements there and its warnings reported as diagnostic, and the
+    reference's later calls, never made, are no expectation of its own;
+    None otherwise. A move to a later call, and a row naming another
+    call, never are."""
+    theirs = (reference or {}).get('outcome') or {}
+    if (
+        wanted is None
+        or wanted.get('result') != 'refusal'
+        or theirs.get('result') != 'refusal'
+        or theirs.get('stage') not in STAGES
+    ):
+        return None
+    calls = report.statements_differ.get((key, who), ())
+    stage = wanted.get('stage') or (calls[0] if len(calls) == 1 else None)
+    if stage not in calls or stage not in STAGES:
+        return None
+    if STAGES.index(stage) >= STAGES.index(theirs['stage']):
+        return None
+    return str(stage)
+
+
+def statements_kept(
+    report: Report,
+    key: str,
+    who: str,
+    wanted: dict[str, Any] | None,
+    reference: dict[str, Any] | None,
+) -> str | None:
+    r"""The call both the reference and ``who`` refuse at on the line
+    ``key``, with one code, when the owner-approved entry's row keeping
+    that refusal names the call under ``statements_differ`` (KO2-68): the
+    runner reads less before the same refusal, so the reference's
+    statements there are no expectation of its own; None otherwise. With
+    no effective expectation the reference's outcome is the one held."""
+    theirs = (reference or {}).get('outcome') or {}
+    stage = theirs.get('stage')
+    if wanted is None:
+        wanted = theirs
+    if (
+        wanted.get('result') != 'refusal'
+        or theirs.get('result') != 'refusal'
+        or wanted.get('code') != theirs.get('code')
+        or wanted.get('stage') not in (None, stage)
+    ):
+        return None
+    return (
+        stage if stage in report.statements_differ.get((key, who), ()) else None
+    )
+
+
 def statements_opted_in(
     report: Report,
     key: str,
@@ -2647,6 +2834,7 @@ def _cell_pair(
     old: dict[str, Any] | None,
     stop: str | None = None,
     on_duckdb: bool = True,
+    earlier: bool = False,
 ) -> None:
     r"""H1's comparison in a cell other than the reference's: ``python-core``
     and ``python-old`` observed in the same cell, and their host fields
@@ -2655,7 +2843,11 @@ def _cell_pair(
     there is a failure: the cell's comparison needs both. ``stop``, where
     python-old stopped as the reference did and an approved move took
     python-core past it (E114): held only that far, as :func:`_host_fields`
-    holds a runner past the reference's stop.
+    holds a runner past the reference's stop. ``earlier``, where an
+    owner-approved row moved python-core's refusal to an earlier call
+    (:func:`statements_earlier`, T2.1r) and ``stop`` is that call: the
+    warnings are reported, not gated, as against the reference, since
+    python-old stands in for the reference's later calls.
 
     Off DuckDB python-old does not run (its SQLite sampling lacks the
     reference's seeding, main's f0f324ce; T2.1a fix 4), so there
@@ -2687,9 +2879,12 @@ def _cell_pair(
     if named:
         old = without_left_out_warning(old, named, core)
         core = without_core_only(core, named)
+    since = len(report.failures)
     _host_fields(
         report, case, 'python-core', core, old, 'python-old', stop=stop
     )
+    if earlier:
+        report.demote(since, keep=tuple(r for r in RULES if r != 'warnings'))
 
 
 def compare(
@@ -2715,6 +2910,7 @@ def compare(
     report = Report(policy['rules'], check.excluded(policy))
     report.narrowed = owner_approved(RUNTIME_DEPRECATIONS, register_file)
     report.more_exact = more_exact(improvements or register_file)
+    report.fewer = fewer_deprecations(improvements or register_file)
     report.statements_differ = statements_differ(improvements or register_file)
     report.core_only = core_only_columns(improvements or register_file)
     if set(policy['rules']) != set(RULES):
@@ -2819,6 +3015,7 @@ def compare(
         before = len(report.failures)
         ref = reference.get(case['id'])
         stops: dict[str, str | None] = {}
+        earliers: dict[str, str | None] = {}
         if reference_file is not None and ref is None:
             report.fail(f'{case["id"]}: no reference observation')
         if ref is not None:
@@ -2848,12 +3045,17 @@ def compare(
             _shape(report, case, who, observation)
             _inputs(report, case, who, observation, digests)
             wanted = effective.get(case['id'], {}).get(who)
-            # Off DuckDB the line is held to the calls it makes (T2.1e).
-            held = (
-                case
-                if on_duckdb
-                else core_held(case, observation, line_stop(wanted, ref))
-            )
+            # An approved move of the reference's refusal to an earlier
+            # call (T2.1r) holds the line to the calls up to that one, on
+            # every database; off DuckDB the line is held to the calls it
+            # makes (T2.1e).
+            earlier = statements_earlier(report, case['id'], who, wanted, ref)
+            if earlier is not None:
+                held = core_held(case, observation, earlier)
+            elif on_duckdb:
+                held = case
+            else:
+                held = core_held(case, observation, line_stop(wanted, ref))
             _core_consistent(report, held, who, observation, database)
             stop = past_stop(
                 who,
@@ -2861,7 +3063,8 @@ def compare(
                 who in effective.get(MOVED, {}).get(case['id'], []),
                 ref,
             )
-            stops[who] = stop
+            stops[who] = earlier or stop
+            earliers[who] = earlier
             if wanted is not None:
                 _effective(
                     report, case, who, observation['outcome'], wanted, ref
@@ -2889,8 +3092,12 @@ def compare(
             if named and who in MORE_EXACT_RUNNERS and ref is not None:
                 seen = without_core_only(observation, named)
                 against = without_left_out_warning(ref, named, observation)
-            _core_payload(report, case, who, seen, against, stop)
-            refused = statements_refused(report, case['id'], who, wanted, ref)
+            _core_payload(report, case, who, seen, against, earlier or stop)
+            refused = (
+                statements_refused(report, case['id'], who, wanted, ref)
+                or earlier
+            )
+            kept = statements_kept(report, case['id'], who, wanted, ref)
             if against is not None:
                 cell = observation['identity'].get('cell')
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
@@ -2898,13 +3105,17 @@ def compare(
                     # fields against the reference are reported; python-core
                     # against python-old gates them (below).
                     since = len(report.failures)
-                    _host_fields(report, case, who, seen, against, stop=stop)
+                    _host_fields(
+                        report, case, who, seen, against, stop=earlier or stop
+                    )
                     report.reported(
                         since, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
                     since = len(report.failures)
-                    _host_fields(report, case, who, seen, against, stop=stop)
+                    _host_fields(
+                        report, case, who, seen, against, stop=earlier or stop
+                    )
                     if refused is not None:
                         # The warnings of a call refused by the approval.
                         report.demote(
@@ -2918,10 +3129,11 @@ def compare(
                     seen,
                     against,
                     ordered,
-                    stop if refused is None else refused,
+                    refused or kept or stop,
                     large,
                     database,
                     answered=refused is not None
+                    or kept is not None
                     or statements_opted_in(
                         report, case['id'], who, stop, wanted
                     ),
@@ -2948,7 +3160,16 @@ def compare(
             and all(old['outcome'][f] == ref['outcome'][f] for f in OUTCOME)
             else None
         )
-        _cell_pair(report, case, python, old, pair_stop, on_duckdb)
+        _cell_pair(
+            report,
+            case,
+            python,
+            old,
+            pair_stop,
+            on_duckdb,
+            earlier=pair_stop is not None
+            and pair_stop == earliers.get('python-core'),
+        )
         rust = observed.get('rust-host', {}).get(case['id'])
         if python is not None and rust is not None:
             _core_agree(

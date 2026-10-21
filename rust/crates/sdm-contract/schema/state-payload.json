@@ -55,6 +55,12 @@
             },
             "anchor_time_column": {
               "type": "string"
+            },
+            "top_k": {
+              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
             }
           },
           "additionalProperties": false,
@@ -120,6 +126,12 @@
             },
             "anchor_time_column": {
               "type": "string"
+            },
+            "top_k": {
+              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
             }
           },
           "additionalProperties": false,
@@ -181,6 +193,12 @@
             },
             "anchor_time_column": {
               "type": "string"
+            },
+            "top_k": {
+              "description": "How many candidates the call asked be kept (`top_k`), which the\nengine writes into the task where the caller gave it (T2.8).",
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
             }
           },
           "additionalProperties": false,
@@ -599,9 +617,13 @@
                   "type": "boolean"
                 },
                 "target_transforms": {
+                  "description": "Each a transform's name, or null, which the engine's type takes and\nwrites as null (T2.13).",
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "output_type": {

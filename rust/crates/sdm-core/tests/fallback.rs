@@ -428,10 +428,12 @@ fn key_counts_count_rows_distinct_keys_and_rows_missing_one() {
             TableKey {
                 table: "events".into(),
                 columns: vec!["user".into()],
+                label: None,
             },
             TableKey {
                 table: "events".into(),
                 columns: vec!["user".into(), "v".into()],
+                label: None,
             },
         ],
     };

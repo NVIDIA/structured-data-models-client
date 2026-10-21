@@ -474,3 +474,31 @@ impl JsonSchema for Scalar {
         ScalarWire::json_schema(generator)
     }
 }
+
+/// The `f64` Arrow's `Decimal128::ToDouble` gives the decimal of unscaled
+/// value `value` at `scale`: the integer's two halves at float64, scaled by
+/// the power of ten, split into whole and fractional parts where the value
+/// is past what a float64 holds exactly; pandas' `astype('float32')` of a
+/// decimal takes this, then narrows it, and the reference's `_sanitize`
+/// casts a decimal of scale > 0 to float64 by it before it infers anything.
+pub fn decimal_to_f64(value: i128, scale: i8) -> f64 {
+    fn no_split(magnitude: u128, scale: i32) -> f64 {
+        let high = (magnitude >> 64) as u64;
+        let low = magnitude as u64;
+        let mut x = (high as f64) * 18_446_744_073_709_551_616.0;
+        x += low as f64;
+        // Arrow's table of powers of ten holds each as its literal, the
+        // closest double, which parsing the literal gives.
+        let power: f64 = format!("1e{}", -scale).parse().unwrap_or(f64::NAN);
+        x * power
+    }
+    let scale = i32::from(scale);
+    let magnitude = value.unsigned_abs();
+    let positive = if scale <= 0 || magnitude <= 1_u128 << 53 {
+        no_split(magnitude, scale)
+    } else {
+        let power = 10_u128.pow(scale as u32);
+        no_split(magnitude / power, 0) + no_split(magnitude % power, scale)
+    };
+    if value < 0 { -positive } else { positive }
+}

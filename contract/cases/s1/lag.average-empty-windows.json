@@ -1,0 +1,92 @@
+{
+  "format": "sdm-case/1",
+  "id": "lag.average-empty-windows",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT AVG(orders.price, 0, 28, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-05-01",
+      "lag_timesteps": 2
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1682899200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: 1 call; each lag of an average drops the examples whose window holds no order and packs the rest at the top of the column, so values sit on other examples' rows and the last rows get none: users 0 and 1, predicted at 2023-05-01, get no first lag where their windows hold 34.0 and 35.5 (the core fixes it under KO2-70)"
+  },
+  "why": "lag_timesteps of 2 on a temporal regression of an AVG whose windows are sometimes empty (each user orders every 56 days, the window is 28), one call: the reference's lagged average is misaligned, and the core puts each window's value on its own example (the orchestrator's decision under KO2-70)",
+  "source": "T2.9 forecasting (the design row T2.9), the reference at 6298913c"
+}

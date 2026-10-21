@@ -15,7 +15,10 @@ if(NOT pybind11_FOUND)
   FetchContent_MakeAvailable(pybind11)
 endif()
 
-set(CMAKE_CXX_FLAGS "-O3")
+# MSVC rejects `-O3`; its release default is already `/O2`.
+if(NOT MSVC)
+  set(CMAKE_CXX_FLAGS "-O3")
+endif()
 set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "Minimum macOS deployment version" FORCE)
 
 pybind11_add_module(relationallib src/sdm_relational_engine/csrc/neighbor_sampler.cpp)

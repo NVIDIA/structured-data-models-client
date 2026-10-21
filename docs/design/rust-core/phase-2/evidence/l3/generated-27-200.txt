@@ -1,0 +1,83 @@
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT SUM(a.f, 0, 1, months) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.f, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.v, 0, 2, months) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.v, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.*, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.v, 0, 48, hours) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT SUM(a.n, 0, 30, days) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT SUM(a.f, 0, 30, days) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT SUM(a.f, 0, 1, months) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT COUNT(a.f, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT COUNT(a.v, 0, 2, months) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT COUNT(a.v, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT COUNT(a.*, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT COUNT(a.v, 0, 48, hours) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT SUM(a.n, 0, 30, days) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: [CONTEXT_CONSTANT] every context row has the same answer to 'PREDICT SUM(a.f, 0, 30, days) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT SUM(a.f, 0, 1, months) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.f, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.v, 0, 2, months) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.v, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.*, 0, 1, weeks) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT COUNT(a.v, 0, 48, hours) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT SUM(a.n, 0, 30, days) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+contract/tools/differential.py:1083: SDMWarning: every context row has the same answer to 'PREDICT SUM(a.f, 0, 30, days) FOR EACH e.id', so nothing in the context distinguishes one answer from another. The endpoint will answer, but the answer cannot say much. Gather a wider context with num_context_samples, or ask about entities whose answers differ.
+  result = client.predict(request, model=KumoRelational())
+g102: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g106: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g107: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g11: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g122: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g127: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g128: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g148: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g155: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g161: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g166: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g168: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g175: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g186: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g19: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g190: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g193: UNCLASSIFIED: the reference refuses ['StructuredDataError', 'INVALID_REQUEST', None], the core ['UnsupportedRequestError', 'UNSUPPORTED_REQUEST', 'text_time']; the corrected reference asks the reference's request
+g20: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g25: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g31: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g33: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g44: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g49: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g52: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g55: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g66: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g67: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g77: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g82: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g87: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g88: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g93: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+g94: UNCLASSIFIED: payload; the corrected reference asks the reference's request
+g98: approved:P1B-11: E66(b): the reference ['RuntimeError', None, None], the core ['StructuredDataError', 'INVALID_REQUEST', 'empty_table']
+classes {"UNCLASSIFIED": 8, "agree": 166, "approved:P1B-11": 26}

@@ -1,4 +1,4 @@
-{"format":"sdm-pql-dates/1","source":"rust-core-reference at 6298913c3b66da9459bb605d0127f8493adaa1fc, pandas 3.0.6: pd.to_datetime of each literal, recorded by dates_record.py beside this file","year":2026,"pads_year":false,"packed":{"seed":20261012,"candidates":150000,"rows":[["0-0-0000007",null,null,null],
+{"format":"sdm-pql-dates/1","source":"rust-core-reference at 43e55f4f58924384c3cb52f67c8ed2e73ba45fa1, pandas 3.0.6: pd.to_datetime of each literal, recorded by dates_record.py beside this file","year":2026,"pads_year":false,"packed":{"seed":20261012,"candidates":150000,"rows":[["0-0-0000007",null,null,null],
 ["0-0-8423554511093394 024:000005:056",null,null,null],
 ["0-0000000-6",null,null,null],
 ["0-0000009165-25",null,null,null],

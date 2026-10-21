@@ -1,0 +1,126 @@
+{
+  "format": "sdm-case/1",
+  "id": "key.past-2-53.edited-link",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "decimal128/primary-key",
+    "decimal128/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 9007199254740992",
+      "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 9007199254740992"
+    ],
+    "from_source": {
+      "primary_keys": {
+        "users": "user_id",
+        "orders": "order_id"
+      },
+      "relationships": []
+    },
+    "edits": [
+      {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "orders",
+            "source_column": "user_id",
+            "target_table": "users",
+            "target_column": "user_id"
+          }
+        ]
+      }
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        9007199254740993,
+        9007199254740994
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {
+          "orders": {
+            "value": [
+              "order_id"
+            ]
+          },
+          "users": {
+            "value": [
+              "user_id"
+            ]
+          }
+        },
+        "time_columns": {},
+        "relationships": []
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "9007199254740993"
+        },
+        {
+          "t": "i64",
+          "v": "9007199254740994"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c on DuckDB, SQLite and Postgres: answered through predict, each user_id read as int64 on DuckDB and as text on SQLite (the loader stores a DECIMAL as its canonical text); on Postgres, a numeric(38,0), as int64, the link set by an edit (the reference reads a Postgres numeric as text only where the catalog declares it a key)"
+  },
+  "why": "The same key past 2**53, both keys given and no link, the link from orders.user_id then set on the schema: an edited relationship on an exact numeric id",
+  "source": "T2.21: exact numeric keys follow the effective keys (the mid-phase design check; learnings lesson 19, design choice 5, KO2-35)"
+}

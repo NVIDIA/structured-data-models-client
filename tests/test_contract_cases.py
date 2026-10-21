@@ -143,6 +143,33 @@ def _refused_before_reading(case_id: str) -> bool:
     return False
 
 
+def _spelled(value: Any) -> Any:
+    r"""A value no contract type holds, as the codec's ``spelled`` writes
+    it from T2.14b (KO2-86): its ``repr``, which the core names."""
+    return {'spelled': repr(value)}
+
+
+def _given_key(key: Any) -> Any:
+    r"""A primary key given to ``from_source`` as contract 23's ``Given``
+    writes it (decision E101, the codec's one classifier): a name or a list
+    of names as their list, None as itself, anything else spelled."""
+    if key is None:
+        return {'value': None}
+    if isinstance(key, str):
+        return {'value': [key]}
+    if isinstance(key, list) and all(isinstance(k, str) for k in key):
+        return {'value': key}
+    return _spelled(key)
+
+
+def _given_time(column: Any) -> Any:
+    r"""A time column given to ``from_source`` as contract 23's ``Given``
+    writes it: a name or None as itself, anything else spelled."""
+    if column is None or isinstance(column, str):
+        return {'value': column}
+    return _spelled(column)
+
+
 def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     r"""Each way a case's core operations depart from its own input: the
     source described is the one ``from_source`` names, materialize's
@@ -152,15 +179,22 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
     problems = []
     source = core['describe_source']['source']
     named = given.get('from_source', {})
-    if source != {
+    wanted_links = [
+        [
+            {'table': link['source_table'], 'column': link['source_column']},
+            {'table': link['target_table'], 'column': link['target_column']},
+        ]
+        for link in named.get('relationships', [])
+    ]
+    if {k: v for k, v in source.items() if k != 'relationships'} != {
         'tables': list(named.get('tables', [])),
         'primary_keys': {
-            t: {'value': [k]} for t, k in named.get('primary_keys', {}).items()
+            t: _given_key(k) for t, k in named.get('primary_keys', {}).items()
         },
         'time_columns': {
-            t: {'value': c} for t, c in named.get('time_columns', {}).items()
+            t: _given_time(c) for t, c in named.get('time_columns', {}).items()
         },
-    }:
+    } or source.get('relationships', []) != wanted_links:
         problems.append('describe_source is not of its source')
     materialize = core.get('materialize')
     # The operations a case carries are its call's, in order, from
@@ -202,7 +236,13 @@ def _held_to_its_input(case: dict[str, Any]) -> list[str]:
             str(index) for index in call['indices']
         ]:
             problems.append("materialize's indices are not the call's")
-        wanted = _anchor(call['anchor_time']) if 'anchor_time' in call else None
+        # An anchor at each entity's own time (T2.11's literal 'entity') is
+        # no time the call gives: the core is passed none.
+        wanted = (
+            _anchor(call['anchor_time'])
+            if call.get('anchor_time', 'entity') != 'entity'
+            else None
+        )
         if materialize['anchor_time'] != wanted:
             problems.append("materialize's anchor time is not the call's")
     if core.get('predict', {'model': 'kumo-relational'}) != {
@@ -290,16 +330,304 @@ T219_SHAPES = (
     'shape.two-paths.keyless',
 )
 
+#: T2.8c's multi-call predict cases (main's 1fc5a686), none in the
+#: inventory: the call's ``rows_per_call`` and the endpoint's failed call
+#: (``input.fail_call``) are inputs no inventory entry carries.
+T28C_MULTICALL = (
+    'multicall.body-30mib.one-row',
+    'multicall.body-30mib.several-rows',
+    'multicall.calls.100',
+    'multicall.calls.101',
+    'multicall.entities-per-call.10001',
+    'multicall.entities.100000',
+    'multicall.entities.100001',
+    'multicall.fail-call-0',
+    'multicall.fail-call-2',
+    'multicall.forecast.batched',
+    'multicall.forecast.fail-call-1',
+    'multicall.forecast.one-call',
+    'multicall.rows-per-call-3',
+    'multicall.rows-per-call.above-the-cap',
+    'multicall.rows-per-call.bool',
+    'multicall.rows-per-call.fraction',
+    'multicall.rows-per-call.negative',
+    'multicall.rows-per-call.past-int64',
+    'multicall.rows-per-call.text',
+    'multicall.rows-per-call.whole-float',
+    'multicall.rows-per-call.zero',
+)
+
+
+#: T2.14b's wording cases (KO2-32's G15, M4 and FX-1, and the carried
+#: notes on the generic refusal and a one-class binary target), none in
+#: the inventory: refusals and warnings the core route words otherwise
+#: than the reference, each an acceptance case carrying its call as far as
+#: the reference goes.
+T214B_WORDING = (
+    'wording.anchor-after-data',
+    'wording.binary-one-class',
+    'wording.float32-classification',
+    'wording.float32-regression',
+    'wording.key-missing-table',
+    'wording.key-none',
+    'wording.key-number',
+    'wording.rank-text-candidate',
+    'wording.time-key',
+    'wording.time-missing-column',
+    'wording.time-number',
+)
+
+
+#: T2.13's S1 cases, the query and option long tail, none in the
+#: inventory: an entity filter (a ranking's among them), named entities,
+#: ASSUMING, EVALUATE, EXPLAIN, a null target transform and inference
+#: options given as text, an answer carrying an explanation or item
+#: metadata (input.explanation and input.item_metadata), and U1's
+#: day-first warning kept on a refused query.
+T213_OPTIONS = (
+    'assuming.binary',
+    'assuming.no-examples',
+    'assuming.regression',
+    'assuming.static',
+    'config-text.accepted',
+    'config-text.class-shuffle',
+    'config-text.estimators-out-of-range',
+    'config-text.estimators-whole-float',
+    'config-text.estimators-word',
+    'config-text.shuffle-word',
+    'date.day-first-then-packed',
+    'evaluate.binary',
+    'evaluate.regression',
+    'explain.answered',
+    'explain.explanation-only',
+    'explain.forecast',
+    'explain.not-answered',
+    'explain.query',
+    'explain.two-entities',
+    'filter.entity-aggregation',
+    'filter.entity-column',
+    'filter.entity-text',
+    'filter.event-column',
+    'filter.matches-none',
+    'filter.ranking',
+    'ids.absent',
+    'ids.in-list-other-indices',
+    'ids.one',
+    'ids.wrong-type',
+    'metadata.items',
+    'metadata.items-across-calls',
+    'metadata.items-explained',
+    'transforms.null',
+    'transforms.null-beside-a-name',
+    'transforms.null-on-a-classification',
+    'transforms.whole-null',
+)
+
 
 #: T2.18's S1 cases for any column name (KO2-36), none in the inventory:
 #: each of a dot, a backtick and a line break in a column's name, as a
 #: feature the query does not name, the target, the entity (users' declared
-#: primary key) and an aggregation's column. The filter role waits for
-#: T2.10 (contract/deferred/t210-column-filter/).
+#: primary key), a filter inside the target's aggregation (back from its
+#: deferral, held by T2.10's tests) and an aggregation's column.
 T218_NAMES = tuple(
     f'name.{name}-{role}'
     for name in ('dot', 'backtick', 'line-break')
-    for role in ('feature', 'target', 'entity', 'aggregation')
+    for role in ('feature', 'target', 'entity', 'filter', 'aggregation')
+)
+
+
+#: T2.12's S1 cases for the schema rules it lifts (float_nan,
+#: float_signed_zero, key_tie, key_name_order, composite_key), none in the
+#: inventory, each carrying its call as far as the reference goes.
+T212_RULES = (
+    'rule.float-nan-feature',
+    'rule.float-nan-aggregated',
+    'rule.float-signed-zero-feature',
+    'rule.key-tie-fact',
+    'rule.key-tie-entity',
+    'rule.key-name-form',
+    'rule.composite-key-given',
+    'rule.composite-key-declared',
+    'rule.composite-foreign-key-declared',
+    'rule.float-nan-category-double',
+    'rule.float-nan-category-float',
+    'rule.float-nan-key-tie',
+    'rule.float-signed-zero-key-tie',
+    'rule.float-nan-key-double',
+    'rule.float-nan-key-float',
+    'rule.float-signed-nan-key-tie-double',
+    'rule.float-signed-nan-key-tie-float',
+    'rule.float-signed-nan-category-double',
+    'rule.float-signed-nan-category-float',
+    'rule.float-nan-key-static-double',
+    'rule.float-nan-key-static-float',
+    'rule.float-nan-key-static-linked-double',
+    'rule.float-nan-payload-key-tie',
+    'rule.float-nan-payload-category',
+)
+
+#: T2.21's S1 cases for an exact numeric key past 2**53 made the key by the
+#: caller (given, its link given, its link edited) and by the catalog (the
+#: control), none in the inventory, each carrying its call through predict.
+T221_EXACT_KEYS = (
+    'key.past-2-53.given-key',
+    'key.past-2-53.given-link',
+    'key.past-2-53.edited-link',
+    'key.past-2-53.catalog',
+)
+
+
+#: T2.8's S1 ranking cases (the design's T2.8a and T2.8b rows), none in the
+#: inventory: a ranking over named candidates through predict, its refusals
+#: before any call, and the forecast's top_k and MOST_PARTS refusals.
+T28_RANKING = (
+    'rank.top-k',
+    'rank.top-k-option',
+    'rank.top-k-zero',
+    'rank.no-candidates',
+    'rank.candidates-empty',
+    'rank.candidates-not-a-ranking',
+    'rank.most-parts',
+    'rank.batched',
+    'rank.unscored-candidate',
+    'rank.all-unscored',
+    'rank.entities-by-candidates.over',
+    'rank.entities-by-candidates.at',
+    'forecast.top-k',
+    'forecast.most-parts',
+)
+
+
+#: T2.9's S1 forecasting cases (the design's T2.9 row), none in the
+#: inventory: num_forecasts the reference takes and refuses, lag_timesteps
+#: on a forecast and beside one, and quantiles asked for and answered.
+T29_FORECASTING = (
+    'forecast.steps-1',
+    'forecast.steps-2',
+    'forecast.steps-3',
+    'forecast.steps-zero',
+    'forecast.steps-negative',
+    'forecast.steps-fraction',
+    'forecast.steps-past-grammar',
+    'forecast.static-target',
+    'forecast.binary-target',
+    'forecast.count-months',
+    'forecast.lag-0',
+    'forecast.lag-1',
+    'forecast.lag-2',
+    'forecast.lag-negative',
+    'forecast.lag-fraction',
+    'forecast.lag-whole-float',
+    'forecast.lag-bool',
+    'forecast.lag-text',
+    'lag.regression-2',
+    'lag.binary-2',
+    'lag.static-2',
+    'lag.static-negative',
+    'lag.not-filtered-2',
+    'forecast.quantiles',
+    'forecast.quantiles-and-prediction',
+    'forecast.quantiles-unanswered',
+    'quantiles.regression',
+    'lag.average-empty-windows',
+    'lag.condition-per-call',
+)
+
+
+#: T2.10's S1 cases for the PQL target rules, none in the inventory: one or
+#: two targets under each rule the core does not take yet (aggregation,
+#: condition, logical_target, target_filter; open_window and static_target
+#: held where the query validator refuses them first), and two rankings
+#: whose questions filter by a DECIMAL key and by a key named with a dot.
+T210_TARGETS = (
+    'rank.decimal-key',
+    'rank.odd-column',
+    'target.aggregation.list-distinct',
+    'target.condition.in',
+    'target.condition.text',
+    'target.filter.and',
+    'target.filter.sum',
+    'target.filter.text-in',
+    'target.logical.and',
+    'target.logical.not',
+    'target.open-window',
+    'target.static.other-table',
+)
+
+
+#: T2.11's S1 cases for the sampling options, none in the inventory:
+#: each option with values the reference takes and values it refuses,
+#: anchor_time='entity' and an entity table with a parent, each carrying
+#: its call as far as the reference goes. The unseeded cases are judged by
+#: properties (KO2-76) and kept in contract/tests/t211-unseeded/.
+#: T2.11's diagnostic case, by the register entry carrying the core's
+#: refusal where the reference answers, inconsistently across databases
+#: (P2I-4, KO2-82): compared and reported, gating nothing, since the
+#: comparator holds an acceptance case refused earlier than the reference
+#: to the reference's later stage; T2.11's acceptance tests check the
+#: refusal.
+T211_DIAGNOSTIC = {'sample.num-neighbors.minus-one': 'P2I-4'}
+T211_SAMPLING = (
+    'sample.anchor-entity',
+    'sample.anchor-entity.context-entity',
+    'sample.anchor-entity.context-time',
+    'sample.anchor-entity.null-time',
+    'sample.anchor-entity.null-time.prediction-time',
+    'sample.anchor-entity.no-time-column',
+    'sample.anchor-entity.regression',
+    'sample.anchor-entity.temporal',
+    'sample.context-anchor-time',
+    'sample.context-anchor-time.entity',
+    'sample.context-anchor-time.later',
+    'sample.context-anchor-time.too-early',
+    'sample.embeddings-answered',
+    'sample.embeddings-only',
+    'sample.exclude-cols.key',
+    'sample.exclude-cols.list',
+    'sample.exclude-cols.null',
+    'sample.exclude-cols.orders-price',
+    'sample.exclude-cols.text-columns',
+    'sample.exclude-cols.unknown-column',
+    'sample.exclude-cols.unknown-table',
+    'sample.exclude-cols.users-age',
+    'sample.max-pq-iterations-1',
+    'sample.max-pq-iterations.text',
+    'sample.max-pq-iterations.zero',
+    'sample.num-hops-1',
+    'sample.num-hops-3',
+    'sample.num-hops.bool',
+    'sample.num-hops.fraction',
+    'sample.num-hops.seven',
+    'sample.num-hops.text',
+    'sample.num-hops.zero',
+    'sample.num-neighbors-2-2',
+    'sample.num-neighbors-4',
+    'sample.num-neighbors.empty',
+    'sample.num-neighbors.minus-one',
+    'sample.num-neighbors.number',
+    'sample.num-neighbors.over-num-hops',
+    'sample.num-neighbors.seven-hops',
+    'sample.num-neighbors.zero',
+    'sample.parent-table',
+    'sample.parent-table.decimal-keys',
+    'sample.parent-table.relbench-avito',
+    'sample.parent-table.relbench-stack',
+    'sample.parent-table.static',
+    'sample.return-embeddings',
+    'sample.seed-7',
+    'sample.seed.negative',
+    'sample.use-prediction-time',
+    'sample.use-prediction-time.false',
+)
+
+#: T2.14b's S1 cases (the test author's), none in the inventory: a
+#: ranking's candidates given with repeats, kept as the reference's
+#: dict.fromkeys keeps them (MID2 P2-2), and a scaled decimal whose values
+#: differ only past float64's precision, categorical as the reference
+#: counts it (the decimal stype fix riding along).
+T214B_HOST = (
+    'rank.repeated-candidates',
+    'decimal.stype-past-float-precision',
 )
 
 
@@ -326,7 +654,15 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
     # each is an acceptance case carrying its call as far as the reference
     # goes. T2.19 adds the two-path sampling cases, acceptance cases through
     # predict, no inventory case either. T2.18 adds the column-name cases
-    # (KO2-36), each carrying its call through predict.
+    # (KO2-36), each carrying its call through predict; so does T2.8c its
+    # multi-call cases, each an acceptance case, and T2.13 its option
+    # cases. T2.12 adds the schema rules' cases, T2.8 the ranking cases and
+    # T2.9 the forecasting cases, each carrying its call as far as the
+    # reference goes, and T2.10 its target cases, each an acceptance case;
+    # T2.21 its exact-key cases, each carrying its call through predict.
+    # reference goes; T2.11 the sampling options' cases likewise; T2.14b a
+    # ranking's repeated candidates, a scaled decimal's stype and its
+    # wording cases, each an acceptance case.
     assert set(committed) == {entry['id'] for entry in inventory['cases']} | {
         'base.adventureworks',
         'base.adventureworks.churn',
@@ -334,10 +670,50 @@ def test_every_inventory_case_is_a_committed_case_as_the_inventory_has_it() -> (
         *T20C_DECIMAL,
         *T219_SHAPES,
         *T218_NAMES,
+        *T28C_MULTICALL,
+        *T212_RULES,
+        *T28_RANKING,
+        *T213_OPTIONS,
+        *T214B_WORDING,
+        *T29_FORECASTING,
+        *T210_TARGETS,
+        *T221_EXACT_KEYS,
+        *T211_SAMPLING,
+        *T214B_HOST,
     }
-    for case_id in (*T20C_DECIMAL, *T218_NAMES):
+    for case_id in (
+        *T28C_MULTICALL,
+        *T213_OPTIONS,
+        *T214B_WORDING,
+        *T210_TARGETS,
+        *T214B_HOST,
+    ):
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert _held_to_its_input(committed[case_id]) == [], case_id
+    for case_id in (
+        *T20C_DECIMAL,
+        *T218_NAMES,
+        *T212_RULES,
+        *T28_RANKING,
+        *T29_FORECASTING,
+        *T221_EXACT_KEYS,
+        *T211_SAMPLING,
+    ):
+        assert committed[case_id]['status'] == (
+            'diagnostic' if case_id in T211_DIAGNOSTIC else 'acceptance'
+        ), case_id
+        assert _held_to_its_input(committed[case_id]) == [], case_id
+    for case_id, entry in T211_DIAGNOSTIC.items():
+        assert committed[case_id].get('register') == entry, case_id
+    # Seeded: a core whose links or composite key are not its input's.
+    case = copy.deepcopy(committed['rule.key-name-form'])
+    case['core']['describe_source']['source']['relationships'] = []
+    assert _held_to_its_input(case) != []
+    case = copy.deepcopy(committed['rule.composite-key-given'])
+    case['core']['describe_source']['source']['primary_keys'] = {
+        'orders': {'value': ['order_id']}
+    }
+    assert _held_to_its_input(case) != []
     for case_id in T219_SHAPES:
         assert committed[case_id]['status'] == 'acceptance', case_id
         assert committed[case_id]['until'] == 'predict', case_id
@@ -1276,8 +1652,17 @@ def _as_core(accepted: bool | None, error: Any = None) -> Any:
                 ) or []
                 outcome = observation['outcome']
                 if received:
+                    # A request asked in several calls (T2.8c): the last
+                    # call's body, and every call's in order under
+                    # `calls`, as the runner records them (T2.1g).
+                    several = (
+                        {'calls': [each['parsed'] for each in received]}
+                        if len(received) > 1
+                        else {}
+                    )
                     predicted = {
-                        'body': received[0]['parsed'],
+                        'body': received[-1]['parsed'],
+                        **several,
                         'model': 'kumo-relational',
                         'request_id': 'r1',
                         'metadata': {},

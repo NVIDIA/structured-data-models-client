@@ -21,3 +21,4 @@
 pub mod options;
 pub mod payload;
 pub mod predict;
+pub mod ranking;

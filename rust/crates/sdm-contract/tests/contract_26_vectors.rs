@@ -27,7 +27,9 @@ fn vectors() -> Value {
     );
     let document: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     assert_eq!(document["format"], "sdm-contract-vectors/1");
-    assert_eq!(document["contract"], sdm_contract::CONTRACT_VERSION);
+    // v26's vectors, which v27 (T2.12's key label, optional) reads as
+    // they are.
+    assert_eq!(document["contract"], 26);
     document
 }
 

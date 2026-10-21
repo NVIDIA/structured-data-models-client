@@ -1,0 +1,389 @@
+{
+ "format": "sdm-t214b-host-vectors/1",
+ "about": "What T2.14b's host facts give on the reference's public calls: each query's request entity_table and whether its target moves with time; a forecast's and a ranking's refused call, said of its part; and a ranking given candidates that repeat by Python's equality, each question asked and the rankings. contract/tests/test_t214b_host.py holds python-core to them, observed by the same code (observe).",
+ "recorded_by": "contract/tools/t214b_host_record.py",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "facts": {
+  "windowed": {
+   "entity_table": "users",
+   "windowed": true,
+   "parts": null
+  },
+  "static": {
+   "entity_table": "users",
+   "windowed": false,
+   "parts": null
+  },
+  "condition": {
+   "entity_table": "users",
+   "windowed": true,
+   "parts": null
+  },
+  "other-entity": {
+   "entity_table": "orders",
+   "windowed": false,
+   "parts": null
+  },
+  "forecast": {
+   "entity_table": "users",
+   "windowed": true,
+   "parts": [
+    {
+     "entity_table": "users",
+     "windowed": true
+    },
+    {
+     "entity_table": "users",
+     "windowed": true
+    }
+   ]
+  },
+  "ranking": {
+   "entity_table": "users",
+   "windowed": true,
+   "parts": [
+    {
+     "entity_table": "users",
+     "windowed": true
+    },
+    {
+     "entity_table": "users",
+     "windowed": true
+    },
+    {
+     "entity_table": "users",
+     "windowed": true
+    }
+   ]
+  }
+ },
+ "steps": {
+  "forecast-fail-0": {
+   "refusal": {
+    "error": "NimRequestError",
+    "code": null,
+    "details": {
+     "error": "scripted_failure",
+     "call": 0
+    },
+    "message": "[500] {\"error\": \"scripted_failure\", \"call\": 0}. This is forecast step 1 of 2."
+   },
+   "asked": [
+    "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id"
+   ]
+  },
+  "ranking-fail-0": {
+   "refusal": {
+    "error": "NimRequestError",
+    "code": null,
+    "details": {
+     "error": "scripted_failure",
+     "call": 0
+    },
+    "message": "[500] {\"error\": \"scripted_failure\", \"call\": 0}. This is the question asked for candidate 0, one of 3 this ranking is asked as."
+   },
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "forecast-fail-1": {
+   "refusal": {
+    "error": "NimRequestError",
+    "code": null,
+    "details": {
+     "error": "scripted_failure",
+     "call": 1,
+     "parts_answered": 1,
+     "answered": {
+      "type": "PredictionResult",
+      "text": "PredictionResult('kumo-relational', 2 rows)"
+     }
+    },
+    "message": "[500] {\"error\": \"scripted_failure\", \"call\": 1}. This is forecast step 2 of 2."
+   },
+   "asked": [
+    "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "PREDICT SUM(orders.price, 30, 60, days) FOR EACH users.user_id"
+   ]
+  },
+  "ranking-fail-1": {
+   "refusal": {
+    "error": "NimRequestError",
+    "code": null,
+    "details": {
+     "error": "scripted_failure",
+     "call": 1,
+     "parts_answered": 1
+    },
+    "message": "[500] {\"error\": \"scripted_failure\", \"call\": 1}. This is the question asked for candidate 1, one of 3 this ranking is asked as."
+   },
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  }
+ },
+ "repeats": {
+  "ints": {
+   "rankings": [
+    [
+     {
+      "candidate": 0,
+      "score": 0.7
+     },
+     {
+      "candidate": 1,
+      "score": 0.4
+     }
+    ],
+    [
+     {
+      "candidate": 1,
+      "score": 0.9
+     },
+     {
+      "candidate": 2,
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "int-float-bool": {
+   "rankings": [
+    [
+     {
+      "candidate": 2,
+      "score": 0.4
+     },
+     {
+      "candidate": 1,
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 2,
+      "score": 0.9
+     },
+     {
+      "candidate": 1,
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "bool-first": {
+   "refusal": {
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "details": {},
+    "message": "[INVALID_REQUEST] a candidate names a row, and True and False do not"
+   },
+   "asked": []
+  },
+  "zero-false": {
+   "rankings": [
+    [
+     {
+      "candidate": 1,
+      "score": 0.4
+     },
+     {
+      "candidate": 0,
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 1,
+      "score": 0.9
+     },
+     {
+      "candidate": 0,
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "decimal-first": {
+   "rankings": [
+    [
+     {
+      "candidate": 2,
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "Decimal",
+       "text": "1"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 2,
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "Decimal",
+       "text": "1"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "numpy-first": {
+   "rankings": [
+    [
+     {
+      "candidate": 2,
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "int64",
+       "text": "1"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 2,
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "int64",
+       "text": "1"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "float-first": {
+   "rankings": [
+    [
+     {
+      "candidate": 2,
+      "score": 0.4
+     },
+     {
+      "candidate": 1.0,
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 2,
+      "score": 0.9
+     },
+     {
+      "candidate": 1.0,
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "negative-zero": {
+   "rankings": [
+    [
+     {
+      "candidate": 1,
+      "score": 0.4
+     },
+     {
+      "candidate": 0.0,
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 1,
+      "score": 0.9
+     },
+     {
+      "candidate": 0.0,
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "decimal-scales": {
+   "rankings": [
+    [
+     {
+      "candidate": 2,
+      "score": 0.4
+     },
+     {
+      "candidate": {
+       "type": "Decimal",
+       "text": "1.0"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": 2,
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "Decimal",
+       "text": "1.0"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id"
+   ]
+  },
+  "missing-twice": {
+   "refusal": {
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "details": {},
+    "message": "[INVALID_REQUEST] a candidate names a row, and a missing value names none"
+   },
+   "asked": []
+  }
+ }
+}

@@ -1,0 +1,177 @@
+{
+ "format": "sdm-key-cast-p3-8-vectors/1",
+ "recorded_by": "contract/tools/schema_rules_record.py key-cast",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "cell": "ref-pandas3",
+ "environment": {
+  "python": "3.12.13",
+  "pandas": "3.0.6",
+  "pyarrow": "25.0.1",
+  "numpy": "2.5.3",
+  "duckdb": "1.5.6"
+ },
+ "query": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+ "anchor_time": "2024-03-01",
+ "register_ref": "contract/key-cast-p3-8-vectors.json#",
+ "recorded_elsewhere": [
+  {
+   "id": "int64.float.2pow63",
+   "file": "contract/key-cast-vectors.json"
+  }
+ ],
+ "keys": [
+  {
+   "id": "int64",
+   "setup": []
+  },
+  {
+   "id": "utf8",
+   "setup": [
+    "ALTER TABLE users ALTER user_id TYPE VARCHAR USING user_id::VARCHAR",
+    "ALTER TABLE orders ALTER user_id TYPE VARCHAR USING user_id::VARCHAR"
+   ]
+  }
+ ],
+ "vectors": [
+  {
+   "id": "utf8.decimal.1e-7",
+   "key": "utf8",
+   "input": [
+    {
+     "t": "Decimal",
+     "v": "1E-7"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "decimal128(7, 7)",
+    "values": [
+     {
+      "t": "d128",
+      "p": 7,
+      "s": 7,
+      "v": "1"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "refusal",
+     "stage": "materialize",
+     "error": "StructuredDataError",
+     "code": "INVALID_REQUEST"
+    },
+    "cast": {
+     "dtype": "string[pyarrow]",
+     "values": [
+      [
+       "s",
+       "1E-7"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": false,
+    "why": [],
+    "disposition": null
+   }
+  },
+  {
+   "id": "int64.time.timedelta",
+   "key": "int64",
+   "input": [
+    {
+     "t": "timedelta",
+     "v": "1"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "duration[us]",
+    "values": [
+     {
+      "t": "duration",
+      "unit": "us",
+      "v": "1"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a timedelta entity as a number key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  },
+  {
+   "id": "int64.time.time-of-day",
+   "key": "int64",
+   "input": [
+    {
+     "t": "time",
+     "v": "00:00:00.000001"
+    }
+   ],
+   "host_arrow": {
+    "rule": "inferred",
+    "type": "time64[us]",
+    "values": [
+     {
+      "t": "time64",
+      "unit": "us",
+      "v": "1"
+     }
+    ]
+   },
+   "reference": {
+    "public": {
+     "outcome": "success",
+     "entities": [
+      [
+       "i",
+       "1"
+      ]
+     ]
+    },
+    "cast": {
+     "dtype": "int64[pyarrow]",
+     "values": [
+      [
+       "i",
+       "1"
+      ]
+     ]
+    }
+   },
+   "register": {
+    "required": true,
+    "why": [
+     "the reference accepts a time entity as a number key (pandas' cast changes its kind)"
+    ],
+    "disposition": null
+   }
+  }
+ ]
+}

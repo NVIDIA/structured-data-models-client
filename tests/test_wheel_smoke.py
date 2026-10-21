@@ -15,6 +15,7 @@ The smoke itself runs in CI's ``wheel-smoke`` job, against the wheels."""
 from __future__ import annotations
 
 import ast
+import dataclasses
 import importlib.util
 import json
 import os
@@ -118,7 +119,21 @@ def test_what_resolved_is_held_to_the_lane() -> None:
 
 def test_the_lanes_are_e16_s_floor_and_newest() -> None:
     floor, newest = smoke.LANES['floor'], smoke.LANES['newest']
-    assert set(smoke.LANES) == {'floor', 'newest'}
+    assert set(smoke.LANES) == {
+        'floor',
+        'newest',
+        'aarch64-floor',
+        'aarch64-newest',
+    }
+    # The aarch64 lanes are the same two on an aarch64 machine (KO2-40).
+    for lane in (floor, newest):
+        assert lane.machine is None
+    assert smoke.LANES['aarch64-floor'] == dataclasses.replace(
+        floor, machine='aarch64'
+    )
+    assert smoke.LANES['aarch64-newest'] == dataclasses.replace(
+        newest, machine='aarch64'
+    )
     assert floor.python == '3.10' and newest.python == '3.14'
     for lane in (floor, newest):
         image, digest = lane.image.split('@')

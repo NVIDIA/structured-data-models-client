@@ -1,0 +1,4617 @@
+{
+ "format": "sdm-t210-target-vectors/1",
+ "about": "The reference's labels for T2.10's PQL targets (contract/tools/target_record.py SCENARIOS, one target under one of the core's rules aggregation, open_window, condition, logical_target, target_filter and static_target, over the shop base, on DuckDB, SQLite and Postgres), by <scenario>@<database>: the outcome, each request's task and its context's and predicted rows' instance tables (the labels in TARGET), the rows each call scores and the result through to_pandas(). contract/tests/test_t210_targets.py holds python-core to them, observed by the same code (observe).",
+ "recorded_by": "contract/tools/target_record.py",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+ "vectors": {
+  "aggregation.list-distinct.users@duckdb": {
+   "rule": "aggregation",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "temporal_link_prediction",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "stringlist"
+      },
+      "entity_table_names": ["items", "users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [
+        0,
+        0,
+        4,
+        "2023-01-30T00:00:00.000000Z",
+        ["0"]
+       ],
+       [
+        1,
+        1,
+        3,
+        "2023-01-30T00:00:00.000000Z",
+        ["7", "3"]
+       ],
+       [
+        2,
+        2,
+        2,
+        "2023-01-30T00:00:00.000000Z",
+        ["6", "2"]
+       ],
+       [
+        3,
+        3,
+        5,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time"],
+      "rows": [
+       [4, 0, 0, "2023-03-01T00:00:00.000000Z"],
+       [5, 1, 3, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "aggregation.list-distinct.users@postgres": {
+   "rule": "aggregation",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "temporal_link_prediction",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "stringlist"
+      },
+      "entity_table_names": ["items", "users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [
+        0,
+        0,
+        4,
+        "2023-01-30T00:00:00.000000Z",
+        ["0"]
+       ],
+       [
+        1,
+        2,
+        2,
+        "2023-01-30T00:00:00.000000Z",
+        ["6", "2"]
+       ],
+       [
+        2,
+        3,
+        5,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        3,
+        1,
+        3,
+        "2023-01-30T00:00:00.000000Z",
+        ["7", "3"]
+       ]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time"],
+      "rows": [
+       [4, 0, 0, "2023-03-01T00:00:00.000000Z"],
+       [5, 1, 3, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "aggregation.list-distinct.users@sqlite": {
+   "rule": "aggregation",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "temporal_link_prediction",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "stringlist"
+      },
+      "entity_table_names": ["items", "users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [
+        0,
+        0,
+        4,
+        "2023-01-30T00:00:00.000000Z",
+        ["0"]
+       ],
+       [
+        1,
+        1,
+        3,
+        "2023-01-30T00:00:00.000000Z",
+        ["3", "7"]
+       ],
+       [
+        2,
+        3,
+        5,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        3,
+        2,
+        2,
+        "2023-01-30T00:00:00.000000Z",
+        ["2", "6"]
+       ]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time"],
+      "rows": [
+       [4, 0, 0, "2023-03-01T00:00:00.000000Z"],
+       [5, 1, 3, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "aggregation.list-distinct@duckdb": {
+   "rule": "aggregation",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "temporal_link_prediction",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "stringlist"
+      },
+      "entity_table_names": ["users", "items"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [
+        0,
+        2,
+        2.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["2"]
+       ],
+       [
+        1,
+        7,
+        null,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        2,
+        1,
+        3.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["3"]
+       ],
+       [
+        3,
+        3,
+        1.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        4,
+        0,
+        0.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["0"]
+       ],
+       [
+        5,
+        6,
+        null,
+        "2023-01-30T00:00:00.000000Z",
+        ["2"]
+       ]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time"],
+      "rows": [
+       [6, 0, 0.0, "2023-03-01T00:00:00.000000Z"],
+       [7, 1, 3.0, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "aggregation.list-distinct@postgres": {
+   "rule": "aggregation",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "temporal_link_prediction",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "stringlist"
+      },
+      "entity_table_names": ["users", "items"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [
+        0,
+        3,
+        1.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        1,
+        7,
+        null,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        2,
+        0,
+        0.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["0"]
+       ],
+       [
+        3,
+        6,
+        null,
+        "2023-01-30T00:00:00.000000Z",
+        ["2"]
+       ],
+       [
+        4,
+        1,
+        3.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["3"]
+       ],
+       [
+        5,
+        2,
+        2.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["2"]
+       ]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time"],
+      "rows": [
+       [6, 0, 0.0, "2023-03-01T00:00:00.000000Z"],
+       [7, 1, 3.0, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "aggregation.list-distinct@sqlite": {
+   "rule": "aggregation",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "temporal_link_prediction",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "stringlist"
+      },
+      "entity_table_names": ["users", "items"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [
+        0,
+        2,
+        2.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["2"]
+       ],
+       [
+        1,
+        3,
+        1.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        2,
+        7,
+        null,
+        "2023-01-30T00:00:00.000000Z",
+        ["1"]
+       ],
+       [
+        3,
+        0,
+        0.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["0"]
+       ],
+       [
+        4,
+        1,
+        3.0,
+        "2023-01-30T00:00:00.000000Z",
+        ["3"]
+       ],
+       [
+        5,
+        6,
+        null,
+        "2023-01-30T00:00:00.000000Z",
+        ["2"]
+       ]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_entity_ref_1", "__kumo_anchor_time"],
+      "rows": [
+       [6, 0, 0.0, "2023-03-01T00:00:00.000000Z"],
+       [7, 1, 3.0, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.aggregation-in@duckdb": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", true],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.aggregation-in@postgres": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", true],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.aggregation-in@sqlite": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", true],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.bool@duckdb": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", true],
+       [1, 7, "2024-07-07T00:00:00.000000Z", false],
+       [2, 4, "2024-07-07T00:00:00.000000Z", true],
+       [3, 5, "2024-07-07T00:00:00.000000Z", false],
+       [5, 3, "2024-07-07T00:00:00.000000Z", false],
+       [7, 6, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.bool@postgres": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2024-07-07T00:00:00.000000Z", true],
+       [1, 3, "2024-07-07T00:00:00.000000Z", false],
+       [2, 7, "2024-07-07T00:00:00.000000Z", false],
+       [4, 6, "2024-07-07T00:00:00.000000Z", true],
+       [6, 2, "2024-07-07T00:00:00.000000Z", true],
+       [7, 5, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.bool@sqlite": {
+   "rule": "condition",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "condition.in@duckdb": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", true],
+       [1, 7, "2024-07-07T00:00:00.000000Z", false],
+       [2, 4, "2024-07-07T00:00:00.000000Z", false],
+       [3, 5, "2024-07-07T00:00:00.000000Z", false],
+       [5, 3, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.in@postgres": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2024-07-07T00:00:00.000000Z", false],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 7, "2024-07-07T00:00:00.000000Z", false],
+       [4, 6, "2024-07-07T00:00:00.000000Z", false],
+       [6, 2, "2024-07-07T00:00:00.000000Z", true],
+       [7, 5, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.in@sqlite": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", true],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 5, "2024-07-07T00:00:00.000000Z", false],
+       [3, 7, "2024-07-07T00:00:00.000000Z", false],
+       [5, 4, "2024-07-07T00:00:00.000000Z", false],
+       [7, 6, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text-in@duckdb": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", false],
+       [1, 7, "2024-07-07T00:00:00.000000Z", true],
+       [2, 4, "2024-07-07T00:00:00.000000Z", true],
+       [3, 5, "2024-07-07T00:00:00.000000Z", false],
+       [5, 3, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text-in@postgres": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2024-07-07T00:00:00.000000Z", true],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 7, "2024-07-07T00:00:00.000000Z", true],
+       [4, 6, "2024-07-07T00:00:00.000000Z", true],
+       [6, 2, "2024-07-07T00:00:00.000000Z", false],
+       [7, 5, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text-in@sqlite": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", false],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 5, "2024-07-07T00:00:00.000000Z", false],
+       [3, 7, "2024-07-07T00:00:00.000000Z", true],
+       [5, 4, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text-not-equal@duckdb": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", true],
+       [1, 7, "2024-07-07T00:00:00.000000Z", true],
+       [2, 4, "2024-07-07T00:00:00.000000Z", true],
+       [3, 5, "2024-07-07T00:00:00.000000Z", true],
+       [5, 3, "2024-07-07T00:00:00.000000Z", false],
+       [7, 6, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text-not-equal@postgres": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2024-07-07T00:00:00.000000Z", true],
+       [1, 3, "2024-07-07T00:00:00.000000Z", false],
+       [2, 7, "2024-07-07T00:00:00.000000Z", true],
+       [4, 6, "2024-07-07T00:00:00.000000Z", false],
+       [6, 2, "2024-07-07T00:00:00.000000Z", true],
+       [7, 5, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text-not-equal@sqlite": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", true],
+       [1, 3, "2024-07-07T00:00:00.000000Z", false],
+       [2, 5, "2024-07-07T00:00:00.000000Z", true],
+       [3, 7, "2024-07-07T00:00:00.000000Z", true],
+       [5, 4, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text@duckdb": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", false],
+       [1, 7, "2024-07-07T00:00:00.000000Z", false],
+       [2, 4, "2024-07-07T00:00:00.000000Z", false],
+       [3, 5, "2024-07-07T00:00:00.000000Z", false],
+       [5, 3, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text@postgres": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2024-07-07T00:00:00.000000Z", false],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 7, "2024-07-07T00:00:00.000000Z", false],
+       [4, 6, "2024-07-07T00:00:00.000000Z", true],
+       [6, 2, "2024-07-07T00:00:00.000000Z", false],
+       [7, 5, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "condition.text@sqlite": {
+   "rule": "condition",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", false],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 5, "2024-07-07T00:00:00.000000Z", false],
+       [3, 7, "2024-07-07T00:00:00.000000Z", false],
+       [5, 4, "2024-07-07T00:00:00.000000Z", false],
+       [7, 6, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.and@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.and@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.and@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.avg@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [1, 0, "2023-01-30T00:00:00.000000Z", 22.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [2, 0, "2023-03-01T00:00:00.000000Z"],
+       [3, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.avg@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [1, 0, "2023-01-30T00:00:00.000000Z", 22.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [2, 0, "2023-03-01T00:00:00.000000Z"],
+       [3, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.avg@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [1, 0, "2023-01-30T00:00:00.000000Z", 22.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [2, 0, "2023-03-01T00:00:00.000000Z"],
+       [3, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.count@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.count@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.count@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.decimal@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.decimal@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.decimal@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "filter.in@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.in@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.in@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.key@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", true],
+       [6, 0, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.key@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", false],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.key@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", false],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.max@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [1, 5, "2023-01-30T00:00:00.000000Z", 17.5],
+       [2, 6, "2023-01-30T00:00:00.000000Z", 19.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [3, 0, "2023-03-01T00:00:00.000000Z"],
+       [4, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.max@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [1, 6, "2023-01-30T00:00:00.000000Z", 19.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 17.5]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [3, 0, "2023-03-01T00:00:00.000000Z"],
+       [4, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.max@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 5, "2023-01-30T00:00:00.000000Z", 17.5],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [2, 6, "2023-01-30T00:00:00.000000Z", 19.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [3, 0, "2023-03-01T00:00:00.000000Z"],
+       [4, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.not-null@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.not-null@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.not-null@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.not@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 1.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.not@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.not@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 1.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.or@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", true],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.or@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.or@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", true],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.sum@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 22.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.sum@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 22.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.sum@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 22.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.text-in@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 19.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.text-in@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 19.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.text-in@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 20.5],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 19.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.text@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.text@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 6, "2023-01-30T00:00:00.000000Z", 1.0],
+       [5, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 5, "2023-01-30T00:00:00.000000Z", 0.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "filter.text@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "regression",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "float32"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", 0.0],
+       [1, 3, "2023-01-30T00:00:00.000000Z", 0.0],
+       [2, 5, "2023-01-30T00:00:00.000000Z", 0.0],
+       [3, 7, "2023-01-30T00:00:00.000000Z", 0.0],
+       [4, 0, "2023-01-30T00:00:00.000000Z", 0.0],
+       [5, 4, "2023-01-30T00:00:00.000000Z", 0.0],
+       [6, 1, "2023-01-30T00:00:00.000000Z", 0.0],
+       [7, 6, "2023-01-30T00:00:00.000000Z", 1.0]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.and-or@duckdb": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", true],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.and-or@postgres": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.and-or@sqlite": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", true],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.and@duckdb": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.and@postgres": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.and@sqlite": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.not@duckdb": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 7, "2023-01-30T00:00:00.000000Z", false],
+       [2, 4, "2023-01-30T00:00:00.000000Z", true],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", true],
+       [5, 3, "2023-01-30T00:00:00.000000Z", true],
+       [6, 0, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.not@postgres": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", true],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 7, "2023-01-30T00:00:00.000000Z", false],
+       [3, 0, "2023-01-30T00:00:00.000000Z", false],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", true],
+       [6, 2, "2023-01-30T00:00:00.000000Z", true],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.not@sqlite": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", false],
+       [4, 0, "2023-01-30T00:00:00.000000Z", false],
+       [5, 4, "2023-01-30T00:00:00.000000Z", true],
+       [6, 1, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.or@duckdb": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 7, "2023-01-30T00:00:00.000000Z", false],
+       [2, 4, "2023-01-30T00:00:00.000000Z", true],
+       [3, 5, "2023-01-30T00:00:00.000000Z", true],
+       [4, 1, "2023-01-30T00:00:00.000000Z", true],
+       [5, 3, "2023-01-30T00:00:00.000000Z", true],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.or@postgres": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", true],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 7, "2023-01-30T00:00:00.000000Z", false],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", true],
+       [6, 2, "2023-01-30T00:00:00.000000Z", true],
+       [7, 5, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.or@sqlite": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 5, "2023-01-30T00:00:00.000000Z", true],
+       [3, 7, "2023-01-30T00:00:00.000000Z", false],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", true],
+       [6, 1, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.static-and@duckdb": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", false],
+       [1, 7, "2024-07-07T00:00:00.000000Z", false],
+       [2, 4, "2024-07-07T00:00:00.000000Z", true],
+       [3, 5, "2024-07-07T00:00:00.000000Z", true],
+       [5, 3, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.static-and@postgres": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2024-07-07T00:00:00.000000Z", true],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 7, "2024-07-07T00:00:00.000000Z", false],
+       [4, 6, "2024-07-07T00:00:00.000000Z", false],
+       [6, 2, "2024-07-07T00:00:00.000000Z", false],
+       [7, 5, "2024-07-07T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "logical.static-and@sqlite": {
+   "rule": "logical_target",
+   "outcome": {
+    "result": "success",
+    "stage": "materialize",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2024-07-07T00:00:00.000000Z", false],
+       [1, 3, "2024-07-07T00:00:00.000000Z", true],
+       [2, 5, "2024-07-07T00:00:00.000000Z", true],
+       [3, 7, "2024-07-07T00:00:00.000000Z", false],
+       [5, 4, "2024-07-07T00:00:00.000000Z", true],
+       [7, 6, "2024-07-07T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2024-07-07T00:00:00.000000Z"],
+       [9, 1, "2024-07-07T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [],
+   "result": null
+  },
+  "open-window@duckdb": {
+   "rule": "open_window",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "open-window@postgres": {
+   "rule": "open_window",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "open-window@sqlite": {
+   "rule": "open_window",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "rank.decimal-key@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", false],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", true],
+       [6, 0, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 7, "2023-01-30T00:00:00.000000Z", false],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [2, 2, 2],
+   "result": {
+    "columns": ["row_index", "id", "prediction", "rankings"],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      [2, 1],
+      ["{'candidate': 2, 'score': 0.7}", "{'candidate': 1, 'score': 0.4}"]
+     ],
+     [
+      1,
+      1,
+      [1, 0],
+      ["{'candidate': 1, 'score': 0.9}", "{'candidate': 0, 'score': 0.6}"]
+     ]
+    ]
+   }
+  },
+  "rank.decimal-key@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", false],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", false],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", false],
+       [3, 0, "2023-01-30T00:00:00.000000Z", false],
+       [4, 6, "2023-01-30T00:00:00.000000Z", true],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", true],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [2, 2, 2],
+   "result": {
+    "columns": ["row_index", "id", "prediction", "rankings"],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      [2, 1],
+      ["{'candidate': 2, 'score': 0.7}", "{'candidate': 1, 'score': 0.4}"]
+     ],
+     [
+      1,
+      1,
+      [1, 0],
+      ["{'candidate': 1, 'score': 0.9}", "{'candidate': 0, 'score': 0.6}"]
+     ]
+    ]
+   }
+  },
+  "rank.decimal-key@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", false],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", false],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", false],
+       [4, 0, "2023-01-30T00:00:00.000000Z", false],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [2, 2, 2],
+   "result": {
+    "columns": ["row_index", "id", "prediction", "rankings"],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      [2, 1],
+      ["{'candidate': 2, 'score': 0.7}", "{'candidate': 1, 'score': 0.4}"]
+     ],
+     [
+      1,
+      1,
+      [1, 0],
+      ["{'candidate': 1, 'score': 0.9}", "{'candidate': 0, 'score': 0.6}"]
+     ]
+    ]
+   }
+  },
+  "rank.odd-column.twin@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", false],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", true],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 7, "2023-01-30T00:00:00.000000Z", true],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", true],
+       [6, 0, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 7, "2023-01-30T00:00:00.000000Z", false],
+       [2, 4, "2023-01-30T00:00:00.000000Z", false],
+       [3, 5, "2023-01-30T00:00:00.000000Z", false],
+       [4, 1, "2023-01-30T00:00:00.000000Z", false],
+       [5, 3, "2023-01-30T00:00:00.000000Z", false],
+       [6, 0, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [2, 2, 2],
+   "result": {
+    "columns": ["row_index", "id", "prediction", "rankings"],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      [2, 1],
+      ["{'candidate': 2, 'score': 0.7}", "{'candidate': 1, 'score': 0.4}"]
+     ],
+     [
+      1,
+      1,
+      [1, 0],
+      ["{'candidate': 1, 'score': 0.9}", "{'candidate': 0, 'score': 0.6}"]
+     ]
+    ]
+   }
+  },
+  "rank.odd-column.twin@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", false],
+       [3, 0, "2023-01-30T00:00:00.000000Z", true],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 7, "2023-01-30T00:00:00.000000Z", true],
+       [3, 0, "2023-01-30T00:00:00.000000Z", false],
+       [4, 6, "2023-01-30T00:00:00.000000Z", false],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", false],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 4, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 7, "2023-01-30T00:00:00.000000Z", false],
+       [3, 0, "2023-01-30T00:00:00.000000Z", false],
+       [4, 6, "2023-01-30T00:00:00.000000Z", true],
+       [5, 1, "2023-01-30T00:00:00.000000Z", false],
+       [6, 2, "2023-01-30T00:00:00.000000Z", true],
+       [7, 5, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [2, 2, 2],
+   "result": {
+    "columns": ["row_index", "id", "prediction", "rankings"],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      [2, 1],
+      ["{'candidate': 2, 'score': 0.7}", "{'candidate': 1, 'score': 0.4}"]
+     ],
+     [
+      1,
+      1,
+      [1, 0],
+      ["{'candidate': 1, 'score': 0.9}", "{'candidate': 0, 'score': 0.6}"]
+     ]
+    ]
+   }
+  },
+  "rank.odd-column.twin@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "success",
+    "stage": "predict",
+    "error": null,
+    "code": null
+   },
+   "payloads": [
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", false],
+       [4, 0, "2023-01-30T00:00:00.000000Z", true],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", false],
+       [1, 3, "2023-01-30T00:00:00.000000Z", true],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", true],
+       [4, 0, "2023-01-30T00:00:00.000000Z", false],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", false]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    },
+    {
+     "task": {
+      "kind": "binary_classification",
+      "target": {
+       "column_name": "TARGET",
+       "dtype": "bool",
+       "classes": ["false", "true"],
+       "positive_class": "true"
+      },
+      "entity_table_names": ["users"],
+      "anchor_time_column": "__kumo_anchor_time"
+     },
+     "context": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time", "TARGET"],
+      "rows": [
+       [0, 2, "2023-01-30T00:00:00.000000Z", true],
+       [1, 3, "2023-01-30T00:00:00.000000Z", false],
+       [2, 5, "2023-01-30T00:00:00.000000Z", false],
+       [3, 7, "2023-01-30T00:00:00.000000Z", false],
+       [4, 0, "2023-01-30T00:00:00.000000Z", false],
+       [5, 4, "2023-01-30T00:00:00.000000Z", false],
+       [6, 1, "2023-01-30T00:00:00.000000Z", false],
+       [7, 6, "2023-01-30T00:00:00.000000Z", true]
+      ]
+     },
+     "predict": {
+      "format": "arrays",
+      "columns": ["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"],
+      "rows": [
+       [8, 0, "2023-03-01T00:00:00.000000Z"],
+       [9, 1, "2023-03-01T00:00:00.000000Z"]
+      ]
+     }
+    }
+   ],
+   "calls": [2, 2, 2],
+   "result": {
+    "columns": ["row_index", "id", "prediction", "rankings"],
+    "count": 2,
+    "rows": [
+     [
+      0,
+      0,
+      [2, 1],
+      ["{'candidate': 2, 'score': 0.7}", "{'candidate': 1, 'score': 0.4}"]
+     ],
+     [
+      1,
+      1,
+      [1, 0],
+      ["{'candidate': 1, 'score': 0.9}", "{'candidate': 0, 'score': 0.6}"]
+     ]
+    ]
+   }
+  },
+  "rank.odd-column@duckdb": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "rank.odd-column@postgres": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "rank.odd-column@sqlite": {
+   "rule": "target_filter",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "static.other-table@duckdb": {
+   "rule": "static_target",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "static.other-table@postgres": {
+   "rule": "static_target",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  },
+  "static.other-table@sqlite": {
+   "rule": "static_target",
+   "outcome": {
+    "result": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+   },
+   "payloads": null,
+   "calls": [],
+   "result": null
+  }
+ }
+}

@@ -141,7 +141,58 @@ NOT_A_NAME = {
     'table': 'orders',
     'rule': 'time_column_not_a_name',
 }
-EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
+EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders', 'reason': 'empty_key'}
+#: From T2.14b a refusal of a column or a table the schema lacks names its
+#: reason and lists those it has, so the host words it as the reference
+#: does ("table 'orders' has no column 'nope'; it has [...]").
+ORDERS_COLUMNS = ['order_id', 'price', 'ts', 'user_id']
+TABLES = ['orders', 'users']
+
+
+def no_column(field: str) -> dict[str, Any]:
+    r"""The refusal of a column ``orders`` lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'orders',
+        'column': 'nope',
+        'reason': 'no_column',
+        'columns': ORDERS_COLUMNS,
+    }
+
+
+def no_table(field: str) -> dict[str, Any]:
+    r"""The refusal of a table the schema lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'nope',
+        'reason': 'no_table',
+        'tables': TABLES,
+    }
+
+
+def S(text: str) -> dict[str, str]:
+    r"""A value no contract type holds, as the host spells it from T2.14b
+    (KO2-86): ``Given::Spelled``, the text Python shows it as (``repr``),
+    in place of E101's ``unreadable``."""
+    return {'spelled': text}
+
+
+def not_names(given: str) -> dict[str, Any]:
+    r"""The refusal of a key the host spelled ``given``, naming it."""
+    return {**NOT_NAMES, 'given': given, 'variant': 'given'}
+
+
+def not_a_name(given: str) -> dict[str, Any]:
+    r"""The refusal of a time column the host spelled ``given``, naming it
+    and the columns the table has."""
+    return {
+        **NOT_A_NAME,
+        'given': given,
+        'variant': 'given',
+        'columns': ORDERS_COLUMNS,
+    }
+
+
 #: D3's refusal of a key naming ``order_id`` twice.
 TWICE = {
     'field': 'primary_keys',
@@ -149,9 +200,6 @@ TWICE = {
     'column': 'order_id',
     'rule': 'key_column_twice',
 }
-COMPOSITE = refused(
-    'UNSUPPORTED_REQUEST', operation='describe_source', rule='composite_key'
-)
 ORDERS_INFERRED = (['order_id'], 'ts')
 
 
@@ -214,32 +262,32 @@ VECTORS: list[dict[str, Any]] = [
     case(
         'key.int',
         {'primary_keys': {'orders': 3}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S('3')}),
+        refused('INVALID_REQUEST', **not_names('3')),
     ),
     case(
         'key.float',
         {'primary_keys': {'orders': 1.5}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S('1.5')}),
+        refused('INVALID_REQUEST', **not_names('1.5')),
     ),
     case(
         'key.bool',
         {'primary_keys': {'orders': True}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S('True')}),
+        refused('INVALID_REQUEST', **not_names('True')),
     ),
     case(
         'key.nested',
         {'primary_keys': {'orders': [['order_id']]}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S("[['order_id']]")}),
+        refused('INVALID_REQUEST', **not_names("[['order_id']]")),
     ),
     case(
         'key.mapping',
         {'primary_keys': {'orders': {'order_id': 1}}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S("{'order_id': 1}")}),
+        refused('INVALID_REQUEST', **not_names("{'order_id': 1}")),
     ),
     case(
         'key.empty',
@@ -250,14 +298,14 @@ VECTORS: list[dict[str, Any]] = [
     case(
         'key.member-int',
         {'primary_keys': {'orders': ['order_id', 3]}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S("['order_id', 3]")}),
+        refused('INVALID_REQUEST', **not_names("['order_id', 3]")),
     ),
     case(
         'key.member-null',
         {'primary_keys': {'orders': ['order_id', None]}},
-        spec({'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S("['order_id', None]")}),
+        refused('INVALID_REQUEST', **not_names("['order_id', None]")),
     ),
     # D3 (P1B-73, the owner's): a key naming a column twice is refused by
     # describe_source, after its columns' existence and before a composite
@@ -283,21 +331,22 @@ VECTORS: list[dict[str, Any]] = [
         'key.twice-missing-first',
         {'primary_keys': {'orders': ['nope', 'nope']}},
         spec({'orders': V(['nope', 'nope'])}),
-        refused('INVALID_REQUEST', **EMPTY_KEY, column='nope'),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
         owner='D3',
     ),
     case(
         'key.composite',
         {'primary_keys': {'orders': ['order_id', 'user_id']}},
         spec({'orders': V(['order_id', 'user_id'])}),
-        COMPOSITE,
-        {'phase2': 'composite_key'},
+        # T2.12 lifted composite_key: the key the two columns in order, as
+        # the reference describes it.
+        described((['order_id', 'user_id'], 'ts')),
     ),
     case(
         'key.missing-column',
         {'primary_keys': {'orders': 'nope'}},
         spec({'orders': V(['nope'])}),
-        refused('INVALID_REQUEST', **EMPTY_KEY, column='nope'),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
     ),
     # --- time columns a caller can give, rows 18-22 ----------------------
     case(
@@ -315,26 +364,26 @@ VECTORS: list[dict[str, Any]] = [
     case(
         'time.int',
         {'time_columns': {'orders': 3}},
-        spec(time_columns={'orders': U}),
-        refused('INVALID_REQUEST', **NOT_A_NAME),
+        spec(time_columns={'orders': S('3')}),
+        refused('INVALID_REQUEST', **not_a_name('3')),
     ),
     case(
         'time.float',
         {'time_columns': {'orders': 1.5}},
-        spec(time_columns={'orders': U}),
-        refused('INVALID_REQUEST', **NOT_A_NAME),
+        spec(time_columns={'orders': S('1.5')}),
+        refused('INVALID_REQUEST', **not_a_name('1.5')),
     ),
     case(
         'time.bool',
         {'time_columns': {'orders': True}},
-        spec(time_columns={'orders': U}),
-        refused('INVALID_REQUEST', **NOT_A_NAME),
+        spec(time_columns={'orders': S('True')}),
+        refused('INVALID_REQUEST', **not_a_name('True')),
     ),
     case(
         'time.list',
         {'time_columns': {'orders': ['ts']}},
-        spec(time_columns={'orders': U}),
-        refused('INVALID_REQUEST', **NOT_A_NAME),
+        spec(time_columns={'orders': S("['ts']")}),
+        refused('INVALID_REQUEST', **not_a_name("['ts']")),
         {
             'entry': 'P1B-12',
             'transition': 'refusal UNNAMED -> refusal INVALID_REQUEST',
@@ -343,8 +392,8 @@ VECTORS: list[dict[str, Any]] = [
     case(
         'time.mapping',
         {'time_columns': {'orders': {'ts': 1}}},
-        spec(time_columns={'orders': U}),
-        refused('INVALID_REQUEST', **NOT_A_NAME),
+        spec(time_columns={'orders': S("{'ts': 1}")}),
+        refused('INVALID_REQUEST', **not_a_name("{'ts': 1}")),
         {
             'entry': 'P1B-12',
             'transition': 'refusal UNNAMED -> refusal INVALID_REQUEST',
@@ -354,59 +403,44 @@ VECTORS: list[dict[str, Any]] = [
         'time.missing-column',
         {'time_columns': {'orders': 'nope'}},
         spec(time_columns={'orders': V('nope')}),
-        refused(
-            'INVALID_REQUEST',
-            field='time_columns',
-            table='orders',
-            column='nope',
-        ),
+        refused('INVALID_REQUEST', **no_column('time_columns')),
     ),
     # --- the ordering promise, section 2, steps 3 to 6 --------------------
     case(
         'order.key-table-first',
         {'primary_keys': {'nope': 3}},
-        spec({'nope': U}),
-        refused('INVALID_REQUEST', field='primary_keys', table='nope'),
+        spec({'nope': S('3')}),
+        refused('INVALID_REQUEST', **no_table('primary_keys')),
     ),
     case(
         'order.time-table-first',
         {'time_columns': {'nope': 3}},
-        spec(time_columns={'nope': U}),
-        refused('INVALID_REQUEST', field='time_columns', table='nope'),
+        spec(time_columns={'nope': S('3')}),
+        refused('INVALID_REQUEST', **no_table('time_columns')),
     ),
     case(
         'order.keys-before-times',
         {'primary_keys': {'orders': 3}, 'time_columns': {'orders': 3}},
-        spec({'orders': U}, {'orders': U}),
-        refused('INVALID_REQUEST', **NOT_NAMES),
+        spec({'orders': S('3')}, {'orders': S('3')}),
+        refused('INVALID_REQUEST', **not_names('3')),
     ),
     case(
         'order.key-null-before-time',
         {'primary_keys': {'orders': None}, 'time_columns': {'orders': 3}},
-        spec({'orders': V(None)}, {'orders': U}),
+        spec({'orders': V(None)}, {'orders': S('3')}),
         refused('INVALID_REQUEST', **EMPTY_KEY),
     ),
     case(
         'order.tables-by-name',
         {'primary_keys': {'users': 3, 'orders': 'nope'}},
-        spec({'users': U, 'orders': V(['nope'])}),
-        refused(
-            'INVALID_REQUEST',
-            field='primary_keys',
-            table='orders',
-            column='nope',
-        ),
+        spec({'users': S('3'), 'orders': V(['nope'])}),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
     ),
     case(
         'order.missing-column-before-composite',
         {'primary_keys': {'orders': ['order_id', 'nope']}},
         spec({'orders': V(['order_id', 'nope'])}),
-        refused(
-            'INVALID_REQUEST',
-            field='primary_keys',
-            table='orders',
-            column='nope',
-        ),
+        refused('INVALID_REQUEST', **no_column('primary_keys')),
     ),
     # --- the wire: what no host may write (section 6A) -------------------
     wire('wire.key-bare-list', spec({'orders': ['order_id']}), HOST_BUG),
@@ -461,12 +495,9 @@ VECTORS: list[dict[str, Any]] = [
         'kind': 'edit',
         'owner': None,
         'set': {'table': 'orders', 'attribute': 'primary_key', 'value': 3},
-        'edit': {'edit': 'primary_key', 'table': 'orders', 'key': U},
+        'edit': {'edit': 'primary_key', 'table': 'orders', 'key': S('3')},
         'core': refused(
-            'INVALID_REQUEST',
-            field='primary_key',
-            table='orders',
-            rule='key_not_names',
+            'INVALID_REQUEST', **{**not_names('3'), 'field': 'primary_key'}
         ),
         'pair': 'key.int',
         'register': None,
@@ -478,12 +509,9 @@ VECTORS: list[dict[str, Any]] = [
         'kind': 'edit',
         'owner': None,
         'set': {'table': 'orders', 'attribute': 'time_column', 'value': 3},
-        'edit': {'edit': 'time_column', 'table': 'orders', 'column': U},
+        'edit': {'edit': 'time_column', 'table': 'orders', 'column': S('3')},
         'core': refused(
-            'INVALID_REQUEST',
-            field='time_column',
-            table='orders',
-            rule='time_column_not_a_name',
+            'INVALID_REQUEST', **{**not_a_name('3'), 'field': 'time_column'}
         ),
         'pair': 'time.int',
         'register': None,

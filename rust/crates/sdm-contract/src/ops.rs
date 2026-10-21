@@ -89,6 +89,7 @@ impl Operation {
                 named.extend(m.held.map(|id| (id, Bytes)));
                 named.push((m.query, Bytes));
                 named.extend(m.indices.map(|id| (id, Arrow)));
+                named.extend(m.candidates.map(|id| (id, Bytes)));
                 named.extend(m.sampler_state.as_ref().map(|s| (s.memo, Bytes)));
                 named.extend(m.values.map(|id| (id, Bytes)));
                 named
@@ -101,6 +102,10 @@ impl Operation {
                 }
                 for batch in p.state.batches.iter().flatten() {
                     named.push((batch.payload, Bytes));
+                }
+                for part in p.state.ranking.iter().flat_map(|r| &r.parts) {
+                    named.push((part.payload, Bytes));
+                    named.push((part.query, Bytes));
                 }
                 named
             }
@@ -471,6 +476,28 @@ pub struct DescribedColumn {
     /// 3, and absent from the JSON.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
+    /// Set for a column of numbers the host provider handed over as their
+    /// exact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):
+    /// whether its catalog declares it a key. The schema reads such a column
+    /// by its role in the schema as it stands (T2.21): as its text
+    /// (`received` `utf8`, `dtype` `string`) where the catalog declares it a
+    /// key, or where the schema keys it or joins it and every column it
+    /// joins to is such a column too; as a double (`float64`) otherwise.
+    /// `None` for every other column, and absent from the JSON.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_number: Option<ExactNumber>,
+}
+
+/// A column of numbers handed over as their exact text
+/// ([`DescribedColumn::exact_number`]), by what its catalog declares of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ExactNumber {
+    /// The catalog declares it a key, the one column of a primary, unique
+    /// or foreign key: always read as its text, as the reference reads it.
+    DeclaredKey,
+    /// Any other: its text while the schema keys or joins on it, as above.
+    Other,
 }
 
 // --- edit_schema ------------------------------------------------------------------
@@ -608,14 +635,102 @@ pub enum SchemaEdit {
 /// error raised while reading a collection is the caller's, never
 /// `unreadable`. Whether a value is valid (an empty key, a column the
 /// table lacks) is the core's call, never the host's.
+///
+/// A value no contract type holds may instead be given `{"spelled":
+/// "<text>"}`, the text the host's language shows it as (in Python, its
+/// `repr`): the core takes it as `unreadable` and names it in its refusal
+/// (`given`), as the reference names it, a value of the caller's own call
+/// (KO2-86, T2.14b).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum Given<T> {
     Value(T),
     Unreadable,
+    Spelled(String),
+}
+
+impl<T> Given<T> {
+    /// The value, where the host could write it as the contract's type.
+    pub fn value(&self) -> Option<&T> {
+        match self {
+            Given::Value(value) => Some(value),
+            Given::Unreadable | Given::Spelled(_) => None,
+        }
+    }
+
+    /// The host's text of a value no contract type holds, where it gave
+    /// one.
+    pub fn spelled(&self) -> Option<&str> {
+        match self {
+            Given::Spelled(text) => Some(text),
+            Given::Value(_) | Given::Unreadable => None,
+        }
+    }
 }
 
 // --- materialize and predict --------------------------------------------------
+
+/// One candidate of a ranking as a host gives it (`Materialize.candidates`,
+/// T2.8), each in one of these forms:
+///
+/// - `{"value": <scalar>}`: the host's value as the contract's scalar of
+///   its own type, a missing value `null`.
+/// - `{"integer": "<digits>"}`: an integer wider than an integer scalar
+///   holds, by its digits (`-` before a negative one).
+/// - `{"decimal": "<digits>"}`: an exact decimal of any precision, by its
+///   fixed-point digits (`-12.50`), its scale the digits after the point.
+/// - `{"spelled": "<text>"}`: a value of a type no scalar holds, by the
+///   text the reference writes into its question (in Python, `str` of it);
+///   it is no text candidate, and the core holds it equal to no other.
+/// - `{"typed": {"text": "<text>", "type": "<name>"}}`: a value of a type
+///   no scalar holds, written into its question by its text as `spelled`
+///   is, with the name of the kind of value it is (`date`, `datetime` for a
+///   timestamp with no zone, `datetime_zoned` for one with one, `time`).
+///   Two of one kind and one text are one candidate; a host whose language
+///   holds others equal (two zones of one instant) says so with `repeat`
+///   (T2.14b).
+/// - `repeat`: a value the host's own language holds equal to one given
+///   before it, left out as the reference's `dict.fromkeys` leaves it out.
+///   A host whose candidates are all scalars sends none, the core keeping
+///   each distinct value once by its own equality.
+/// - `unreadable`: a value the host cannot look up by value (in Python,
+///   one it cannot hash), which names no row and which the core refuses by
+///   name, as the reference fails on it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum GivenCandidate {
+    Value(Scalar),
+    Integer(String),
+    Decimal(String),
+    Spelled(String),
+    Typed(TypedCandidate),
+    Repeat,
+    Unreadable,
+}
+
+/// A candidate of a type no scalar holds, by its text and the name of its
+/// kind (`GivenCandidate::Typed`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TypedCandidate {
+    pub text: String,
+    #[serde(rename = "type")]
+    pub kind: TypedKind,
+}
+
+/// The kinds a typed candidate is of, a closed set: a kind no host may
+/// name otherwise, an unknown one refused by the contract's reader by
+/// name.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TypedKind {
+    Date,
+    Datetime,
+    DatetimeZoned,
+    Time,
+}
 
 /// Build a request for a query over a described source.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -635,18 +750,27 @@ pub struct Materialize {
     pub query: AttachmentId,
     /// The entities to predict for: an Arrow attachment of one column.
     pub indices: Option<AttachmentId>,
+    /// The rows a ranking (`RANK TOP k`) is over, as the caller named them
+    /// (contract v27, optional, T2.8): a bytes attachment of a JSON list of
+    /// [`GivenCandidate`]s, each candidate as the host's value is written,
+    /// so values of several types keep each its own. The core asks a
+    /// ranking as one question per distinct candidate, writing each into
+    /// its question by the type of the column ranked, and refuses
+    /// candidates on any other question.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidates: Option<AttachmentId>,
     /// The anchor time, a `ts` scalar.
     pub anchor_time: Option<Scalar>,
     /// The sampling seed, an integer of any size.
     pub seed: Option<Seed>,
     /// Whether the caller asked for an unseeded sample, a new one each
-    /// call (`random_seed=None`), with `seed` left out; the core samples
-    /// under a seed and refuses it by name, `unseeded` (decision E61).
+    /// call (`random_seed=None`), with `seed` left out; from contract v27
+    /// the core draws it under a seed of its own, new each call (T2.11).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unseeded: bool,
     /// Whether the caller anchored each entity at its own time
-    /// (`anchor_time='entity'`), with `anchor_time` left out; refused by
-    /// name, `anchor_entity`, until the core takes it (decision E61).
+    /// (`anchor_time='entity'`), with `anchor_time` left out; from contract
+    /// v27 taken for a static query (T2.11).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub anchor_entity: bool,
     /// A bytes attachment of a JSON object of the call's option values the
@@ -660,18 +784,26 @@ pub struct Materialize {
     /// `random_seed`, in place of `seed` and `unseeded` where it is given
     /// (`null`, an unseeded sample); from contract v26, `rows_per_call`,
     /// the most rows one model call scores, which only lowers the profile's
-    /// (`main`'s multi-call `predict`, read from T2.8c). The core reads it with `sdm-wire`'s
+    /// (`main`'s multi-call `predict`, read from T2.8c); `top_k`, how
+    /// many candidates a ranking keeps, in place of the query's `TOP k`,
+    /// read from T2.8; from contract v27, `lag_timesteps`, the past steps
+    /// of a temporal target added as features (T2.9), any value, which the
+    /// core refuses where the reference's engine refuses it, once the
+    /// context is labelled; and from contract v27 the sampling options
+    /// (T2.11): `num_hops` and `num_neighbors`, the hops walked and each
+    /// one's size; `max_pq_iterations`; `use_prediction_time`;
+    /// `return_embeddings`, which names `embeddings` among the payload's
+    /// outputs; `exclude_cols_dict`, as given; and `context_anchor_time`,
+    /// written as `anchor_time` is (a `ts` scalar), or as the text
+    /// `entity`, `null`, or the text `unreadable` for any other value. The core reads it with `sdm-wire`'s
     /// bounded reader and holds each value's type to what the reference's
     /// client takes, so the host checks none of them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<AttachmentId>,
     /// The names of the call's other sampling options, which this message
-    /// carries no value of (the reference's `context_anchor_time`,
-    /// `exclude_cols_dict`, `lag_timesteps`,
-    /// `max_pq_iterations`, `num_hops`, `num_neighbors`,
-    /// `return_embeddings`, `top_k` and `use_prediction_time`): the core
-    /// takes none of them yet and refuses the first in name order by its
-    /// name, and another name as `INVALID_REQUEST` (decision E61). The host
+    /// carries no value of (none from contract v27: every sampling option
+    /// travels in `values`): the core refuses any name it is given as
+    /// `INVALID_REQUEST` (decision E61). The host
     /// passes each the call gave, so it refuses none of its own.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub options: Vec<String>,
@@ -925,6 +1057,58 @@ pub struct RequestState {
     /// ranking, already one call per step or candidate, is never batched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub batches: Option<Vec<RequestBatch>>,
+    /// A ranking (`RANK TOP k`), which the core asks as one binary question
+    /// per distinct candidate, whether the entity reaches it in the window
+    /// (the client's `_per_candidate`, contract v27, optional, T2.8):
+    /// `payload` and `query` are the first candidate's question, and this
+    /// holds every later one's, in order. Absent for any other request.
+    /// `predict` asks each and gives the answers back as one ranking.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking: Option<Ranking>,
+}
+
+/// A ranking's request state ([`RequestState::ranking`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Ranking {
+    /// How many candidates each row keeps, best first (the call's `top_k`,
+    /// else the query's `TOP k`); none keeps every candidate scored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
+    /// The first candidate's position among the candidates `materialize`
+    /// was given (0, but where the host held the first a repeat); its
+    /// question is the state's own. Each later part's position is past it,
+    /// in increasing order, or `predict` refuses the state.
+    pub candidate: u32,
+    /// The first candidate as the result's `rankings` names it, the JSON
+    /// text of its value.
+    pub value: String,
+    /// The question of each later candidate, in the order the candidates
+    /// were named.
+    pub parts: Vec<RankingPart>,
+}
+
+/// One later candidate's question of a ranking's request state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RankingPart {
+    /// The candidate this question asks after: its position among the
+    /// candidates `materialize` was given, its first where it was named
+    /// more than once.
+    pub candidate: u32,
+    /// The candidate as the result's `rankings` names it: the JSON text of
+    /// its value.
+    pub value: String,
+    /// A bytes attachment of this question's payload as JSON, as
+    /// [`RequestState::payload`].
+    pub payload: AttachmentId,
+    /// This question's text: a bytes attachment of a JSON string.
+    pub query: AttachmentId,
+    /// The id this question's call carries, as [`ForecastStep::request_id`];
+    /// `materialize` writes none, and `predict` refuses a later candidate's
+    /// question without one (`INVALID_REQUEST`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 /// One later call of a request asked in several ([`RequestState::batches`]).
@@ -1011,13 +1195,37 @@ pub struct Predicted {
     /// (`sdm_request::predict::table`).
     ///
     /// Contract v26 fixes the columns ranking and forecasting add (design
-    /// choice 1; written from T2.8b and T2.9), after `probabilities` and
+    /// choice 1; written from T2.8 and T2.9), after `probabilities` and
     /// before `answer_index`, each where an answer carries it: `scores`
-    /// (list of float64, a ranking's score of each candidate, in the
-    /// endpoint's order), `rankings` (list of utf8, a ranking's candidates,
-    /// best first, each the JSON text of the reference's item value), and
-    /// `quantiles` (list of struct `quantile` float64, `value` float64, a
-    /// forecast's quantiles in the endpoint's order).
+    /// (list of float64, an item's scores in the endpoint's order),
+    /// `rankings` (list of utf8, an item's rankings, each a mapping), and
+    /// `quantiles` (a regression's quantiles, each named as the endpoint
+    /// named it, in the order written; from contract v27, T2.9, a
+    /// mapping-valued field, laid out as the next paragraph says, an
+    /// answer's `{}` the text `{}`, none null).
+    ///
+    /// A mapping-valued field (T2.8, contract v27) is laid out as JSON
+    /// object text in a Utf8 column, and a list of mappings as a list of
+    /// those texts: a JSON object when every key is text, otherwise (a key
+    /// that is a number, a boolean or null) the JSON list of its `[key,
+    /// value]` pairs, as a JSON object holds no other key. Each is read
+    /// from the answer as Python's `dict` reads it, keys equal as Python's
+    /// are, by the one reader `sdm_wire::response::mapping`.
+    ///
+    /// A ranking's result (T2.8, contract v27), one row per entity asked
+    /// about, in place
+    /// of `prediction` and `probabilities`: `rankings` (the candidates the
+    /// row ranks, best first, at most `top_k`, each the JSON text of its
+    /// value, as the state names it), `scores` (how sure the endpoint was
+    /// of each, in the same order) and `candidates` (list of int64, each
+    /// one's position among the candidates `materialize` was given, its
+    /// first where it was given more than once, in the same order), which a
+    /// host gives back as the outputs named in `outputs`, each candidate as
+    /// the value it was given as, found by its position.
+    ///
+    /// Contract v27 adds, after those, `embeddings` (list of float64, an
+    /// answer's embedding in the order written, null where it has none;
+    /// T2.11).
     pub result: AttachmentId,
     /// The model that answered, as the endpoint names it.
     pub model: String,
@@ -1029,6 +1237,12 @@ pub struct Predicted {
     /// The outputs the call asked for, the task's default ones where the
     /// caller named none.
     pub outputs: Vec<String>,
+    /// A ranking's candidates no question was sent for, the context sampled
+    /// for each holding one answer only (T2.8): each its position among the
+    /// candidates `materialize` was given, in the order named. Empty for
+    /// any other result.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unscored_candidates: Vec<u32>,
 }
 
 // --- attachments ----------------------------------------------------------------
@@ -1067,6 +1281,8 @@ pub struct Attachments {
     pub materialize_query: String,
     #[schemars(rename = "Materialize.values")]
     pub materialize_values: CallValues,
+    #[schemars(rename = "Materialize.candidates")]
+    pub materialize_candidates: Vec<GivenCandidate>,
     #[schemars(rename = "SamplerState.memo")]
     pub sampler_state_memo: SamplerMemo,
     #[schemars(rename = "RequestState.payload")]
@@ -1079,6 +1295,10 @@ pub struct Attachments {
     pub forecast_step_query: String,
     #[schemars(rename = "RequestBatch.payload")]
     pub request_batch_payload: StatePayload,
+    #[schemars(rename = "RankingPart.payload")]
+    pub ranking_part_payload: StatePayload,
+    #[schemars(rename = "RankingPart.query")]
+    pub ranking_part_query: String,
     #[schemars(rename = "Predicted.metadata")]
     pub predicted_metadata: EndpointMetadata,
 }

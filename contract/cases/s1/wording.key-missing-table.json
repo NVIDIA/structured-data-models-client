@@ -1,0 +1,59 @@
+{
+  "format": "sdm-case/1",
+  "id": "wording.key-missing-table",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "primary_keys": {
+        "nope": "user_id"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {
+          "nope": {
+            "value": [
+              "user_id"
+            ]
+          }
+        },
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "G15: a primary key given for a table the schema does not have is refused naming the table and the tables it has",
+  "source": "T2.14b's test author, the reference at 6298913c"
+}

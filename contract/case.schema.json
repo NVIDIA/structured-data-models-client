@@ -64,6 +64,27 @@
         "probabilities": {
           "description": "Whether the scripted endpoint answers a classification call asking for probabilities with them, as a model does (contract/runners/scripted_endpoint.py; T2.8's ranking cases, whose order is their probabilities): a JSON boolean; absent, the rule answers none.",
           "type": "boolean"
+        },
+        "quantiles": {
+          "description": "Whether the scripted endpoint answers a regression call asking for quantiles with them, as a model does (contract/runners/scripted_endpoint.py; T2.9's forecast cases): a JSON boolean; absent, the rule answers none.",
+          "type": "boolean"
+        },
+        "outputs": {
+          "description": "The output fields SDMClient.predict asks for (its outputs=), passed as written (T2.9's quantile cases); absent, the call names none and the model's defaults for the task are asked.",
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "explanation": {
+          "description": "Whether the scripted endpoint answers a call asking for an explanation with one, as a model explains the entity it is asked about (contract/runners/scripted_endpoint.py; T2.13's cases): a JSON boolean; absent, the rule answers none.",
+          "type": "boolean"
+        },
+        "item_metadata": {
+          "description": "Whether the scripted endpoint gives each item it answers its metadata, as a model reports something of each answer (contract/runners/scripted_endpoint.py; T2.13's cases): a JSON boolean; absent, the rule gives none.",
+          "type": "boolean"
+        },
+        "embeddings": {
+          "description": "Whether the scripted endpoint answers a call asking for embeddings with one on each item, as a model answers the vector it holds of each entity (contract/runners/scripted_endpoint.py; T2.11's cases): a JSON boolean; absent, the rule answers none.",
+          "type": "boolean"
         }
       }
     },
@@ -264,7 +285,8 @@
       "properties": {
         "indices": {"type": "array", "items": {"type": ["integer", "string"]}},
         "indices_as": {"const": "decimal"},
-        "anchor_time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"},
+        "anchor_time": {"description": "An ISO timestamp, or the literal entity: each entity at its own time (T2.11).", "type": "string", "anyOf": [{"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}, {"const": "entity"}]},
+        "context_anchor_time": {"description": "The context's anchor time (T2.11), as anchor_time is written: an ISO timestamp, or the literal entity.", "type": "string", "anyOf": [{"pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}"}, {"const": "entity"}]},
         "inference_config": {"type": "object", "minProperties": 1},
         "candidates": {
           "description": "The rows a ranking is over (E153), each an entity key read as indices are: a JSON integer literal of any size or a string.",
@@ -278,6 +300,31 @@
         "rows_per_call": {
           "description": "How many entities one model call scores (main's 1fc5a686, T2.8c), passed as written: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
           "type": ["integer", "number", "boolean", "string"]
+        },
+        "lag_timesteps": {
+          "description": "How many past steps of the target materialize adds as lagged features (T2.9), passed as written as rows_per_call is: a JSON integer as an integer of any size, a number written with a fraction or an exponent as a float, true or false as a bool, a string as text, so a value the reference refuses is the case's input.",
+          "type": ["integer", "number", "boolean", "string"]
+        },
+        "random_seed": {
+          "description": "The sampling seed passed to materialize (T2.11), as written: any JSON value, a JSON integer as an integer of any size, null as None (an unseeded sample, a new one each call), so a value the reference refuses is the case's input; absent, the call's default seed."
+        },
+        "num_hops": {
+          "description": "How many hops the sampler walks (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+        },
+        "num_neighbors": {
+          "description": "How many neighbours the sampler takes at each hop (T2.11), passed as written: any JSON value, a list as a list, null as None, so a value the reference refuses is the case's input."
+        },
+        "max_pq_iterations": {
+          "description": "How many tries per example the sampler makes to find valid labels (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+        },
+        "use_prediction_time": {
+          "description": "Whether the model reads the prediction time as a feature (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+        },
+        "return_embeddings": {
+          "description": "Whether materialize asks for embeddings (T2.11), passed as written: any JSON value, null as None, so a value the reference refuses is the case's input."
+        },
+        "exclude_cols_dict": {
+          "description": "The columns to leave out of the request, by table (T2.11), passed as written: any JSON value, an object as a dict and a list as a list, null as None, so a value the reference refuses is the case's input."
         }
       }
     },

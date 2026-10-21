@@ -23,7 +23,7 @@
 use serde_json::Value;
 
 /// The attachments the core reads from a `start`, by the lock's names.
-const READ: [&str; 12] = [
+const READ: [&str; 14] = [
     "ValidateQuery.query",
     "ValidateQuery.schema",
     "DescribeSource.source",
@@ -33,16 +33,19 @@ const READ: [&str; 12] = [
     "Materialize.schema",
     "Materialize.held",
     "Materialize.query",
+    "Materialize.candidates",
     "RequestState.query",
     "ForecastStep.query",
+    "RankingPart.query",
     "SamplerState.memo",
 ];
 
 /// The values dispatch reads an attachment's id from, other than an
 /// operation's `request`, and the contract type each is.
-const HOLDERS: [(&str, &str); 3] = [
+const HOLDERS: [(&str, &str); 4] = [
     ("request.state.", "RequestState"),
     ("step.", "ForecastStep"),
+    ("part.", "RankingPart"),
     ("state.", "SamplerState"),
 ];
 
@@ -117,6 +120,11 @@ fn locked(attachments: &Value, name: &str) -> Option<String> {
     match (property.get("$ref"), property.get("type")) {
         (Some(Value::String(target)), _) => target.rsplit('/').next().map(str::to_owned),
         (None, Some(Value::String(kind))) if kind == "string" => Some("String".into()),
+        // A list of one type, as `Materialize.candidates` (T2.8).
+        (None, Some(Value::String(kind))) if kind == "array" => {
+            let item = property.get("items")?.get("$ref")?.as_str()?;
+            item.rsplit('/').next().map(|ty| format!("Vec<{ty}>"))
+        }
         _ => None,
     }
 }

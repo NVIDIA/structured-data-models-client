@@ -690,6 +690,7 @@ def freeze_cases(results: list[Result]) -> None:
         on: bridge_freeze.Base | str = base,
         rewrite: bool = False,
         declare: dict[str, dict[str, str]] | None = None,
+        strict: bool = False,
     ) -> None:
         with tree(*FREEZE_TREE) as root:
             (root / bridge_freeze.CHANGES).write_text(changes)
@@ -705,7 +706,7 @@ def freeze_cases(results: list[Result]) -> None:
                 data = json.loads(path.read_text())
                 data['changes'] = declare
                 path.write_text(json.dumps(data))
-            problems = refused + bridge_freeze.check(root, on)
+            problems = refused + bridge_freeze.check(root, on, strict=strict)
             expect(
                 results,
                 f'bridge_freeze: {name}',
@@ -817,7 +818,7 @@ def freeze_cases(results: list[Result]) -> None:
             f'{rel}: neither a bridge file nor the home of a ledgered rule'
             for rel in bridge_freeze.FROZEN
             if rel not in l0_deps.BRIDGE_FILES
-            and rel.parent.name != '_rust'
+            and '_rust' not in rel.parts
             and not any(
                 f'`{name.split(".")[-1]}`' in ledger or f'`{name}`' in ledger
                 for name in bridge_freeze.COVERED.get(rel, ())
@@ -1487,6 +1488,48 @@ def freeze_cases(results: list[Result]) -> None:
         ),
         '_tables_linked_to: covered code the baseline does not hold',
     )
+    # T2.16a: a copy judging another tree (the gate's checkpoint copy)
+    # takes covered code the tree's baseline leaves out, and a frozen file
+    # it leaves out whole, when the tree declares each gone: the tree no
+    # longer freezes them, and its own copy refuses a baseline entry for
+    # them. Undeclared, or judged strict, each is still refused.
+    linked = f'{key_of["relational"]}::_tables_linked_to'
+    dropped = lambda r: baseline(  # noqa: E731
+        r,
+        lambda d: d['files'][key_of['relational']].pop('_tables_linked_to'),
+    )
+    declared_gone = {linked: {'gone': 'no longer frozen (T2.14c)'}}
+    case(
+        'control: a covered function left out of the baseline, declared gone',
+        dropped,
+        None,
+        declare=declared_gone,
+    )
+    case(
+        'a covered function left out of the baseline, declared gone, strict',
+        dropped,
+        '_tables_linked_to: covered code the baseline does not hold',
+        declare=declared_gone,
+        strict=True,
+    )
+    every_client = {
+        f'{key_of["client"]}::{name}': {'gone': 'no longer frozen (T2.14c)'}
+        for name in json.loads(committed)['files'][key_of['client']]
+    }
+    no_client = lambda r: baseline(  # noqa: E731
+        r, lambda d: d['files'].pop(key_of['client'])
+    )
+    case(
+        'control: a frozen file left out of the baseline, every entry gone',
+        no_client,
+        None,
+        declare=every_client,
+    )
+    case(
+        'a frozen file left out of the baseline, not declared',
+        no_client,
+        f'no entry for the frozen file {key_of["client"]}',
+    )
     case(
         'a covered function renamed away',
         lambda r: edit(
@@ -1655,8 +1698,164 @@ def freeze_cases(results: list[Result]) -> None:
                 }
             )
         ),
-        'f49999 is not a frozen bridge file',
+        # A file outside FROZEN is ignored (T2.14a1); the frozen files it
+        # leaves out are refused.
+        f'no entry for the frozen file {materialize}',
     )
+
+    # T2.14a1: this copy judges only what it freezes, so a later copy may
+    # freeze more and still be judged by its checkpoint's copy; everything
+    # it freezes is judged as before.
+    fake = {'fingerprint': 'ab' * 32}
+    outside = str(client / 'not_frozen.py')
+    uncovered = 'SDMClient.not_covered'
+    case(
+        'control: a baseline file outside FROZEN is ignored',
+        lambda r: baseline(
+            r, lambda d: d['files'].update({outside: {'f': dict(fake)}})
+        ),
+        None,
+    )
+    case(
+        'control: an uncovered name of a covered-by-name file is ignored',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['client']].update(
+                {uncovered: dict(fake)}
+            ),
+        ),
+        None,
+    )
+    case(
+        'control: a declaration of an entry this copy does not freeze',
+        lambda r: None,
+        None,
+        declare={
+            f'{key_of["client"]}::{uncovered}': refactor,
+            f'{outside}::f': refactor,
+        },
+    )
+    case(
+        'a frozen file missing from the baseline, beside an outside one',
+        lambda r: baseline(
+            r,
+            lambda d: (
+                d['files'].pop(key_of['schema']),
+                d['files'].update({outside: {'f': dict(fake)}}),
+            ),
+        ),
+        f'no entry for the frozen file {schema}',
+    )
+    case(
+        'a function deleted from a WHOLE file',
+        lambda r: baseline(
+            r,
+            lambda d: d['files'][key_of['schema']].update({'gone': dict(fake)}),
+        ),
+        f'{schema}::gone: in the baseline but not covered code',
+    )
+    case(
+        'a stray declaration inside a frozen file',
+        lambda r: None,
+        f'{schema}::not_a_function: declared in',
+        declare={f'{schema}::not_a_function': refactor},
+    )
+    case(
+        'a covered entry is still compared exactly',
+        lambda r: baseline(
+            r,
+            lambda d: (
+                d['files'][key_of['client']]['SDMClient._prepare'].update(fake),
+                d['files'].update({outside: {'f': dict(fake)}}),
+            ),
+        ),
+        'SDMClient._prepare: differs from the baseline',
+    )
+    # T2.14a: strict, a copy judging its own tree (its bridge_freeze.py
+    # this file, byte for byte, as prepush.sh and CI's rust-lint run it),
+    # keeps every refusal T2.14a1's tolerances drop for the gate's
+    # checkpoint copy: each seed passes tolerant and is refused strict.
+    run_py = str(client / '_rust/run.py')
+    for name, change, declared, refusal in (
+        (
+            'a baseline file outside FROZEN',
+            lambda r: baseline(
+                r, lambda d: d['files'].update({run_py: {'go': dict(fake)}})
+            ),
+            None,
+            f'{run_py} is not a frozen bridge file',
+        ),
+        (
+            'an uncovered client.py name in the baseline',
+            lambda r: baseline(
+                r,
+                lambda d: d['files'][key_of['client']].update(
+                    {'SDMClient.close': dict(fake)}
+                ),
+            ),
+            None,
+            f'{key_of["client"]}::SDMClient.close: in the baseline but not '
+            'covered code',
+        ),
+        (
+            'a declaration of a file outside FROZEN',
+            lambda r: None,
+            {f'{run_py}::go': refactor},
+            f'{run_py}::go: declared in',
+        ),
+        (
+            'a declaration of an uncovered client.py name',
+            lambda r: None,
+            {f'{key_of["client"]}::SDMClient.close': refactor},
+            f'{key_of["client"]}::SDMClient.close: declared in',
+        ),
+    ):
+        case(f'control: {name}, tolerant', change, None, declare=declared)
+        case(f'{name}, strict', change, refusal, declare=declared, strict=True)
+    case('control: the tree unchanged, tolerant', lambda r: None, None)
+    case(
+        'control: the tree unchanged, strict', lambda r: None, None, strict=True
+    )
+
+    # own_tree: strict only where the tree's bridge_freeze.py is this file,
+    # byte for byte; problems() runs check with it.
+    script = REPO_ROOT / bridge_freeze.SCRIPT
+    with tree(*FREEZE_TREE) as root:
+        own = root / bridge_freeze.SCRIPT
+        seen: list[bool] = []
+        saved = bridge_freeze.check, bridge_freeze.base_baseline
+        try:
+            bridge_freeze.base_baseline = lambda _root, _ref: base
+            bridge_freeze.check = lambda _root, _base, *, strict=False: (
+                seen.append(strict) or []
+            )
+            for label, text, wanted in (
+                ('identical', script.read_bytes(), True),
+                ('a byte differs', script.read_bytes() + b'#', False),
+                ('missing', None, False),
+            ):
+                if own.exists():
+                    own.unlink()
+                if text is not None:
+                    own.parent.mkdir(parents=True, exist_ok=True)
+                    own.write_bytes(text)
+                seen.clear()
+                bridge_freeze.problems(root, 'origin/rust-core-phase-2')
+                expect(
+                    results,
+                    f"bridge_freeze: own_tree, the tree's copy {label}",
+                    []
+                    if bridge_freeze.own_tree(root) is wanted
+                    and seen == [wanted]
+                    else [
+                        f'own_tree {bridge_freeze.own_tree(root)}, problems() '
+                        f'ran check with strict {seen}, not {wanted}'
+                    ],
+                    fails_with=None,
+                )
+        finally:
+            bridge_freeze.check, bridge_freeze.base_baseline = saved
+
     case(
         'a format 2 entry without its counts',
         lambda r: baseline(

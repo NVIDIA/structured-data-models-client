@@ -36,6 +36,7 @@ mod blake2b;
 mod duckdb;
 mod keys;
 mod mt19937;
+mod pg_values;
 mod postgres;
 mod quote;
 mod read;
@@ -153,6 +154,48 @@ impl DataLayer for Data {
             ProviderChoice::Host { .. } => false,
             ProviderChoice::Sql { dialect } => {
                 matches!(rendered(dialect), Ok(Rendered::Sqlite))
+            }
+        }
+    }
+
+    fn conform(
+        &self,
+        provider: &ProviderChoice,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        match provider {
+            ProviderChoice::Sql { dialect }
+                if matches!(rendered(dialect), Ok(Rendered::Postgres)) =>
+            {
+                pg_values::conform(schema, batches, float_text)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn bound_keys(
+        &self,
+        provider: &ProviderChoice,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        match provider {
+            ProviderChoice::Sql { dialect }
+                if matches!(rendered(dialect), Ok(Rendered::Postgres)) =>
+            {
+                pg_values::bound_keys(schema, batches)
+            }
+            _ => Ok(None),
+        }
+    }
+
+    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
+        match provider {
+            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Sql { dialect } => {
+                matches!(rendered(dialect), Ok(Rendered::Postgres))
             }
         }
     }

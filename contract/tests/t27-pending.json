@@ -1,0 +1,10 @@
+{
+ "about": "T2.7's acceptance tests (the non-SQL test provider and the swapped data layer) that failed when the test author wrote them, before the implementation (sdm-testkit's tests/t27_non_sql_provider.rs as rust:<test>). Each listed test must still fail (strict); the implementer takes a name out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": [],
+ "authored": [
+  "rust:the_kit_passes_on_the_non_sql_provider",
+  "rust:a_seeded_fault_fails_the_kit_on_the_non_sql_provider",
+  "rust:the_same_prediction_runs_on_the_swapped_layer",
+  "rust:no_domain_crate_changed_for_t2_7"
+ ]
+}

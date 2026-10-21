@@ -1,9 +1,12 @@
 {
   "format": "sdm-case/1",
   "id": "edit.time-column-text",
-  "status": "diagnostic",
+  "status": "acceptance",
   "slice": "S1",
-  "paths": [],
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
   "routes": [
     "schema.from-source/all-tables/duckdb",
     "schema.from-source/catalog-keys/duckdb",
@@ -85,5 +88,5 @@
     "stage": "materialize"
   },
   "why": "A time column set on a VARCHAR column of ISO dates is taken, as the reference takes it (its meaning made timestamp), and the request reads the text as times, on both core hosts",
-  "source": "T1.27: from T1.24b's review, the time column's rule reached on both core hosts over a text column"
+  "source": "T1.27: from T1.24b's review, the time column's rule reached on both core hosts over a text column; admitted as an acceptance case by T2.12 (the design row: the nine edit.* S1 cases, reached on both core hosts, admitted as acceptance)"
 }

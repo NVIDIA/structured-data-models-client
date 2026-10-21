@@ -65,6 +65,7 @@ import importlib.util
 import json
 import math
 import random
+import re
 import sys
 import warnings
 from collections.abc import Callable, Iterator
@@ -292,8 +293,77 @@ TIME_NOT_A_NAME = {
     'table': 'orders',
     'rule': 'time_column_not_a_name',
 }
-EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders'}
-COMPOSITE = {'operation': 'describe_source', 'rule': 'composite_key'}
+
+
+#: From T2.14b (KO2-86: an error may name a value of the caller's own
+#: call) a key or time column the contract's types do not hold is written
+#: spelled, ``{"spelled": repr(value)}``, in place of E101's
+#: ``unreadable``, and its refusal names it: ``given``, that same text,
+#: ``variant`` ``given``, and for a time column the columns the table has.
+def spelled(value: Any) -> dict[str, str]:
+    r"""``value`` as the host spells it for the core."""
+    return {'spelled': repr(value)}
+
+
+def not_names(value: Any) -> dict[str, Any]:
+    r"""The refusal of ``value`` as a key."""
+    return {**KEY_NOT_NAMES, 'given': repr(value), 'variant': 'given'}
+
+
+def not_a_name(value: Any) -> dict[str, Any]:
+    r"""The refusal of ``value`` as a time column."""
+    return {
+        **TIME_NOT_A_NAME,
+        'given': repr(value),
+        'variant': 'given',
+        'columns': ORDERS_COLUMNS,
+    }
+
+
+_ADDRESS = re.compile(r' at 0x[0-9a-f]+>')
+
+
+def masked(value: Any) -> Any:
+    r"""``value`` with each object address in its text (a generator's or
+    an object's ``repr``, which a new object of the same kind gives
+    another of) written as one, so a spelled value is held exactly but
+    for its address."""
+    if isinstance(value, str):
+        return _ADDRESS.sub(' at 0x0>', value)
+    if isinstance(value, dict):
+        return {k: masked(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [masked(v) for v in value]
+    return value
+
+
+#: From T2.14b each refusal also names its reason, and one of a column or
+#: a table the schema lacks lists those it has, so the host words it as the
+#: reference does ("table 'orders' has no column 'nope'; it has [...]").
+EMPTY_KEY = {'field': 'primary_keys', 'table': 'orders', 'reason': 'empty_key'}
+ORDERS_COLUMNS = ['order_id', 'price', 'ts', 'user_id']
+TABLES = ['orders', 'users']
+
+
+def no_column(field: str) -> dict[str, Any]:
+    r"""The refusal of a column ``orders`` lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'orders',
+        'column': 'nope',
+        'reason': 'no_column',
+        'columns': ORDERS_COLUMNS,
+    }
+
+
+def no_table(field: str) -> dict[str, Any]:
+    r"""The refusal of a table the schema lacks, ``nope``."""
+    return {
+        'field': field,
+        'table': 'nope',
+        'reason': 'no_table',
+        'tables': TABLES,
+    }
 
 
 def table_not_a_name(field: str) -> dict[str, Any]:
@@ -338,6 +408,10 @@ def key(
     reference: tuple[Any, ...],
     owner: str | None = None,
 ) -> dict[str, Any]:
+    if written == U:
+        written = spelled(value())
+        if core == NOT_NAMES:
+            core = refused(not_names(value()))
     return row(
         id,
         lambda: {'primary_keys': {'orders': value()}},
@@ -357,6 +431,10 @@ def time(
     core: tuple[Any, ...],
     reference: tuple[Any, ...],
 ) -> dict[str, Any]:
+    if written == U:
+        written = spelled(value())
+        if core == NOT_A_NAME:
+            core = refused(not_a_name(value()))
     return row(
         id,
         lambda: {'time_columns': {'orders': value()}},
@@ -511,14 +589,19 @@ ROWS = [
         'k.missing',
         lambda: 'nope',
         V(['nope']),
-        refused({**EMPTY_KEY, 'column': 'nope'}),
+        refused(no_column('primary_keys')),
         REF_REFUSED,
     ),
     key(
         'k.composite',
         lambda: ['order_id', 'user_id'],
         V(['order_id', 'user_id']),
-        refused(COMPOSITE, 'UNSUPPORTED_REQUEST', 'UnsupportedRequestError'),
+        # T2.12 lifted composite_key: described as the reference describes
+        # it, the key the two columns in order.
+        (
+            'success',
+            {'primary_key': ['order_id', 'user_id'], 'time_column': 'ts'},
+        ),
         REF_OK,
     ),
     # Time columns: rows 18 to 22.
@@ -548,7 +631,7 @@ ROWS = [
         't.missing',
         lambda: 'nope',
         V('nope'),
-        refused({'field': 'time_columns', 'table': 'orders', 'column': 'nope'}),
+        refused(no_column('time_columns')),
         REF_REFUSED,
     ),
     time('t.int', lambda: 3, U, NOT_A_NAME, REF_REFUSED),
@@ -685,7 +768,7 @@ def core_problems(the_row: dict[str, Any], got: dict[str, Any]) -> list[str]:
     written = the_row['written']
     if written is not None:
         written = {'tables': [], **written}
-    if got['written'] != written:
+    if masked(got['written']) != masked(written):
         problems.append(f'the host wrote {got["written"]}, wanted {written}')
     want = the_row['core']
     if want[0] == 'success':
@@ -699,7 +782,7 @@ def core_problems(the_row: dict[str, Any], got: dict[str, Any]) -> list[str]:
         return [*problems, f'{got}']
     if (got['class'], got['code']) != (cls, code):
         problems.append(f'{got["class"]} {got["code"]}, wanted {cls} {code}')
-    if got['fields'] != fields:
+    if masked(got['fields']) != masked(fields):
         problems.append(f'fields {got["fields"]}, wanted {fields}')
     if where == 'host' and got['starts']:
         problems.append('a run was started before the host refused')
@@ -1009,12 +1092,12 @@ def test_the_strategy_is_bounded_and_reaches_every_kind() -> None:
 ORDER = [
     pytest.param(
         {'primary_keys': {'nope': 3}},
-        {'field': 'primary_keys', 'table': 'nope'},
+        no_table('primary_keys'),
         id='the-table-before-the-key',
     ),
     pytest.param(
         {'time_columns': {'nope': ['ts']}},
-        {'field': 'time_columns', 'table': 'nope'},
+        no_table('time_columns'),
         id='the-table-before-the-time-column',
     ),
     pytest.param(
@@ -1022,17 +1105,17 @@ ORDER = [
             'primary_keys': {'orders': {'order_id'}},
             'time_columns': {'orders': ['ts']},
         },
-        KEY_NOT_NAMES,
+        not_names({'order_id'}),
         id='every-key-before-any-time-column',
     ),
     pytest.param(
         {'primary_keys': {'users': np.bool_(True), 'orders': 'nope'}},
-        {'field': 'primary_keys', 'table': 'orders', 'column': 'nope'},
+        no_column('primary_keys'),
         id='the-tables-in-name-order',
     ),
     pytest.param(
         {'primary_keys': {'orders': ['order_id', 'nope']}},
-        {'field': 'primary_keys', 'table': 'orders', 'column': 'nope'},
+        no_column('primary_keys'),
         id='a-missing-column-before-a-composite-key',
     ),
 ]
@@ -1074,7 +1157,9 @@ RULES = {
 }
 
 
-def pair_problems(attribute: str, edited: Any, described: Any) -> list[str]:
+def pair_problems(
+    attribute: str, value: Any, edited: Any, described: Any
+) -> list[str]:
     r"""Where the setter's refusal and ``Schema.from_source``'s of the same
     value differ, but in the field, each operation's own."""
     if not isinstance(edited, StructuredDataError):
@@ -1099,17 +1184,10 @@ def pair_problems(attribute: str, edited: Any, described: Any) -> list[str]:
         or theirs.get('rule') != RULES[attribute]
     ):
         problems.append(f'rule {mine.get("rule")} beside {theirs.get("rule")}')
-    if mine != {
-        'field': attribute,
-        'table': 'orders',
-        'rule': RULES[attribute],
-    }:
+    names = not_names if attribute == 'primary_key' else not_a_name
+    if mine != {**names(value), 'field': attribute}:
         problems.append(f'the setter: {mine}')
-    if theirs != {
-        'field': f'{attribute}s',
-        'table': 'orders',
-        'rule': RULES[attribute],
-    }:
+    if theirs != {**names(value), 'field': f'{attribute}s'}:
         problems.append(f'from_source: {theirs}')
     return problems
 
@@ -1139,7 +1217,7 @@ def test_the_setter_and_from_source_refuse_a_value_alike(
                 )
             except Exception as error:  # noqa: BLE001 - compared below
                 described = error
-        problems = pair_problems(attribute, edited, described)
+        problems = pair_problems(attribute, value, edited, described)
         assert not problems, problems
 
     G.held('exits', f'py:{request.node.name}', check)
@@ -1257,20 +1335,44 @@ def test_each_seeded_fault_fails_a_check() -> None:
         made.details.update(details)
         return made
 
-    describe = error(field='primary_keys', table='orders', rule='key_not_names')
-    setter = error(field='primary_key', table='orders', rule='key_not_names')
-    assert pair_problems('primary_key', setter, describe) == []
+    given = {'given': '3', 'variant': 'given'}
+    describe = error(
+        field='primary_keys', table='orders', rule='key_not_names', **given
+    )
+    setter = error(
+        field='primary_key', table='orders', rule='key_not_names', **given
+    )
+    assert pair_problems('primary_key', 3, setter, describe) == []
     assert (
         pair_problems(
             'primary_key',
-            error(field='primary_keys', table='orders', rule='key_not_names'),
+            3,
+            error(
+                field='primary_keys',
+                table='orders',
+                rule='key_not_names',
+                **given,
+            ),
             describe,
         )
         != []
     )
     assert (
         pair_problems(
-            'primary_key', error(field='primary_key', table='orders'), describe
+            'primary_key',
+            3,
+            error(field='primary_key', table='orders', **given),
+            describe,
+        )
+        != []
+    )
+    # A value named other than the one given.
+    assert (
+        pair_problems(
+            'primary_key',
+            4,
+            setter,
+            describe,
         )
         != []
     )

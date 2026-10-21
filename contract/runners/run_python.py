@@ -76,7 +76,7 @@ import struct
 import subprocess
 import sys
 import warnings
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -139,11 +139,25 @@ def validator(name: str) -> Any:
     schema = schemas[name] if name in schemas else {'$ref': name}
     cls = jsonschema.validators.validator_for(schemas['case'])
     cls.check_schema(schema)
+    _long_lists_held(schema)
     return cls(schema, registry=registry)
 
 
 def _invalid(validate: Any, document: Any) -> str | None:
-    r"""The first schema error's location and rule, or None; never the value."""
+    r"""The first schema error's location and rule, or None; never the value.
+
+    jsonschema walks every item of a list: a case or an observation of
+    100,000 entities takes about a second, and every tool that loads them
+    pays it on each load. So a long list's items past its leading ones are
+    checked in plain Python by their list's rule (:data:`_LONG_LISTS`), and
+    jsonschema sees the document with the list cut. A document taken that
+    way is one the whole-document validation takes; any other is
+    validated whole, so a refusal names what it names (T2.1l).
+    """
+    lists = _LONG_LISTS.get(_schema_id(validate.schema), ())
+    cut = _cut(document, lists) if lists else None
+    if cut is not None and next(iter(validate.iter_errors(cut)), None) is None:
+        return None
     error = next(iter(validate.iter_errors(document)), None)
     if error is None:
         return None
@@ -151,10 +165,175 @@ def _invalid(validate: Any, document: Any) -> str | None:
     return f'{where} fails {error.validator!r}'
 
 
+#: Each item of a list, in a path into a document.
+_EACH = '*'
+#: Where a long list may be, by the schema's ``$id``: its path in the
+#: document, its path in the schema, the schema it has there (beside its
+#: description), and its items' rule as Python reads them, the rule
+#: :func:`_indices` holds an entity key to (a JSON integer or a string) or
+#: an object. A case's call lists the entities it asks about, and its core
+#: and its observation's core the Arrow column the host passed.
+_LONG_LISTS: dict[
+    str,
+    tuple[
+        tuple[
+            tuple[str, ...],
+            tuple[str | int, ...],
+            dict[str, Any],
+            Callable[[Any], bool],
+        ],
+        ...,
+    ],
+] = {
+    'urn:sdm:case:1': (
+        (
+            ('input', 'materialize', 'indices'),
+            ('$defs', 'materialize', 'properties', 'indices'),
+            {'type': 'array', 'items': {'type': ['integer', 'string']}},
+            lambda item: type(item) in (int, str),
+        ),
+        (
+            ('input', 'materialize', 'candidates'),
+            ('$defs', 'materialize', 'properties', 'candidates'),
+            {'type': 'array', 'items': {'type': ['integer', 'string']}},
+            lambda item: type(item) in (int, str),
+        ),
+        (
+            ('core', 'materialize', 'indices'),
+            (
+                'properties',
+                'core',
+                'properties',
+                'materialize',
+                'properties',
+                'indices',
+            ),
+            {'type': 'array', 'items': {'type': 'object'}},
+            lambda item: type(item) is dict,
+        ),
+    ),
+    'urn:sdm:observation:1': (
+        (
+            ('core', 'inputs', _EACH, 'indices'),
+            (
+                'properties',
+                'core',
+                'properties',
+                'inputs',
+                'items',
+                'oneOf',
+                2,
+                'properties',
+                'indices',
+            ),
+            {'type': ['array', 'null'], 'items': {'type': 'object'}},
+            lambda item: type(item) is dict,
+        ),
+    ),
+}
+#: The leading items of a long list that jsonschema still sees.
+_KEPT = 8
+
+
+def _schema_id(schema: Any) -> str:
+    return str(schema.get('$id', '')) if isinstance(schema, dict) else ''
+
+
+def _at(document: Any, where: tuple[str | int, ...]) -> Any:
+    r"""The value at ``where`` in ``document``, or None where there is
+    none."""
+    for key in where:
+        if isinstance(document, dict) and key in document:
+            document = document[key]
+        elif isinstance(document, list) and isinstance(key, int):
+            document = document[key] if key < len(document) else None
+        else:
+            return None
+    return document
+
+
+def _long_lists_held(schema: Any) -> None:
+    r"""Refuse a schema whose long lists hold more than their items' one
+    rule, or whose list a ``oneOf`` beside it could read too: the items
+    past a list's leading ones are checked by that rule alone (T2.1l)."""
+    for _, where, wanted, _ in _LONG_LISTS.get(_schema_id(schema), ()):
+        node = _at(schema, where)
+        held = isinstance(node, dict) and wanted == {
+            key: value for key, value in node.items() if key != 'description'
+        }
+        if 'oneOf' in where:
+            # Each other branch takes no key of the list's name.
+            at = where.index('oneOf')
+            branches = _at(schema, where[: at + 1])
+            held = (
+                held
+                and isinstance(branches, list)
+                and all(
+                    isinstance(branch, dict)
+                    and branch.get('additionalProperties') is False
+                    and 'patternProperties' not in branch
+                    and where[-1] not in branch.get('properties', {})
+                    for number, branch in enumerate(branches)
+                    if number != where[at + 1]
+                )
+            )
+        if not held:
+            raise RunnerFailure(
+                f'{_schema_id(schema)}: {"/".join(map(str, where))} is not '
+                'the list the validator checks item by item (T2.1l)'
+            )
+
+
+def _lists(
+    document: Any, path: tuple[str, ...]
+) -> Iterator[tuple[tuple[str | int, ...], Any]]:
+    r"""Each value at ``path`` in ``document``, with its own path."""
+    if not path:
+        yield (), document
+        return
+    head, rest = path[0], path[1:]
+    if head == _EACH:
+        if isinstance(document, list):
+            for number, item in enumerate(document):
+                for where, found in _lists(item, rest):
+                    yield (number, *where), found
+    elif isinstance(document, dict) and head in document:
+        for where, found in _lists(document[head], rest):
+            yield (head, *where), found
+
+
+def _replaced(document: Any, where: tuple[str | int, ...], value: Any) -> Any:
+    r"""``document`` with ``value`` at ``where``, copying only the objects
+    and arrays on the way, never changing ``document``."""
+    if not where:
+        return value
+    head, rest = where[0], where[1:]
+    copied: Any = (
+        list(document) if isinstance(document, list) else dict(document)
+    )
+    copied[head] = _replaced(document[head], rest, value)
+    return copied
+
+
+def _cut(document: Any, lists: Any) -> Any:
+    r"""``document`` with each long list cut to its :data:`_KEPT` leading
+    items, or None where an item past them breaks its list's rule."""
+    cut = document
+    for path, _, _, holds in lists:
+        for where, items in list(_lists(document, path)):
+            if not isinstance(items, list) or len(items) <= _KEPT:
+                continue
+            if not all(map(holds, items[_KEPT:])):
+                return None
+            cut = _replaced(cut, where, items[:_KEPT])
+    return cut
+
+
 def _indices(given: dict[str, Any]) -> str | None:
     r"""An entity key is a JSON integer literal of any size, or a string,
     in ``indices`` and ``candidates`` alike; ``top_k`` and ``fail_call``
-    are integers (``rows_per_call`` is passed as written, whatever it is).
+    are integers (``rows_per_call`` and ``lag_timesteps`` are passed as
+    written, whatever they are).
 
     JSON Schema counts ``1.0`` as an integer; ``json`` reads it as a float,
     and a bool is no index either, so the type read is checked too, as
@@ -854,7 +1033,9 @@ class _Capture:
 
 def _result_rows(stream: Any) -> dict[str, Any]:
     r"""An Arrow result the core gave, as the pure-Rust host records one:
-    its columns' names and types, and its rows in order, each cell an
+    the result's explanation where the core gave one (its schema's
+    ``explanation``, T2.16a), its columns' names and types, and its rows in
+    order, each cell an
     integer's digits (``i64``), a float's IEEE-754 bits (``f64_bits``, 16
     hex digits, so no text form of a float is compared) or text
     (``utf8``); from T1.28b a boolean (``bool``) and a class's
@@ -923,7 +1104,15 @@ def _result_rows(stream: Any) -> dict[str, Any]:
             strict=True,
         )
     ]
-    return {'columns': columns, 'rows': rows}
+    recorded: dict[str, Any] = {'columns': columns, 'rows': rows}
+    # The result's explanation (T2.13), on the schema's metadata as the JSON
+    # text the core wrote, recorded as text so the hosts are held to the
+    # same bytes (T2.16a); an item's explanation and metadata are the
+    # result's own columns, among the rows.
+    explanation = (table.schema.metadata or {}).get(b'explanation')
+    if explanation is not None:
+        recorded['explanation'] = explanation.decode('utf-8')
+    return recorded
 
 
 #: A pyarrow integer type's contract scalar tag.
@@ -2427,19 +2616,39 @@ def _materialize_arguments(spec: dict[str, Any]) -> dict[str, Any]:
     if spec.get('indices_as') == 'decimal':
         indices = [Decimal(value) for value in indices]
     arguments: dict[str, Any] = {'indices': list(indices)}
-    if 'anchor_time' in spec:
-        arguments['anchor_time'] = pd.Timestamp(spec['anchor_time'])
+    # An anchor time is a timestamp, or the literal 'entity' (each entity
+    # at its own time; T2.11's cases), as the public call takes it.
+    for key in ('anchor_time', 'context_anchor_time'):
+        if key in spec:
+            arguments[key] = (
+                'entity' if spec[key] == 'entity' else pd.Timestamp(spec[key])
+            )
     if 'inference_config' in spec:
         arguments['inference_config'] = copy.deepcopy(spec['inference_config'])
     if 'candidates' in spec:
         arguments['candidates'] = list(spec['candidates'])
     if 'top_k' in spec:
         arguments['top_k'] = spec['top_k']
-    if 'rows_per_call' in spec:
-        # As written (T2.8c's cases): a value the reference refuses is the
-        # case's input.
-        arguments['rows_per_call'] = spec['rows_per_call']
+    for key in ('rows_per_call', 'lag_timesteps', *SAMPLING_OPTIONS):
+        if key in spec:
+            # As written (T2.8c's, T2.9's and T2.11's cases): a value the
+            # reference refuses is the case's input, and a null is None
+            # (random_seed=None, an unseeded sample).
+            arguments[key] = copy.deepcopy(spec[key])
     return arguments
+
+
+#: The sampling options a case passes to materialize as written, any JSON
+#: value, null as None (T2.11).
+SAMPLING_OPTIONS = (
+    'random_seed',
+    'num_hops',
+    'num_neighbors',
+    'max_pq_iterations',
+    'use_prediction_time',
+    'return_embeddings',
+    'exclude_cols_dict',
+)
 
 
 def _from_source_arguments(spec: dict[str, Any]) -> dict[str, Any]:
@@ -2659,11 +2868,18 @@ def _call(
         log.stage = stage
     with (
         # The scripted endpoint, failing the case's chosen call and
-        # answering a classification with its probabilities where the case
-        # says so (T2.8's ranking cases).
+        # answering a classification with its probabilities (T2.8's ranking
+        # cases), a regression with its quantiles (T2.9's forecast cases),
+        # a call asking for an explanation with one and each item with its
+        # metadata (T2.13's cases), and a call asking for embeddings with
+        # one on each item (T2.11's cases) where the case says so.
         serve(
             fail_call=given.get('fail_call'),
             probabilities=given.get('probabilities', False),
+            quantiles=given.get('quantiles', False),
+            explanation=given.get('explanation', False),
+            item_metadata=given.get('item_metadata', False),
+            embeddings=given.get('embeddings', False),
         ) as (url, received),
         warnings.catch_warnings(record=True) as shown,
     ):
@@ -2688,8 +2904,17 @@ def _call(
                 stage = 'predict'
                 if log is not None:
                     log.stage = stage
+                # The output fields the case names, as written (T2.9's
+                # quantile cases); none named, the model's defaults.
+                outputs = (
+                    {'outputs': list(given['outputs'])}
+                    if 'outputs' in given
+                    else {}
+                )
                 with SDMClient(url) as client:
-                    result = client.predict(request, model=KumoRelational())
+                    result = client.predict(
+                        request, model=KumoRelational(), **outputs
+                    )
                 public['result'] = _result_projection(result)
             outcome = _outcome('success', stage)
         except RunnerFailure:

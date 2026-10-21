@@ -1,0 +1,208 @@
+{
+  "format": "sdm-case/1",
+  "id": "sample.parent-table.relbench-stack",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE users AS SELECT i::BIGINT AS Id, (10 * i)::INTEGER AS Reputation, TIMESTAMP '2019-01-01' + to_days((i * 20)::INTEGER) AS CreationDate FROM range(6) t(i)",
+      "CREATE TABLE posts AS SELECT i::BIGINT AS Id, (i % 6)::BIGINT AS OwnerUserId, ((i + 1) % 20)::BIGINT AS ParentId, (1 + i % 2)::INTEGER AS PostTypeId, TIMESTAMP '2020-01-01' + to_days((i * 9)::INTEGER) AS CreationDate FROM range(20) t(i)",
+      "CREATE TABLE votes AS SELECT i::BIGINT AS Id, ((i * i) % 20)::BIGINT AS PostId, (i % 6)::BIGINT AS UserId, (1 + i % 3)::INTEGER AS VoteTypeId, TIMESTAMP '2020-01-05' + to_days((i * 3)::INTEGER) AS CreationDate FROM range(120) t(i)"
+    ],
+    "from_source": {
+      "primary_keys": {
+        "posts": "Id",
+        "users": "Id",
+        "votes": "Id"
+      },
+      "time_columns": {
+        "posts": "CreationDate",
+        "users": "CreationDate",
+        "votes": "CreationDate"
+      },
+      "relationships": [
+        {
+          "source_table": "posts",
+          "source_column": "OwnerUserId",
+          "target_table": "users",
+          "target_column": "Id"
+        },
+        {
+          "source_table": "posts",
+          "source_column": "ParentId",
+          "target_table": "posts",
+          "target_column": "Id"
+        },
+        {
+          "source_table": "votes",
+          "source_column": "PostId",
+          "target_table": "posts",
+          "target_column": "Id"
+        },
+        {
+          "source_table": "votes",
+          "source_column": "UserId",
+          "target_table": "users",
+          "target_column": "Id"
+        }
+      ]
+    },
+    "pql": "PREDICT COUNT(votes.*, 0, 90, days) FOR EACH posts.Id",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ],
+      "anchor_time": "2020-07-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {
+          "posts": {
+            "value": [
+              "Id"
+            ]
+          },
+          "users": {
+            "value": [
+              "Id"
+            ]
+          },
+          "votes": {
+            "value": [
+              "Id"
+            ]
+          }
+        },
+        "time_columns": {
+          "posts": {
+            "value": "CreationDate"
+          },
+          "users": {
+            "value": "CreationDate"
+          },
+          "votes": {
+            "value": "CreationDate"
+          }
+        },
+        "relationships": [
+          [
+            {
+              "table": "posts",
+              "column": "OwnerUserId"
+            },
+            {
+              "table": "users",
+              "column": "Id"
+            }
+          ],
+          [
+            {
+              "table": "posts",
+              "column": "ParentId"
+            },
+            {
+              "table": "posts",
+              "column": "Id"
+            }
+          ],
+          [
+            {
+              "table": "votes",
+              "column": "PostId"
+            },
+            {
+              "table": "posts",
+              "column": "Id"
+            }
+          ],
+          [
+            {
+              "table": "votes",
+              "column": "UserId"
+            },
+            {
+              "table": "users",
+              "column": "Id"
+            }
+          ]
+        ]
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1593561600000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "RelBench rel-stack's stack-post-votes-90d (contract/tools/relbench.py), a few dozen rows of its shape: posts as the entity table, linked to its parent users and to itself (ParentId, never null: a null foreign key is P1B-13's, covered by its own cases), votes counted per post over 90 days",
+  "source": "T2.11 (sampling options), written by its test author from python-ref 6298913c"
+}

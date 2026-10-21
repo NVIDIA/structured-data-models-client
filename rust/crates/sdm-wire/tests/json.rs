@@ -11,7 +11,7 @@
     reason = "test code: reruns its own binary for the deep-text test"
 )]
 
-use sdm_wire::json::{MAX_DEPTH, Value, is_integer_token, read, read_answer, whole};
+use sdm_wire::json::{MAX_DEPTH, Value, answer_text, is_integer_token, read, read_answer, whole};
 
 #[test]
 fn a_value_read_and_written_again_is_the_same_text() {
@@ -242,4 +242,90 @@ fn an_answer_reads_non_finite_tokens_as_python_s_reader_does() {
     let wide = format!("{{{}}}", wide.join(","));
     let value = read_answer(wide.as_bytes()).unwrap();
     assert_eq!(value.get("k49999"), Some(&Value::Number("NaN".into())));
+}
+
+/// An answer's bytes are decoded as Python's `json.loads` decodes bytes:
+/// UTF-8 with or without its byte order mark, and UTF-16 and UTF-32 of
+/// either byte order, with or without one, all read as the same value;
+/// UTF-8 without a mark is the bytes as they are; what does not decode,
+/// a surrogate code point included, is refused as category `encoding`.
+#[test]
+fn an_answer_is_decoded_as_python_s_reader_decodes_bytes() {
+    let text = r#"{"a":[1.5,NaN],"b":"é😀"}"#;
+    let expected = read_answer(text.as_bytes()).unwrap();
+    let utf16 = |big: bool| -> Vec<u8> {
+        text.encode_utf16()
+            .flat_map(|u| {
+                if big {
+                    u.to_be_bytes()
+                } else {
+                    u.to_le_bytes()
+                }
+            })
+            .collect()
+    };
+    let utf32 = |big: bool| -> Vec<u8> {
+        text.chars()
+            .flat_map(|c| {
+                let n = u32::from(c);
+                if big {
+                    n.to_be_bytes()
+                } else {
+                    n.to_le_bytes()
+                }
+            })
+            .collect()
+    };
+    let marked = |mark: &[u8], body: Vec<u8>| [mark, &body].concat();
+    let spellings = [
+        marked(&[0xEF, 0xBB, 0xBF], text.as_bytes().to_vec()),
+        utf16(true),
+        utf16(false),
+        marked(&[0xFE, 0xFF], utf16(true)),
+        marked(&[0xFF, 0xFE], utf16(false)),
+        utf32(true),
+        utf32(false),
+        marked(&[0, 0, 0xFE, 0xFF], utf32(true)),
+        marked(&[0xFF, 0xFE, 0, 0], utf32(false)),
+    ];
+    for bytes in &spellings {
+        assert_eq!(&*answer_text(bytes).unwrap(), text.as_bytes());
+        assert_eq!(read_answer(bytes).unwrap(), expected);
+    }
+    // UTF-8 without a mark is not copied; two-byte text is UTF-16 by its
+    // zero byte, as Python's detection has it; three bytes are UTF-8.
+    assert!(matches!(
+        answer_text(text.as_bytes()).unwrap(),
+        std::borrow::Cow::Borrowed(_)
+    ));
+    assert_eq!(read_answer(&[b'1', 0]).unwrap(), Value::Number("1".into()));
+    assert_eq!(read_answer(&[0, b'1']).unwrap(), Value::Number("1".into()));
+    assert_eq!(read_answer(b"[1]").unwrap(), read(b"[1]").unwrap());
+    // A second mark is a character, which JSON text cannot start with.
+    let twice = marked(&[0xEF, 0xBB, 0xBF, 0xEF, 0xBB, 0xBF], b"{}".to_vec());
+    assert_eq!(read_answer(&twice).unwrap_err().category, "syntax");
+    for bad in [
+        // An odd byte count in UTF-16, a count not a multiple of four in
+        // UTF-32, and a UTF-32 code point past Unicode.
+        marked(&[0xFE, 0xFF], vec![0, b'{', 0, b'}', 0]),
+        marked(&[0, 0, 0xFE, 0xFF], vec![0, 0, 0, b'1', 0, 0]),
+        vec![0, 0, 0, b'"', 0, 0x11, 0, 0, 0, 0, 0, b'"'],
+    ] {
+        assert_eq!(
+            read_answer(&bad).unwrap_err().category,
+            "encoding",
+            "{bad:?}"
+        );
+    }
+    // A lone surrogate in UTF-16, as a UTF-32 code point, and written in
+    // UTF-8 as Python's `surrogatepass` keeps it, is read as U+FFFD, as its
+    // escape is (register P1B-24, KO2-93).
+    let replaced = Value::Text("\u{FFFD}".into());
+    for lone in [
+        vec![0, b'"', 0xD8, 0, 0, b'"'],
+        vec![0, 0, 0, b'"', 0, 0, 0xD8, 0, 0, 0, 0, b'"'],
+        b"\"\xED\xA0\x80\"".to_vec(),
+    ] {
+        assert_eq!(read_answer(&lone).unwrap(), replaced, "{lone:?}");
+    }
 }

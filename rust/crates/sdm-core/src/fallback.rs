@@ -284,7 +284,10 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                     .map(|row| rows.row(row))
                     .collect();
                 let missing = (0..total).filter(|&row| !holds(&present, row)).count();
-                positions.push(i32::try_from(at).map_err(|_| internal("too many keys"))?);
+                // Labelled as the dialects label it: its label, where it
+                // gives one, else its position (T2.12).
+                positions
+                    .push(i32::try_from(key.label_at(at)).map_err(|_| internal("too many keys"))?);
                 for (count, value) in counts.iter_mut().zip([total, distinct.len(), missing]) {
                     count.push(i64_of(value)?);
                 }

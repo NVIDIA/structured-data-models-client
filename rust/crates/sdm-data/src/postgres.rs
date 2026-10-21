@@ -484,14 +484,10 @@ pub(crate) fn read(
                     }
                 })
                 .collect();
-            // The reference's graph discovery takes a one-column primary
-            // key only, and fails on another (`_get_source_columns`).
-            if keys
-                .iter()
-                .any(|k| k.kind == KeyKind::Primary && k.columns.len() > 1)
-            {
-                return Err(composite_key());
-            }
+            // A key of several columns is read as it is declared; the
+            // core makes no table's key of one, as DuckDB's and SQLite's
+            // references do not (the reference's Postgres graph discovery
+            // fails on one, `_get_source_columns`; register P2E-4).
             Ok(CatalogAnswer::Keys(keys))
         }
         DescribePart::ForeignKeys => {
@@ -516,11 +512,10 @@ pub(crate) fn read(
                     ));
                 }
             }
-            // The reference's graph discovery takes a one-column foreign key
-            // only, and fails on another (`_get_source_foreign_keys`).
-            if keys.values().any(|(_, pairs)| pairs.len() > 1) {
-                return Err(composite_key());
-            }
+            // A foreign key of several columns is read as it is declared;
+            // the core links by none, as DuckDB's and SQLite's references
+            // do not (the reference's Postgres graph discovery fails on
+            // one, `_get_source_foreign_keys`; register P2E-4).
             Ok(CatalogAnswer::ForeignKeys(
                 keys.into_values()
                     .zip(0_i64..)
@@ -538,20 +533,6 @@ pub(crate) fn read(
         }
         DescribePart::Indexes | DescribePart::IndexColumns => crate::read::host(part, batches),
     }
-}
-
-/// A key of several columns the catalog declares, which the reference's
-/// Postgres graph discovery fails on with an unnamed `ValueError`, refused
-/// by name as the core refuses a key of several columns a caller names
-/// (`composite_key`, E92's Phase 2 class), at `describe_source`.
-fn composite_key() -> CoreError {
-    CoreError::new(
-        ErrorKind::Unsupported,
-        ErrorCode::UnsupportedRequest,
-        "describing this source takes an inference rule this core does not hold yet",
-    )
-    .with_field("operation", Detail::text("describe_source"))
-    .with_field("rule", Detail::text("composite_key"))
 }
 
 /// One column pair of a foreign key: its position, its column and the
@@ -728,6 +709,7 @@ fn key_counts(request: &DataRequest, keys: &[TableKey]) -> Result<String, CoreEr
         .zip(tables)
         .enumerate()
         .map(|(position, (key, table))| {
+            let position = key.label_at(position);
             let quoted: Vec<String> = key.columns.iter().map(|c| identifier(c)).collect();
             let missing = quoted
                 .iter()

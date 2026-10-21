@@ -10,7 +10,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use sdm_testkit::endpoint::{Endpoint, FAILED, REASONS, answer, answer_call};
+use sdm_testkit::endpoint::{Endpoint, FAILED, REASONS, Told, answer, answer_call, answer_told};
 use serde_json::Value;
 
 fn vectors() -> Value {
@@ -198,5 +198,267 @@ fn the_rule_answers_each_probabilities_vector() {
                 .collect()
         };
         assert_eq!(classes(&answered), classes(&vector["answer"]), "{name}");
+    }
+}
+
+/// T2.9: an endpoint told to answer quantiles answers each of the file's
+/// `quantiles` vectors, as call number `call`, as the Python endpoint
+/// does: the status, the answer, and each item's quantiles in the order
+/// given; told to answer probabilities only, or nothing, it answers none.
+#[test]
+fn the_rule_answers_each_quantiles_vector() {
+    let document = vectors();
+    let vectors = document["quantiles"].as_array().unwrap();
+    // Not vacuous: quantiles given on calls past the first, and a call
+    // asking for none, and a classification, answered by the rule.
+    assert!(vectors.len() >= 5, "{}", vectors.len());
+    let given = |v: &Value| v["answer"]["predictions"][0].get("quantiles").is_some();
+    assert!(vectors.iter().any(|v| given(v) && v["call"] != 0));
+    assert!(vectors.iter().any(|v| !given(v)));
+    let spread = |answer: &Value| -> Vec<Vec<String>> {
+        answer["predictions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| {
+                item.get("quantiles")
+                    .and_then(Value::as_object)
+                    .map(|q| q.keys().cloned().collect())
+                    .unwrap_or_default()
+            })
+            .collect()
+    };
+    for vector in vectors {
+        let name = vector["name"].as_str().unwrap();
+        let asked = (
+            vector["method"].as_str().unwrap(),
+            vector["path"].as_str().unwrap(),
+            vector["body"].as_str().unwrap().as_bytes(),
+            vector["call"].as_u64().unwrap(),
+        );
+        let (status, answered) =
+            sdm_testkit::endpoint::answer_as_asked(asked.0, asked.1, asked.2, asked.3, false, true);
+        assert_eq!(
+            u64::from(status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, vector["answer"], "{name}");
+        assert_eq!(spread(&answered), spread(&vector["answer"]), "{name}");
+        for (probabilities, quantiles) in [(false, false), (true, false)] {
+            let (_, answered) = sdm_testkit::endpoint::answer_as_asked(
+                asked.0,
+                asked.1,
+                asked.2,
+                asked.3,
+                probabilities,
+                quantiles,
+            );
+            assert!(
+                spread(&answered).iter().all(Vec::is_empty),
+                "{name}: quantiles where none were to be given"
+            );
+        }
+    }
+}
+
+/// The answer of each of the file's `section` vectors by an endpoint told
+/// `told`, as call number `call`, with the vector's name.
+fn answered_told(section: &str, told: Told) -> Vec<(String, Value, u16, Value)> {
+    let document = vectors();
+    document[section]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|vector| {
+            let (status, answered) = answer_told(
+                vector["method"].as_str().unwrap(),
+                vector["path"].as_str().unwrap(),
+                vector["body"].as_str().unwrap().as_bytes(),
+                vector["call"].as_u64().unwrap(),
+                told,
+            );
+            (
+                vector["name"].as_str().unwrap().to_owned(),
+                vector.clone(),
+                status,
+                answered,
+            )
+        })
+        .collect()
+}
+
+/// Whether any item of `answer` carries `field`.
+fn carries(answer: &Value, field: &str) -> bool {
+    answer["predictions"]
+        .as_array()
+        .is_some_and(|items| items.iter().any(|item| item.get(field).is_some()))
+}
+
+/// T2.13: an endpoint told to answer explanations answers each of the
+/// file's `explanation` vectors, as call number `call`, as the Python
+/// endpoint does; untold, or told everything else, it answers none.
+#[test]
+fn the_rule_answers_each_explanation_vector() {
+    let told = Told {
+        explanation: true,
+        ..Told::default()
+    };
+    let answers = answered_told("explanation", told);
+    // Not vacuous: an explanation given on a call past the first and over
+    // several rows, and a call asking for none answered by the rule.
+    assert!(answers.len() >= 5, "{}", answers.len());
+    let given = |v: &Value| carries(&v["answer"], "explanation");
+    assert!(answers.iter().any(|(_, v, ..)| given(v) && v["call"] != 0));
+    assert!(answers.iter().any(|(_, v, ..)| {
+        given(v) && v["answer"]["predictions"].as_array().unwrap().len() > 1
+    }));
+    assert!(answers.iter().any(|(_, v, ..)| !given(v)));
+    for (name, vector, status, answered) in &answers {
+        assert_eq!(
+            u64::from(*status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, &vector["answer"], "{name}");
+    }
+    let everything_else = Told {
+        probabilities: true,
+        quantiles: true,
+        item_metadata: true,
+        ..Told::default()
+    };
+    for told in [Told::default(), everything_else] {
+        for (name, _, _, answered) in answered_told("explanation", told) {
+            assert!(
+                !carries(&answered, "explanation"),
+                "{name}: an explanation where none was to be given"
+            );
+        }
+    }
+}
+
+/// T2.13: an endpoint told to answer item metadata answers each of the
+/// file's `item_metadata` vectors, as call number `call`, as the Python
+/// endpoint does; untold, or told everything else, no item carries any.
+#[test]
+fn the_rule_answers_each_item_metadata_vector() {
+    let told = Told {
+        item_metadata: true,
+        ..Told::default()
+    };
+    let answers = answered_told("item_metadata", told);
+    assert!(answers.len() >= 5, "{}", answers.len());
+    let given = |v: &Value| carries(&v["answer"], "metadata");
+    assert!(answers.iter().any(|(_, v, ..)| given(v) && v["call"] != 0));
+    assert!(answers.iter().any(|(_, v, ..)| v["status"] == 400));
+    for (name, vector, status, answered) in &answers {
+        assert_eq!(
+            u64::from(*status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, &vector["answer"], "{name}");
+    }
+    let everything_else = Told {
+        probabilities: true,
+        quantiles: true,
+        explanation: true,
+        ..Told::default()
+    };
+    for told in [Told::default(), everything_else] {
+        for (name, _, _, answered) in answered_told("item_metadata", told) {
+            assert!(
+                !carries(&answered, "metadata"),
+                "{name}: item metadata where none was to be given"
+            );
+        }
+    }
+}
+
+/// T2.13: the rule as `answer_as_asked` gave it before `Told` is
+/// `answer_told` told only probabilities and quantiles, every earlier
+/// section's vector answered the same either way.
+#[test]
+fn answer_as_asked_is_answer_told_without_the_new_fields() {
+    let document = vectors();
+    for section in ["vectors", "probabilities", "quantiles"] {
+        for vector in document[section].as_array().unwrap() {
+            let asked = (
+                vector["method"].as_str().unwrap(),
+                vector["path"].as_str().unwrap(),
+                vector["body"].as_str().unwrap().as_bytes(),
+                vector["call"].as_u64().unwrap_or(0),
+            );
+            for (probabilities, quantiles) in [(false, false), (true, false), (false, true)] {
+                assert_eq!(
+                    sdm_testkit::endpoint::answer_as_asked(
+                        asked.0,
+                        asked.1,
+                        asked.2,
+                        asked.3,
+                        probabilities,
+                        quantiles
+                    ),
+                    answer_told(
+                        asked.0,
+                        asked.1,
+                        asked.2,
+                        asked.3,
+                        Told {
+                            probabilities,
+                            quantiles,
+                            ..Told::default()
+                        }
+                    ),
+                    "{section}: {}",
+                    vector["name"]
+                );
+            }
+        }
+    }
+}
+
+/// T2.11: an endpoint told to answer embeddings answers each of the file's
+/// `embeddings` vectors, as call number `call`, as the Python endpoint
+/// does; untold, or told everything else, it answers none.
+#[test]
+fn the_rule_answers_each_embeddings_vector() {
+    let told = Told {
+        embeddings: true,
+        ..Told::default()
+    };
+    let answers = answered_told("embeddings", told);
+    // Not vacuous: embeddings given on a call past the first and over
+    // several rows, and a call asking for none answered by the rule.
+    assert!(answers.len() >= 5, "{}", answers.len());
+    let given = |v: &Value| carries(&v["answer"], "embeddings");
+    assert!(answers.iter().any(|(_, v, ..)| given(v) && v["call"] != 0));
+    assert!(answers.iter().any(|(_, v, ..)| {
+        given(v) && v["answer"]["predictions"].as_array().unwrap().len() > 1
+    }));
+    assert!(answers.iter().any(|(_, v, ..)| !given(v)));
+    for (name, vector, status, answered) in &answers {
+        assert_eq!(
+            u64::from(*status),
+            vector["status"].as_u64().unwrap(),
+            "{name}"
+        );
+        assert_eq!(answered, &vector["answer"], "{name}");
+    }
+    let everything_else = Told {
+        probabilities: true,
+        quantiles: true,
+        explanation: true,
+        item_metadata: true,
+        ..Told::default()
+    };
+    for told in [Told::default(), everything_else] {
+        for (name, _, _, answered) in answered_told("embeddings", told) {
+            assert!(
+                !carries(&answered, "embeddings"),
+                "{name}: embeddings where none were to be given"
+            );
+        }
     }
 }

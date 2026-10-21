@@ -41,11 +41,111 @@ pub const BIG_INTEGER_MARKED: &str = "true";
 /// provider sets on a column of numbers it hands over as their exact
 /// decimal text because their declaration fixes no Arrow decimal (a
 /// Postgres `numeric` without a precision): the core reads such a column
-/// as its reference reads one, by its role, a key (the one column of a
-/// declared primary, unique or foreign key) as that text and any other as
-/// a double, and holds every later fetch of it to the type described.
+/// by its role in the schema, a key (the one column of a declared primary,
+/// unique or foreign key, or a key or link of the schema as it stands) as
+/// that text and any other as a double (`DescribedColumn::exact_number`),
+/// and holds every later fetch of it to the type described.
 pub const EXACT_NUMBER_MARKER: &str = "sdm:exact_number";
 pub const EXACT_NUMBER_MARKED: &str = "true";
+/// The field metadata key a host provider sets on a column of numbers it
+/// hands over as their exact decimal text because their declaration is
+/// past the digits an Arrow decimal holds (a Postgres `numeric` declared
+/// with more than 76): its value is the declared scale, in decimal digits.
+/// The data layer reads such a column by its declaration, as the reference
+/// reads it (`DataLayer::conform`), and the core never sees the mark.
+pub const DECLARED_SCALE_MARKER: &str = "sdm:declared_scale";
+
+/// The magnitude past which an exponent is read as this bound: far past
+/// every decimal's 38 places and every float's range, and far within
+/// `i64`, so no arithmetic on a scale overflows (T1.32a fix round 1).
+const EXPONENT_BOUND: i64 = 1 << 40;
+
+/// A decimal number as written: its sign, its significant digits (no
+/// leading or trailing zeros; empty for zero) and the scale they stand at.
+pub struct WrittenNumber {
+    pub negative: bool,
+    pub digits: String,
+    pub scale: i64,
+}
+
+/// Text written as a decimal number: an optional sign, ASCII digits with
+/// an optional point and fraction (at least one digit in all), and an
+/// optional exponent (`e` or `E`, an optional sign, digits); `None` for
+/// any other text.
+pub fn written_number(text: &str) -> Option<WrittenNumber> {
+    let (mantissa, exponent) = match text.find(['e', 'E']) {
+        Some(at) => (&text[..at], Some(&text[at + 1..])),
+        None => (text, None),
+    };
+    let (negative, unsigned) = match mantissa.as_bytes().first() {
+        Some(b'-') => (true, &mantissa[1..]),
+        Some(b'+') => (false, &mantissa[1..]),
+        _ => (false, mantissa),
+    };
+    let (whole, fraction) = match unsigned.split_once('.') {
+        Some((whole, fraction)) => (whole, fraction),
+        None => (unsigned, ""),
+    };
+    let ascii = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    if whole.len() + fraction.len() == 0 || !ascii(whole) || !ascii(fraction) {
+        return None;
+    }
+    let exponent: i64 = match exponent {
+        None => 0,
+        Some(written) => {
+            let (sign, digits) = match written.as_bytes().first() {
+                Some(b'-') => (-1, &written[1..]),
+                Some(b'+') => (1, &written[1..]),
+                _ => (1, written),
+            };
+            if digits.is_empty() || !ascii(digits) {
+                return None;
+            }
+            // An exponent past any decimal's or float's reach still reads:
+            // it decides only whether the value is out of range or inexact.
+            let magnitude = digits.trim_start_matches('0');
+            let magnitude = if magnitude.len() > 13 {
+                EXPONENT_BOUND
+            } else {
+                magnitude.parse::<i64>().unwrap_or(0).min(EXPONENT_BOUND)
+            };
+            sign * magnitude
+        }
+    };
+    // The digits as one run, leading zeros dropped, then trailing zeros,
+    // which carry no value, each moving the scale by one. Lengths are of
+    // text, far within i64.
+    let all = format!("{whole}{fraction}");
+    let significant = all.trim_start_matches('0');
+    let digits = significant.trim_end_matches('0');
+    let length = |part: &str| i64::try_from(part.len()).unwrap_or(EXPONENT_BOUND);
+    let dropped = length(significant) - length(digits);
+    Some(WrittenNumber {
+        negative,
+        digits: digits.to_owned(),
+        scale: length(fraction) - dropped - exponent,
+    })
+}
+
+/// The one text of the number `text` writes, the same for every spelling
+/// of it (`1.0`, `1.00`, `1E0`): `0`, or its sign, its significant digits
+/// and the power of ten they stand at (`1e0`, `-125e-2`); text that writes
+/// no number (a `NaN`, an `Infinity`) is itself. A column marked
+/// [`EXACT_NUMBER_MARKER`] holds two keys the same exactly when their
+/// texts are, as the source compares them, with nothing passed through a
+/// float.
+pub fn exact_number_text(text: &str) -> String {
+    match written_number(text) {
+        None => text.to_owned(),
+        Some(written) if written.digits.is_empty() => "0".to_owned(),
+        Some(written) => format!(
+            "{}{}e{}",
+            if written.negative { "-" } else { "" },
+            written.digits,
+            -written.scale
+        ),
+    }
+}
 /// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
 /// joined table's key column's declared type as the source spells it (its
 /// catalog's `type`, kept in the described schema for a marked big-integer
@@ -300,6 +400,19 @@ pub struct TableColumn {
 pub struct TableKey {
     pub table: Relation,
     pub columns: Vec<String>,
+    /// The number a `key_counts` row for this key is labelled with, where
+    /// not its position among the keys asked: the reference labels each by
+    /// its table's place among the tables with a key, a key it does not
+    /// count included (T2.12).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<u64>,
+}
+
+impl TableKey {
+    /// The label of the key at `position` among the keys asked.
+    pub fn label_at(&self, position: usize) -> u64 {
+        self.label.unwrap_or(position as u64)
+    }
 }
 
 /// One bound of a `neighbors` window: a seed time column, compared with the
@@ -372,10 +485,10 @@ pub enum DataRequest {
         table: Relation,
         filters: Vec<Filter>,
     },
-    /// For each key, in order, one row: its position, the table's rows, the
-    /// key's distinct values among rows holding all of it, and the rows
-    /// missing any part of it, as the reference's single `UNION ALL` reads
-    /// them.
+    /// For each key, in order, one row: its label (its position, where it
+    /// gives none), the table's rows, the key's distinct values among rows
+    /// holding all of it, and the rows missing any part of it, as the
+    /// reference's single `UNION ALL` reads them.
     KeyCounts { keys: Vec<TableKey> },
     /// For each time column, in order, one row: its position and the
     /// smallest and largest `CAST(column AS TIMESTAMP)`, as the reference's
@@ -778,7 +891,12 @@ pub enum ProviderChoice {
 /// PostgreSQL dialect may bind the keys as JSON text that a common table
 /// expression of that name unpacks, as the reference's PostgreSQL sampler
 /// does. `relation` names what the text reads, not an instruction to
-/// register an Arrow relation.
+/// register an Arrow relation. Where the dialect binds keys as text
+/// (`DataLayer::bound_keys`, Postgres's), the attachment holds each column
+/// the dialect spells otherwise than Arrow's text of its values (a time
+/// without a zone, binary) as that spelling, a `utf8` column of the same
+/// name, which `keys.columns` still types as the statement reads it; the
+/// provider binds each cell as Arrow's text of it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "param", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SqlParam {
@@ -817,6 +935,22 @@ impl FetchPlan {
     pub fn expect(&self) -> &ExpectedSchema {
         match self {
             FetchPlan::Sql { expect, .. } | FetchPlan::Host { expect } => expect,
+        }
+    }
+
+    /// The attachments of the key sets the plan's statements bind, in
+    /// order, each as often as it is bound; none for a host plan.
+    pub fn key_sets(&self) -> Vec<AttachmentId> {
+        match self {
+            FetchPlan::Sql { statements, .. } => statements
+                .iter()
+                .flat_map(|statement| &statement.params)
+                .filter_map(|param| match param {
+                    SqlParam::KeySet { keys, .. } => Some(keys.attachment),
+                    _ => None,
+                })
+                .collect(),
+            FetchPlan::Host { .. } => Vec::new(),
         }
     }
 }
@@ -864,6 +998,40 @@ pub trait DataLayer: Send + Sync {
         None
     }
 
+    /// The run's provider's answer to a fetch, admitted, read as the
+    /// reference reads its source's values where the provider hands over
+    /// the driver's own (T2.14d, MID2 P2-3): a dialect's value rules, such
+    /// as Postgres's text of a JSON value and its reading of a `numeric`
+    /// past the digits an Arrow decimal holds (each `float_text`, the text
+    /// the reference's language gives a double, where it writes one).
+    /// `None`, the default and a host provider's: the answer as it is. A
+    /// value the rule cannot read is refused by name, never guessed.
+    fn conform(
+        &self,
+        provider: &ProviderChoice,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+        float_text: fn(f64) -> String,
+    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        let _ = (provider, schema, batches, float_text);
+        Ok(None)
+    }
+
+    /// A key set the run's provider binds, as the provider binds it, where
+    /// its dialect binds keys as text (T2.14d): each column the reference
+    /// spells otherwise than Arrow's text of its values as that spelling,
+    /// so the provider binds Arrow's text of each cell. `None`, the default
+    /// and a host provider's: the key set as the core made it.
+    fn bound_keys(
+        &self,
+        provider: &ProviderChoice,
+        schema: &arrow_schema::SchemaRef,
+        batches: &[RecordBatch],
+    ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
+        let _ = (provider, schema, batches);
+        Ok(None)
+    }
+
     /// Whether the run's provider compares a window's bounds with the
     /// stored text of the window's column, as a source with no time type
     /// does (SQLite's reference spells each bound as one stored value is
@@ -884,6 +1052,17 @@ pub trait DataLayer: Send + Sync {
     /// column on each `sample_entities` (`key_dtype`). `false`, the default
     /// and a host provider's: the request leaves it out.
     fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
+        let _ = provider;
+        false
+    }
+
+    /// Whether the reference reads the run's provider's rows into a frame
+    /// of NumPy-backed floats, where a NaN is missing and `-0.0` is `0.0`
+    /// (Postgres's rows, read as Python objects); otherwise it reads them
+    /// as Arrow-backed pandas does (DuckDB's and SQLite's), where a NaN is
+    /// a value and the two zeros are two values. `false`, the default and a
+    /// host provider's (T2.12).
+    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
         let _ = provider;
         false
     }

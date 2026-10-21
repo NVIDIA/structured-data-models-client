@@ -44,6 +44,11 @@ vector's own.
   (``key.composite-foreign``), which the reference refuses at
   ``Schema.from_source`` with an unnamed ValueError; the core may answer
   only under an approved entry declaring ``refusal UNNAMED -> success``.
+  The core refused both by name (``composite_key``, P2C-11) until T2.12,
+  which lifts the rule: it now reads them as no key, as the reference's
+  DuckDB and SQLite engines read a catalog's key of several columns
+  (register P2E-4, the owner's, which must name these two vectors with
+  that transition).
 - From Claude's second round: unconstrained ``numeric`` keys are sent as
   the reference sends them, small (``key.numeric-unconstrained-small``)
   and past 2**53, never merged (``key.numeric-unconstrained-past-2-53``).

@@ -17,13 +17,21 @@ shipped (design, "Packaging"). Either way it:
   `target-cpu`, which would tie the wheel to the build machine's processor
   (decision F7);
 - with `--manylinux`, reads the wheel with `auditwheel show` and fails unless
-  it is manylinux2014 (`manylinux_2_17`) or older;
+  it is manylinux2014 (`manylinux_2_17`) or older, for one of
+  :data:`ARCHES`;
 - writes beside the wheel `<wheel>.json`, its identity: the SHA-256 of the
   wheel and of the extension module in it, commit, features, toolchain,
   maturin version and the target flags, which a runner records as the
   identity of the build it ran.
 
     scripts/rust_core/native_wheel.py --out DIR [--test-ops] [--manylinux]
+    scripts/rust_core/native_wheel.py --check-set DIR...
+
+`--check-set` holds the shipped wheels, gathered from the directories
+named, to the set CI builds (decision KO2-40): one wheel for each of
+:data:`ARCHES`, each tagged as that architecture's manylinux2014 wheel, all
+of one distribution, version and interpreter tag; a set missing an
+architecture, or holding one twice, fails by name.
 
 maturin must be on PATH at the pinned version, for instance through
 `uv run --no-project --with maturin==1.15.0`.
@@ -54,11 +62,19 @@ FLAG_VARIABLES = (
     'CARGO_ENCODED_RUSTFLAGS',
     'CARGO_BUILD_RUSTFLAGS',
     'CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS',
+    'CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS',
     'CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS',
     'CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS',
 )
 #: The newest glibc a manylinux2014 wheel may need.
 MANYLINUX2014_GLIBC = (2, 17)
+#: The architectures the client's Linux wheel ships for, each built on a
+#: runner of its own (KO2-40), with the platform tag maturin gives a
+#: manylinux2014 build there.
+ARCHES = {
+    'x86_64': 'manylinux_2_17_x86_64.manylinux2014_x86_64',
+    'aarch64': 'manylinux_2_17_aarch64.manylinux2014_aarch64',
+}
 
 
 def _run(*command: str, **kwargs: object) -> str:
@@ -163,11 +179,16 @@ def _manylinux(wheel: pathlib.Path) -> str:
     found = re.search(r'platform tag:\s*"([^"]+)"', ' '.join(shown.split()))
     tag = found.group(1) if found else ''
     legacy = {
-        'manylinux1_x86_64': (2, 5),
-        'manylinux2010_x86_64': (2, 12),
-        'manylinux2014_x86_64': (2, 17),
+        f'{name}_{arch}': glibc
+        for arch in ARCHES
+        for name, glibc in (
+            ('manylinux1', (2, 5)),
+            ('manylinux2010', (2, 12)),
+            ('manylinux2014', (2, 17)),
+        )
     }
-    numbered = re.fullmatch(r'manylinux_(\d+)_(\d+)_x86_64', tag)
+    arches = '|'.join(ARCHES)
+    numbered = re.fullmatch(rf'manylinux_(\d+)_(\d+)_(?:{arches})', tag)
     glibc = (
         (int(numbered.group(1)), int(numbered.group(2)))
         if numbered
@@ -178,6 +199,34 @@ def _manylinux(wheel: pathlib.Path) -> str:
             f'auditwheel does not read the wheel as manylinux2014:\n{shown}'
         )
     return shown
+
+
+def wheel_set_refusal(wheels: list[pathlib.Path]) -> str | None:
+    """Why the shipped wheel set is refused, or `None`: it must hold one
+    wheel for each of :data:`ARCHES`, tagged as that architecture's
+    manylinux2014 wheel, all of one distribution, version and interpreter
+    and ABI tags."""
+    by_arch: dict[str, list[str]] = {}
+    heads = set()
+    for wheel in wheels:
+        # name-version-python-abi-platform.whl, no build tag.
+        parts = wheel.name.removesuffix('.whl').split('-')
+        if len(parts) != 5:
+            return f'{wheel.name} is not a wheel name this build makes'
+        heads.add(tuple(parts[:4]))
+        arch = next((a for a, tag in ARCHES.items() if parts[4] == tag), None)
+        if arch is None:
+            return f'{wheel.name}: platform tag {parts[4]} is none of {ARCHES}'
+        by_arch.setdefault(arch, []).append(wheel.name)
+    missing = sorted(set(ARCHES) - set(by_arch))
+    if missing:
+        return f'the wheel set has no wheel for {missing}: {sorted(by_arch)}'
+    twice = {arch: names for arch, names in by_arch.items() if len(names) > 1}
+    if twice:
+        return f'the wheel set holds more than one wheel for {twice}'
+    if len(heads) != 1:
+        return f'the wheels disagree on distribution or version: {heads}'
+    return None
 
 
 def _build(
@@ -246,10 +295,24 @@ def _build(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--out', required=True, type=pathlib.Path)
+    parser.add_argument('--out', type=pathlib.Path)
     parser.add_argument('--test-ops', action='store_true')
     parser.add_argument('--manylinux', action='store_true')
+    parser.add_argument('--check-set', nargs='+', type=pathlib.Path)
     arguments = parser.parse_args()
+    if arguments.check_set:
+        wheels = sorted(
+            wheel
+            for directory in arguments.check_set
+            for wheel in directory.glob('*.whl')
+        )
+        refusal = wheel_set_refusal(wheels)
+        if refusal:
+            sys.exit(refusal)
+        print('\n'.join(sorted(wheel.name for wheel in wheels)))
+        return 0
+    if arguments.out is None:
+        parser.error('--out is required to build')
 
     version = _run('maturin', '--version').split()[-1]
     if version != MATURIN:

@@ -684,13 +684,27 @@ class Transport:
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._post(_PREDICTIONS_PATH, payload)
 
-    def predict_body(self, body: bytes) -> dict[str, Any]:
+    def predict_body(self, body: bytes) -> bytes:
         r"""Sends a prediction call already written as UTF-8 JSON, the bytes
-        as they are: the core's call on its route, whose size limit counts
-        the bytes it wrote, which are the bytes sent (register PD-2,
-        T1.28a). The old route's calls go through :meth:`predict`.
+        as they are, and gives back the endpoint's answer as the bytes it
+        sent: the core's call on its route, whose size limit counts the
+        bytes it wrote, which are the bytes sent (register PD-2, T1.28a),
+        and whose answer the core reads itself (T2.14b). A refusal by its
+        status is raised as :meth:`predict` raises it. The old route's calls
+        go through :meth:`predict`. An answer :meth:`predict` would refuse
+        as not a JSON object is refused as it refuses it; one nested past
+        this interpreter's reader is handed over as sent, for the core to
+        refuse as too deep (register P1B-22); an empty one is given as
+        ``{}``, as :meth:`predict` reads it.
         """
-        return self._post_body(_PREDICTIONS_PATH, body)
+        url = self._url + _PREDICTIONS_PATH
+        content = self._post_raw(_PREDICTIONS_PATH, body) or b'{}'
+        try:
+            _decoded_object(content, url)
+        except StructuredDataError as failed:
+            if not failed._response_too_deep:
+                raise
+        return content
 
     def create_session(self, payload: dict[str, Any]) -> dict[str, Any]:
         r"""Pins a context server-side; ``payload`` carries the context-only
@@ -757,6 +771,11 @@ class Transport:
         return self._post_body(path, body.encode('utf-8'))
 
     def _post_body(self, path: str, body: bytes) -> dict[str, Any]:
+        return _decoded_object(self._post_raw(path, body), self._url + path)
+
+    def _post_raw(self, path: str, body: bytes) -> bytes:
+        r"""Posts ``body`` and gives back the answer's bytes, a status of
+        400 or more raised as the endpoint's refusal."""
         self._require_open()
         url = self._url + path
         try:
@@ -774,7 +793,7 @@ class Transport:
             raise _failed_to_reach(error, url, self._timeout) from error
         if status_code >= 400:
             raise _to_nim_error(status_code, content)
-        return _decoded_object(content, url)
+        return content
 
 
 #: Deeper than any real request and far below the interpreter's own limit,

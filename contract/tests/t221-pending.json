@@ -1,0 +1,30 @@
+{
+ "about": "T2.21's acceptance tests that failed when the test author wrote them, before the implementation, by key (contract/tests/test_t221_exact_keys.py as py:<key>, sdm-testkit's tests/t221_exact_keys.rs as rust:<key>). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": [],
+ "authored": [
+  "py:key.past-2-53.given-key",
+  "py:key.past-2-53.given-link",
+  "py:key.past-2-53.edited-link",
+  "py:key.past-2-53.catalog",
+  "py:key.past-2-53.given-key@sqlite",
+  "py:key.past-2-53.given-link@sqlite",
+  "py:key.past-2-53.edited-link@sqlite",
+  "py:key.past-2-53.catalog@sqlite",
+  "py:key.past-2-53.given-key@postgres",
+  "py:key.past-2-53.given-link@postgres",
+  "py:key.past-2-53.edited-link@postgres",
+  "py:key.past-2-53.catalog@postgres",
+  "py:vector:pk.given",
+  "py:vector:pk.catalog",
+  "py:vector:fk.given",
+  "py:vector:fk.edited",
+  "py:vector:fk.catalog",
+  "py:register:pk.given",
+  "py:register:fk.given",
+  "py:register:fk.edited",
+  "rust:key.past-2-53.given-key@memory-marked",
+  "rust:key.past-2-53.given-link@memory-marked",
+  "rust:key.past-2-53.edited-link@memory-marked",
+  "rust:key.past-2-53.catalog@memory-marked"
+ ]
+}

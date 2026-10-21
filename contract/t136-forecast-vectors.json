@@ -1,5 +1,5 @@
 {
- "reference": "6298913c3b66da9459bb605d0127f8493adaa1fc",
+ "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
  "reference_environment": {
   "python": "3.12.13",
   "pandas": "3.0.6",
@@ -7154,7 +7154,7 @@
    "pql": "PREDICT COUNT(orders.* WHERE orders.price > 50, 0, 30, days) FORECAST 3 TIMEFRAMES FOR EACH users.user_id",
    "anchor_time": "2024-03-01",
    "options": {},
-   "rust_host": "python-core",
+   "rust_host": "reference",
    "case": {
     "format": "sdm-case/1",
     "id": "t136fc.count-filtered-3",
@@ -7454,16 +7454,222 @@
     }
    },
    "python_core": {
-    "payloads": [],
-    "result": null,
+    "payloads": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "084de3fc4ec58620ce322d142463c702c20ab6cb4278c8502dc6aeb571694e51",
+      "tables": {
+       "context.instance_table": {
+        "rows": 112,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 112,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 408,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 16,
+        "nulls": 0
+       }
+      },
+      "masked_sha256": "0baaf585b809a8e752ae4d9e46969c8bdfaa5c97e35f46ed499c7f015dfaef4b"
+     },
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "c808d0c042aa7c666639b8bc423194e56be472b2e8a47855336d995358cac340",
+      "tables": {
+       "context.instance_table": {
+        "rows": 104,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 104,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 351,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 16,
+        "nulls": 0
+       }
+      },
+      "masked_sha256": "46211c0c9885d83b1e411d9dc09d6e488a2ea08060c73973474e814d57d7b224"
+     },
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "2e75e0ecc62d9fe2027e49e1cd3a4ad1b8cff8631a101d3f5f448bc2cbabe98b",
+      "tables": {
+       "context.instance_table": {
+        "rows": 96,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 96,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 298,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 16,
+        "nulls": 0
+       }
+      },
+      "masked_sha256": "38671f5895df45ad61f7f9bf4692a0005fca2a0660d4cf7dc0ba2a969667e1c2"
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "dtype": "int64"
+      },
+      {
+       "name": "id",
+       "dtype": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "dtype": "int64"
+      },
+      {
+       "name": "prediction",
+       "dtype": "float64"
+      }
+     ],
+     "rows": 6,
+     "digest": "f94f607e851e171f8b8d18fcc5a8e8443cc1c0d793e141042a77721d941f1da3",
+     "cells": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ]
+     ]
+    },
     "outcome": {
-     "result": "refusal",
-     "stage": "materialize",
-     "error": "UnsupportedRequestError",
-     "code": "UNSUPPORTED_REQUEST",
-     "message": "[UNSUPPORTED_REQUEST] the request is valid, and not one the core supports yet. This is forecast step 1 of 3."
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null,
+     "message": null
     },
     "warnings": [
+     "UserWarning",
+     "UserWarning",
      "UserWarning"
     ]
    },
@@ -7686,14 +7892,15 @@
      "UserWarning",
      "UserWarning"
     ]
-   }
+   },
+   "python_core_candidate": "4da6643e1a025d031ff0c98aa4b0051afd2ecc73"
   },
   {
    "id": "sum-entity-filter-3",
    "pql": "PREDICT SUM(orders.price, 0, 7, days) FORECAST 3 TIMEFRAMES FOR EACH users.user_id WHERE users.age > 21",
    "anchor_time": "2024-03-01",
    "options": {},
-   "rust_host": "python-core",
+   "rust_host": "reference",
    "case": {
     "format": "sdm-case/1",
     "id": "t136fc.sum-entity-filter-3",
@@ -7993,16 +8200,225 @@
     }
    },
    "python_core": {
-    "payloads": [],
-    "result": null,
+    "payloads": [
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "0fd84777c7a1789c16e57df3b9f8e126dbaea1556de6a0bafe1de84be3835cfd",
+      "tables": {
+       "context.instance_table": {
+        "rows": 360,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 360,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 1326,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 16,
+        "nulls": 0
+       }
+      },
+      "masked_sha256": "0f24862cbfae0c520d8531b115af9ba02faa7eda5d45f15b72fab92ae1c231f5"
+     },
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "740fbe79d3b0fb16c86f251414302e979bf432ce55f6b1104f1bcf4b50499908",
+      "tables": {
+       "context.instance_table": {
+        "rows": 354,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 354,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 1282,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 16,
+        "nulls": 0
+       }
+      },
+      "masked_sha256": "42044655676c5fbe824f84644200179556451af4fc46fa6d2071014f00d82d8e"
+     },
+     {
+      "method": "POST",
+      "path": "/v1/predictions",
+      "digest": "ef3e3a2dfa64ada9198311afc73d8453cf556162d186b376d7f0fd80326633de",
+      "tables": {
+       "context.instance_table": {
+        "rows": 348,
+        "nulls": 0
+       },
+       "context.related_tables.users": {
+        "rows": 348,
+        "nulls": 0
+       },
+       "context.related_tables.orders": {
+        "rows": 1239,
+        "nulls": 0
+       },
+       "predict.instance_table": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.users": {
+        "rows": 2,
+        "nulls": 0
+       },
+       "predict.related_tables.orders": {
+        "rows": 16,
+        "nulls": 0
+       }
+      },
+      "masked_sha256": "5608eb0a87a5b017ce95c3dfe59c52f079e428d26ae8a356388315fdd25ff24e"
+     }
+    ],
+    "result": {
+     "columns": [
+      {
+       "name": "row_index",
+       "dtype": "int64"
+      },
+      {
+       "name": "id",
+       "dtype": "int64"
+      },
+      {
+       "name": "forecast_step",
+       "dtype": "int64"
+      },
+      {
+       "name": "prediction",
+       "dtype": "float64"
+      }
+     ],
+     "rows": 6,
+     "digest": "f94f607e851e171f8b8d18fcc5a8e8443cc1c0d793e141042a77721d941f1da3",
+     "cells": [
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "0"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "2"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ],
+      [
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "1"
+       },
+       {
+        "i64": "3"
+       },
+       {
+        "f64_bits": "3ff0000000000000"
+       }
+      ]
+     ]
+    },
     "outcome": {
-     "result": "refusal",
-     "stage": "materialize",
-     "error": "UnsupportedRequestError",
-     "code": "UNSUPPORTED_REQUEST",
-     "message": "[UNSUPPORTED_REQUEST] the request is valid, and not one the core supports yet. This is forecast step 1 of 3."
+     "result": "success",
+     "stage": "predict",
+     "error": null,
+     "code": null,
+     "message": null
     },
     "warnings": [
+     "SDMWarning",
+     "UserWarning",
+     "SDMWarning",
+     "UserWarning",
+     "SDMWarning",
      "UserWarning"
     ]
    },
@@ -8228,7 +8644,8 @@
      "SDMWarning",
      "UserWarning"
     ]
-   }
+   },
+   "python_core_candidate": "175daf75a64a2960e604402cf7dfcd448b52f313"
   },
   {
    "id": "refuse.zero-steps",
@@ -8727,7 +9144,7 @@
      "stage": "materialize",
      "error": "StructuredDataError",
      "code": "INVALID_REQUEST",
-     "message": "[INVALID_REQUEST] the request is not one the core accepts. This is forecast step 2 of 3."
+     "message": "[INVALID_REQUEST] Context anchor timestamp is too early or aggregation time range is too large. To make this prediction, we would need data back to '2022-12-27 00:00:00', however, your data only contains data back to '2023-01-01 00:00:00'. This is forecast step 2 of 3. The window named above is that step's rather than the one written; ask for fewer than 2 steps if the data does not reach that far."
     },
     "warnings": [
      "UserWarning",
@@ -8750,7 +9167,8 @@
      "UserWarning",
      "UserWarning"
     ]
-   }
+   },
+   "python_core_candidate": "bfd6bee63fa7cf15e7a6d6db4bc2eeaa85ba091c"
   },
   {
    "id": "refuse.boolean-target",

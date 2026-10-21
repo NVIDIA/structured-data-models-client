@@ -1,0 +1,620 @@
+{
+  "objects": {
+    "request-forecast": {
+      "predicted": {
+        "bodies": [
+          "4761cb55ff0143f451e366fbecccd644ceda9a57ec577d6308dc79070d5f6190",
+          "eedc092e0fe4959fb81b6a881fa500a275abe53a680a545b273b9d463b097fa6"
+        ],
+        "result": {
+          "columns": [
+            "row_index",
+            "id",
+            "forecast_step",
+            "prediction"
+          ],
+          "digest": "d0910548e2e9dc4c70596092f6b97b1a7bb760691a1b21780b5814dea27fe11d",
+          "rows": 4
+        }
+      },
+      "projection": {
+        "context": {
+          "columns": [
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time",
+            "TARGET"
+          ],
+          "digest": "01036007649e61b295dbf2e6e8800abcd59152e438643258ea65ee1bf86648d8",
+          "rows": 120
+        },
+        "decomposition": {
+          "kind": "forecast",
+          "parts": [
+            [
+              "PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.user_id",
+              "1"
+            ],
+            [
+              "PREDICT SUM(orders.price, 7, 14, days) FOR EACH users.user_id",
+              "2"
+            ]
+          ]
+        },
+        "entity_table": "users",
+        "indices": [
+          "0",
+          "1"
+        ],
+        "kind": "Request",
+        "parts": [
+          {
+            "context": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "digest": "ab93558b1f0d9fbdcca6ef8d401cf05629800ca0946582ab866a066affb3ae7b",
+              "rows": 64
+            },
+            "entity_table": "users",
+            "indices": [
+              "0",
+              "1"
+            ],
+            "kind": "Request",
+            "payloads": [
+              "a723320940f544551fde91f2b66f44d0e7bafb417a9e3cd1a3626047cf24d9b0"
+            ],
+            "predict": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "digest": "c356a7fd527987e18da48b867c2087d995e66f8e565a2f996cba913f21bd6f45",
+              "rows": 2
+            },
+            "query": "PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.user_id",
+            "schema": [
+              "buys",
+              "items",
+              "orders",
+              "users"
+            ],
+            "task": {
+              "entity_table": "users",
+              "kind": "regression",
+              "target": [
+                "TARGET",
+                "float32",
+                null
+              ]
+            },
+            "windowed": true
+          },
+          {
+            "context": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "digest": "cb77c10781b9dc819b61a8b7c72845d71689c1c1d88dc9a9c8fe1682be5b845b",
+              "rows": 56
+            },
+            "entity_table": "users",
+            "indices": [
+              "0",
+              "1"
+            ],
+            "kind": "Request",
+            "payloads": [
+              "7f564d02bfd51d7e66022ccb88c0585027e826dd8a8c28685319df296ec58bda"
+            ],
+            "predict": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "digest": "40b2485ee9ad20a0ddb20308c8044507fbadd2e5f563d69ea7c43a1230c41647",
+              "rows": 2
+            },
+            "query": "PREDICT SUM(orders.price, 7, 14, days) FOR EACH users.user_id",
+            "schema": [
+              "buys",
+              "items",
+              "orders",
+              "users"
+            ],
+            "task": {
+              "entity_table": "users",
+              "kind": "regression",
+              "target": [
+                "TARGET",
+                "float32",
+                null
+              ]
+            },
+            "windowed": true
+          }
+        ],
+        "payloads": [
+          "a723320940f544551fde91f2b66f44d0e7bafb417a9e3cd1a3626047cf24d9b0",
+          "7f564d02bfd51d7e66022ccb88c0585027e826dd8a8c28685319df296ec58bda"
+        ],
+        "predict": {
+          "columns": [
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time"
+          ],
+          "digest": "b789dd53d78fa76b9890d7f46ba02d09353430386374c12c1a42ff9138c46140",
+          "rows": 4
+        },
+        "query": "PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.user_id",
+        "schema": [
+          "buys",
+          "items",
+          "orders",
+          "users"
+        ],
+        "task": {
+          "entity_table": "users",
+          "kind": "regression",
+          "target": [
+            "TARGET",
+            "float32",
+            null
+          ]
+        },
+        "windowed": true
+      }
+    },
+    "request-frames": {
+      "projection": {
+        "context": {
+          "columns": [
+            "x",
+            "y"
+          ],
+          "digest": "bcd516941de10ef25acbc18c99c9e36031b9e9c4e4cbe7f9b31d3e89eb4ec21c",
+          "rows": 3
+        },
+        "entity_table": "instance",
+        "indices": [],
+        "kind": "Request",
+        "payloads": null,
+        "predict": {
+          "columns": [
+            "x"
+          ],
+          "digest": "041dd4a6edd5ea16b8910f0b0e67e500c262483e802bc9010f7818c6537d5efa",
+          "rows": 2
+        },
+        "query": null,
+        "schema": [
+          "instance"
+        ],
+        "task": {
+          "entity_table": null,
+          "kind": "regression",
+          "target": [
+            "y",
+            "float64",
+            "instance"
+          ]
+        },
+        "windowed": null
+      }
+    },
+    "request-one-call": {
+      "predicted": {
+        "bodies": [
+          "4761cb55ff0143f451e366fbecccd644ceda9a57ec577d6308dc79070d5f6190"
+        ],
+        "result": {
+          "columns": [
+            "row_index",
+            "id",
+            "prediction"
+          ],
+          "digest": "be067529844a78acc5952c522cf29acf7425e99c5c8f733f6025fe4d5411d126",
+          "rows": 2
+        }
+      },
+      "projection": {
+        "context": {
+          "columns": [
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time",
+            "TARGET"
+          ],
+          "digest": "ab93558b1f0d9fbdcca6ef8d401cf05629800ca0946582ab866a066affb3ae7b",
+          "rows": 64
+        },
+        "entity_table": "users",
+        "indices": [
+          "0",
+          "1"
+        ],
+        "kind": "Request",
+        "payloads": [
+          "a723320940f544551fde91f2b66f44d0e7bafb417a9e3cd1a3626047cf24d9b0"
+        ],
+        "predict": {
+          "columns": [
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time"
+          ],
+          "digest": "c356a7fd527987e18da48b867c2087d995e66f8e565a2f996cba913f21bd6f45",
+          "rows": 2
+        },
+        "query": "PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.user_id",
+        "schema": [
+          "buys",
+          "items",
+          "orders",
+          "users"
+        ],
+        "task": {
+          "entity_table": "users",
+          "kind": "regression",
+          "target": [
+            "TARGET",
+            "float32",
+            null
+          ]
+        },
+        "windowed": true
+      }
+    },
+    "request-ranking": {
+      "predicted": {
+        "bodies": [
+          "90a4342e50983dbaf78e0e42d298435b2fe0726c6619b06a9f5058542c906fe1",
+          "52323f2882b0e7c04b5d89cc33d044f183ef664f56d129638a25bd38b2e6a926",
+          "89ec6dff65d66b86d0689d219dbc82a41e05e8300043a648772decb083d3b1d6"
+        ],
+        "result": {
+          "columns": [
+            "row_index",
+            "id",
+            "prediction",
+            "rankings"
+          ],
+          "digest": "549b51a54f61426ce9f62b94f90db1e58b8450c62070fdaf1898bd54926b3eac",
+          "rows": 2
+        }
+      },
+      "projection": {
+        "context": {
+          "columns": [
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time",
+            "TARGET"
+          ],
+          "digest": "a718e0926f5b31e56f7a1f2f415e38c4cdd3fdec6478d2af186ac0462555ee1c",
+          "rows": 48
+        },
+        "decomposition": {
+          "kind": "ranking",
+          "parts": [
+            [
+              "PREDICT COUNT(buys.* WHERE buys.item_id=2, 0, 30, days) > 0 FOR EACH users.user_id",
+              "2"
+            ],
+            [
+              "PREDICT COUNT(buys.* WHERE buys.item_id=1, 0, 30, days) > 0 FOR EACH users.user_id",
+              "1"
+            ],
+            [
+              "PREDICT COUNT(buys.* WHERE buys.item_id=0, 0, 30, days) > 0 FOR EACH users.user_id",
+              "0"
+            ]
+          ]
+        },
+        "entity_table": "users",
+        "indices": [
+          "0",
+          "1"
+        ],
+        "kind": "Request",
+        "parts": [
+          {
+            "context": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "digest": "2e4ebe8fa7c660f006c3ec0b584df3b522b869ce3b59e1ee88f40ab964781645",
+              "rows": 16
+            },
+            "entity_table": "users",
+            "indices": [
+              "0",
+              "1"
+            ],
+            "kind": "Request",
+            "payloads": [
+              "3d0892a6a8befa6453f90e258c81ad12a964ddb39f4edb6bcb1f9545aa5b1800"
+            ],
+            "predict": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "digest": "e66ee0857a075f8bb8c795cc106d8afbe99fc65408801c4d761e12fb4fdf6bf4",
+              "rows": 2
+            },
+            "query": "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id",
+            "schema": [
+              "buys",
+              "items",
+              "orders",
+              "users"
+            ],
+            "task": {
+              "entity_table": "users",
+              "kind": "binary_classification",
+              "target": [
+                "TARGET",
+                "bool",
+                null
+              ]
+            },
+            "windowed": true
+          },
+          {
+            "context": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "digest": "dd5f02e91f6915f8df674cd9f9b897d6a64d234edc67e3ab54dd1729812e5b6b",
+              "rows": 16
+            },
+            "entity_table": "users",
+            "indices": [
+              "0",
+              "1"
+            ],
+            "kind": "Request",
+            "payloads": [
+              "523cd9fb0b3b327e01d2108bd8ff89bf36da9defde0c92c34fb2e20c18d11efa"
+            ],
+            "predict": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "digest": "e66ee0857a075f8bb8c795cc106d8afbe99fc65408801c4d761e12fb4fdf6bf4",
+              "rows": 2
+            },
+            "query": "PREDICT COUNT(buys.* WHERE buys.item_id = 1, 0, 30, days) > 0 FOR EACH users.user_id",
+            "schema": [
+              "buys",
+              "items",
+              "orders",
+              "users"
+            ],
+            "task": {
+              "entity_table": "users",
+              "kind": "binary_classification",
+              "target": [
+                "TARGET",
+                "bool",
+                null
+              ]
+            },
+            "windowed": true
+          },
+          {
+            "context": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+              ],
+              "digest": "8281f58d067659e45b641c0b4b3fa5443ce77491e3b6e6cb2f15900412f5d712",
+              "rows": 16
+            },
+            "entity_table": "users",
+            "indices": [
+              "0",
+              "1"
+            ],
+            "kind": "Request",
+            "payloads": [
+              "09bec2008f8b6358e8c178186110d946edc8a1dd27581e78b9e68361fc34c326"
+            ],
+            "predict": {
+              "columns": [
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time"
+              ],
+              "digest": "e66ee0857a075f8bb8c795cc106d8afbe99fc65408801c4d761e12fb4fdf6bf4",
+              "rows": 2
+            },
+            "query": "PREDICT COUNT(buys.* WHERE buys.item_id = 0, 0, 30, days) > 0 FOR EACH users.user_id",
+            "schema": [
+              "buys",
+              "items",
+              "orders",
+              "users"
+            ],
+            "task": {
+              "entity_table": "users",
+              "kind": "binary_classification",
+              "target": [
+                "TARGET",
+                "bool",
+                null
+              ]
+            },
+            "windowed": true
+          }
+        ],
+        "payloads": [
+          "3d0892a6a8befa6453f90e258c81ad12a964ddb39f4edb6bcb1f9545aa5b1800",
+          "523cd9fb0b3b327e01d2108bd8ff89bf36da9defde0c92c34fb2e20c18d11efa",
+          "09bec2008f8b6358e8c178186110d946edc8a1dd27581e78b9e68361fc34c326"
+        ],
+        "predict": {
+          "columns": [
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time"
+          ],
+          "digest": "d4e92e6e62d540873b7cb3f65ece3aadf9499efa07798972496da4760553bdfb",
+          "rows": 6
+        },
+        "query": "PREDICT COUNT(buys.* WHERE buys.item_id = 2, 0, 30, days) > 0 FOR EACH users.user_id",
+        "schema": [
+          "buys",
+          "items",
+          "orders",
+          "users"
+        ],
+        "task": {
+          "entity_table": "users",
+          "kind": "binary_classification",
+          "target": [
+            "TARGET",
+            "bool",
+            null
+          ]
+        },
+        "windowed": true
+      }
+    },
+    "schema-notes": {
+      "projection": {
+        "conversion_notes": [
+          "'total_quantity' is SUM(order_lines.quantity, 0, 30, days) over the next 30 days"
+        ],
+        "kind": "Schema",
+        "links": [
+          [
+            "order_lines",
+            "customer_id",
+            "customers",
+            "customer_id"
+          ],
+          [
+            "order_lines",
+            "product_id",
+            "products",
+            "product_id"
+          ]
+        ],
+        "source": false,
+        "tables": [
+          {
+            "columns": [
+              [
+                "line_id",
+                "int64",
+                "ID",
+                false
+              ],
+              [
+                "ordered_at",
+                "timestamp[us]",
+                "timestamp",
+                true
+              ],
+              [
+                "quantity",
+                "int64",
+                "numerical",
+                false
+              ],
+              [
+                "discounted",
+                "bool",
+                "categorical",
+                false
+              ],
+              [
+                "customer_id",
+                "int64",
+                "ID",
+                false
+              ],
+              [
+                "product_id",
+                "int64",
+                "ID",
+                false
+              ]
+            ],
+            "kind": "SourceTable",
+            "name": "order_lines",
+            "primary_key": null,
+            "time_column": "ordered_at"
+          },
+          {
+            "columns": [
+              [
+                "segment",
+                "string",
+                "categorical",
+                false
+              ],
+              [
+                "customer_id",
+                "int64",
+                "ID",
+                false
+              ]
+            ],
+            "kind": "SourceTable",
+            "name": "customers",
+            "primary_key": "customer_id",
+            "time_column": null
+          },
+          {
+            "columns": [
+              [
+                "color",
+                "string",
+                "categorical",
+                false
+              ],
+              [
+                "product_id",
+                "int64",
+                "ID",
+                false
+              ]
+            ],
+            "kind": "SourceTable",
+            "name": "products",
+            "primary_key": "product_id",
+            "time_column": null
+          }
+        ]
+      }
+    }
+  },
+  "pandas": "3.0.6",
+  "protocol": 4,
+  "python": "3.12.13",
+  "reference": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1"
+}

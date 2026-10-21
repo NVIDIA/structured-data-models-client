@@ -708,6 +708,8 @@ def test_each_seeded_fault_fails_a_check() -> None:
             'field': 'primary_keys',
             'table': 'orders',
             'rule': 'key_not_names',
+            'given': '3',
+            'variant': 'given',
         },
         'fetches': 2,
     }
@@ -719,6 +721,11 @@ def test_each_seeded_fault_fails_a_check() -> None:
             core,
             {**good, 'fields': {'field': 'primary_keys', 'table': 'orders'}},
         )
+        != []
+    )
+    # KO2-86: the value named, not another.
+    assert (
+        differs(core, {**good, 'fields': {**good['fields'], 'given': '4'}})
         != []
     )
     assert differs(core, {**good, 'at': 'start', 'fetches': 0}) != []
@@ -783,6 +790,19 @@ def test_each_seeded_fault_fails_a_check() -> None:
     named = copy.deepcopy(BY_ID['key.int'])
     named['register'] = {'entry': 'P1B-12', 'transition': 'x'}
     assert register_problems(named, approved, phase2) != []
-    uncovered = copy.deepcopy(BY_ID['key.composite'])
+    uncovered = copy.deepcopy(BY_ID['key.twice-before-composite'])
     uncovered['register'] = None
     assert register_problems(uncovered, approved, phase2) != []
+    # A refusal by a rule of E92's class is covered by naming it (T2.12
+    # lifted composite_key, so no vector refuses by one now; a seed does).
+    refused = copy.deepcopy(BY_ID['key.composite'])
+    refused['core'] = {
+        'outcome': 'refusal',
+        'at': 'run',
+        'code': 'UNSUPPORTED_REQUEST',
+        'fields': {'operation': 'describe_source', 'rule': 'composite_key'},
+    }
+    refused['register'] = {'phase2': 'composite_key'}
+    assert register_problems(refused, document, phase2) == []
+    refused['register'] = {'phase2': 'not_a_rule'}
+    assert register_problems(refused, document, phase2) != []

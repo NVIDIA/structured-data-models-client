@@ -70,6 +70,14 @@ pub struct Validation {
     /// never the steps themselves, which a caller writes within its own
     /// bound ([`ForecastPlan::step`], T1.36 fix 23).
     pub steps: Option<ForecastPlan>,
+    /// A ranking's plan, when it has no errors: what each candidate's
+    /// question is written from ([`per_candidate`], T2.8).
+    pub ranking: Option<RankingPlan>,
+    /// The entity filter's condition, when the query has no errors and
+    /// filters its entity, written as the reference writes it
+    /// (`str(query.entity_ast.condition)`), which its notices and its
+    /// refusal of a sample left empty quote (T2.13b).
+    pub entity_filter: Option<String>,
 }
 
 impl Validation {
@@ -80,6 +88,8 @@ impl Validation {
             text: None,
             warnings,
             steps: None,
+            ranking: None,
+            entity_filter: None,
         }
     }
 
@@ -118,9 +128,45 @@ pub fn validate(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<(QueryValidation, Vec<CoreWarning>), CoreError> {
+    let (validation, warnings) = validate_warned(query, schema, profile, facts, zones);
+    validation.map(|validation| (validation, warnings))
+}
+
+/// [`validate`], with D4's warnings for the day-first literals read beside
+/// the outcome, whether the query was answered or the run ends with an
+/// error (a packed literal, a two-digit year the run's zone cannot place):
+/// the literals read before the error keep their warnings, as the
+/// reference's reader gives each as it reads it (carried row U1, T2.13).
+pub fn validate_warned(
+    query: &str,
+    schema: &QuerySchema,
+    profile: &Profile,
+    facts: &HostFacts,
+    zones: &dyn Zones,
+) -> (Result<QueryValidation, CoreError>, Vec<CoreWarning>) {
     on_adapter_stack(|| {
-        resolve_here(query, schema, profile, facts, zones).map(|v| (v.to_result(), v.warnings))
+        let resolved = resolve_here(query, schema, profile, facts, zones);
+        match resolved {
+            Ok(validation) => (Ok(validation.to_result()), validation.warnings),
+            Err(Halted { error, warnings }) => (Err(*error), warnings),
+        }
     })
+}
+
+/// A validation that ended with an error, and D4's warnings for the
+/// day-first literals read before it.
+struct Halted {
+    error: Box<CoreError>,
+    warnings: Vec<CoreWarning>,
+}
+
+impl From<CoreError> for Halted {
+    fn from(error: CoreError) -> Self {
+        Halted {
+            error: Box::new(error),
+            warnings: vec![],
+        }
+    }
 }
 
 /// `query` as the PQL library writes it back (its `to_string()`, the text a
@@ -167,7 +213,7 @@ pub fn resolve(
     facts: &HostFacts,
     zones: &dyn Zones,
 ) -> Result<Validation, CoreError> {
-    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones))
+    on_adapter_stack(|| resolve_here(query, schema, profile, facts, zones).map_err(|h| *h.error))
 }
 
 fn resolve_here(
@@ -176,7 +222,7 @@ fn resolve_here(
     profile: &Profile,
     facts: &HostFacts,
     zones: &dyn Zones,
-) -> Result<Validation, CoreError> {
+) -> Result<Validation, Halted> {
     // Resolve the current year up front; propagate a zone or clock error
     // only if a literal needs a two-digit year placed.
     let year = local_year(facts, zones);
@@ -194,16 +240,23 @@ fn resolve_here(
     });
     let parse = parser::parse_held(query, mode, reader, held);
     let warnings: Vec<CoreWarning> = parse.warnings.iter().map(day_first_warning).collect();
+    // An error after a literal was read keeps the literal's warning (U1).
+    let halted = |error: CoreError| Halted {
+        error: Box::new(error),
+        warnings: warnings.clone(),
+    };
     let parsed = match parse.outcome {
         Ok(parsed) => parsed,
         Err(parser::Unparsed::Refused(response)) => {
             return Ok(Validation::refused(diagnostics(&response), warnings));
         }
-        Err(parser::Unparsed::Packed(location)) => return Err(packed(location)),
+        Err(parser::Unparsed::Packed(location, literal)) => {
+            return Err(halted(packed(query, location, &literal)));
+        }
         Err(parser::Unparsed::Unplaced) => {
-            return Err(year.err().unwrap_or_else(|| {
+            return Err(halted(year.err().unwrap_or_else(|| {
                 internal("a two-digit year went unplaced with the current year known")
-            }));
+            })));
         }
     };
     let refused = check_parsed_capabilities(parsed.target_has_time_range(), profile);
@@ -220,16 +273,19 @@ fn resolve_here(
             return Ok(Validation::refused(diagnostics(&response), warnings));
         }
     };
-    let query = validated_query(&validated)?;
+    let query = validated_query(&validated).map_err(halted)?;
     let mut found = diagnostics(&validated.validation_response);
     let refusals = check_capabilities(&features(&query, schema), profile);
     if refusals.is_empty() {
+        let steps = per_step(&validated).map_err(halted)?;
         return Ok(Validation {
             diagnostics: found,
             query: Some(query),
             text: Some(validated.query.to_string_with(false, false)),
             warnings,
-            steps: per_step(&validated)?,
+            steps,
+            ranking: per_candidate(&validated),
+            entity_filter: entity_filter(&validated),
         });
     }
     let later = found.split_off(found.iter().take_while(|d| is_error(d)).count());
@@ -274,10 +330,12 @@ impl ForecastPlan {
 
 /// A forecast's plan, the regressions the client's `_per_step` asks it as
 /// (T1.36 fix 21), written by [`ForecastPlan::step`]; none for a query that
-/// is not a forecast. A forecast whose target ends in no aggregation, or
-/// whose window has no start, the reference cannot split (an
-/// `AttributeError` or `TypeError`), refused by name, as the regression it
-/// would ask is. Nothing is written per step here (T1.36 fix 23).
+/// is not a forecast. A forecast whose target ends in no aggregation the
+/// reference cannot split (an `AttributeError`), refused by name, as the
+/// regression it would ask is; one whose window has no start the query's
+/// validation refuses first ("TARGET cannot have an aggregation in the
+/// past"), so reaching it here is a fault of this build (T2.10). Nothing is
+/// written per step here (T1.36 fix 23).
 fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, CoreError> {
     let query = &validated.query;
     if query.problem_type != Some(t::ProblemType::Forecast) {
@@ -290,13 +348,13 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
         Kind::Aggregation { aggr, target, .. } => (aggr.value(), ast::to_string(target)),
         _ => return Err(internal("a final aggregation is not an aggregation")),
     };
-    let window =
-        ast::date_offset_range(&aggregation).ok_or_else(|| sdm_engine::not_yet("open_window"))?;
+    let window = ast::date_offset_range(&aggregation)
+        .ok_or_else(|| internal("a forecast's aggregation has no window"))?;
     let window = window.borrow();
     let start = i128::from(
         window
             .start
-            .ok_or_else(|| sdm_engine::not_yet("open_window"))?,
+            .ok_or_else(|| internal("a forecast's window has no start"))?,
     );
     let count = query
         .num_forecasts
@@ -313,21 +371,93 @@ fn per_step(validated: &parser::ValidatedQuery) -> Result<Option<ForecastPlan>, 
     }))
 }
 
+/// A ranking as the client's `_per_candidate` asks it (T2.8): what every
+/// candidate's binary question is written from, read off the validated
+/// query; nothing is refused here, the core refusing in the client's order
+/// what the client refuses as it writes the questions
+/// (`sdm_request::ranking`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RankingPlan {
+    /// The query's own `TOP k`, its digits as written.
+    pub top_k: Option<String>,
+    /// The final aggregation the ranking is over; none where the target
+    /// ends in none, which the client refuses.
+    pub ranked: Option<sdm_request::ranking::Ranked>,
+}
+
+/// A ranking's plan ([`RankingPlan`]); none for a query that is not a
+/// ranking.
+fn per_candidate(validated: &parser::ValidatedQuery) -> Option<RankingPlan> {
+    let query = &validated.query;
+    if query.problem_type != Some(t::ProblemType::Rank) {
+        return None;
+    }
+    let top_k = query.top_k.as_ref().map(ToString::to_string);
+    let ranked = validated
+        .get_final_target_aggregation()
+        .and_then(|aggregation| {
+            let Kind::Aggregation { target, .. } = &aggregation.borrow().kind else {
+                return None;
+            };
+            let text = ast::to_string(target);
+            // The table and the column ranked: the column node's own, held
+            // apart (KO2-36); the text split at its first dot where the target
+            // is no lone column, as the client splits it.
+            let (table, column) = match &target.borrow().kind {
+                Kind::Column { name, .. } => (name.table_name.clone(), name.col_name.clone()),
+                _ => match text.split_once('.') {
+                    Some((table, column)) => (table.to_owned(), column.to_owned()),
+                    None => (text.clone(), String::new()),
+                },
+            };
+            let window = ast::date_offset_range(&aggregation).map(|window| {
+                let window = window.borrow();
+                sdm_request::ranking::Window {
+                    start: window.start,
+                    end: window.end,
+                    unit: window.unit.value().to_owned(),
+                }
+            });
+            Some(sdm_request::ranking::Ranked {
+                target: text,
+                table,
+                column,
+                window,
+                entity: format!("{} {}", query.for_each, ast::to_string(&query.entity_ast)),
+            })
+        });
+    Some(RankingPlan { top_k, ranked })
+}
+
+/// The entity filter's condition as the reference writes it
+/// (`str(query.entity_ast.condition)`), when the entity is filtered.
+fn entity_filter(validated: &parser::ValidatedQuery) -> Option<String> {
+    match &validated.query.entity_ast.borrow().kind {
+        Kind::Filter { condition, .. } => Some(ast::to_string(condition)),
+        _ => None,
+    }
+}
+
 fn is_error(diagnostic: &PqlDiagnostic) -> bool {
     diagnostic.severity == Severity::Error
 }
 
 /// The refusal of a date literal with a run of five digits or more (D8),
-/// by name and where it is, never its text (decision E79): the reference
-/// reads such a literal through `dateutil`, or refuses it.
-fn packed(location: Option<ast::Location>) -> CoreError {
+/// by name and where it is: the reference reads such a literal through
+/// `dateutil`, or refuses it. It names the literal and the query, as the
+/// caller wrote them (`literal`, `query`), as the reference's message does
+/// (KO2-86, narrowing decision E79: a value of the caller's own call).
+fn packed(query: &str, location: Option<ast::Location>, literal: &str) -> CoreError {
     let mut error = CoreError::new(
         ErrorKind::InvalidRequest,
         ErrorCode::InvalidRequest,
         "a date literal with a run of five digits or more is refused",
     )
     .with_field("operation", Detail::text("validate_query"))
-    .with_field("rule", Detail::text("date_literal_packed"));
+    .with_field("rule", Detail::text("date_literal_packed"))
+    .with_field("field", Detail::text("query"))
+    .with_field("query", Detail::text(query))
+    .with_field("literal", Detail::text(literal));
     if let Some(at) = location.and_then(parser::Span::at) {
         error = error
             .with_field("start_row", count(at.start_row))
@@ -875,6 +1005,13 @@ fn ranks_foreign_key(target: &PqlNode, schema: &QuerySchema) -> bool {
     schema.links.iter().flatten().any(|c| c == column)
 }
 
+/// A name as the query language spells it, in backticks where a bare name
+/// cannot (T2.8: a ranking's questions name the ranked table so), from
+/// here, the one module that names the parser.
+pub(crate) fn quote_name(name: &str) -> String {
+    parser::names::quote_name(name)
+}
+
 /// The text a float class is spelled in, as the reference spells it: the
 /// parser's float text, the shortest digits that read back to the double
 /// ([`sdm_pql::float_repr`]). The payload and the answer's layout take it
@@ -931,5 +1068,75 @@ mod tests {
         let refused = local_year(&facts(new_year, unknown), &NewYork).unwrap_err();
         assert_eq!(refused.fields["field"], Detail::text("facts.local_zone"));
         assert!(local_year(&facts(i64::MIN, None), &NewYork).is_err());
+    }
+
+    /// Carried row U1 (T2.13): a day-first literal read before the error a
+    /// query then ends with (a packed literal, a two-digit year the run's
+    /// zone cannot place) keeps its warning; one read after it is never
+    /// read, as the reference's reader stops there too.
+    #[test]
+    fn a_day_first_literal_read_before_an_error_keeps_its_warning() {
+        let schema: QuerySchema = serde_json::from_value(serde_json::json!({
+            "tables": [{"name": "t", "columns": [
+                {"name": "id", "dtype": "int", "stype": "ID"},
+                {"name": "c", "dtype": "int", "stype": "categorical"},
+                {"name": "ts", "dtype": "time", "stype": "timestamp"}],
+             "primary_key": "id", "time_column": "ts", "end_time_column": null}],
+            "links": [],
+        }))
+        .unwrap();
+        let profile = Profile::resolve(&sdm_contract::ops::ProfileSpec {
+            name: sdm_contract::ops::ProfileName::Relational,
+            model: None,
+            capabilities: Default::default(),
+        });
+        let known = facts(1_767_225_600_000_000, None);
+        let unknown = facts(
+            1_767_225_600_000_000,
+            Some(LocalZone::Iana("Mars/Olympus".into())),
+        );
+        for (query, facts, rule, warned) in [
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts < 20240101-01-01",
+                &known,
+                Some("date_literal_packed"),
+                1,
+            ),
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts > 14/01/2024 \
+                 AND t.ts < 20240101-01-01",
+                &known,
+                Some("date_literal_packed"),
+                2,
+            ),
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 20240101-01-01 AND t.ts < 13/01/2024",
+                &known,
+                Some("date_literal_packed"),
+                0,
+            ),
+            (
+                "PREDICT t.c FOR EACH t.id WHERE t.ts > 13/01/2024 AND t.ts < 1/2/76",
+                &unknown,
+                None,
+                1,
+            ),
+        ] {
+            let (outcome, warnings) = validate_warned(query, &schema, &profile, facts, &NewYork);
+            let err = outcome.expect_err(query);
+            assert_eq!(err.code, ErrorCode::InvalidRequest, "{query}");
+            match rule {
+                Some(rule) => assert_eq!(err.fields["rule"], Detail::text(rule), "{query}"),
+                None => assert_eq!(err.fields["field"], Detail::text("facts.local_zone")),
+            }
+            assert_eq!(warnings.len(), warned, "{query}");
+            assert!(
+                warnings.iter().all(|w| w.code == DATE_LITERAL_DAY_FIRST),
+                "{query}"
+            );
+            // `validate` ends with the same error.
+            let plain = validate(query, &schema, &profile, facts, &NewYork).unwrap_err();
+            assert_eq!(plain, err, "{query}");
+        }
     }
 }

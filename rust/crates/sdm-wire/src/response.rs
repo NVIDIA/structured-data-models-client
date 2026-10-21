@@ -18,15 +18,28 @@
 //! number, or text a float reads, not a boolean (`not_a_number`) and
 //! finite (`not_finite`), kept in the order written.
 //!
+//! From T2.8 an item's `scores` is read as the bindings' `_float_tuple`
+//! reads it (an array, each member read as a probability is), and its
+//! `rankings` as their `_mapping_tuple` reads it (each member a mapping,
+//! [`mappings`]).
+//!
+//! From T2.13 an item's `explanation` and `metadata` are each read as the
+//! bindings' `_dict_or_none` reads them, Python's `dict` of the value
+//! ([`mapping`], the one reader T2.8 lands).
+//!
+//! From T2.9 an item's `quantiles` is read as the bindings' `_float_dict`
+//! reads it, as `probabilities` is (an object, each member's value a
+//! finite number, each refusal naming `prediction.quantiles`), and kept as
+//! the [`mapping`] it is, each value written as the double it reads as.
+//!
+//! From T2.11 an item's `embeddings` is read as the bindings'
+//! `_float_tuple` reads it, as `scores` is: absent or `null` is none, any
+//! value not an array refused (`not_a_sequence`), each member a number.
+//!
 //! As built at T1.11d the item's `prediction` is taken as written, as the
-//! bindings take it, and its other fields (`scores`,
-//! `rankings`, `embeddings`, `quantiles`, `explanation`, `metadata`) are
-//! not read or type-checked: when one is there and not null, it is named in
-//! [`PredictionItem::carried`], for the caller to refuse by name as a field
-//! the result does not carry yet (`UNSUPPORTED_REQUEST`, register P1B-4),
-//! where the bindings would refuse a malformed one as a response not the
-//! contract's (`INVALID_RESPONSE`, decision E45(f)); T1.28 reads them.
-//! Members the bindings do not read are ignored, as there.
+//! bindings take it. From T2.11 every other field the bindings read is
+//! read, so [`PredictionItem::carried`] names none. Members the bindings
+//! do not read are ignored, as there.
 
 use crate::json::{Value, is_integer_token, whole};
 
@@ -46,14 +59,7 @@ fn refused(field: &'static str, reason: &'static str) -> Refused {
 }
 
 /// The fields of an item this build does not read, in the bindings' order.
-pub const UNREAD_ITEM_FIELDS: [&str; 6] = [
-    "scores",
-    "rankings",
-    "embeddings",
-    "quantiles",
-    "explanation",
-    "metadata",
-];
+pub const UNREAD_ITEM_FIELDS: [&str; 0] = [];
 
 /// One answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -69,6 +75,25 @@ pub struct PredictionItem {
     /// Each class's probability, in the order written; absent and `null`
     /// alike are `None`.
     pub probabilities: Option<Vec<(String, f64)>>,
+    /// The item's scores, in the order written; absent and `null` alike are
+    /// `None` (T2.8).
+    pub scores: Option<Vec<f64>>,
+    /// The item's rankings, each a mapping as a JSON object, in the order
+    /// written; absent and `null` alike are `None` (T2.8).
+    pub rankings: Option<Vec<Value>>,
+    /// The item's explanation, a mapping as [`mapping`] lays one out;
+    /// absent and `null` alike are `None` (T2.13).
+    pub explanation: Option<Value>,
+    /// The item's own metadata, a mapping as [`mapping`] lays one out;
+    /// absent and `null` alike are `None` (T2.13).
+    pub metadata: Option<Value>,
+    /// The item's quantiles, a mapping as [`mapping`] lays one out, each
+    /// value the double it reads as; absent and `null` alike are `None`
+    /// (T2.9).
+    pub quantiles: Option<Value>,
+    /// The item's embedding, in the order written; absent and `null` alike
+    /// are `None` (T2.11).
+    pub embeddings: Option<Vec<f64>>,
     /// The fields of [`UNREAD_ITEM_FIELDS`] this item carries, not null.
     pub carried: Vec<&'static str>,
 }
@@ -150,6 +175,46 @@ impl PredictionItem {
             ),
             Some(_) => return Err(refused("prediction.probabilities", "not_an_object")),
         };
+        let scores = match value.get("scores") {
+            None | Some(Value::Null) => None,
+            Some(Value::Array(members)) => Some(
+                members
+                    .iter()
+                    .map(|v| number(v, "prediction.scores"))
+                    .collect::<Result<_, Refused>>()?,
+            ),
+            Some(_) => return Err(refused("prediction.scores", "not_a_sequence")),
+        };
+        let rankings = match value.get("rankings") {
+            None | Some(Value::Null) => None,
+            Some(given) => Some(mappings(given)?),
+        };
+        let explanation = match value.get("explanation") {
+            None | Some(Value::Null) => None,
+            Some(given) => Some(mapping(given, "prediction.explanation")?),
+        };
+        let metadata = match value.get("metadata") {
+            None | Some(Value::Null) => None,
+            Some(given) => Some(mapping(given, "prediction.metadata")?),
+        };
+        let quantiles = match value.get("quantiles") {
+            None | Some(Value::Null) => None,
+            Some(given @ Value::Object(_)) => Some(numbers(
+                mapping(given, "prediction.quantiles")?,
+                "prediction.quantiles",
+            )?),
+            Some(_) => return Err(refused("prediction.quantiles", "not_an_object")),
+        };
+        let embeddings = match value.get("embeddings") {
+            None | Some(Value::Null) => None,
+            Some(Value::Array(members)) => Some(
+                members
+                    .iter()
+                    .map(|v| number(v, "prediction.embeddings"))
+                    .collect::<Result<_, Refused>>()?,
+            ),
+            Some(_) => return Err(refused("prediction.embeddings", "not_a_sequence")),
+        };
         let carried = UNREAD_ITEM_FIELDS
             .into_iter()
             .filter(|name| !matches!(value.get(name), None | Some(Value::Null)))
@@ -160,6 +225,12 @@ impl PredictionItem {
             forecast_step,
             prediction,
             probabilities,
+            scores,
+            rankings,
+            explanation,
+            metadata,
+            quantiles,
+            embeddings,
             carried,
         })
     }
@@ -199,15 +270,189 @@ fn whole_of(value: &Value, field: &'static str) -> Result<i128, Refused> {
 /// A probability as the bindings' `_finite` reads one: a number, or text
 /// Python's `float` reads ([`numeric_text`]), never a boolean, and finite.
 fn probability(value: &Value) -> Result<f64, Refused> {
-    const FIELD: &str = "prediction.probabilities";
+    number(value, "prediction.probabilities")
+}
+
+/// A mapping whose every value is a number, as the bindings' `_float_dict`
+/// holds one: each value read as [`number`] reads it (refused naming
+/// `field`), and written as the double it reads as, so text a float reads
+/// and an integer alike are that double.
+fn numbers(mapping: Value, field: &'static str) -> Result<Value, Refused> {
+    let Value::Object(members) = mapping else {
+        return Err(refused(field, "not_an_object"));
+    };
+    members
+        .into_iter()
+        .map(|(name, v)| {
+            let read = number(&v, field)?;
+            Ok((
+                name,
+                Value::float(read).ok_or(refused(field, "not_finite"))?,
+            ))
+        })
+        .collect::<Result<_, Refused>>()
+        .map(Value::Object)
+}
+
+/// One mapping of a response field, as Python's `dict` makes one of the
+/// value the transport read: of an object as it is, of a list of pairs, and
+/// of empty text none. A pair is a list of two whose first member a dict
+/// may key by (text, a number, a boolean or null), text of two characters
+/// (a character to a character), or an object of two members (its first
+/// name to its second, as `dict` iterates an object's names). A key given
+/// twice keeps its first place and spelling and takes the last value, keys
+/// equal as Python's are ([`key_of`]). Anything else is refused
+/// (`not_a_mapping`, naming `field`), as `dict` refuses it.
+///
+/// The one reader of a mapping-valued response field (T2.8; the
+/// explanation, the item metadata and the quantiles read it too): the core
+/// lays a mapping out as JSON object text in a Utf8 column, a list of
+/// mappings as a list of those texts. A mapping keyed by text alone is the
+/// JSON object; one with another key (a number, a boolean or null) is the
+/// JSON list of its pairs, `[[key, value], ...]`, as a JSON object holds no
+/// other key. Both forms are read here, keys equal as Python's are in both.
+pub fn mapping(member: &Value, field: &'static str) -> Result<Value, Refused> {
+    let not = || refused(field, "not_a_mapping");
+    // Two characters, as `dict` reads a pair from text.
+    let pair_of = |text: &str| -> Option<(Value, Value)> {
+        let mut chars = text.chars();
+        let (Some(a), Some(b), None) = (chars.next(), chars.next(), chars.next()) else {
+            return None;
+        };
+        Some((Value::Text(a.to_string()), Value::Text(b.to_string())))
+    };
+    match member {
+        Value::Object(_) => Ok(member.clone()),
+        Value::Text(text) if text.is_empty() => Ok(Value::Object(vec![])),
+        Value::Array(pairs) => {
+            let mut built: Vec<(Value, Value)> = Vec::new();
+            for pair in pairs {
+                let (key, value) = match pair {
+                    Value::Array(two) => match two.as_slice() {
+                        [Value::Array(_) | Value::Object(_), _] => return Err(not()),
+                        [key, value] => (key.clone(), value.clone()),
+                        _ => return Err(not()),
+                    },
+                    Value::Text(text) => pair_of(text).ok_or_else(not)?,
+                    Value::Object(two) => match two.as_slice() {
+                        [(first, _), (second, _)] => {
+                            (Value::Text(first.clone()), Value::Text(second.clone()))
+                        }
+                        _ => return Err(not()),
+                    },
+                    _ => return Err(not()),
+                };
+                let named = key_of(&key);
+                match built
+                    .iter_mut()
+                    .find(|(k, _)| named.is_some() && key_of(k) == named)
+                {
+                    Some(kept) => kept.1 = value,
+                    None => built.push((key, value)),
+                }
+            }
+            if built.iter().all(|(k, _)| matches!(k, Value::Text(_))) {
+                Ok(Value::Object(
+                    built
+                        .into_iter()
+                        .filter_map(|(k, v)| match k {
+                            Value::Text(name) => Some((name, v)),
+                            _ => None,
+                        })
+                        .collect(),
+                ))
+            } else {
+                Ok(Value::Array(
+                    built
+                        .into_iter()
+                        .map(|(k, v)| Value::Array(vec![k, v]))
+                        .collect(),
+                ))
+            }
+        }
+        _ => Err(not()),
+    }
+}
+
+/// A rankings field as the bindings' `_mapping_tuple` reads it, `tuple(
+/// dict(item) for item in value)`: each member a [`mapping`]; text iterates
+/// its characters and an object its names, each made a mapping as a member
+/// is. Anything else is refused (`not_a_mapping`).
+pub fn mappings(value: &Value) -> Result<Vec<Value>, Refused> {
+    const FIELD: &str = "prediction.rankings";
+    let one = |member: &Value| mapping(member, FIELD);
+    match value {
+        Value::Array(members) => members.iter().map(one).collect(),
+        Value::Text(text) => text
+            .chars()
+            .map(|c| one(&Value::Text(c.to_string())))
+            .collect(),
+        Value::Object(members) => members
+            .iter()
+            .map(|(name, _)| one(&Value::Text(name.clone())))
+            .collect(),
+        _ => Err(refused(FIELD, "not_a_mapping")),
+    }
+}
+
+/// A dict key as Python's equality holds it, which the reference's client
+/// keys a response's mappings by (`dict`), so two keys the reference holds
+/// one are one here, and only here: text by its text, null as
+/// itself, a boolean or a number by its exact value (an integer's digits, a
+/// whole double's digits, another double by its bits); every NaN one key.
+/// Two NaN objects are two keys to Python's `dict`, but the client reads a
+/// response with `json.loads`, which gives every `NaN` token the same NaN
+/// object, and `dict` finds a key that is the same object before it
+/// compares, so the reference keeps one key for them all (T2.13: the
+/// reference's `PredictionItem.from_dict` makes `[[NaN, 1], [NaN, 2]]`
+/// `{NaN: 2}`).
+fn key_of(key: &Value) -> Option<String> {
+    match key {
+        Value::Text(text) => Some(format!("s{text}")),
+        Value::Null => Some("z".to_owned()),
+        Value::Bool(b) => Some(format!("n{}", u8::from(*b))),
+        Value::Number(token) if is_integer_token(token) => {
+            let digits = token.trim_start_matches('-').trim_start_matches('0');
+            let sign = if token.starts_with('-') && !digits.is_empty() {
+                "-"
+            } else {
+                ""
+            };
+            Some(format!(
+                "n{sign}{}",
+                if digits.is_empty() { "0" } else { digits }
+            ))
+        }
+        Value::Number(token) => {
+            let float: f64 = token.parse().ok()?;
+            if float.is_nan() {
+                Some("x".to_owned())
+            } else if float.is_finite() && float.fract() == 0.0 {
+                Some(if float == 0.0 {
+                    "n0".to_owned()
+                } else {
+                    format!("n{float:.0}")
+                })
+            } else {
+                Some(format!("f{:016x}", float.to_bits()))
+            }
+        }
+        _ => None,
+    }
+}
+
+/// A number as the bindings' `_finite` reads one, for `field`: a number,
+/// or text Python's `float` reads ([`numeric_text`]), never a boolean, and
+/// finite.
+fn number(value: &Value, field: &'static str) -> Result<f64, Refused> {
     let read = match value {
         Value::Number(token) => token.parse::<f64>().ok(),
         Value::Text(text) => numeric_text(text),
         _ => None,
     };
     match read {
-        None => Err(refused(FIELD, "not_a_number")),
-        Some(p) if !p.is_finite() => Err(refused(FIELD, "not_finite")),
+        None => Err(refused(field, "not_a_number")),
+        Some(p) if !p.is_finite() => Err(refused(field, "not_finite")),
         Some(p) => Ok(p),
     }
 }
@@ -331,4 +576,117 @@ pub fn numeric_text(text: &str) -> Option<f64> {
         return None;
     }
     plain.parse::<f64>().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read(text: &str) -> Value {
+        crate::json::read(text.as_bytes()).unwrap()
+    }
+
+    /// A response as the transport reads one, `NaN` and the infinities
+    /// taken (`json::read_answer`).
+    fn answer(text: &str) -> Value {
+        crate::json::read_answer(text.as_bytes()).unwrap()
+    }
+
+    /// T2.13: `dict(value)` as the bindings' `_dict_or_none` makes it, each
+    /// answer recorded through the reference's `PredictionItem.from_dict`
+    /// (an item's explanation), a key kept as first written.
+    #[test]
+    fn a_mapping_is_made_as_python_s_dict_makes_one() {
+        for (given, wanted) in [
+            ("{}", "{}"),
+            (r#"{"a":1,"b":[1,2]}"#, r#"{"a":1,"b":[1,2]}"#),
+            (r#""""#, "{}"),
+            ("[]", "{}"),
+            (r#"[["a",1],["b",2]]"#, r#"{"a":1,"b":2}"#),
+            (r#"[["a",1],["a",2]]"#, r#"{"a":2}"#),
+            (r#"["ab","cd"]"#, r#"{"a":"b","c":"d"}"#),
+            (r#"["ab","ac"]"#, r#"{"a":"c"}"#),
+            (r#"[{"x":1,"y":2}]"#, r#"{"x":"y"}"#),
+            (r#"[[1,"one"],[1.0,"uno"],[true,"si"]]"#, r#"[[1,"si"]]"#),
+            ("[[null,1]]", "[[null,1]]"),
+            (r#"[[1,2],["1",3]]"#, r#"[[1,2],["1",3]]"#),
+            (r#"[["a",1],[2,3]]"#, r#"[["a",1],[2,3]]"#),
+            (r#"[[-0,"z"],[0.0,"y"]]"#, r#"[[-0,"y"]]"#),
+            ("[[NaN,1],[NaN,2]]", "[[NaN,2]]"),
+            ("[[1e400,1],[1e999,2]]", "[[1e400,2]]"),
+            (r#"["\u00e9\u00e8"]"#, r#"{"\u00e9":"\u00e8"}"#),
+            (
+                "[[9007199254740993,1],[9007199254740992.0,2]]",
+                "[[9007199254740993,1],[9007199254740992.0,2]]",
+            ),
+            ("[[100,1],[1e2,2]]", "[[100,2]]"),
+        ] {
+            assert_eq!(
+                mapping(&answer(given), "prediction.explanation").unwrap(),
+                answer(wanted),
+                "{given}"
+            );
+        }
+        for given in [
+            r#""ab""#,
+            r#""a""#,
+            r#"[{"x":1}]"#,
+            "[[[1],2]]",
+            r#"[[{"a":1},2]]"#,
+            r#"[["a"]]"#,
+            r#"[["a",1,2]]"#,
+            "[1]",
+            "[null]",
+            "1",
+            "true",
+        ] {
+            let refused = mapping(&answer(given), "prediction.metadata").unwrap_err();
+            assert_eq!(
+                (refused.field, refused.reason),
+                ("prediction.metadata", "not_a_mapping"),
+                "{given}"
+            );
+        }
+    }
+
+    /// Every NaN is one key, as the reference holds them: `json.loads` gives
+    /// every `NaN` token the same object, which `dict` finds as one key
+    /// (T2.13); the first place is kept and the last value taken, and a NaN
+    /// is no other number's key.
+    #[test]
+    fn every_nan_key_is_one_key() {
+        let read = |text: &str| mapping(&answer(text), "prediction.explanation").unwrap();
+        assert_eq!(read("[[NaN,1],[NaN,2]]"), answer("[[NaN,2]]"));
+        assert_eq!(read("[[NaN,1],[0,2],[NaN,3]]"), answer("[[NaN,3],[0,2]]"));
+        assert_eq!(
+            read("[[NaN,1],[Infinity,2],[-Infinity,3]]"),
+            answer("[[NaN,1],[Infinity,2],[-Infinity,3]]")
+        );
+        assert_eq!(
+            read(r#"[[NaN,1],["NaN",2]]"#),
+            answer(r#"[[NaN,1],["NaN",2]]"#)
+        );
+    }
+
+    #[test]
+    fn a_mapping_is_read_as_python_s_dict_reads_it() {
+        let made = |text: &str| {
+            mapping(&read(text), "f").map(|v| String::from_utf8(v.to_bytes()).unwrap())
+        };
+        assert_eq!(made(r#"{"a":1}"#), Ok(r#"{"a":1}"#.to_owned()));
+        // A pair of each form: a list of two, two characters, and an object
+        // of two members, its first name to its second.
+        assert_eq!(
+            made(r#"[["a",1],"bc",{"d":0,"e":0}]"#),
+            Ok(r#"{"a":1,"b":"c","d":"e"}"#.to_owned())
+        );
+        // Keys equal as Python's are one, the first kept, the last value.
+        assert_eq!(
+            made(r#"[[1,"x"],[1.0,"y"],[true,"z"]]"#),
+            Ok(r#"[[1,"z"]]"#.to_owned())
+        );
+        assert!(made(r#"[{"a":0}]"#).is_err());
+        assert!(made(r#"[[[1],2]]"#).is_err());
+        assert!(made("3").is_err());
+    }
 }

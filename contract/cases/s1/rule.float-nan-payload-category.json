@@ -1,0 +1,96 @@
+{
+  "format": "sdm-case/1",
+  "id": "rule.float-nan-payload-category",
+  "status": "acceptance",
+  "slice": "S1",
+  "databases": [
+    "duckdb"
+  ],
+  "exclusion": "KO2-65",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "float32/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i % 50)::INTEGER AS age, CASE WHEN i < 49 THEN i::FLOAT WHEN i % 2 = 1 THEN '01111111100000000000000000000001'::BIT::FLOAT ELSE '01111111110000000000000000000001'::BIT::FLOAT END AS feature FROM range(1000) t(i)"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c on DuckDB: answered through predict, the feature numerical (51 distinct values, the two encodings two of them)"
+  },
+  "why": "A FLOAT feature of 1,000 users, 49 distinct finite values and the NaNs 0x7f800001 and 0x7fc00001: whether the two encodings are two values decides whether the preview reads it as categorical (rule float_nan; T2.12 round 3). DuckDB only, as rule.float-nan-payload-key-tie",
+  "source": "T2.12 round 3 (Codex P2): two NaN encodings of a FLOAT, as DuckDB stores and previews them"
+}

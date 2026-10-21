@@ -11,9 +11,7 @@
 use std::collections::BTreeSet;
 
 use sdm_contract::ops::{ColumnRef, DescribedColumn, SourceDescription, Stype};
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
-
-use crate::not_yet;
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
 /// One table of the graph.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +68,60 @@ pub struct Graph {
 /// source column may start with.
 pub const RESERVED_PREFIX: &str = "__kumo_";
 
+/// The prefix a key of several columns is folded under (`DERIVED_PREFIX`).
+pub const FOLDED_PREFIX: &str = "__kumo_key_";
+
+/// The column a key of several columns is folded into: the prefix, then
+/// each column's name as the hexadecimal of its UTF-8, joined by `_`
+/// (`composite_key.encode_identity`).
+pub fn folded_name(key: &[String]) -> String {
+    format!(
+        "{FOLDED_PREFIX}{}",
+        key.iter()
+            .map(|c| c.bytes().map(|b| format!("{b:02x}")).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("_")
+    )
+}
+
+/// `error`, naming every column of `description` the SQL samplers' check of
+/// the schema's names refuses (`_reject_reserved_columns`), as
+/// `table.column`, sorted: each column named with [`RESERVED_PREFIX`], and
+/// each key of several columns as the column it is folded into; with the
+/// prefix and the reason, `reserved_name` or `reserved_names` by their
+/// count, for the host's words.
+pub fn with_reserved(error: CoreError, description: &SourceDescription) -> CoreError {
+    let mut reserved: Vec<String> = Vec::new();
+    for table in &description.tables {
+        if table.primary_key.len() > 1 {
+            reserved.push(format!(
+                "{}.{}",
+                table.name,
+                folded_name(&table.primary_key)
+            ));
+        }
+        for column in &table.columns {
+            if column.name.starts_with(RESERVED_PREFIX) {
+                reserved.push(format!("{}.{}", table.name, column.name));
+            }
+        }
+    }
+    reserved.sort_unstable();
+    reserved.dedup();
+    let reason = if reserved.len() > 1 {
+        "reserved_names"
+    } else {
+        "reserved_name"
+    };
+    error
+        .with_field("reason", Detail::text(reason))
+        .with_field("prefix", Detail::text(RESERVED_PREFIX))
+        .with_field(
+            "reserved",
+            Detail::List(reserved.into_iter().map(Scalar::Utf8).collect()),
+        )
+}
+
 fn invalid(message: &str, field: &str) -> CoreError {
     CoreError::new(
         ErrorKind::InvalidRequest,
@@ -85,23 +137,40 @@ impl Graph {
     /// kept once, and one whose referenced column is not its table's key is
     /// refused, as the reference's materializer refuses it; a column named
     /// with the samplers' reserved prefix is refused, as their sampler
-    /// refuses it. A key of several columns is not sampled yet.
+    /// refuses it. So is a table keyed by several columns, as the
+    /// reference's SQL samplers refuse every such table: its engine folds
+    /// the key into one column named with that prefix
+    /// (`__kumo_key_<columns>`), which their check of the schema's names
+    /// then refuses (`_reject_reserved_columns`), whatever the query.
     pub fn new(description: &SourceDescription) -> Result<Graph, CoreError> {
         let mut tables = Vec::with_capacity(description.tables.len());
         for table in &description.tables {
             let primary_key = match table.primary_key.as_slice() {
                 [] => None,
                 [one] => Some(one.clone()),
-                _ => return Err(not_yet("composite_key")),
+                several => {
+                    return Err(with_reserved(invalid(
+                        "a table keyed by several columns cannot be sampled: the SQL samplers fold its key into a column of the name they reserve",
+                        "schema",
+                    )
+                    .with_field("table", Detail::text(&table.name))
+                    .with_field(
+                        "columns",
+                        Detail::List(several.iter().map(|c| Scalar::Utf8(c.clone())).collect()),
+                    ), description));
+                }
             };
             if table
                 .columns
                 .iter()
                 .any(|c| c.name.starts_with(RESERVED_PREFIX))
             {
-                return Err(invalid(
-                    "a column's name starts with the prefix the SQL samplers reserve",
-                    "schema",
+                return Err(with_reserved(
+                    invalid(
+                        "a column's name starts with the prefix the SQL samplers reserve",
+                        "schema",
+                    ),
+                    description,
                 ));
             }
             tables.push(Table {

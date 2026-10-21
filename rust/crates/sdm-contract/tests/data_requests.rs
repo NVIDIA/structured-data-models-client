@@ -178,10 +178,12 @@ fn the_reference_s_union_reads_name_what_they_read() {
             TableKey {
                 table: "orders".into(),
                 columns: vec!["order_id".into()],
+                label: None,
             },
             TableKey {
                 table: "users".into(),
                 columns: vec!["user_id".into()],
+                label: None,
             },
         ],
     };
@@ -192,6 +194,7 @@ fn the_reference_s_union_reads_name_what_they_read() {
             keys: vec![TableKey {
                 table: "orders".into(),
                 columns: vec![],
+                label: None,
             }],
         },
         "keys",

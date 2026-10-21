@@ -21,11 +21,18 @@
 //!   once to the nearest float32 (T2.0c).
 //!   An example with no row is 0 for `SUM` and `COUNT` and has no label
 //!   for the others.
-//! - A condition ([`compare`], `execute_rel_op`) compares the values its
+//! - A condition (`column_compare`, `execute_rel_op`) compares the values its
 //!   target has with a constant read at the target's type: at float32 for a
 //!   float32 target, at float64 for an integer target and a float constant,
 //!   at int64 for an integer target and an integer constant; a decimal
-//!   target exactly, at no scale but their own (T2.0c, KO2-50).
+//!   target exactly, at no scale but their own (T2.0c, KO2-50); a boolean,
+//!   text or time with its own kind. `IN` (`execute_member_op`) reads its
+//!   list at the target's type the same way, then tests membership.
+//! - `NOT`, `AND` and `OR` ([`truth`], `execute_logical_operation`) join
+//!   their conditions' answers row by row, and label only the rows every
+//!   condition has a value for; a target's filter (`execute_filter`) keeps
+//!   the rows its condition holds for, which [`aggregate_kept`] aggregates
+//!   (T2.10).
 //! - [`label`] puts them together as `execute` does: the examples whose
 //!   target has a value keep their label, in order; the rest have none.
 //!
@@ -101,32 +108,10 @@ pub struct Aggregated {
     pub present: Vec<bool>,
 }
 
-/// The `f64` Arrow's `Decimal128::ToDouble` gives the decimal of unscaled
-/// value `value` at `scale`: the integer's two halves at float64, scaled by
-/// the power of ten, split into whole and fractional parts where the value
-/// is past what a float64 holds exactly; pandas' `astype('float32')` of a
-/// decimal takes this, then narrows it.
-pub fn decimal_to_f64(value: i128, scale: i8) -> f64 {
-    fn no_split(magnitude: u128, scale: i32) -> f64 {
-        let high = (magnitude >> 64) as u64;
-        let low = magnitude as u64;
-        let mut x = (high as f64) * 18_446_744_073_709_551_616.0;
-        x += low as f64;
-        // Arrow's table of powers of ten holds each as its literal, the
-        // closest double, which parsing the literal gives.
-        let power: f64 = format!("1e{}", -scale).parse().unwrap_or(f64::NAN);
-        x * power
-    }
-    let scale = i32::from(scale);
-    let magnitude = value.unsigned_abs();
-    let positive = if scale <= 0 || magnitude <= 1_u128 << 53 {
-        no_split(magnitude, scale)
-    } else {
-        let power = 10_u128.pow(scale as u32);
-        no_split(magnitude / power, 0) + no_split(magnitude % power, scale)
-    };
-    if value < 0 { -positive } else { positive }
-}
+/// The `f64` Arrow's `Decimal128::ToDouble` gives a decimal, shared with
+/// inference (`sdm-schema`), which counts a scaled decimal as the
+/// reference's cast to float64 gives it (T2.14b).
+pub use sdm_contract::scalar::decimal_to_f64;
 
 /// The exact sum of decimals' unscaled values, in 256 bits, two's
 /// complement (`high * 2**128 + low`): no sum of `i128`s a request holds
@@ -275,8 +260,28 @@ pub fn aggregate(
     times: &[Option<i64>],
     bounds: Bounds<'_>,
 ) -> Result<Aggregated, CoreError> {
+    aggregate_kept(aggregation, examples, batch, values, times, bounds, None)
+}
+
+/// [`aggregate`] over the rows a target's filter keeps (`kept`, one for
+/// each row, from [`truth`]'s values), as `execute_filter` hands
+/// `execute_aggregation` only the rows whose condition holds and whose
+/// value is present; every row where `kept` is `None`.
+pub fn aggregate_kept(
+    aggregation: Aggregation,
+    examples: usize,
+    batch: &[usize],
+    values: &Values,
+    times: &[Option<i64>],
+    bounds: Bounds<'_>,
+    kept: Option<&[bool]>,
+) -> Result<Aggregated, CoreError> {
     let rows = batch.len();
-    if values.len() != rows || times.len() != rows || bounds.ends.len() != examples {
+    if values.len() != rows
+        || times.len() != rows
+        || bounds.ends.len() != examples
+        || kept.is_some_and(|k| k.len() != rows)
+    {
         return Err(CoreError::new(
             ErrorKind::Internal,
             ErrorCode::InternalError,
@@ -293,7 +298,7 @@ pub fn aggregate(
     // The rows each example aggregates, in row order.
     let mut taken: Vec<Vec<usize>> = vec![Vec::new(); examples];
     for row in 0..rows {
-        if values.present(row) && within(row) {
+        if values.present(row) && kept.is_none_or(|k| k[row]) && within(row) {
             taken[batch[row]].push(row);
         }
     }
@@ -419,11 +424,22 @@ pub enum RelOp {
     Ge,
 }
 
+/// How `AND` and `OR` join two conditions (`execute_bool_op`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BoolOp {
+    And,
+    Or,
+}
+
 /// A condition's constant, as the query wrote it.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant {
     Int(i128),
     Float(f64),
+    Bool(bool),
+    Text(String),
+    /// A date literal's time, nanoseconds since the epoch, with no zone.
+    Time(i64),
 }
 
 /// What a target gives each example it has a value for, in order.
@@ -449,6 +465,24 @@ impl Labels {
         self.len() == 0
     }
 
+    /// The labels whose place `keep` marks, in order (`keep` one flag a
+    /// label).
+    pub fn kept(self, keep: &[bool]) -> Labels {
+        fn only<T>(values: Vec<T>, keep: &[bool]) -> Vec<T> {
+            values
+                .into_iter()
+                .zip(keep)
+                .filter_map(|(value, kept)| kept.then_some(value))
+                .collect()
+        }
+        match self {
+            Labels::Float(v) => Labels::Float(only(v, keep)),
+            Labels::Int(v) => Labels::Int(only(v, keep)),
+            Labels::Bool(v) => Labels::Bool(only(v, keep)),
+            Labels::Text(v) => Labels::Text(only(v, keep)),
+        }
+    }
+
     /// The first `n` labels.
     pub fn truncated(mut self, n: usize) -> Labels {
         match &mut self {
@@ -461,41 +495,34 @@ impl Labels {
     }
 }
 
-/// `left op constant` for each value, as `execute_rel_op` compares them: a
-/// NaN equal to nothing and, unlike IEEE, not unequal either. An integer
-/// constant past int64 against an integer target, which the reference
-/// cannot read at the target's type, is refused by name
-/// (`condition_value`); a target that is neither a float32 nor an int64,
-/// by `condition`.
-pub fn compare(left: &Labels, op: RelOp, constant: Constant) -> Result<Vec<bool>, CoreError> {
-    Ok(match left {
-        Labels::Float(values) => {
-            // The constant at the target's float32, by way of float64, as
-            // numpy reads a Python number at float32.
-            let value = match constant {
-                Constant::Int(i) => i as f64 as f32,
-                Constant::Float(f) => f as f32,
-            };
-            values
-                .iter()
-                .map(|&v| !v.is_nan() && apply(v, op, value))
-                .collect()
-        }
-        Labels::Int(values) => match constant {
-            Constant::Float(f) => values
-                .iter()
-                .map(|&v| {
-                    let v = v as f64;
-                    !f.is_nan() && apply(v, op, f)
-                })
-                .collect(),
-            Constant::Int(i) => {
-                let value = i64::try_from(i).map_err(|_| not_yet("condition_value"))?;
-                values.iter().map(|&v| apply(v, op, value)).collect()
-            }
-        },
-        Labels::Bool(_) | Labels::Text(_) => return Err(not_yet("condition")),
-    })
+/// A condition the query's validation lets through only for operands and
+/// constants of matching types, met with others: a fault of this build.
+fn unpaired() -> CoreError {
+    CoreError::new(
+        ErrorKind::Internal,
+        ErrorCode::InternalError,
+        "a condition pairs a value and a constant of types the query's validation keeps apart",
+    )
+}
+
+/// A comparison with `NULL` other than `=` and `!=`, which the query's
+/// validation refuses before it reaches here.
+fn ordered_null() -> CoreError {
+    CoreError::new(
+        ErrorKind::Internal,
+        ErrorCode::InternalError,
+        "a comparison with NULL other than = and != reached the labels",
+    )
+}
+
+/// A number constant at float32, by way of float64, as numpy reads a
+/// Python number at a float32 target's type.
+fn float32(constant: &Constant) -> Result<f32, CoreError> {
+    match constant {
+        Constant::Int(i) => Ok(*i as f64 as f32),
+        Constant::Float(f) => Ok(*f as f32),
+        _ => Err(unpaired()),
+    }
 }
 
 /// `a op b`.
@@ -510,13 +537,25 @@ fn apply<T: PartialOrd>(a: T, op: RelOp, b: T) -> bool {
     }
 }
 
+/// Whether `order`, the left side's against the right, satisfies `op`.
+fn holds(order: std::cmp::Ordering, op: RelOp) -> bool {
+    match op {
+        RelOp::Eq => order.is_eq(),
+        RelOp::Ne => order.is_ne(),
+        RelOp::Lt => order.is_lt(),
+        RelOp::Le => order.is_le(),
+        RelOp::Gt => order.is_gt(),
+        RelOp::Ge => order.is_ge(),
+    }
+}
+
 /// A condition's constant as a decimal, `digits * 10**exponent`: an
 /// integer as written; a float as the shortest decimal that names its
 /// double, which is the constant the query wrote whenever it wrote no more
 /// than a double's 17 significant digits; `None` for a float that is not
-/// finite.
-fn constant_decimal(constant: Constant) -> Option<(i128, i32)> {
-    match constant {
+/// finite, or a constant that is not a number.
+fn constant_decimal(constant: &Constant) -> Option<(i128, i32)> {
+    match *constant {
         Constant::Int(value) => Some((value, 0)),
         Constant::Float(value) if value.is_finite() => {
             // `{:e}` writes the shortest such decimal: `1.5e0`, `-1e308`.
@@ -527,7 +566,7 @@ fn constant_decimal(constant: Constant) -> Option<(i128, i32)> {
             let digits: i128 = mantissa.replace('.', "").parse().ok()?;
             Some((digits, exponent - fraction as i32))
         }
-        Constant::Float(_) => None,
+        _ => None,
     }
 }
 
@@ -537,10 +576,10 @@ fn constant_decimal(constant: Constant) -> Option<(i128, i32)> {
 /// column's scale, and one past the column's digits orders by its sign.
 /// An infinite constant orders past every value; a NaN, which the PQL
 /// validator refuses before it reaches here, orders against none.
-fn decimal_order(value: i128, scale: i8, constant: Constant) -> Option<std::cmp::Ordering> {
+fn decimal_order(value: i128, scale: i8, constant: &Constant) -> Option<std::cmp::Ordering> {
     use std::cmp::Ordering;
     let Some((digits, exponent)) = constant_decimal(constant) else {
-        return match constant {
+        return match *constant {
             Constant::Float(f) if f == f64::INFINITY => Some(Ordering::Less),
             Constant::Float(f) if f == f64::NEG_INFINITY => Some(Ordering::Greater),
             _ => None,
@@ -581,12 +620,12 @@ fn decimal_order(value: i128, scale: i8, constant: Constant) -> Option<std::cmp:
 
 /// `= NULL` and `!= NULL` over the examples `has` says have a value: each
 /// example keeps its answer, whether it has none, or one; another
-/// comparison with NULL the executor does not make.
+/// comparison with NULL the query's validation refuses.
 fn null_condition(has: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError> {
     let labels = match op {
         RelOp::Eq => has.iter().map(|h| !h).collect(),
         RelOp::Ne => has.clone(),
-        _ => return Err(not_yet("condition")),
+        _ => return Err(ordered_null()),
     };
     Ok(Labelled {
         mask: vec![true; has.len()],
@@ -604,7 +643,7 @@ fn aggregated_null(present: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError>
     let label = match op {
         RelOp::Eq => false,
         RelOp::Ne => true,
-        _ => return Err(not_yet("condition")),
+        _ => return Err(ordered_null()),
     };
     let n = present.iter().filter(|p| **p).count();
     Ok(Labelled {
@@ -613,40 +652,9 @@ fn aggregated_null(present: Vec<bool>, op: RelOp) -> Result<Labelled, CoreError>
     })
 }
 
-/// A static decimal column compared with a constant: exactly
-/// ([`decimal_order`]); the examples with a value keep their answer.
-fn decimal_condition(
-    values: &[Option<i128>],
-    scale: i8,
-    op: RelOp,
-    constant: Option<Constant>,
-) -> Result<Labelled, CoreError> {
-    let mask: Vec<bool> = values.iter().map(Option::is_some).collect();
-    let Some(constant) = constant else {
-        return null_condition(mask, op);
-    };
-    Ok(Labelled {
-        labels: Labels::Bool(
-            values
-                .iter()
-                .flatten()
-                .map(|&v| {
-                    decimal_order(v, scale, constant).is_some_and(|order| match op {
-                        RelOp::Eq => order.is_eq(),
-                        RelOp::Ne => order.is_ne(),
-                        RelOp::Lt => order.is_lt(),
-                        RelOp::Le => order.is_le(),
-                        RelOp::Gt => order.is_gt(),
-                        RelOp::Ge => order.is_ge(),
-                    })
-                })
-                .collect(),
-        ),
-        mask,
-    })
-}
-
-/// A static column's values for each example, as the executor reads them.
+/// A column's values for each example (an entity's static column) or for
+/// each row fetched (a column a target's filter tests), as the executor
+/// reads them.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Column {
     Float(Vec<Option<f32>>),
@@ -654,13 +662,37 @@ pub enum Column {
     Bool(Vec<Option<bool>>),
     Text(Vec<Option<String>>),
     /// A decimal column's unscaled values, its declared precision and its
-    /// scale: compared in a condition ([`decimal_condition`]), or a target
+    /// scale: compared exactly in a condition, or a target
     /// ([`decimal_target`]).
     Decimal {
         values: Vec<Option<i128>>,
         precision: u8,
         scale: i8,
     },
+    /// A time column's values, nanoseconds since the epoch with no zone:
+    /// only compared in a condition, never a target.
+    Time(Vec<Option<i64>>),
+    /// An unsigned 64-bit column's values, past int64 too: only tested in
+    /// a condition (a target's static column is read as [`Column::Int`]),
+    /// against an integer exactly and against a float at float64, as
+    /// the executor compares a uint64 column.
+    UInt(Vec<Option<u64>>),
+}
+
+impl Column {
+    /// Whether each row holds a value: not null, and for a float not NaN
+    /// (`notna()` after `execute_column`'s float32).
+    fn present(&self) -> Vec<bool> {
+        match self {
+            Column::Float(v) => v.iter().map(|v| v.is_some_and(|v| !v.is_nan())).collect(),
+            Column::Int(v) => v.iter().map(Option::is_some).collect(),
+            Column::Bool(v) => v.iter().map(Option::is_some).collect(),
+            Column::Text(v) => v.iter().map(Option::is_some).collect(),
+            Column::Decimal { values, .. } => values.iter().map(Option::is_some).collect(),
+            Column::Time(v) => v.iter().map(Option::is_some).collect(),
+            Column::UInt(v) => v.iter().map(Option::is_some).collect(),
+        }
+    }
 }
 
 /// A decimal column as a target. At scale 0, where every value fits, an
@@ -721,10 +753,11 @@ fn decimal_text(value: i128, scale: i8) -> String {
     format!("{sign}{whole}.{fraction}")
 }
 
-/// A query's target over the examples.
+/// A query's target over the examples, or a target's filter over the rows
+/// fetched for it (its leaves then the rows' columns).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Target {
-    /// A column of the entity's row.
+    /// A column of the entity's row, or of a row fetched.
     Column(Column),
     /// A windowed aggregation.
     Aggregated(Aggregated),
@@ -734,6 +767,19 @@ pub enum Target {
         op: RelOp,
         constant: Option<Constant>,
     },
+    /// `target IN (values)`.
+    Member {
+        target: Box<Target>,
+        values: Vec<Constant>,
+    },
+    /// `NOT condition`.
+    Not(Box<Target>),
+    /// `left AND right`, `left OR right`.
+    Both {
+        op: BoolOp,
+        left: Box<Target>,
+        right: Box<Target>,
+    },
 }
 
 /// The examples' labels: which of them have one (`mask`), and the labels
@@ -742,6 +788,332 @@ pub enum Target {
 pub struct Labelled {
     pub mask: Vec<bool>,
     pub labels: Labels,
+}
+
+/// A condition over every row (an example, or a row fetched), as the
+/// executor's `execute_condition` and `execute_logical_operation` give it
+/// without dropping a row (`filter_na=False`): whether it holds (`values`,
+/// `False` where a value it compares is missing, so `NOT` of such a row
+/// holds), and whether the row has a value for every column and
+/// aggregation it tests (`mask`; for `= NULL` too, which holds exactly
+/// where it has none).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Truth {
+    pub values: Vec<bool>,
+    pub mask: Vec<bool>,
+}
+
+/// What a condition asks of its operand.
+enum Test<'a> {
+    Compare(RelOp, Option<&'a Constant>),
+    In(&'a [Constant]),
+}
+
+/// `target`'s truth for each row, a condition, `NOT`, `AND` or `OR`
+/// ([`Truth`]), as a target's filter (`execute_filter`, which keeps the
+/// rows whose condition holds) and a logical target read it. `NOT` negates
+/// a condition's values and keeps its mask; `AND` and `OR` join their
+/// sides' values and require both masks (`execute_logical_operation`'s
+/// `mask & right_mask`). An aggregation's example is joined to the same
+/// example's other side: the reference's packs an average's, a minimum's
+/// and a maximum's values onto the examples that have one before it joins
+/// them, which misaligns them where an earlier example has none (register
+/// entry of T2.10).
+pub fn truth(target: &Target) -> Result<Truth, CoreError> {
+    match target {
+        Target::Condition {
+            target,
+            op,
+            constant,
+        } => leaf(target, &Test::Compare(*op, constant.as_ref()), false),
+        Target::Member { target, values } => leaf(target, &Test::In(values), false),
+        Target::Not(inner) => {
+            let Truth { values, mask } = truth(inner)?;
+            Ok(Truth {
+                values: values.into_iter().map(|v| !v).collect(),
+                mask,
+            })
+        }
+        Target::Both { op, left, right } => {
+            let left = truth(left)?;
+            let right = truth(right)?;
+            if left.values.len() != right.values.len() {
+                return Err(CoreError::new(
+                    ErrorKind::Internal,
+                    ErrorCode::InternalError,
+                    "a logical target's sides do not cover the same rows",
+                ));
+            }
+            Ok(Truth {
+                values: left
+                    .values
+                    .iter()
+                    .zip(&right.values)
+                    .map(|(&l, &r)| match op {
+                        BoolOp::And => l && r,
+                        BoolOp::Or => l || r,
+                    })
+                    .collect(),
+                mask: left
+                    .mask
+                    .iter()
+                    .zip(&right.mask)
+                    .map(|(&l, &r)| l && r)
+                    .collect(),
+            })
+        }
+        Target::Column(_) | Target::Aggregated(_) => Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a column or an aggregation stands where a condition is read",
+        )),
+    }
+}
+
+/// One condition's truth over its operand, a column or an aggregation.
+/// `top` is a condition that is the whole target, whose column the
+/// executor reads without its missing values first (`filter_na=True`), so
+/// an integer column is a numpy int64 that refuses a float with a
+/// fraction in an `IN` list; elsewhere such a float is compared exactly
+/// and matches no integer ([`int_member`], KO2-73).
+fn leaf(target: &Target, test: &Test<'_>, top: bool) -> Result<Truth, CoreError> {
+    match target {
+        Target::Column(column) => {
+            let mask = column.present();
+            let values = match test {
+                Test::Compare(op, None) => match op {
+                    RelOp::Eq => mask.iter().map(|p| !p).collect(),
+                    RelOp::Ne => mask.clone(),
+                    _ => return Err(ordered_null()),
+                },
+                Test::Compare(op, Some(constant)) => column_compare(column, *op, constant)?,
+                Test::In(values) => column_member(column, values, top)?,
+            };
+            Ok(Truth { values, mask })
+        }
+        Target::Aggregated(aggregated) => {
+            let rows = aggregated.values.iter().zip(&aggregated.present);
+            let values = match test {
+                Test::Compare(op, None) => match op {
+                    // The executor compares the values it packed, each
+                    // present.
+                    RelOp::Eq => vec![false; aggregated.present.len()],
+                    RelOp::Ne => aggregated.present.clone(),
+                    _ => return Err(ordered_null()),
+                },
+                Test::Compare(op, Some(constant)) => {
+                    let value = float32(constant)?;
+                    rows.map(|(&v, &p)| p && !v.is_nan() && apply(v, *op, value))
+                        .collect()
+                }
+                Test::In(values) => {
+                    let set = values.iter().map(float32).collect::<Result<Vec<_>, _>>()?;
+                    rows.map(|(v, &p)| p && set.contains(v)).collect()
+                }
+            };
+            Ok(Truth {
+                values,
+                mask: aggregated.present.clone(),
+            })
+        }
+        _ => Err(CoreError::new(
+            ErrorKind::Internal,
+            ErrorCode::InternalError,
+            "a condition of a condition reached the labels",
+        )),
+    }
+}
+
+/// Each row's `value op constant`, as `execute_rel_op` makes it: a float
+/// column at float32, the constant cast to it; an integer column against
+/// an integer exactly, against a float at float64; a decimal exactly
+/// ([`decimal_order`]); a boolean, text or time against its own kind. A
+/// row without a value holds no comparison.
+fn column_compare(column: &Column, op: RelOp, constant: &Constant) -> Result<Vec<bool>, CoreError> {
+    Ok(match (column, constant) {
+        (Column::Float(v), Constant::Int(_) | Constant::Float(_)) => {
+            let value = float32(constant)?;
+            v.iter()
+                .map(|x| x.is_some_and(|x| !x.is_nan() && apply(x, op, value)))
+                .collect()
+        }
+        (Column::Int(v), Constant::Int(c)) => {
+            let c = i64::try_from(*c).map_err(|_| not_yet("condition_value"))?;
+            v.iter()
+                .map(|x| x.is_some_and(|x| apply(x, op, c)))
+                .collect()
+        }
+        (Column::Int(v), Constant::Float(f)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(x as f64, op, *f)))
+            .collect(),
+        (Column::UInt(v), Constant::Int(c)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(i128::from(x), op, *c)))
+            .collect(),
+        #[allow(
+            clippy::cast_precision_loss,
+            reason = "an unsigned value widened to compare with a float, as the executor does"
+        )]
+        (Column::UInt(v), Constant::Float(f)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(x as f64, op, *f)))
+            .collect(),
+        (Column::Decimal { values, scale, .. }, Constant::Int(_) | Constant::Float(_)) => values
+            .iter()
+            .map(|x| {
+                x.is_some_and(|x| decimal_order(x, *scale, constant).is_some_and(|o| holds(o, op)))
+            })
+            .collect(),
+        (Column::Bool(v), Constant::Bool(b)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(x, op, *b)))
+            .collect(),
+        (Column::Text(v), Constant::Text(t)) => v
+            .iter()
+            .map(|x| x.as_deref().is_some_and(|x| apply(x, op, t.as_str())))
+            .collect(),
+        (Column::Time(v), Constant::Time(t)) => v
+            .iter()
+            .map(|x| x.is_some_and(|x| apply(x, op, *t)))
+            .collect(),
+        _ => return Err(unpaired()),
+    })
+}
+
+/// Each row's `value IN (values)`, as `execute_member_op` makes it: the
+/// list read at the column's type (`pd.Series(values, dtype=...)`), then
+/// `isin`. A float column's list at float32; a decimal's compared exactly;
+/// an integer column's integers as written and its floats as
+/// [`int_member`] reads them. A row without a value is in no list.
+fn column_member(column: &Column, values: &[Constant], top: bool) -> Result<Vec<bool>, CoreError> {
+    fn within<T: PartialEq>(rows: &[Option<T>], set: &[T]) -> Vec<bool> {
+        rows.iter()
+            .map(|x| x.as_ref().is_some_and(|x| set.contains(x)))
+            .collect()
+    }
+    fn each<T>(
+        values: &[Constant],
+        read: impl Fn(&Constant) -> Option<T>,
+    ) -> Result<Vec<T>, CoreError> {
+        values
+            .iter()
+            .map(|c| read(c).ok_or_else(unpaired))
+            .collect()
+    }
+    Ok(match column {
+        Column::Float(v) => {
+            let set = values.iter().map(float32).collect::<Result<Vec<_>, _>>()?;
+            v.iter()
+                .map(|x| x.is_some_and(|x| !x.is_nan() && set.contains(&x)))
+                .collect()
+        }
+        Column::Int(v) => {
+            let set: Vec<i64> = values
+                .iter()
+                .map(|c| int_member(c, top))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect();
+            within(v, &set)
+        }
+        Column::Decimal {
+            values: v, scale, ..
+        } => {
+            for c in values {
+                if !matches!(c, Constant::Int(_) | Constant::Float(_)) {
+                    return Err(unpaired());
+                }
+            }
+            v.iter()
+                .map(|x| {
+                    x.is_some_and(|x| {
+                        values
+                            .iter()
+                            .any(|c| decimal_order(x, *scale, c).is_some_and(|o| o.is_eq()))
+                    })
+                })
+                .collect()
+        }
+        Column::Bool(v) => within(
+            v,
+            &each(values, |c| match c {
+                Constant::Bool(b) => Some(*b),
+                _ => None,
+            })?,
+        ),
+        Column::Text(v) => within(
+            v,
+            &each(values, |c| match c {
+                Constant::Text(t) => Some(t.clone()),
+                _ => None,
+            })?,
+        ),
+        Column::Time(v) => within(
+            v,
+            &each(values, |c| match c {
+                Constant::Time(t) => Some(*t),
+                _ => None,
+            })?,
+        ),
+        // An integer as written, exactly; a float as [`int_member`] reads it.
+        Column::UInt(v) => {
+            let set: Vec<i128> = values
+                .iter()
+                .map(|c| match c {
+                    Constant::Int(i) => Ok(Some(*i)),
+                    c => int_member(c, top).map(|m| m.map(i128::from)),
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect();
+            v.iter()
+                .map(|x| x.is_some_and(|x| set.contains(&i128::from(x))))
+                .collect()
+        }
+    })
+}
+
+/// An `IN` list's constant read at an integer column's type, or none where
+/// it matches no integer: an integer as written. A float, where the
+/// condition is the whole target, only when it has no fraction (numpy's
+/// int64 refuses another, the caller's error, `INVALID_REQUEST`, as the
+/// reference refuses it on every database), a float past int64 refused by
+/// name (`condition_value`) where numpy's int64 raises an overflow.
+/// Elsewhere (a target's filter, a logical target) a float is compared
+/// exactly (KO2-73): a whole one matches its integer, and one with a
+/// fraction or past int64 matches no row, where the reference takes it
+/// toward zero on DuckDB and SQLite and refuses it on Postgres (register
+/// P2E-17).
+fn int_member(constant: &Constant, top: bool) -> Result<Option<i64>, CoreError> {
+    // 2**63, the first float past int64.
+    const PAST: f64 = 9_223_372_036_854_775_808.0;
+    match *constant {
+        Constant::Int(i) => i64::try_from(i)
+            .map(Some)
+            .map_err(|_| not_yet("condition_value")),
+        Constant::Float(f) if top => {
+            if f.fract() != 0.0 || !f.is_finite() {
+                return Err(CoreError::new(
+                    ErrorKind::InvalidRequest,
+                    ErrorCode::InvalidRequest,
+                    "an IN list of an integer column holds a float with a fraction",
+                )
+                .with_field("field", sdm_contract::Detail::text("query")));
+            }
+            if (-PAST..PAST).contains(&f) {
+                Ok(Some(f as i64))
+            } else {
+                Err(not_yet("condition_value"))
+            }
+        }
+        Constant::Float(f) => Ok(
+            (f.is_finite() && f.fract() == 0.0 && (-PAST..PAST).contains(&f)).then_some(f as i64),
+        ),
+        _ => Err(unpaired()),
+    }
 }
 
 /// `target`'s labels, as the executor's `execute` gives them, for any task
@@ -754,6 +1126,21 @@ pub fn label(target: &Target) -> Result<Labelled, CoreError> {
 /// values are kept as distinct classes ([`decimal_target`]).
 pub fn label_classes(target: &Target) -> Result<Labelled, CoreError> {
     labelled(target, true)
+}
+
+/// The rows of `truth` its mask keeps, each labelled whether it holds.
+fn kept_truth(truth: Truth) -> Labelled {
+    let labels = truth
+        .values
+        .iter()
+        .zip(&truth.mask)
+        .filter(|(_, m)| **m)
+        .map(|(v, _)| *v)
+        .collect();
+    Labelled {
+        mask: truth.mask,
+        labels: Labels::Bool(labels),
+    }
 }
 
 fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
@@ -793,6 +1180,8 @@ fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
                     (m, Labels::Text(l))
                 }
                 Column::Decimal { values, scale, .. } => decimal_target(values, *scale, classes),
+                // A time is no target the reference's task table takes.
+                Column::Time(_) | Column::UInt(_) => return Err(not_yet("target_type")),
             };
             Ok(Labelled { mask, labels })
         }
@@ -808,26 +1197,36 @@ fn labelled(target: &Target, classes: bool) -> Result<Labelled, CoreError> {
                     .collect(),
             ),
         }),
+        // A condition that is the whole target: `= NULL` and `!= NULL`
+        // label every example of a column, and of an aggregation those
+        // with a value; any other, the examples with a value.
         Target::Condition {
             target,
             op,
-            constant,
-        } => {
-            if let Target::Column(Column::Decimal { values, scale, .. }) = target.as_ref() {
-                return decimal_condition(values, *scale, *op, *constant);
-            }
-            let inner = label(target)?;
-            match constant {
-                Some(constant) => Ok(Labelled {
-                    labels: Labels::Bool(compare(&inner.labels, *op, *constant)?),
-                    mask: inner.mask,
-                }),
-                None if matches!(target.as_ref(), Target::Aggregated(_)) => {
-                    aggregated_null(inner.mask, *op)
-                }
-                None => null_condition(inner.mask, *op),
-            }
-        }
+            constant: None,
+        } => match target.as_ref() {
+            Target::Aggregated(aggregated) => aggregated_null(aggregated.present.clone(), *op),
+            Target::Column(column) => null_condition(column.present(), *op),
+            _ => Err(CoreError::new(
+                ErrorKind::Internal,
+                ErrorCode::InternalError,
+                "a condition of a condition reached the labels",
+            )),
+        },
+        Target::Condition {
+            target: inner,
+            op,
+            constant: Some(constant),
+        } => Ok(kept_truth(leaf(
+            inner,
+            &Test::Compare(*op, Some(constant)),
+            true,
+        )?)),
+        Target::Member {
+            target: inner,
+            values,
+        } => Ok(kept_truth(leaf(inner, &Test::In(values), true)?)),
+        Target::Not(_) | Target::Both { .. } => Ok(kept_truth(truth(target)?)),
     }
 }
 
@@ -1256,30 +1655,6 @@ mod tests {
     }
 
     #[test]
-    fn a_condition_reads_its_constant_at_the_target_s_type() {
-        let left = Labels::Float(vec![0.0, 0.1, 1.0, f32::NAN]);
-        assert_eq!(
-            compare(&left, RelOp::Gt, Constant::Int(0)).unwrap(),
-            [false, true, true, false]
-        );
-        // 0.1 at float32 equals the float32 0.1.
-        assert_eq!(
-            compare(&left, RelOp::Eq, Constant::Float(0.1)).unwrap(),
-            [false, true, false, false]
-        );
-        assert_eq!(
-            compare(&left, RelOp::Ne, Constant::Int(1)).unwrap(),
-            [true, true, false, false]
-        );
-        let ints = Labels::Int(vec![1, 2]);
-        assert_eq!(
-            compare(&ints, RelOp::Lt, Constant::Float(1.5)).unwrap(),
-            [true, false]
-        );
-        assert!(compare(&ints, RelOp::Lt, Constant::Int(1 << 70)).is_err());
-    }
-
-    #[test]
     fn a_static_column_keeps_the_examples_it_has_a_value_for() {
         let out = label(&Target::Column(Column::Text(vec![
             Some("IN".into()),
@@ -1301,5 +1676,220 @@ mod tests {
         .unwrap();
         assert_eq!(null.mask, [true; 3]);
         assert_eq!(null.labels, Labels::Bool(vec![false, true, true]));
+    }
+
+    // The reference's executor's answers below were read from it at
+    // 6298913c over these values (T2.10's probe): six entities, `cat`
+    // `['US', 'DE', 'IN', NULL, 'DE', 'IN']`, `flag`
+    // `[true, false, false, true, NULL, false]`, `ni` `[0, 1, 2, 3, 0, NULL]`.
+    fn cat() -> Box<Target> {
+        Box::new(Target::Column(Column::Text(
+            ["US", "DE", "IN", "", "DE", "IN"]
+                .iter()
+                .map(|t| (!t.is_empty()).then(|| (*t).to_owned()))
+                .collect(),
+        )))
+    }
+
+    fn flag() -> Box<Target> {
+        Box::new(Target::Column(Column::Bool(vec![
+            Some(true),
+            Some(false),
+            Some(false),
+            Some(true),
+            None,
+            Some(false),
+        ])))
+    }
+
+    fn ni() -> Box<Target> {
+        Box::new(Target::Column(Column::Int(vec![
+            Some(0),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(0),
+            None,
+        ])))
+    }
+
+    fn text(t: &str) -> Constant {
+        Constant::Text(t.to_owned())
+    }
+
+    #[test]
+    fn a_logical_target_labels_the_rows_every_condition_has_a_value_for() {
+        // `e.cat != 'US' OR e.flag = true`: [T, T, T, T], mask 1 1 1 0 0 1.
+        let or = label(&Target::Both {
+            op: BoolOp::Or,
+            left: Box::new(Target::Condition {
+                target: cat(),
+                op: RelOp::Ne,
+                constant: Some(text("US")),
+            }),
+            right: Box::new(Target::Condition {
+                target: flag(),
+                op: RelOp::Eq,
+                constant: Some(Constant::Bool(true)),
+            }),
+        })
+        .unwrap();
+        assert_eq!(or.mask, [true, true, true, false, false, true]);
+        assert_eq!(or.labels, Labels::Bool(vec![true; 4]));
+        // `NOT e.cat = NULL`: a NULL test inside a logical target keeps
+        // only the rows with a value: [T; 5], mask 1 1 1 0 1 1.
+        let not = label(&Target::Not(Box::new(Target::Condition {
+            target: cat(),
+            op: RelOp::Eq,
+            constant: None,
+        })))
+        .unwrap();
+        assert_eq!(not.mask, [true, true, true, false, true, true]);
+        assert_eq!(not.labels, Labels::Bool(vec![true; 5]));
+    }
+
+    #[test]
+    fn an_in_list_reads_a_float_at_an_integer_column_as_the_executor_does() {
+        // `e.ni IN (1, 2)` and `IN (1, 2.0)`: [F, T, T, F, F], mask 1 1 1 1 1 0.
+        for list in [
+            vec![Constant::Int(1), Constant::Int(2)],
+            vec![Constant::Int(1), Constant::Float(2.0)],
+        ] {
+            let out = label(&Target::Member {
+                target: ni(),
+                values: list,
+            })
+            .unwrap();
+            assert_eq!(out.mask, [true, true, true, true, true, false]);
+            assert_eq!(
+                out.labels,
+                Labels::Bool(vec![false, true, true, false, false])
+            );
+        }
+        // `e.ni IN (1, 2.5)`, the whole target: numpy's int64 refuses 2.5.
+        let refused = label(&Target::Member {
+            target: ni(),
+            values: vec![Constant::Int(1), Constant::Float(2.5)],
+        })
+        .unwrap_err();
+        assert_eq!(refused.code, ErrorCode::InvalidRequest);
+        // `e.ni IN (1, 2.5) OR e.flag = true`: 2.5 is compared exactly and
+        // matches no integer (KO2-73), where the reference takes it as 2:
+        // [T, T, F, T], mask 1 1 1 1 0 0.
+        let or = label(&Target::Both {
+            op: BoolOp::Or,
+            left: Box::new(Target::Member {
+                target: ni(),
+                values: vec![Constant::Int(1), Constant::Float(2.5)],
+            }),
+            right: Box::new(Target::Condition {
+                target: flag(),
+                op: RelOp::Eq,
+                constant: Some(Constant::Bool(true)),
+            }),
+        })
+        .unwrap();
+        assert_eq!(or.mask, [true, true, true, true, false, false]);
+        assert_eq!(or.labels, Labels::Bool(vec![true, true, false, true]));
+        // Inside a logical target a whole float matches its integer, and
+        // one past int64 matches no row.
+        for (float, wanted) in [(2.0, true), (1e20, false), (-2.5, false)] {
+            let not = label(&Target::Not(Box::new(Target::Member {
+                target: ni(),
+                values: vec![Constant::Float(float)],
+            })))
+            .unwrap();
+            assert_eq!(
+                not.labels,
+                Labels::Bool(vec![true, true, !wanted, true, true]),
+                "{float}"
+            );
+        }
+        // `e.score IN (0.25, 0.5)` at float32: [F, T, T, F, F, F].
+        let score = label(&Target::Member {
+            target: Box::new(Target::Column(Column::Float(
+                (0..6).map(|i| Some(i as f32 * 0.25)).collect(),
+            ))),
+            values: vec![Constant::Float(0.25), Constant::Float(0.5)],
+        })
+        .unwrap();
+        assert_eq!(
+            score.labels,
+            Labels::Bool(vec![false, true, true, false, false, false])
+        );
+    }
+
+    #[test]
+    fn a_filter_keeps_the_rows_its_condition_holds_for_a_missing_value_failing_it() {
+        // `COUNT(a.* WHERE NOT a.v > 3, ...)`: a row whose `v` is null fails
+        // `a.v > 3`, so `NOT` keeps it.
+        let v = Target::Column(Column::Float(vec![Some(1.0), None, Some(5.0), Some(2.0)]));
+        let kept = truth(&Target::Not(Box::new(Target::Condition {
+            target: Box::new(v),
+            op: RelOp::Gt,
+            constant: Some(Constant::Int(3)),
+        })))
+        .unwrap()
+        .values;
+        assert_eq!(kept, [true, true, false, true]);
+        let out = aggregate_kept(
+            Aggregation::Count,
+            2,
+            &[0, 0, 1, 1],
+            &Values::Ones(4),
+            &[Some(5); 4],
+            bounds(&[10, 10]),
+            Some(&kept),
+        )
+        .unwrap();
+        assert_eq!(out.values, [2.0, 1.0]);
+        assert_eq!(out.present, [true, true]);
+    }
+
+    #[test]
+    fn an_aggregation_in_a_logical_target_keeps_each_example_s_own_value() {
+        // Examples 0 and 2 have an average, 1 none: each example's
+        // condition stays its own, and 1 has no label.
+        let avg = Box::new(Target::Aggregated(Aggregated {
+            values: vec![1.5, 0.0, 2.5],
+            present: vec![true, false, true],
+        }));
+        let count = Box::new(Target::Aggregated(Aggregated {
+            values: vec![2.0, 0.0, 1.0],
+            present: vec![true; 3],
+        }));
+        let and = label(&Target::Both {
+            op: BoolOp::And,
+            left: Box::new(Target::Condition {
+                target: avg,
+                op: RelOp::Gt,
+                constant: Some(Constant::Int(2)),
+            }),
+            right: Box::new(Target::Condition {
+                target: count,
+                op: RelOp::Gt,
+                constant: Some(Constant::Int(0)),
+            }),
+        })
+        .unwrap();
+        assert_eq!(and.mask, [true, false, true]);
+        assert_eq!(and.labels, Labels::Bool(vec![false, true]));
+    }
+
+    #[test]
+    fn a_time_is_compared_with_a_time() {
+        let day = 86_400_000_000_000_i64;
+        let out = label(&Target::Condition {
+            target: Box::new(Target::Column(Column::Time(vec![
+                Some(0),
+                None,
+                Some(2 * day),
+            ]))),
+            op: RelOp::Gt,
+            constant: Some(Constant::Time(day)),
+        })
+        .unwrap();
+        assert_eq!(out.mask, [true, false, true]);
+        assert_eq!(out.labels, Labels::Bool(vec![false, true]));
     }
 }

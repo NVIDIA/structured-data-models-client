@@ -15,19 +15,34 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, RecordBatch};
 use arrow_schema::{DataType, TimeUnit};
+use sdm_contract::scalar::decimal_to_f64;
 use sdm_contract::{CoreError, Scalar, Unit};
 
 use crate::not_yet;
+
+/// How the reference's frame holds a float of a source's preview: Arrow-
+/// backed pandas (DuckDB's and SQLite's), where every float is a value of
+/// its own bits, so a NaN is a value, a NaN of each sign (DuckDB's `0.0/0.0`
+/// and `'NaN'`) two, and `-0.0` and `0.0` two; or NumPy-backed pandas
+/// (Postgres's rows), where a NaN is missing, as a null is (`isna`, and
+/// every count drops it), and `-0.0` equals `0.0` (`nunique` counts them
+/// once).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Floats {
+    #[default]
+    NanValue,
+    NanMissing,
+}
 
 /// One value, ordered and compared exactly.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Value {
     Bool(bool),
-    /// Any integer, a decimal's unscaled value (one column has one scale),
-    /// or a temporal count (one column has one unit).
+    /// Any integer, the unscaled value of a decimal of scale 0 or less (one
+    /// column has one scale), or a temporal count (one column has one unit).
     Int(i128),
-    /// A float's bits; a column holding NaN or both zeros is refused before
-    /// one is made, since how those count is not ported.
+    /// A float's bits, as [`Floats`] reads them; a decimal of scale > 0
+    /// as the float64 the reference's cast gives it.
     Float(u64),
     Text(String),
 }
@@ -36,6 +51,7 @@ pub(crate) enum Value {
 pub(crate) fn column(
     batches: &[RecordBatch],
     index: usize,
+    floats: Floats,
 ) -> Result<Vec<Option<Value>>, CoreError> {
     let mut out = Vec::new();
     for batch in batches {
@@ -72,22 +88,63 @@ pub(crate) fn column(
             DataType::Timestamp(TimeUnit::Nanosecond, _) => ints!(TimestampNanosecondType),
             DataType::Time64(TimeUnit::Microsecond) => ints!(Time64MicrosecondType),
             DataType::Time64(TimeUnit::Nanosecond) => ints!(Time64NanosecondType),
+            // A decimal of scale > 0 as the float64 the reference's cast
+            // gives it (`_sanitize`'s `pa.float64()`, Arrow's
+            // `Decimal128::ToDouble`), which inference counts: values that
+            // differ only past float64's precision are one value there
+            // (T2.14b). Of scale 0 or less, its unscaled integer, as the
+            // reference reads it as int64 or keeps it exact. Only what
+            // inference counts reads this; materialize and predict keep
+            // exact decimals (P2B-1).
+            DataType::Decimal128(_, scale) if *scale > 0 => {
+                let a = array.as_primitive::<Decimal128Type>();
+                for i in 0..n {
+                    let value = decimal_to_f64(a.value(i), *scale);
+                    out.push(float(
+                        array.is_null(i),
+                        false,
+                        value == 0.0,
+                        value.to_bits(),
+                        0.0_f64.to_bits(),
+                        floats,
+                    ));
+                }
+            }
             DataType::Decimal128(_, _) => {
                 let a = array.as_primitive::<Decimal128Type>();
                 for i in 0..n {
                     push(i, Value::Int(a.value(i)));
                 }
             }
+            // Each float by its own bits at its own width: widening a float32
+            // would quiet a signaling NaN, making two NaNs the source and
+            // the reference hold apart one (T2.12 fix 7).
             DataType::Float32 => {
                 let a = array.as_primitive::<Float32Type>();
                 for i in 0..n {
-                    push(i, Value::Float(f64::from(a.value(i)).to_bits()));
+                    let value = a.value(i);
+                    out.push(float(
+                        array.is_null(i),
+                        value.is_nan(),
+                        value == 0.0,
+                        u64::from(value.to_bits()),
+                        u64::from(0.0_f32.to_bits()),
+                        floats,
+                    ));
                 }
             }
             DataType::Float64 => {
                 let a = array.as_primitive::<Float64Type>();
                 for i in 0..n {
-                    push(i, Value::Float(a.value(i).to_bits()));
+                    let value = a.value(i);
+                    out.push(float(
+                        array.is_null(i),
+                        value.is_nan(),
+                        value == 0.0,
+                        value.to_bits(),
+                        0.0_f64.to_bits(),
+                        floats,
+                    ));
                 }
             }
             DataType::Utf8 => {
@@ -99,25 +156,31 @@ pub(crate) fn column(
             _ => return Err(not_yet("column_type")),
         }
     }
-    if out
-        .iter()
-        .flatten()
-        .any(|v| matches!(v, Value::Float(bits) if f64::from_bits(*bits).is_nan()))
-    {
-        return Err(not_yet("float_nan"));
-    }
-    let zeros = out
-        .iter()
-        .flatten()
-        .filter_map(|v| match v {
-            Value::Float(bits) if f64::from_bits(*bits) == 0.0 => Some(*bits),
-            _ => None,
-        })
-        .collect::<BTreeSet<_>>();
-    if zeros.len() > 1 {
-        return Err(not_yet("float_signed_zero"));
-    }
     Ok(out)
+}
+
+/// A float as the reference's frame holds it (`floats`), given whether it
+/// is null, a NaN and a zero, its `bits` at its width and that width's
+/// positive zero's (`zero`): a NaN missing, and `-0.0` as `0.0`, in
+/// NumPy-backed pandas; its own bits in Arrow-backed pandas, each NaN
+/// (its sign and payload) and each zero apart.
+fn float(
+    null: bool,
+    nan: bool,
+    is_zero: bool,
+    bits: u64,
+    zero: u64,
+    floats: Floats,
+) -> Option<Value> {
+    if null {
+        return None;
+    }
+    let bits = match floats {
+        Floats::NanMissing if nan => return None,
+        Floats::NanMissing if is_zero => zero,
+        _ => bits,
+    };
+    Some(Value::Float(bits))
 }
 
 /// How many distinct values `values` holds among those not null.
@@ -265,4 +328,102 @@ pub(crate) fn scalar(array: &dyn Array, row: usize) -> Option<Scalar> {
         },
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, Float64Array, RecordBatch};
+    use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
+
+    /// A NaN and the two zeros as each reference frame counts them: in
+    /// Arrow-backed pandas (DuckDB's and SQLite's) each float is a value of
+    /// its own bits, a NaN of each sign and each zero apart; in NumPy-backed
+    /// pandas (Postgres's) a NaN is missing and the zeros are one (T2.12
+    /// fixes 3 and 5).
+    #[test]
+    fn floats_are_counted_as_each_reference_frame_counts_them() {
+        let values: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(1.0),
+            Some(f64::NAN),
+            Some(-f64::NAN),
+            None,
+            Some(0.0),
+            Some(-0.0),
+        ]));
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("x", DataType::Float64, true)])),
+            vec![values],
+        )
+        .unwrap();
+        let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
+        assert_eq!(arrow.iter().flatten().count(), 5);
+        assert_eq!(distinct(&arrow), 5);
+        let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
+        assert_eq!(numpy.iter().flatten().count(), 3);
+        assert_eq!(distinct(&numpy), 2);
+    }
+
+    /// DuckDB's `0.0/0.0` is a NaN of the sign bit set and its `'NaN'` one
+    /// without it; Arrow-backed pandas counts them as two values, as their
+    /// bits differ, and each repeat of one as that one (T2.12 fix 5,
+    /// probed on the reference: `nunique` 3 over `[-NaN, NaN, NaN, 1.0]`).
+    #[test]
+    fn a_nan_of_each_sign_is_two_values_where_floats_keep_their_bits() {
+        let negative = f64::from_bits(0xfff8_0000_0000_0000);
+        let positive = f64::from_bits(0x7ff8_0000_0000_0000);
+        let values: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(negative),
+            Some(positive),
+            Some(positive),
+            Some(1.0),
+        ]));
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new("x", DataType::Float64, true)])),
+            vec![values],
+        )
+        .unwrap();
+        let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
+        assert_eq!(distinct(&arrow), 3);
+        let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
+        assert_eq!(numpy.iter().flatten().count(), 1);
+        assert_eq!(distinct(&numpy), 1);
+    }
+
+    /// A signaling and a quiet NaN are two values where floats keep their
+    /// bits, at each width: DuckDB stores a float32's `0x7f800001` and
+    /// `0x7fc00001` apart and the reference counts them apart, and no
+    /// widening quiets the first (T2.12 fix 7).
+    #[test]
+    fn a_signaling_and_a_quiet_nan_are_two_values_at_each_width() {
+        use arrow_array::Float32Array;
+        let narrow: ArrayRef = Arc::new(Float32Array::from(vec![
+            Some(f32::from_bits(0x7f80_0001)),
+            Some(f32::from_bits(0x7fc0_0001)),
+            Some(f32::from_bits(0x7fc0_0001)),
+        ]));
+        let wide: ArrayRef = Arc::new(Float64Array::from(vec![
+            Some(f64::from_bits(0x7ff0_0000_0000_0001)),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+            Some(f64::from_bits(0x7ff8_0000_0000_0001)),
+        ]));
+        for values in [narrow, wide] {
+            let batch = RecordBatch::try_new(
+                Arc::new(Schema::new(vec![Field::new(
+                    "x",
+                    values.data_type().clone(),
+                    true,
+                )])),
+                vec![values],
+            )
+            .unwrap();
+            let arrow = column(std::slice::from_ref(&batch), 0, Floats::NanValue).unwrap();
+            assert_eq!(distinct(&arrow), 2, "{:?}", batch.schema());
+            let numpy = column(std::slice::from_ref(&batch), 0, Floats::NanMissing).unwrap();
+            assert_eq!(numpy.iter().flatten().count(), 0);
+        }
+    }
 }

@@ -52,8 +52,13 @@ fn sampled(note: &str) -> Sampled {
         entity_table: "users".into(),
         source_query: String::new(),
         run_mode: RunMode::Fast,
+        use_prediction_time: false,
+        return_embeddings: false,
         options: Options::default(),
         statistic: None,
+        top_k: None,
+        rows_per_call: 1,
+        lags: vec![],
         float_text: |x| format!("{x:?}"),
     }
 }

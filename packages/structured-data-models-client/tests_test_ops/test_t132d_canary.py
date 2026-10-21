@@ -27,11 +27,11 @@ price), so a message quoting the data it read holds one:
   users.user_id`` (not a primary key) as the reference does;
 - describe and materialize: an all-null feature, null foreign keys, null
   times, an all-null target (the reference warns that every context row
-  has the same answer, naming no value), and an entity with no facts whose
-  own key is the number;
-- materialize: an empty entity list and entities the table does not hold,
-  one of them the number (each refused with INVALID_REQUEST by the
-  reference), and a question naming a column the schema does not hold;
+  has the same answer, naming no value), and an entity with no facts, its
+  row holding the data sentinel;
+- materialize: an empty entity list and an entity the table does not hold
+  (each refused with INVALID_REQUEST by the reference), and a question
+  naming a column the schema does not hold;
 - predict: a classification whose every context row answers the same
   (UNSUPPORTED_REQUEST at predict on the reference).
 
@@ -99,6 +99,10 @@ CORE = ','.join(
     + _routing.MATERIALIZE_DUCKDB
     + _routing.PREDICT_DUCKDB
 )
+#: The entities of the scenarios that name one past the shop's keys,
+#: holding no sentinel (an error may name the caller's own, KO2-86).
+NO_FACTS = 999
+NOT_HELD = 99
 #: The sentinels planted around every scenario: two users' countries and
 #: an order's price.
 PLANTED = [
@@ -147,14 +151,16 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         'setup': ['UPDATE orders SET price = NULL'],
         'predict': True,
     },
-    'materialize: an entity with no facts keyed by the number': {
-        'setup': [f"INSERT INTO users VALUES ({NUMBER}, 50, '{DATA}')"],
-        'indices': [0, int(NUMBER)],
+    # From KO2-86 an error may name the entities the caller passed, so they
+    # hold no sentinel; what the data holds stays out.
+    'materialize: an entity with no facts': {
+        'setup': [f"INSERT INTO users VALUES ({NO_FACTS}, 50, '{DATA}')"],
+        'indices': [0, NO_FACTS],
         'predict': True,
     },
     'materialize: an empty entity list': {'indices': []},
-    'materialize: an entity the table does not hold, the number': {
-        'indices': [0, int(NUMBER)],
+    'materialize: an entity the table does not hold': {
+        'indices': [0, NOT_HELD],
     },
     'materialize: a column the schema does not hold': {
         'query': 'PREDICT SUM(orders.cost, 0, 30, days) FOR EACH users.user_id',
@@ -282,3 +288,7 @@ def test_the_watch_catches_each_sentinel(
     seen.add('warning', f'every context row has the same {DATA}')
     seen.add('details', f'{{"indices": [{NUMBER}]}}')
     assert {sentinel for _, sentinel in seen.leaks()} == {NUMBER, DATA}
+    # No entity a scenario passes holds a sentinel (KO2-86).
+    for scenario in SCENARIOS.values():
+        for given in scenario.get('indices', []):
+            assert DATA not in str(given) and NUMBER not in str(given)

@@ -10,7 +10,8 @@
 //!
 //! It is not a JSON Schema implementation: it reads only the keywords the
 //! definition it is used on holds (the request state's payload: `type` of
-//! `object`, `array`, `string`, `boolean` or `integer`, `properties`,
+//! `object`, `array`, `string`, `boolean`, `integer` or `null`, or a list
+//! of them (from T2.13, a target transform's `["string", "null"]`), `properties`,
 //! `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `minimum`,
 //! the schemas `true` and `false`, and the annotations `description`,
 //! `title`, `format` and any `x-` keyword, which it does not read). It
@@ -51,10 +52,9 @@ fn readable(schema: &Value, at: &str) -> Result<(), String> {
         }
         match keyword.as_str() {
             "type" => {
-                let kind = rule
-                    .as_str()
-                    .ok_or_else(|| format!("{at}: a type this check does not read: {rule}"))?;
-                type_holds(kind, &Value::Null)?;
+                for kind in kinds(rule, at)? {
+                    type_holds(kind, &Value::Null)?;
+                }
             }
             "enum" | "required" if rule.is_array() => {}
             "minimum" if rule.is_number() => {}
@@ -89,6 +89,19 @@ fn readable(schema: &Value, at: &str) -> Result<(), String> {
 
 const ANNOTATIONS: [&str; 3] = ["description", "title", "format"];
 
+/// The types a `type` keyword names: one, or a list of one or more.
+fn kinds<'a>(rule: &'a Value, at: &str) -> Result<Vec<&'a str>, String> {
+    let unread = || format!("{at}: a type this check does not read: {rule}");
+    match rule {
+        Value::String(kind) => Ok(vec![kind.as_str()]),
+        Value::Array(list) if !list.is_empty() => list
+            .iter()
+            .map(|kind| kind.as_str().ok_or_else(unread))
+            .collect(),
+        _ => Err(unread()),
+    }
+}
+
 fn type_holds(kind: &str, value: &Value) -> Result<bool, String> {
     Ok(match kind {
         "object" => value.is_object(),
@@ -96,6 +109,7 @@ fn type_holds(kind: &str, value: &Value) -> Result<bool, String> {
         "string" => value.is_string(),
         "boolean" => value.is_boolean(),
         "integer" => value.is_i64() || value.is_u64(),
+        "null" => value.is_null(),
         other => return Err(format!("a type this check does not read: {other}")),
     })
 }
@@ -113,10 +127,11 @@ fn node(schema: &Value, value: &Value, at: &str) -> Result<(), String> {
         }
         match keyword.as_str() {
             "type" => {
-                let kind = rule
-                    .as_str()
-                    .ok_or_else(|| format!("{at}: a type this check does not read: {rule}"))?;
-                if !type_holds(kind, value)? {
+                let mut holds = false;
+                for kind in kinds(rule, at)? {
+                    holds |= type_holds(kind, value)?;
+                }
+                if !holds {
                     return Err(format!("{at}: not of type {rule}"));
                 }
             }
@@ -240,9 +255,10 @@ mod tests {
             json!({"prefixItems": [true]}),
             json!({"pattern": "a"}),
             json!({"maximum": 1}),
-            json!({"type": "null"}),
             json!({"type": "number"}),
-            json!({"type": ["string", "null"]}),
+            json!({"type": ["string", "number"]}),
+            json!({"type": []}),
+            json!({"type": [1]}),
             json!(1),
         ] {
             let err = node(&schema, &json!(1), "$").expect_err("an unread keyword passed");
@@ -272,5 +288,12 @@ mod tests {
         let either = json!({"anyOf": [{"type": "string"}, {"type": "array", "items": true}]});
         assert_eq!(node(&either, &json!([1]), "$"), Ok(()));
         assert!(node(&either, &json!(1), "$").is_err());
+        // A list of types holds where any of them does (T2.13).
+        let nullable = json!({"type": "array", "items": {"type": ["string", "null"]}});
+        assert_eq!(readable(&nullable, "$"), Ok(()));
+        assert_eq!(node(&nullable, &json!(["quantile", null]), "$"), Ok(()));
+        let err = node(&nullable, &json!(["quantile", 1]), "$").unwrap_err();
+        assert!(err.contains("not of type"), "{err}");
+        assert!(node(&json!({"type": "null"}), &json!(0), "$").is_err());
     }
 }

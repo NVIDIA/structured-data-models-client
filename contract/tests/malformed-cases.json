@@ -1,5 +1,5 @@
 {
-  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, and from T2.1j input.probabilities, a boolean, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
+  "about": "Changes to base.adventureworks's case that both case loaders must refuse, and ones both must take: contract/runners/run_python.py's validator (tests/test_contract_cases.py) and sdm-testkit's case::load (tests/s0_cases.rs). Each refused or accepted change sets the value at path, and each omitted one removes the key at path (which both must take), a list of keys and positions into the case (T1.21b; from T1.21c the schema's minProperties, minItems and minLength, core.materialize.seed required, and expect's if/then/else; from T1.21d core.materialize naming a schema, refused; from T1.24b the edits set_primary_key, set_time_column, set_stype and set_relationships; from T2.1a materialize's candidates and top_k; from T2.8c's test author materialize's rows_per_call, any JSON scalar but null, and input.fail_call, a whole number from 0 to 2**64 - 1, from T2.1j input.probabilities, a boolean, and from T2.9's test author input.quantiles, a boolean, input.outputs, a list of texts, and materialize's lag_timesteps, any JSON scalar but null, from T2.13's test author input.explanation and input.item_metadata, each a boolean, and from T2.11's test author input.embeddings, a boolean, materialize's context_anchor_time, written as anchor_time is, anchor_time's literal entity, and the sampling options random_seed, num_hops, num_neighbors, max_pq_iterations, use_prediction_time, return_embeddings and exclude_cols_dict, any JSON value, null included, while a databases or exclusion change, which needs its partner, is held in tests/test_t21a_case_format.py through both keys).",
   "case": "contract/cases/s1/base.adventureworks.json",
   "refused": [
     {
@@ -1018,6 +1018,188 @@
         "probabilities"
       ],
       "value": null
+    },
+    {
+      "why": "quantiles as text",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "quantiles as a number",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": 1
+    },
+    {
+      "why": "quantiles null",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": null
+    },
+    {
+      "why": "explanation as text",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "explanation as a number",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": 1
+    },
+    {
+      "why": "explanation null",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": null
+    },
+    {
+      "why": "item_metadata as text",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "item_metadata as a number",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": 0
+    },
+    {
+      "why": "item_metadata null",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": null
+    },
+    {
+      "why": "outputs a single text, not a list",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": "quantiles"
+    },
+    {
+      "why": "outputs naming a number",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": [
+        1
+      ]
+    },
+    {
+      "why": "outputs null",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": null
+    },
+    {
+      "why": "lag_timesteps null",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": null
+    },
+    {
+      "why": "lag_timesteps a list",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": [
+        2
+      ]
+    },
+    {
+      "why": "lag_timesteps an object",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": {
+        "n": 2
+      }
+    },
+    {
+      "why": "embeddings as text",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "embeddings as a number",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": 1
+    },
+    {
+      "why": "embeddings null",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": null
+    },
+    {
+      "why": "context_anchor_time null",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": null
+    },
+    {
+      "why": "context_anchor_time a number",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": 20240101
+    },
+    {
+      "why": "context_anchor_time a list",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": [
+        "2024-01-01"
+      ]
     }
   ],
   "accepted": [
@@ -1347,6 +1529,416 @@
         "probabilities"
       ],
       "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer quantiles (T2.9)",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer quantiles",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer explanations (T2.13)",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer explanations",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer item metadata (T2.13)",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer item metadata",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": false
+    },
+    {
+      "why": "predict's outputs naming quantiles (T2.9)",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": [
+        "quantiles"
+      ]
+    },
+    {
+      "why": "predict's outputs naming two fields",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": [
+        "prediction",
+        "quantiles"
+      ]
+    },
+    {
+      "why": "predict's outputs naming none, an input the reference refuses",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": []
+    },
+    {
+      "why": "lag_timesteps of 2",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": 2
+    },
+    {
+      "why": "lag_timesteps of -1, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": -1
+    },
+    {
+      "why": "lag_timesteps written with a fraction, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": 1.5
+    },
+    {
+      "why": "lag_timesteps as a boolean, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": true
+    },
+    {
+      "why": "lag_timesteps as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": "2"
+    },
+    {
+      "why": "lag_timesteps past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "embeddings true",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": true
+    },
+    {
+      "why": "embeddings false",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": false
+    },
+    {
+      "why": "anchor_time the literal entity",
+      "path": [
+        "input",
+        "materialize",
+        "anchor_time"
+      ],
+      "value": "entity"
+    },
+    {
+      "why": "context_anchor_time an ISO timestamp",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": "2024-01-01"
+    },
+    {
+      "why": "context_anchor_time the literal entity",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": "entity"
+    },
+    {
+      "why": "random_seed of 7",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": 7
+    },
+    {
+      "why": "random_seed null, an unseeded sample",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": null
+    },
+    {
+      "why": "random_seed of -1, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": -1
+    },
+    {
+      "why": "random_seed with a fraction, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": 1.5
+    },
+    {
+      "why": "random_seed past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "num_hops of 1",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": 1
+    },
+    {
+      "why": "num_hops as a boolean, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": true
+    },
+    {
+      "why": "num_hops as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": "2"
+    },
+    {
+      "why": "num_hops null",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": null
+    },
+    {
+      "why": "num_neighbors a list of hop sizes",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": [
+        4,
+        4
+      ]
+    },
+    {
+      "why": "num_neighbors an empty list, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": []
+    },
+    {
+      "why": "num_neighbors a number, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": 5
+    },
+    {
+      "why": "num_neighbors null",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": null
+    },
+    {
+      "why": "max_pq_iterations of 3",
+      "path": [
+        "input",
+        "materialize",
+        "max_pq_iterations"
+      ],
+      "value": 3
+    },
+    {
+      "why": "max_pq_iterations of 0, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "max_pq_iterations"
+      ],
+      "value": 0
+    },
+    {
+      "why": "max_pq_iterations as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "max_pq_iterations"
+      ],
+      "value": "x"
+    },
+    {
+      "why": "use_prediction_time true",
+      "path": [
+        "input",
+        "materialize",
+        "use_prediction_time"
+      ],
+      "value": true
+    },
+    {
+      "why": "use_prediction_time false",
+      "path": [
+        "input",
+        "materialize",
+        "use_prediction_time"
+      ],
+      "value": false
+    },
+    {
+      "why": "use_prediction_time as text",
+      "path": [
+        "input",
+        "materialize",
+        "use_prediction_time"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "return_embeddings true",
+      "path": [
+        "input",
+        "materialize",
+        "return_embeddings"
+      ],
+      "value": true
+    },
+    {
+      "why": "return_embeddings false",
+      "path": [
+        "input",
+        "materialize",
+        "return_embeddings"
+      ],
+      "value": false
+    },
+    {
+      "why": "exclude_cols_dict a table to its columns",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": {
+        "users": [
+          "age"
+        ]
+      }
+    },
+    {
+      "why": "exclude_cols_dict a table to text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": {
+        "users": "age"
+      }
+    },
+    {
+      "why": "exclude_cols_dict a list, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": [
+        "age"
+      ]
+    },
+    {
+      "why": "exclude_cols_dict null",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": null
     }
   ],
   "omitted": [

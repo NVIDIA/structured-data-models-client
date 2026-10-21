@@ -27,6 +27,7 @@ use arrow_array::types::{
 };
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::DataType;
+use sdm_contract::data::{WrittenNumber, written_number};
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
@@ -140,6 +141,57 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
         }
         _ => return Err(not_yet("key_type")),
     })
+}
+
+/// The keys `array` holds where its text writes numbers: a column of
+/// numbers a host provider hands over as their exact text (a Postgres
+/// `numeric` declared without a precision,
+/// `sdm_contract::data::EXACT_NUMBER_MARKER`), whose spellings of one
+/// value may differ (`1.0` and `1.00`, `1E-7` and `1.0E-7`). Each text is
+/// the key of the number it writes ([`Key::number_text`]), so two keys are
+/// the same exactly when their values are, as the source compares them,
+/// with nothing passed through a float (decision H22, register P2G-2 and
+/// P2C-3); an array of any other type is read as [`read`] reads it.
+pub fn read_numbers(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
+    if array.data_type() != &DataType::Utf8 {
+        return read(array);
+    }
+    let values = array.as_string::<i32>();
+    Ok((0..values.len())
+        .map(|i| (!values.is_null(i)).then(|| Key::number_text(values.value(i))))
+        .collect())
+}
+
+impl Key {
+    /// The key of the number `text` writes ([`written`]), by its value: a
+    /// whole one within 128 bits as [`Key::Int`] and one with up to 38
+    /// places as [`Key::Decimal`], as a decimal column's key of the same
+    /// value is; a wider one as its significant digits and the power of
+    /// ten they stand at, one text for every spelling of the value. Text
+    /// that writes no number (a `NaN`, an `Infinity`) is its own text.
+    pub fn number_text(text: &str) -> Key {
+        let Ok(written) = written(text) else {
+            return Key::Text(text.to_owned());
+        };
+        if written.digits.is_empty() {
+            return Key::Int(0);
+        }
+        let negative = written.negative;
+        let signed = |value: i128| if negative { -value } else { value };
+        if let Ok(value) = written.digits.parse::<i128>() {
+            if written.scale <= 0 {
+                if let Ok(value) = rescale(value, written.scale, 0) {
+                    return Key::Int(signed(value));
+                }
+            } else if written.scale <= 38 {
+                return Key::Decimal {
+                    value: signed(value),
+                    scale: written.scale as i8,
+                };
+            }
+        }
+        Key::Text(sdm_contract::data::exact_number_text(text))
+    }
 }
 
 // --- The entities' cast to the key's type (T1.32a) ---------------------------
@@ -336,76 +388,10 @@ fn read_integer(text: &str) -> Result<i128, Uncast> {
     text.parse::<i128>().map_err(|_| Uncast::OutOfRange)
 }
 
-/// The magnitude past which an exponent is read as this bound: far past
-/// every decimal's 38 places and every float's range, and far within
-/// `i64`, so no arithmetic on a scale overflows (T1.32a fix round 1).
-const EXPONENT_BOUND: i64 = 1 << 40;
-
-/// A decimal number as written: its sign, its significant digits (no
-/// leading or trailing zeros; empty for zero) and the scale they stand at.
-struct Written {
-    negative: bool,
-    digits: String,
-    scale: i64,
-}
-
-/// Text written as a decimal number: an optional sign, ASCII digits with
-/// an optional point and fraction (at least one digit in all), and an
-/// optional exponent (`e` or `E`, an optional sign, digits); `NotANumber`
-/// for any other text.
-fn written(text: &str) -> Result<Written, Uncast> {
-    let (mantissa, exponent) = match text.find(['e', 'E']) {
-        Some(at) => (&text[..at], Some(&text[at + 1..])),
-        None => (text, None),
-    };
-    let (negative, unsigned) = match mantissa.as_bytes().first() {
-        Some(b'-') => (true, &mantissa[1..]),
-        Some(b'+') => (false, &mantissa[1..]),
-        _ => (false, mantissa),
-    };
-    let (whole, fraction) = match unsigned.split_once('.') {
-        Some((whole, fraction)) => (whole, fraction),
-        None => (unsigned, ""),
-    };
-    let ascii = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
-    if whole.len() + fraction.len() == 0 || !ascii(whole) || !ascii(fraction) {
-        return Err(Uncast::NotANumber);
-    }
-    let exponent: i64 = match exponent {
-        None => 0,
-        Some(written) => {
-            let (sign, digits) = match written.as_bytes().first() {
-                Some(b'-') => (-1, &written[1..]),
-                Some(b'+') => (1, &written[1..]),
-                _ => (1, written),
-            };
-            if digits.is_empty() || !ascii(digits) {
-                return Err(Uncast::NotANumber);
-            }
-            // An exponent past any decimal's or float's reach still reads:
-            // it decides only whether the value is out of range or inexact.
-            let magnitude = digits.trim_start_matches('0');
-            let magnitude = if magnitude.len() > 13 {
-                EXPONENT_BOUND
-            } else {
-                magnitude.parse::<i64>().unwrap_or(0).min(EXPONENT_BOUND)
-            };
-            sign * magnitude
-        }
-    };
-    // The digits as one run, leading zeros dropped, then trailing zeros,
-    // which carry no value, each moving the scale by one. Lengths are of
-    // text, far within i64.
-    let all = format!("{whole}{fraction}");
-    let significant = all.trim_start_matches('0');
-    let digits = significant.trim_end_matches('0');
-    let length = |part: &str| i64::try_from(part.len()).unwrap_or(EXPONENT_BOUND);
-    let dropped = length(significant) - length(digits);
-    Ok(Written {
-        negative,
-        digits: digits.to_owned(),
-        scale: length(fraction) - dropped - exponent,
-    })
+/// Text written as a decimal number
+/// ([`sdm_contract::data::written_number`]); `NotANumber` for any other.
+fn written(text: &str) -> Result<WrittenNumber, Uncast> {
+    written_number(text).ok_or(Uncast::NotANumber)
 }
 
 /// Text written as a decimal number ([`written`]) as its value

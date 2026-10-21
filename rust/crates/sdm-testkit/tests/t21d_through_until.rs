@@ -22,6 +22,26 @@ fn corpus() -> Vec<Case> {
         .collect()
 }
 
+/// The anchor time the recorders write for a case's `anchor_time` (a
+/// date): its midnight, UTC, in nanoseconds, read here by SQLite's
+/// `strftime`, not by the host's own date arithmetic; null where the case
+/// gives none.
+fn recorded_anchor(date: Option<&str>) -> Value {
+    let Some(date) = date else {
+        return Value::Null;
+    };
+    let seconds: i64 = rusqlite::Connection::open_in_memory()
+        .unwrap()
+        .query_row(
+            "SELECT CAST(strftime('%s', ?1) AS INTEGER)",
+            [date],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|e| panic!("{date} is not a date: {e}"));
+    let nanos = i128::from(seconds) * 1_000_000_000;
+    json!({"t": "ts", "v": nanos.to_string(), "unit": "ns", "zone": null})
+}
+
 fn named(case: &Case) -> Vec<&'static str> {
     let core = case.core.as_ref().unwrap();
     let mut ops = Vec::new();
@@ -46,6 +66,21 @@ fn every_call_through_until_is_named_with_the_recorders_inputs() {
     let base = cases.iter().find(|c| c.id == "base.regression").unwrap();
     let recorded = base.core.as_ref().unwrap();
     let sqlite = json!({"provider": "sql", "dialect": "sqlite"});
+    // The expected anchor is the recorders': every case whose materialize
+    // input was recorded from a date has the anchor `recorded_anchor`
+    // gives for that date (2024-03-01's base.regression's, 2023-05-01's
+    // the shop's), so it stands for the recorder where none was recorded.
+    let mut controls = 0;
+    for case in &cases {
+        let given = case.input.materialize.anchor_time.as_deref();
+        if let Some(recorded) = case.core.as_ref().and_then(|c| c.materialize.as_ref())
+            && given.is_some_and(|d| d.len() == "2024-03-01".len())
+        {
+            assert_eq!(recorded.anchor_time, recorded_anchor(given), "{}", case.id);
+            controls += 1;
+        }
+    }
+    assert!(controls >= 2, "{controls}");
     let mut derived = 0;
     for case in cases
         .iter()
@@ -79,11 +114,18 @@ fn every_call_through_until_is_named_with_the_recorders_inputs() {
             && let Some(made) = core.materialize.as_ref()
         {
             derived += 1;
-            // The shop's question at 2024-03-01 for entities 0 and 1, as the
-            // recorder wrote it for base.regression.
+            // The case's entities 0 and 1 and the default seed as the
+            // recorder wrote them for base.regression, at the case's own
+            // anchor (base.regression's 2024-03-01, or another a case's
+            // base or question anchors at), as the recorders write a date.
             let base = recorded.materialize.as_ref().unwrap();
             assert_eq!(made.indices, base.indices, "{}", case.id);
-            assert_eq!(made.anchor_time, base.anchor_time, "{}", case.id);
+            assert_eq!(
+                made.anchor_time,
+                recorded_anchor(case.input.materialize.anchor_time.as_deref()),
+                "{}",
+                case.id
+            );
             assert_eq!(made.seed, base.seed, "{}", case.id);
         }
         if given.and_then(|c| c.predict.as_ref()).is_none() && case.until == Until::Predict {

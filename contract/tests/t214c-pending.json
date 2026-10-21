@@ -1,0 +1,21 @@
+{
+ "about": "T2.14c's acceptance tests (one number spelled two ways is one key: the whole-phase review's Postgres finding) that failed when the test author wrote them, before the fix (contract/tests/test_t214c_numeric_spelling.py as py:vector:<id>, python-core's answer to the vector of contract/numeric-spelling-vectors.json, and py:register:<id>, its difference from python-ref registered; sdm-testkit's tests/t214c_numeric_spelling.rs as rust:<key>). Each listed key must still fail (strict); the implementer takes a key out of 'pending' once it passes, and changes nothing else: 'pending' stays within 'authored', which is the test author's.",
+ "pending": [],
+ "authored": [
+  "py:register:catalog.default",
+  "py:register:catalog.hops-2",
+  "py:register:given.default",
+  "py:register:given.hops-2",
+  "py:register:given.same-spelling",
+  "py:vector:catalog.default",
+  "py:vector:catalog.hops-2",
+  "py:vector:catalog.same-spelling.default",
+  "py:vector:catalog.same-spelling.hops-2",
+  "py:vector:given.default",
+  "py:vector:given.hops-2",
+  "py:vector:given.same-spelling",
+  "rust:spelling.different@memory-marked",
+  "rust:spelling.equal@memory-marked",
+  "rust:spelling.same@memory-marked"
+ ]
+}

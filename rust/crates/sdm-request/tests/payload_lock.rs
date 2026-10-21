@@ -51,8 +51,13 @@ fn shop() -> Sampled {
         labels: Labels::Float(vec![1.5, 0.0, 42.25]),
         windowed: true,
         run_mode: RunMode::Fast,
+        use_prediction_time: false,
+        return_embeddings: false,
         options: Options::default(),
         statistic: Some("mean".into()),
+        top_k: None,
+        rows_per_call: 1,
+        lags: vec![],
         float_text: |x| format!("{x:?}"),
         tables: vec![
             SampledTable {
@@ -130,8 +135,13 @@ fn family() -> Sampled {
         labels: Labels::Float(vec![f32::NAN, 3.0]),
         windowed: false,
         run_mode: RunMode::Best,
+        use_prediction_time: false,
+        return_embeddings: false,
         options: Options::default(),
         statistic: None,
+        top_k: None,
+        rows_per_call: 1,
+        lags: vec![],
         float_text: |x| format!("{x:?}"),
         tables: vec![
             SampledTable {
@@ -180,6 +190,9 @@ fn classified(kind: Kind, labels: Labels) -> Sampled {
         labels,
         windowed: false,
         statistic: None,
+        top_k: None,
+        rows_per_call: 1,
+        lags: vec![],
         ..shop()
     }
 }
@@ -257,6 +270,81 @@ fn the_payload_the_producer_builds_is_the_locked_definition_s() {
         shop["schema"]["relationships"][1]
             .get("source_table")
             .is_some()
+    );
+}
+
+/// Lagged target columns (`lag_timesteps`, T2.9) are laid out after the
+/// label in both halves, with no semantic type, as the reference's engine
+/// lays out its task table's columns: an aggregation's as `float64`, its
+/// float32s as doubles and a missing one null; a condition's as `bool`, or
+/// as `float64` where no example has one; and the payload holds the locked
+/// definition.
+#[test]
+fn lagged_target_columns_follow_the_label_in_both_halves() {
+    use sdm_request::payload::{LagColumn, LagValues};
+    let mut sampled = shop();
+    sampled.lags = vec![
+        LagColumn {
+            name: "__kumo_arl0__".into(),
+            values: LagValues::Float(vec![Some(0.1), None, Some(2.0), Some(3.5), None]),
+        },
+        LagColumn {
+            name: "__kumo_arl1__".into(),
+            values: LagValues::Bool(vec![Some(true), Some(false), None, None, Some(true)]),
+        },
+        LagColumn {
+            name: "__kumo_arl2__".into(),
+            values: LagValues::Empty(5),
+        },
+    ];
+    let payload = built(&sampled);
+    assert_eq!(check("StatePayload", &payload), Ok(()));
+    let columns = &payload["schema"]["instance_table"]["columns"];
+    assert_eq!(columns["__kumo_arl0__"], json!({"dtype": "float64"}));
+    assert_eq!(columns["__kumo_arl1__"], json!({"dtype": "bool"}));
+    assert_eq!(columns["__kumo_arl2__"], json!({"dtype": "float64"}));
+    // A call's slice keeps a condition's column bool though its own rows
+    // hold no value (T2.9 fix 3).
+    let mut slice = shop();
+    slice.lags = sampled
+        .lags
+        .iter()
+        .map(|lag| lag.rows(&[2, 3, 2, 3, 2]))
+        .collect();
+    let sliced = built(&slice);
+    assert_eq!(
+        sliced["schema"]["instance_table"]["columns"]["__kumo_arl1__"],
+        json!({"dtype": "bool"})
+    );
+    let context = &payload["context"]["instance_table"];
+    let names: Vec<&str> = context["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
+    let at = names.iter().position(|n| *n == "TARGET").unwrap();
+    assert_eq!(
+        names[at + 1..],
+        ["__kumo_arl0__", "__kumo_arl1__", "__kumo_arl2__"]
+    );
+    let first = context["rows"][0].as_array().unwrap();
+    assert_eq!(
+        first[at + 1..],
+        [json!(0.10000000149011612), json!(true), Value::Null]
+    );
+    let predict = &payload["predict"]["instance_table"];
+    let names: Vec<&str> = predict["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
+    assert!(!names.contains(&"TARGET"));
+    let last = predict["rows"][1].as_array().unwrap();
+    assert_eq!(
+        last[names.len() - 3..],
+        [Value::Null, json!(true), Value::Null]
     );
 }
 
@@ -459,4 +547,25 @@ fn what_the_readers_read_is_defined_with_the_type_they_read() {
             .collect();
         assert!(named.iter().any(|n| *n), "{option}");
     }
+}
+
+#[test]
+fn a_missing_entity_anchor_is_sent_as_null_and_the_others_as_their_times() {
+    // T2.11 fix 1: a scored entity anchored at its own time, which is
+    // null, is the reference's `NaT`: null in the anchor column, never the
+    // no-anchor sentinel's 1677 time; the payload still holds the payload
+    // definition.
+    let mut sampled = shop();
+    sampled.anchors[4] = sdm_engine::sample::MISSING_ANCHOR;
+    let payload = built(&sampled);
+    let table = &payload["predict"]["instance_table"];
+    let columns = table["columns"].as_array().unwrap();
+    let at = columns
+        .iter()
+        .position(|c| c == "__kumo_anchor_time")
+        .expect("the anchor column is sent");
+    let rows = table["rows"].as_array().unwrap();
+    assert_eq!(rows[1][at], Value::Null);
+    assert!(rows[0][at].as_str().unwrap().starts_with("2024-02-27"));
+    assert_eq!(check("StatePayload", &payload), Ok(()));
 }

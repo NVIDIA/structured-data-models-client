@@ -1,0 +1,308 @@
+[
+  {
+    "id": "rule:aggregation",
+    "rule": "aggregation",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:635",
+    "also": []
+  },
+  {
+    "id": "rule:column_type",
+    "rule": "column_type",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-schema/src/infer.rs:685",
+    "also": [
+      "rust/crates/sdm-schema/src/infer.rs:688",
+      "rust/crates/sdm-schema/src/values.rs:156"
+    ]
+  },
+  {
+    "id": "rule:condition_value",
+    "rule": "condition_value",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:771",
+    "also": [
+      "rust/crates/sdm-core/src/materialize.rs:774",
+      "rust/crates/sdm-engine/src/labels.rs:941",
+      "rust/crates/sdm-engine/src/labels.rs:1096",
+      "rust/crates/sdm-engine/src/labels.rs:1109"
+    ]
+  },
+  {
+    "id": "rule:empty_table",
+    "rule": "empty_table",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-schema/src/infer.rs:466",
+    "also": []
+  },
+  {
+    "id": "rule:entity_key",
+    "rule": "entity_key",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:2798",
+    "also": []
+  },
+  {
+    "id": "rule:key_type",
+    "rule": "key_type",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-engine/src/keys.rs:142",
+    "also": [
+      "rust/crates/sdm-engine/src/keys.rs:737",
+      "rust/crates/sdm-engine/src/keys.rs:807",
+      "rust/crates/sdm-engine/src/keys.rs:810",
+      "rust/crates/sdm-schema/src/infer.rs:625"
+    ]
+  },
+  {
+    "id": "rule:model",
+    "rule": "model",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:465",
+    "also": []
+  },
+  {
+    "id": "rule:null_order",
+    "rule": "null_order",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:1705",
+    "also": []
+  },
+  {
+    "id": "rule:open_window",
+    "rule": "open_window",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/ranking.rs:156",
+    "also": [
+      "rust/crates/sdm-core/src/ranking.rs:163"
+    ]
+  },
+  {
+    "id": "rule:problem_type",
+    "rule": "problem_type",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:541",
+    "also": [
+      "rust/crates/sdm-core/src/pql.rs:346",
+      "rust/crates/sdm-request/src/predict.rs:261"
+    ]
+  },
+  {
+    "id": "rule:response_field",
+    "rule": "response_field",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:1230",
+    "also": []
+  },
+  {
+    "id": "rule:seed_size",
+    "rule": "seed_size",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:364",
+    "also": []
+  },
+  {
+    "id": "rule:target_stype",
+    "rule": "target_stype",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:569",
+    "also": []
+  },
+  {
+    "id": "rule:target_type",
+    "rule": "target_type",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:1356",
+    "also": [
+      "rust/crates/sdm-core/src/materialize.rs:1397",
+      "rust/crates/sdm-core/src/materialize.rs:1468",
+      "rust/crates/sdm-engine/src/labels.rs:1184"
+    ]
+  },
+  {
+    "id": "rule:text_time",
+    "rule": "text_time",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:4360",
+    "also": [
+      "rust/crates/sdm-schema/src/infer.rs:808",
+      "rust/crates/sdm-schema/src/infer.rs:1485"
+    ]
+  },
+  {
+    "id": "rule:text_time_order",
+    "rule": "text_time_order",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:4361",
+    "also": [
+      "rust/crates/sdm-schema/src/infer.rs:809",
+      "rust/crates/sdm-schema/src/infer.rs:1484"
+    ]
+  },
+  {
+    "id": "rule:text_time_rules",
+    "rule": "text_time_rules",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:1083",
+    "also": [
+      "rust/crates/sdm-core/src/materialize.rs:1199"
+    ]
+  },
+  {
+    "id": "rule:text_time_zones",
+    "rule": "text_time_zones",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:4362",
+    "also": [
+      "rust/crates/sdm-schema/src/infer.rs:810"
+    ]
+  },
+  {
+    "id": "rule:text_times",
+    "rule": "text_times",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:1084",
+    "also": [
+      "rust/crates/sdm-core/src/materialize.rs:1200"
+    ]
+  },
+  {
+    "id": "rule:time_type",
+    "rule": "time_type",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-core/src/materialize.rs:860",
+    "also": [
+      "rust/crates/sdm-core/src/materialize.rs:1093",
+      "rust/crates/sdm-core/src/materialize.rs:1097"
+    ]
+  },
+  {
+    "id": "rule:wire_dtype",
+    "rule": "wire_dtype",
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/payload.rs:301",
+    "also": [
+      "rust/crates/sdm-request/src/payload.rs:509"
+    ]
+  },
+  {
+    "id": "rust/crates/sdm-contract/src/types.rs::from_arrow::unsupported_type#1",
+    "rule": null,
+    "code": "UNSUPPORTED_TYPE",
+    "where": "rust/crates/sdm-contract/src/types.rs:255"
+  },
+  {
+    "id": "rust/crates/sdm-contract/src/types.rs::from_arrow_unchecked::unsupported_type#1",
+    "rule": null,
+    "code": "UNSUPPORTED_TYPE",
+    "where": "rust/crates/sdm-contract/src/types.rs:298"
+  },
+  {
+    "id": "rust/crates/sdm-host/src/admission.rs::admitted_type::admission::unsupported#1",
+    "rule": null,
+    "code": "UNSUPPORTED_TYPE",
+    "where": "rust/crates/sdm-host/src/admission.rs:99"
+  },
+  {
+    "id": "rust/crates/sdm-host/src/admission.rs::admitted_field::admission::unsupported#1",
+    "rule": null,
+    "code": "UNSUPPORTED_TYPE",
+    "where": "rust/crates/sdm-host/src/admission.rs:131"
+  },
+  {
+    "id": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#1",
+    "rule": null,
+    "code": "UNSUPPORTED_TYPE",
+    "where": "rust/crates/sdm-host/src/admission.rs:198"
+  },
+  {
+    "id": "rust/crates/sdm-host/src/admission.rs::convert_type::admission::unsupported#2",
+    "rule": null,
+    "code": "UNSUPPORTED_TYPE",
+    "where": "rust/crates/sdm-host/src/admission.rs:206"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#1",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:425"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#2",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:431"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#3",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:445"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::prepare::predict::unsupported#4",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:456"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#1",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:554"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#2",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:572"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#3",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:605"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#4",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:622"
+  },
+  {
+    "id": "rust/crates/sdm-request/src/predict.rs::preflight::predict::unsupported#5",
+    "rule": null,
+    "code": "UNSUPPORTED_REQUEST",
+    "where": "rust/crates/sdm-request/src/predict.rs:629"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment#1",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/codec.py:392"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_anchor#1",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py:190"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_payload#1",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/predict.py:124"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#1",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:98"
+  },
+  {
+    "id": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source#2",
+    "rule": null,
+    "code": "INVALID_REQUEST",
+    "where": "packages/structured-data-models-client/src/sdm_client/_rust/schema.py:123"
+  }
+]

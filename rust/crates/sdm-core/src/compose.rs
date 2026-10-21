@@ -25,6 +25,8 @@ use sdm_contract::data::{
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 
+use crate::ArrowData;
+
 /// What a binding starts its runs with.
 #[derive(Clone)]
 pub struct CompositionRoot {
@@ -88,6 +90,42 @@ impl DataAccess {
     /// type, as the data layer says for it (`DataLayer::samples_by_key_dtype`).
     pub fn samples_by_key_dtype(&self) -> bool {
         self.layer.samples_by_key_dtype(&self.provider)
+    }
+
+    /// Whether the reference reads the run's provider's floats with a NaN
+    /// missing and `-0.0` as `0.0`, as the data layer says for it
+    /// (`DataLayer::reads_nan_as_missing`).
+    pub fn reads_nan_as_missing(&self) -> bool {
+        self.layer.reads_nan_as_missing(&self.provider)
+    }
+
+    /// An admitted answer of the run's provider, its values read as the
+    /// reference reads them where the provider hands over the driver's own
+    /// (`DataLayer::conform`, T2.14d); the answer as it is where the data
+    /// layer holds no rule for it.
+    pub fn conform(&self, data: ArrowData) -> Result<ArrowData, CoreError> {
+        match self.layer.conform(
+            &self.provider,
+            &data.schema,
+            &data.batches,
+            crate::pql::float_text,
+        )? {
+            Some((schema, batches)) => Ok(ArrowData {
+                schema,
+                batches,
+                received: data.received,
+            }),
+            None => Ok(data),
+        }
+    }
+
+    /// A key set as the run's provider binds it (`DataLayer::bound_keys`,
+    /// T2.14d), or `None` where it binds the key set the core made.
+    pub fn bound_keys(&self, keys: &ArrowData) -> Result<Option<ArrowData>, CoreError> {
+        Ok(self
+            .layer
+            .bound_keys(&self.provider, &keys.schema, &keys.batches)?
+            .map(|(schema, batches)| ArrowData::new(schema, batches)))
     }
 
     /// How the run's provider answers `request`. A request whose fields

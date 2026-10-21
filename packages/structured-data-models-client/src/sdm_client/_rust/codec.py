@@ -25,11 +25,13 @@ from __future__ import annotations
 
 import base64
 import decimal
+import fractions
 import json
 import math
 import numbers
 import re
 import struct
+import sys
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
@@ -304,6 +306,30 @@ def _scalar(value: Any) -> Any:
         value, (str, bytes, bytearray)
     ):
         return list(value)
+    if isinstance(value, (decimal.Decimal, fractions.Fraction)):
+        # From T2.9, a finite decimal or fraction as its nearest double,
+        # its sign and whether it is zero kept, which is all an option the
+        # core reads as a number asks of it: one a double cannot reach is
+        # held at the double nearest it of the same sign (the least
+        # positive one, or the largest finite), so lag_timesteps=Decimal(2),
+        # Decimal('1e-400') or Decimal('1e400') on a static query is taken
+        # and ignored, and on a temporal one refused as not whole, as the
+        # reference meets each; a NaN or an infinity refused, as the
+        # encoder refuses it.
+        if not isinstance(value, decimal.Decimal) or value.is_finite():
+            sign = 1.0 if value > 0 else -1.0
+            try:
+                double = float(value)
+            except OverflowError:
+                double = math.inf
+            if math.isinf(double):
+                return math.copysign(sys.float_info.max, sign)
+            if double == 0 and value != 0:
+                return math.copysign(5e-324, sign)
+            return double
+        raise TypeError(
+            f'Object of type {type(value).__name__} is not JSON serializable'
+        )
     return _integral(value)
 
 
@@ -324,23 +350,53 @@ def encode(message: dict[str, Any]) -> bytes:
     return data
 
 
-def attachment(value: Any) -> bytes:
+def attachment(value: Any, *, named: bool = False) -> bytes:
     r"""An input-sized field as a bytes attachment of its JSON. A value JSON
     cannot hold (one of a type the encoder does not know, a number that is
     not finite, one nested past what the encoder writes) is refused as the
     client's transport refuses it, ``INVALID_REQUEST``: from T1.28a the
-    call's option values travel here as the caller gave them."""
-    try:
-        return json.dumps(
-            value, ensure_ascii=False, allow_nan=False, default=_scalar
-        ).encode()
-    except (TypeError, ValueError, RecursionError):
-        from sdm_client.errors import StructuredDataError
+    call's option values travel here as the caller gave them, and from
+    T2.9 (``named``, for them alone) the refusal names the first option
+    whose value JSON cannot hold, in ``details['field']``."""
 
-        raise StructuredDataError(
-            'this request carries a value that cannot be sent as JSON',
-            code='INVALID_REQUEST',
-        ) from None
+    def written(item: Any) -> bytes:
+        return json.dumps(
+            item, ensure_ascii=False, allow_nan=False, default=_scalar
+        ).encode()
+
+    def writes(item: Any) -> bool:
+        try:
+            written(item)
+        except (TypeError, ValueError, RecursionError):
+            return False
+        return True
+
+    try:
+        return written(value)
+    except (TypeError, ValueError, RecursionError):
+        pass
+    from sdm_client.errors import StructuredDataError
+
+    # A mapping's first member JSON cannot hold is named (T2.9: the call's
+    # option values, a NaN or an infinity among them, say which option).
+    option = next(
+        (
+            str(name)
+            for name, item in (
+                value.items() if named and isinstance(value, dict) else ()
+            )
+            if not writes(item)
+        ),
+        None,
+    )
+    raise StructuredDataError(
+        'this request carries a value that cannot be sent as JSON'
+        if option is None
+        else f'{option} carries a value that cannot be sent as JSON (a NaN, '
+        f'an infinity, or a type JSON has no form for)',
+        code='INVALID_REQUEST',
+        details=None if option is None else {'field': option},
+    )
 
 
 # --- a caller's value as the contract's Given ----------------------------------
@@ -358,6 +414,24 @@ def attachment(value: Any) -> bytes:
 
 #: A value no contract type holds, as the contract writes it.
 UNREADABLE = 'unreadable'
+#: The longest text :func:`spelled` gives the core; a value whose ``repr``
+#: is longer is given as :data:`UNREADABLE`, so a control message stays
+#: within its cap.
+SPELLED_MOST = 2_000
+
+
+def spelled(value: Any) -> Any:
+    r"""A value no contract type holds, as ``Given`` writes it with the
+    text Python shows it as (``repr``), which the core names in its refusal
+    as the reference names the value (T2.14b); :data:`UNREADABLE` where its
+    ``repr`` fails or is past :data:`SPELLED_MOST` characters."""
+    try:
+        text = repr(value)
+    except Exception:  # noqa: BLE001 - a caller's value's own repr
+        return UNREADABLE
+    if not isinstance(text, str) or len(text) > SPELLED_MOST:
+        return UNREADABLE
+    return {'spelled': str.__str__(text)}
 
 
 def given(value: Any) -> Any:
@@ -366,15 +440,16 @@ def given(value: Any) -> Any:
 
 
 def given_text(value: Any) -> Any:
-    r"""Text as the contract writes it, or :data:`UNREADABLE`."""
+    r"""Text as the contract writes it, or any other value
+    :func:`spelled`."""
     if isinstance(value, str):
         return given(str.__str__(value))
-    return UNREADABLE
+    return spelled(value)
 
 
 def given_name_or_none(value: Any) -> Any:
     r"""A name or ``None`` (a time column), as the contract writes it, or
-    :data:`UNREADABLE`."""
+    any other value :func:`spelled`."""
     if value is None:
         return given(None)
     return given_text(value)
@@ -390,10 +465,10 @@ def given_key(value: Any) -> tuple[Any, Any]:
     if isinstance(value, (bytes, Mapping, AbstractSet)) or not isinstance(
         value, Iterable
     ):
-        return UNREADABLE, None
+        return spelled(value), None
     names = tuple(value)
     if not all(isinstance(name, str) for name in names):
-        return UNREADABLE, None
+        return spelled(value), None
     return given([str.__str__(name) for name in names]), names
 
 

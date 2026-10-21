@@ -31,7 +31,7 @@
         "old": {"$ref": "#/$defs/outcome"},
         "new": {"$ref": "#/$defs/outcome"},
         "summary": {"type": "string", "minLength": 1},
-        "statements_differ": {"description": "The one public call refused on an owner-approved move between a refusal there and a success (T2.1e): from the reference's refusal to an answer, the reference's statements up to its refusal are no expectation of that call's; from the reference's answer to the runner's refusal, the reference's statements there and after, and its warnings, are none of the runner's. compare.py reports those differences as diagnostic. Only on a row whose old outcome refuses at that call and whose new outcome is a success, or whose old outcome is a success and whose new outcome refuses at that call (register.py).", "type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["from_source", "materialize", "predict"]}}
+        "statements_differ": {"description": "The one public call refused on an owner-approved move between a refusal there and a success (T2.1e): from the reference's refusal to an answer, the reference's statements up to its refusal are no expectation of that call's; from the reference's answer to the runner's refusal, the reference's statements there and after, and its warnings, are none of the runner's. On a row keeping the reference's refusal at that call, its code the same, the runner's statements there are no expectation of the reference's (KO2-68). compare.py reports those differences as diagnostic. Only on a row whose old outcome refuses at that call and whose new outcome is a success, or whose old outcome is a success and whose new outcome refuses at that call, or whose old and new outcomes both refuse at that call with one code (register.py).", "type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["from_source", "materialize", "predict"]}}
       }
     },
     "entry": {
@@ -88,8 +88,22 @@
             "properties": {
               "case": {"description": "The line's key, as a case outcome's: the bare case ID on DuckDB, <case>@sqlite or <case>@postgres on another database (T2.1d); the part before @ one of the entry's cases.", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres))?$"},
               "runners": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["python-core", "rust-host"]}},
-              "fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(public\\.schema|public\\.result|public\\.payloads|core\\.predicted\\.body)(/[^/]+)+$"}},
+              "fields": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^(public\\.schema|public\\.result|public\\.payloads|core\\.predicted\\.body|core\\.predicted\\.calls)(/[^/]+)+$"}},
               "null_on_one_side": {"description": "Also leave out, at those fields, a value present on one side and null or absent on the other (T2.1e): an owner-approved difference such as KO2-61's, where the core names no time column the reference names. Read only as the item is, from an owner-approved entry.", "type": "boolean"}
+            }
+          }
+        },
+        "fewer_deprecations": {
+          "description": "Fewer repeats of a DeprecationWarning than the reference (T2.1s, under the owner's KO2-83): per line, the core runners whose warnings compare.py takes as the reference's with only repeats of a DeprecationWarning left out: the reference's list with some DeprecationWarnings deleted and nothing else changed, each deleted one preceded in the reference's list by another, so the first is always kept and no class is added, dropped or moved. The observations record classes only; the entry's text carries the evidence that the repeats share one message and source line. Read only from an entry approved by the owner whose decision_ref names a row of the checkpoint's decisions approved by the owner.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["case", "runners"],
+            "properties": {
+              "case": {"description": "The line's key, as a more_exact item's; the part before @ one of the entry's cases.", "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*(@(sqlite|postgres))?$"},
+              "runners": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["python-core", "rust-host"]}}
             }
           }
         },

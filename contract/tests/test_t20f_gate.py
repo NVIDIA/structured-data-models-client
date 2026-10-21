@@ -24,15 +24,15 @@ The reader (exit 1): Phase 2's real locked set, the design's
 ``docs/design/rust-core/phase-2/locked-set.yaml`` (T2.0a lands it; until
 then its copy from the design branch, ``tests/fixtures/t20f/``), landed at
 the checkpoint, is read: ``--locked 2a`` is no usage error, prints the
-table of its checks 1 to 8, 10, 11 and 12, and each step whose tool has
-not landed (``census``, ``coverage-s1``, ``l3``, ``l7``, ``ci``), and
-``main`` with no ``origin/main`` fetched, fails the run by name. Seeded faults, each a usage error naming what is wrong, on
-that file with one change: an unknown step, an unknown key of the half, a
-malformed limit (not a number, negative, a boolean, an unknown name, a
-baseline that is no commit, ``statements`` other than ``equal``, limits
-not a mapping), a malformed CI pattern (empty, not a string, a check's
-patterns not a list, patterns for a check the half does not have, a check
-holding the ``ci`` step with no patterns).
+table of its checks 1, 2, 7, 10 and 12, and ``main`` with no
+``origin/main`` fetched fails the run by name. Under the owner's KO2-76
+(T2.1s) the half's own steps are ``inventory``, ``seeded`` and ``main``:
+the ``census``, ``coverage-s1``, ``l3``, ``l7`` and ``ci`` steps, and the
+``limits`` and ``ci`` keys they read, left the locked set, and none of
+them runs. Seeded faults, each a usage error naming what is wrong, on
+that file with one change: an unknown step, an unknown key of the half,
+each removed step named again (``l7`` with its ``limits``, ``ci`` with its
+patterns), and each removed key named alone.
 
 Check 7 (exit 2): the ``main`` step, run only by a half whose ``steps``
 list it (half 2a, its check 7 holding ``[ratchet, main]``), requires the
@@ -87,10 +87,25 @@ ROOT = Path(__file__).resolve().parents[2]
 #: approved design).
 LOCKED_SET = 'docs/design/rust-core/phase-2/locked-set.yaml'
 COPY = ROOT / 'tests/fixtures/t20f/phase-2-locked-set.yaml'
-#: The steps T2.0f's reader adds, each failing the locked run by name in
-#: the summary until its tool lands (``main``, T2.0f's own, until
-#: ``origin/main`` is fetched and merged).
-NEW_STEPS = ('census', 'coverage-s1', 'l3', 'l7', 'ci', 'main')
+#: Half 2a's own steps under KO2-76 (T2.1s); ``main``, T2.0f's, fails the
+#: locked run by name until ``origin/main`` is fetched and merged.
+STEPS_2A = ('inventory', 'seeded', 'main')
+#: The steps and keys KO2-76 removed from the locked set: each named in a
+#: half again is refused by name, never read and left unrun.
+REMOVED_STEPS = ('census', 'coverage-s1', 'l3', 'l7', 'ci')
+REMOVED_KEYS = ('limits', 'ci')
+#: The removed keys' last values (half 2a before KO2-76), for the seeds.
+OLD_LIMITS = {
+    'statements': 'equal',
+    'cpu-median-ratio': 1.0,
+    'cpu-max-ratio': 1.1,
+    'import-time-ratio': 1.0,
+    'native-size-ratio': 1.25,
+    'native-size-baseline': '91a00319',
+    'boundary-overhead-fraction': 0.05,
+    'boundary-overhead-floor-ms': 2,
+}
+OLD_CI = {'1': ['rust-lint']}
 #: A malformed locked set is a usage error (exit 2) before any step, as
 #: the reader's refusals are today, its message naming what is wrong.
 USAGE = 2
@@ -203,15 +218,17 @@ def named(text: str, token: str) -> bool:
 
 
 def test_the_phase_2_copy_is_a_locked_set_of_half_2a() -> None:
-    r"""The fixture's premise: the file holds half 2a with the steps and
-    keys T2.0f's reader adds, so the test below reads them all."""
+    r"""The fixture's premise: the file holds half 2a with KO2-76's steps,
+    none of the removed steps or keys, so the test below reads them all."""
     half = yaml.safe_load(phase_2_text())['halves']['2a']
-    assert set(NEW_STEPS) <= set(half['steps'])
-    assert {'limits', 'ci'} <= set(half)
+    assert half['steps'] == list(STEPS_2A)
+    assert not set(REMOVED_KEYS) & set(half)
+    held = {step for steps in half['checks'].values() for step in steps}
+    assert not set(REMOVED_STEPS) & held
     assert half['checks'][MAIN_CHECK] == ['ratchet', MAIN_STEP]
 
 
-def test_phase_2_s_locked_set_is_read_and_each_step_without_its_tool_fails_by_name(
+def test_phase_2_s_locked_set_is_read_and_main_without_origin_main_fails_by_name(
     stubbed: Path,
     tmp_path: Path,
     observed: Any,
@@ -219,66 +236,28 @@ def test_phase_2_s_locked_set_is_read_and_each_step_without_its_tool_fails_by_na
 ) -> None:
     r"""Exit 1, and the post-landing state judged against itself: the
     landed harness reads the real half 2a (no usage error), prints its
-    checks, writes its evidence, and each step whose tool has not landed
-    fails the locked run by name."""
+    checks, writes its evidence, and ``main`` with no ``origin/main``
+    fetched fails the locked run by name; no removed step runs."""
     land(stubbed, 'T2.0a', with_locked_set(phase_2_text()), protected='docs/**')
     commit(stubbed)
     done = run_locked(stubbed, stubs, observed, tmp_path)
     assert done.returncode == 1, done.stdout + done.stderr
     steps = GM.summary(done)
-    for name in NEW_STEPS:
-        assert steps.get(name) == 'FAIL', (name, steps)
+    assert steps.get(MAIN_STEP) == 'FAIL', steps
+    for name in ('inventory', 'seeded'):
+        assert name in steps, (name, steps)
+    for name in REMOVED_STEPS:
+        assert name not in steps, (name, steps)
     checks = GM.table(done, '2a')
-    assert set(checks) == {
-        '1',
-        '2',
-        '3',
-        '4',
-        '5',
-        '6',
-        '7',
-        '8',
-        '10',
-        '11',
-        '12',
-    }
-    # Check 11 holds l7 alone and 6 l3 alone: each fails on its own step.
-    assert checks['11'] == checks['6'] == 'FAIL', checks
+    assert set(checks) == {'1', '2', '7', '10', '12'}
+    # Check 7 holds main beside ratchet: it fails on main.
+    assert checks[MAIN_CHECK] == 'FAIL', checks
     assert GM.evidence_of(stubbed, stubs)['halves']['2a']['passed'] is False
 
 
 def _fault(key: str, value: Any) -> Callable[[dict[str, Any]], None]:
     def change(half: dict[str, Any]) -> None:
         half[key] = value
-
-    return change
-
-
-def _limit(name: str, value: Any) -> Callable[[dict[str, Any]], None]:
-    def change(half: dict[str, Any]) -> None:
-        half['limits'][name] = value
-
-    return change
-
-
-def _pattern(
-    check: str, value: Any, replace: bool = False
-) -> Callable[[dict[str, Any]], None]:
-    def change(half: dict[str, Any]) -> None:
-        if replace:
-            half['ci'][check] = value
-        else:
-            half['ci'][check] = [*half['ci'][check], value]
-
-    return change
-
-
-def _without_patterns(check: str) -> Callable[[dict[str, Any]], None]:
-    r"""Check ``check`` still holds the ci step, and its patterns are gone."""
-
-    def change(half: dict[str, Any]) -> None:
-        assert 'ci' in half['checks'][check]
-        del half['ci'][check]
 
     return change
 
@@ -291,35 +270,31 @@ def _step(name: str) -> Callable[[dict[str, Any]], None]:
     return change
 
 
+def _removed(name: str) -> Callable[[dict[str, Any]], None]:
+    r"""A removed step named again in half 2a's steps and check 1, with the
+    key it read (``l7`` its ``limits``, ``ci`` its patterns), as before
+    KO2-76, so only the step's removal is wrong."""
+
+    def change(half: dict[str, Any]) -> None:
+        _step(name)(half)
+        if name == 'l7':
+            half['limits'] = dict(OLD_LIMITS)
+        if name == 'ci':
+            half['ci'] = copy.deepcopy(OLD_CI)
+
+    return change
+
+
 #: Each seeded fault: the change to half 2a, and the word the refusal
 #: must name.
 FAULTS = {
     'unknown-step': (_step('bogus-step'), 'bogus-step'),
     'unknown-key': (_fault('extra-key', 1), 'extra-key'),
-    'limit-not-a-number': (
-        _limit('cpu-median-ratio', 'fast'),
-        'cpu-median-ratio',
-    ),
-    'limit-negative': (_limit('cpu-max-ratio', -1.1), 'cpu-max-ratio'),
-    'limit-a-boolean': (
-        _limit('boundary-overhead-floor-ms', True),
-        'boundary-overhead-floor-ms',
-    ),
-    'limit-unknown': (_limit('made-up-ratio', 1.0), 'made-up-ratio'),
-    'limit-baseline-no-commit': (
-        _limit('native-size-baseline', 'not-a-sha'),
-        'native-size-baseline',
-    ),
-    'limit-statements-not-equal': (_limit('statements', 'fewer'), 'statements'),
-    'limits-not-a-mapping': (_fault('limits', [1.0, 1.1]), 'limits'),
-    'pattern-empty': (_pattern('1', ''), 'ci'),
-    'pattern-not-a-string': (_pattern('3', 42), 'ci'),
-    'patterns-not-a-list': (
-        _pattern('4', 'l5-conversion*', replace=True),
-        'ci',
-    ),
-    'patterns-for-no-check': (_pattern('99', ['x*'], replace=True), '99'),
-    'ci-check-without-patterns': (_without_patterns('8'), '8'),
+    **{
+        f'removed-step-{name}': (_removed(name), name) for name in REMOVED_STEPS
+    },
+    'removed-key-limits': (_fault('limits', dict(OLD_LIMITS)), 'limits'),
+    'removed-key-ci': (_fault('ci', copy.deepcopy(OLD_CI)), 'ci'),
 }
 
 
@@ -331,9 +306,9 @@ def test_a_malformed_phase_2_half_is_a_usage_error_naming_the_fault(
     stubs: dict[str, Any],
     fault: str,
 ) -> None:
-    r"""Seeded (exit 1): an unknown step or key, a malformed limit or CI
-    pattern, each refused before any step, naming what is wrong. Its twin,
-    the file unchanged, is read (the test above)."""
+    r"""Seeded (exit 1): an unknown step or key, and a step or key KO2-76
+    removed named again, each refused before any step, naming what is
+    wrong. Its twin, the file unchanged, is read (the test above)."""
     change, word = FAULTS[fault]
     land(
         stubbed, 'T2.0a', with_locked_set(changed(change)), protected='docs/**'
@@ -597,7 +572,7 @@ def test_phase_1_s_half_is_judged_as_before_with_main_moved(
     done = run_locked(stubbed, stubs, observed, tmp_path, half='1b')
     steps = GM.summary(done)
     assert steps.get('ratchet') == 'ok', done.stdout + done.stderr
-    assert not set(NEW_STEPS) & set(steps), steps
+    assert not {*REMOVED_STEPS, MAIN_STEP} & set(steps), steps
     assert set(GM.table(done, '1b')) == {'4', '5', '6'}
 
 

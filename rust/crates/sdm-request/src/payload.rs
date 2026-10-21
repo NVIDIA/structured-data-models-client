@@ -48,7 +48,7 @@ use arrow_array::types::{
 use arrow_array::{Array, ArrayRef};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::ops::Stype;
-use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
+use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
 use sdm_engine::labels::Labels;
 use sdm_wire::json::Value;
 use sdm_wire::payload::{
@@ -68,6 +68,9 @@ pub const ENTITY_REFERENCE: &str = "__kumo_entity_ref";
 pub const ANCHOR_TIME: &str = "__kumo_anchor_time";
 /// The instance table's label column.
 pub const TARGET: &str = "TARGET";
+/// The name the request's table of examples goes by, as a refusal of one
+/// of its cells names it (the reference's `_serialize_frame`).
+pub const INSTANCE_TABLE: &str = "instance_table";
 /// The names the wire gives its own columns, which a column of the data
 /// may not take (the client's `_RESERVED`).
 pub const RESERVED: [&str; 2] = [INSTANCE_ID, ANCHOR_TIME];
@@ -129,6 +132,54 @@ pub struct SampledLink {
     pub pairs: Vec<(usize, usize)>,
 }
 
+/// The values of one lagged target column (`__kumo_arl<k>__`, T2.9), one
+/// per example of the request, a missing one `None`: an aggregation's at
+/// float32, or a condition's.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LagValues {
+    Float(Vec<Option<f32>>),
+    Bool(Vec<Option<bool>>),
+    /// A condition's column that no example of the whole request has a
+    /// value in, so many rows: `float64` nulls, as pandas types a column of
+    /// booleans with nothing in it (T2.9 fix 3: decided over the request,
+    /// not over one call's rows).
+    Empty(usize),
+}
+
+/// One lagged target column of the instance table (T2.9), as the reference's
+/// engine adds it to the task (`add_lagged_target`) and lays it out
+/// (`_instance_dataframe`): after the label, with no semantic type; an
+/// aggregation's as `float64`, its float32s as doubles; a condition's as
+/// `bool`, or `float64` where no example of the whole request has a value
+/// ([`LagValues::Empty`]), whatever rows one call of it holds; a missing
+/// value null.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LagColumn {
+    pub name: String,
+    pub values: LagValues,
+}
+
+impl LagColumn {
+    /// The column at `rows`, its type kept: a call's slice of the
+    /// request's column (T2.9 fix 3), a condition's `bool` though the
+    /// call's rows hold no value.
+    pub fn rows(&self, rows: &[usize]) -> LagColumn {
+        fn picked<T: Copy>(values: &[Option<T>], rows: &[usize]) -> Vec<Option<T>> {
+            rows.iter()
+                .map(|&at| values.get(at).copied().flatten())
+                .collect()
+        }
+        LagColumn {
+            name: self.name.clone(),
+            values: match &self.values {
+                LagValues::Float(v) => LagValues::Float(picked(v, rows)),
+                LagValues::Bool(v) => LagValues::Bool(picked(v, rows)),
+                LagValues::Empty(_) => LagValues::Empty(rows.len()),
+            },
+        }
+    }
+}
+
 /// What a request is built from.
 #[derive(Debug, Clone)]
 pub struct Sampled {
@@ -154,10 +205,27 @@ pub struct Sampled {
     /// The query, as the reference writes it back.
     pub source_query: String,
     pub run_mode: RunMode,
+    /// Whether the model is told each example's anchor time
+    /// (`use_prediction_time`, T2.11).
+    pub use_prediction_time: bool,
+    /// Whether the outputs name `embeddings` (`return_embeddings`,
+    /// `_output_fields`, T2.11).
+    pub return_embeddings: bool,
     /// The inference options, read for this task ([`crate::options`]).
     pub options: Options,
     /// The regression's statistic the caller chose.
     pub statistic: Option<String>,
+    /// How many candidates the call asked be kept (`top_k`), written into
+    /// the task as the engine writes it (T2.8).
+    pub top_k: Option<u32>,
+    /// The most rows any call of the request this payload is one call of
+    /// scores (`_the_largest_batch`, `main`'s multi-call `predict`): the
+    /// size a refusal of a payload past the endpoint's limit names as the
+    /// one to ask below.
+    pub rows_per_call: usize,
+    /// The lagged target columns (`lag_timesteps`, T2.9), in order; none
+    /// where the call asks for none.
+    pub lags: Vec<LagColumn>,
     /// The text a float's class is spelled in: the shortest digits that
     /// read back to the double, laid out as the reference's `str` lays them
     /// out (`_class_label`). The parser crate holds it; the caller passes
@@ -180,6 +248,29 @@ fn invalid(message: &str, column: &str) -> CoreError {
         message,
     )
     .with_field("column", Detail::text(column))
+}
+
+/// A value no request holds, with the value as Python writes a float
+/// (`inf`, `-inf`) for the host's words (the reference's `_NON_FINITE_MSG`).
+fn not_finite(column: &str, value: f64) -> CoreError {
+    let shown = if value.is_nan() {
+        "nan"
+    } else if value > 0.0 {
+        "inf"
+    } else {
+        "-inf"
+    };
+    invalid(
+        "a value is not finite, and a request holds finite numbers or nulls",
+        column,
+    )
+    .with_field("field", Detail::text("request"))
+    .with_field("reason", Detail::text("not_finite"))
+    .with_field("value", Detail::text(shown))
+}
+
+fn count(n: usize) -> Detail {
+    Detail::Scalar(Scalar::UInt64(u64::try_from(n).unwrap_or(u64::MAX)))
 }
 
 fn internal(message: &str) -> CoreError {
@@ -285,7 +376,13 @@ fn decimal_text(value: i128, scale: i8) -> String {
 /// int64, refused, as the reference refuses it.
 fn int_cell(value: i128, column: &str) -> Result<Value, CoreError> {
     if value < i128::from(i64::MIN) || value > i128::from(i64::MAX) {
-        return Err(invalid("a value is outside the range int64 holds", column));
+        // The range, for the host's words (the reference's
+        // `_cell_json_value`), never the value (decision H17); the table and
+        // row are its caller's.
+        return Err(invalid("a value is outside the range int64 holds", column)
+            .with_field("field", Detail::text("request"))
+            .with_field("reason", Detail::text("past_int64"))
+            .with_field("dtype", Detail::text("int64")));
     }
     if value.abs() > JSON_SAFE {
         return Ok(Value::Text(value.to_string()));
@@ -297,12 +394,7 @@ fn float_cell(value: f64, column: &str) -> Result<Value, CoreError> {
     if value.is_nan() {
         return Ok(Value::Null);
     }
-    Value::float(value).ok_or_else(|| {
-        invalid(
-            "a value is not finite, and a request holds finite numbers or nulls",
-            column,
-        )
-    })
+    Value::float(value).ok_or_else(|| not_finite(column, value))
 }
 
 /// A decimal's unscaled `value` at `scale` as a float64 cell: the nearest
@@ -314,12 +406,7 @@ fn decimal_float(value: i128, scale: i8, column: &str) -> Result<Value, CoreErro
     let float: f64 = format!("{value}e{}", -i32::from(scale))
         .parse()
         .map_err(|_| internal("a decimal's text is not a number"))?;
-    Value::float(float).ok_or_else(|| {
-        invalid(
-            "a value is not finite, and a request holds finite numbers or nulls",
-            column,
-        )
-    })
+    Value::float(float).ok_or_else(|| not_finite(column, float))
 }
 
 /// `ns` nanoseconds since the epoch as the reference writes a time:
@@ -524,7 +611,7 @@ fn arrow_column(
         dtype,
         cells: rows
             .iter()
-            .map(|&row| cell(array, row, name, dtype))
+            .map(|&row| cell(array, row, name, dtype).map_err(|e| e.with_field("row", count(row))))
             .collect::<Result<_, _>>()?,
     })
 }
@@ -677,6 +764,38 @@ fn target(
     })
 }
 
+/// A lagged target column of the instance table ([`LagColumn`]).
+fn lag_column(lag: &LagColumn, examples: usize) -> Result<FrameColumn, CoreError> {
+    let (dtype, cells): (Dtype, Vec<Value>) = match &lag.values {
+        LagValues::Float(values) => (
+            Dtype::Float64,
+            values
+                .iter()
+                .map(|v| match v {
+                    Some(v) => float_cell(f64::from(*v), &lag.name),
+                    None => Ok(Value::Null),
+                })
+                .collect::<Result<_, _>>()?,
+        ),
+        LagValues::Bool(values) => (
+            Dtype::Bool,
+            values
+                .iter()
+                .map(|v| v.map_or(Value::Null, Value::Bool))
+                .collect(),
+        ),
+        LagValues::Empty(rows) => (Dtype::Float64, vec![Value::Null; *rows]),
+    };
+    if cells.len() != examples {
+        return Err(internal("a lagged column does not align with the examples"));
+    }
+    Ok(FrameColumn {
+        name: lag.name.clone(),
+        dtype,
+        cells,
+    })
+}
+
 /// The instance ids of the context examples that answer the question: a
 /// context row whose entity is a predicted row's, at that row's anchor
 /// for a windowed target and at any anchor for a static one
@@ -751,18 +870,31 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
             first[instance] = Some(row);
         }
     }
+    // The lagged target columns are the task's own, which the wire's names
+    // keep clear of (`occupied`).
     let mut occupied = vec![INSTANCE_ID.to_owned(), TARGET.to_owned()];
+    occupied.extend(sampled.lags.iter().map(|lag| lag.name.clone()));
     let reference = unique_name(&occupied, &format!("{ENTITY_REFERENCE}_0"));
     occupied.push(reference.clone());
     let mut instance = Frame {
         columns: vec![int_column(INSTANCE_ID, 0..examples)],
         rows: examples,
     };
-    let reference_dtype = key_dtype(key_array)?;
+    // A float32 key's reference is a float64: the reference builds the
+    // column from the keys as Python floats, which pandas types float64
+    // (T2.12; each value is written widened either way).
+    let reference_dtype = match key_dtype(key_array)? {
+        Dtype::Float32 => Dtype::Float64,
+        dtype => dtype,
+    };
     let reference_cells = first
         .iter()
-        .map(|row| match row {
-            Some(row) => cell(key_array, *row, &reference, reference_dtype),
+        .enumerate()
+        .map(|(at, row)| match row {
+            Some(row) => cell(key_array, *row, &reference, reference_dtype).map_err(|e| {
+                e.with_field("table", Detail::text(INSTANCE_TABLE))
+                    .with_field("row", count(at))
+            }),
             None => Ok(Value::Null),
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -781,7 +913,15 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 cells: sampled
                     .anchors
                     .iter()
-                    .map(|a| Value::Text(iso_microseconds(*a)))
+                    .map(|a| {
+                        // A missing anchor (an entity's own time null,
+                        // `NaT`) is sent as null, as the reference sends it.
+                        if *a == sdm_engine::sample::MISSING_ANCHOR {
+                            Value::Null
+                        } else {
+                            Value::Text(iso_microseconds(*a))
+                        }
+                    })
                     .collect(),
             });
             Some(name)
@@ -796,6 +936,9 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         dtype: target_dtype,
         cells: target_cells,
     });
+    for lag in &sampled.lags {
+        instance.columns.push(lag_column(lag, examples)?);
+    }
 
     // The related tables: each row with the example it belongs to, and a
     // key of its own where the table sends none.
@@ -811,9 +954,10 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 return Err(internal("a sampled column does not align with its rows"));
             }
             let key = table.primary_key.as_deref() == Some(name.as_str());
-            frame
-                .columns
-                .push(sampled_column(name, column, &rows, key)?);
+            frame.columns.push(
+                sampled_column(name, column, &rows, key)
+                    .map_err(|e| e.with_field("table", Detail::text(&table.name)))?,
+            );
         }
         let mut stypes = vec![(INSTANCE_ID.to_owned(), Stype::Id)];
         stypes.extend(table.stypes.iter().cloned());
@@ -847,7 +991,8 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
     }
     // Each foreign key once, from the first of its links that gives a row
     // a key; a row given none is null, and an integer key column holding a
-    // null is written as float64, as pandas types such a column.
+    // null, or a float32 key's column, is written as float64, as pandas
+    // types such a column.
     let mut written: Vec<(&str, &str, &str)> = Vec::new();
     for link in &sampled.links {
         let edge = (link.src.as_str(), link.fkey.as_str(), link.dst.as_str());
@@ -890,9 +1035,16 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 None => Ok(Value::Null),
             })
             .collect::<Result<_, _>>()?;
+        // A float32 key's foreign key is a float64, as pandas types the
+        // column the reference fills with the keys as Python floats (T2.12;
+        // each value is written widened either way).
         let column = FrameColumn {
             name: link.fkey.clone(),
-            dtype: if as_float { Dtype::Float64 } else { key_dtype },
+            dtype: if as_float || key_dtype == Dtype::Float32 {
+                Dtype::Float64
+            } else {
+                key_dtype
+            },
             cells,
         };
         let frame = &mut frames[src].1;
@@ -980,11 +1132,14 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         }
     };
 
-    let fields: Vec<String> = match kind {
+    let mut fields: Vec<String> = match kind {
         Kind::Regression if sampled.options.output_type == "quantiles" => vec!["quantiles".into()],
         Kind::Regression => vec!["prediction".into()],
         Kind::Binary | Kind::Multiclass => vec!["prediction".into(), "probabilities".into()],
     };
+    if sampled.return_embeddings {
+        fields.push("embeddings".into());
+    }
     // The task's and the inference's sections, typed by the task's kind.
     macro_rules! task {
         ($target:expr) => {
@@ -993,6 +1148,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
                 target: $target,
                 entity_table_names: vec![sampled.entity_table.clone()],
                 anchor_time_column: anchor_column.clone(),
+                top_k: sampled.top_k,
             }
         };
     }
@@ -1000,7 +1156,7 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         ($config:expr) => {
             Inference {
                 run_mode: sampled.run_mode.wire_name().to_owned(),
-                use_prediction_time: false,
+                use_prediction_time: sampled.use_prediction_time,
                 inference_config: $config,
             }
         };
@@ -1054,21 +1210,36 @@ pub fn build(sampled: &Sampled) -> Result<Built, CoreError> {
         .to_bytes()
     };
     // The limit counts the bytes the request sends, as written (PD-2).
+    // The refusal names what to change, as the reference's client words
+    // its engine's (`_said_in_this_client_s_terms`, `main`'s 1fc5a686): a
+    // call scoring several rows can be asked as smaller calls, below the
+    // most rows a call of the request scores (`smaller_calls`); a call of
+    // one row cannot, and only a narrower context helps
+    // (`no_smaller_call`).
     if bytes.len() > PAYLOAD_BYTES {
+        let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
         return Err(CoreError::new(
             ErrorKind::InvalidRequest,
             ErrorCode::InvalidRequest,
             "the request is larger than the endpoint takes",
         )
         .with_field("field", Detail::text("payload"))
+        .with_field("bytes", count(bytes.len()))
+        .with_field("limit", count(PAYLOAD_BYTES))
         .with_field(
-            "bytes",
-            Detail::Scalar(sdm_contract::Scalar::UInt64(bytes.len() as u64)),
+            "batch_too_large_to_send",
+            Detail::Scalar(sdm_contract::Scalar::Bool(true)),
         )
         .with_field(
-            "limit",
-            Detail::Scalar(sdm_contract::Scalar::UInt64(PAYLOAD_BYTES as u64)),
-        ));
+            "remedy",
+            Detail::text(if sampled.num_test > 1 {
+                "smaller_calls"
+            } else {
+                "no_smaller_call"
+            }),
+        )
+        .with_field("rows", count(sampled.num_test))
+        .with_field("rows_per_call", count(sampled.rows_per_call)));
     }
     Ok(Built {
         bytes,

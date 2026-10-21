@@ -18,7 +18,7 @@
 //! when its body panics: the state is set to `Poisoned` before every poll
 //! and replaced only when the poll returns.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::mem;
 use std::pin::Pin;
@@ -145,6 +145,9 @@ struct Shared {
     /// The sampler memo the operation leaves for the host (decision E52),
     /// as it last kept it.
     memo: Option<SamplerMemo>,
+    /// The key sets bound as the run's provider binds them
+    /// (`DataAccess::bound_keys`), each once.
+    bound: BTreeSet<AttachmentId>,
     /// Answered, not yet taken by the body.
     replies: BTreeMap<ReplyId, Reply>,
 }
@@ -175,7 +178,10 @@ impl Asker {
             ));
         };
         let limits = match data.route(&request)? {
-            Route::Plan(plan) => return Ok(self.ask_planned(request, plan)),
+            Route::Plan(plan) => {
+                self.bind_keys(data, &plan)?;
+                return Ok(self.ask_planned(request, plan));
+            }
             Route::Fallback(limits) => limits,
         };
         // The in-memory fallback (T2.6): the request is never the host's;
@@ -207,6 +213,28 @@ impl Asker {
         let mut ask = self.fetch(request)?;
         ask.budget = Some(Box::new(budget));
         Ok(ask)
+    }
+
+    /// Each key set `plan` binds, as the run's provider binds it where its
+    /// dialect binds keys as text (`DataAccess::bound_keys`, T2.14d): the
+    /// attachment replaced, once, before the host takes it.
+    fn bind_keys(&self, data: &DataAccess, plan: &FetchPlan) -> Result<(), CoreError> {
+        for attachment in plan.key_sets() {
+            let mut shared = lock(&self.shared);
+            if shared.bound.contains(&attachment) {
+                continue;
+            }
+            let Some(Attachment::Arrow(made)) = shared.attachments.get(&attachment) else {
+                continue;
+            };
+            if let Some(bound) = data.bound_keys(made)? {
+                shared
+                    .attachments
+                    .insert(attachment, Attachment::Arrow(bound));
+            }
+            shared.bound.insert(attachment);
+        }
+        Ok(())
     }
 
     /// The Arrow data the body attached as `id`, taken back before the host
@@ -249,6 +277,15 @@ impl Asker {
         self.data
             .as_ref()
             .is_some_and(DataAccess::samples_by_key_dtype)
+    }
+
+    /// Whether the reference reads the run's provider's floats with a NaN
+    /// missing and `-0.0` as `0.0` (`DataLayer::reads_nan_as_missing`);
+    /// `false` for an operation that names no provider.
+    pub fn reads_nan_as_missing(&self) -> bool {
+        self.data
+            .as_ref()
+            .is_some_and(DataAccess::reads_nan_as_missing)
     }
 
     /// The catalog answer `data` holds, the admitted answer to `request`,
@@ -579,6 +616,9 @@ pub struct Run {
     /// The opaque vendor the run's provider hands over, as its data layer
     /// declares it ([`DataAccess::opaque_vendor`]).
     opaque_vendor: Option<&'static str>,
+    /// The run's data access, which reads each admitted answer's values as
+    /// the reference reads them (`DataAccess::conform`).
+    data: Option<DataAccess>,
 }
 
 fn protocol(code: ErrorCode, message: impl Into<String>) -> CoreError {
@@ -610,6 +650,7 @@ impl Run {
     {
         let shared = Arc::new(Mutex::new(Shared::default()));
         let opaque_vendor = data.as_ref().and_then(DataAccess::opaque_vendor);
+        let access = data.clone();
         let body = make(Asker {
             shared: Arc::clone(&shared),
             data,
@@ -619,6 +660,7 @@ impl Run {
             body: Some(Box::pin(body)),
             shared,
             opaque_vendor,
+            data: access,
         }
     }
 
@@ -762,6 +804,27 @@ impl Run {
         }
         match &mut self.state {
             State::AwaitingFetch(pending) if pending.contains_key(&id) => {
+                // Its values read as the reference reads them, before it is
+                // held to the schema expected (T2.14d).
+                let result = match (result, &self.data) {
+                    (FetchResult::Data(data), Some(access)) => {
+                        access.conform(data).map(FetchResult::Data)
+                    }
+                    (FetchResult::Page { data, continuation }, Some(access)) => access
+                        .conform(data)
+                        .map(|data| FetchResult::Page { data, continuation }),
+                    (other, _) => Ok(other),
+                };
+                let result = match result {
+                    Ok(result) => result,
+                    Err(refusal) => {
+                        self.end()?;
+                        return Err(refusal);
+                    }
+                };
+                let State::AwaitingFetch(pending) = &mut self.state else {
+                    unreachable!("matched above")
+                };
                 if let FetchResult::Data(data) | FetchResult::Page { data, .. } = &result
                     && let Err(mismatch) = check_expected(&pending[&id], data)
                 {

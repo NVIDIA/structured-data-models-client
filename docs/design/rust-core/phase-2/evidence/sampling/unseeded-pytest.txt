@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.7.0 -- <scratch>/cells/cell-ref-pandas3/bin/python
+rootdir: <scratch>/wt
+configfile: pyproject.toml
+plugins: timeout-2.4.0, xdist-3.8.0, requests-mock-1.12.1
+collecting ... collected 9 items
+
+contract/tests/test_t211_unseeded.py::test_the_unseeded_keys_are_authored PASSED [ 11%]
+contract/tests/test_t211_unseeded.py::test_each_case_asks_for_an_unseeded_sample[sample.unseeded] PASSED [ 22%]
+contract/tests/test_t211_unseeded.py::test_each_case_asks_for_an_unseeded_sample[sample.unseeded.chain] PASSED [ 33%]
+contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded] PASSED [ 44%]
+contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded.chain] PASSED [ 55%]
+contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded@sqlite] PASSED [ 66%]
+contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded.chain@sqlite] PASSED [ 77%]
+contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded@postgres] PASSED [ 88%]
+contract/tests/test_t211_unseeded.py::test_python_core_draws_an_unseeded_sample_with_the_reference_s_properties[sample.unseeded.chain@postgres] PASSED [100%]
+
+======================== 9 passed in 139.32s (0:02:19) =========================
+exit 0

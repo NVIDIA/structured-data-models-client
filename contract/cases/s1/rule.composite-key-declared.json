@@ -1,0 +1,94 @@
+{
+  "format": "sdm-case/1",
+  "id": "rule.composite-key-declared",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE TABLE lines (order_no BIGINT, line INTEGER, user_id BIGINT, price DOUBLE, ts TIMESTAMP, PRIMARY KEY (order_no, line))",
+      "INSERT INTO lines SELECT order_id, (order_id % 3)::INTEGER, user_id, price, ts FROM orders",
+      "DROP TABLE orders",
+      "ALTER TABLE lines RENAME TO orders"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "recorded at the reference 6298913c: on DuckDB and SQLite answered through predict, the catalog's key of two columns not taken (orders has no key); on Postgres Schema.from_source fails with an unnamed ValueError (register P2C-11)"
+  },
+  "why": "A primary key of two columns the catalog declares for a fact table (orders keyed by order_no and line): rule composite_key at describe_source",
+  "source": "T2.12 schema rules (design row; not-yet-refusals.md rows 2, 4, 5, 8 and 9)"
+}

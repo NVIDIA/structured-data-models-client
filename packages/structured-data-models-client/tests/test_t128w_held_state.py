@@ -224,9 +224,15 @@ def test_the_core_s_own_refusal_of_a_start_not_about_the_state_keeps_it(
     monkeypatch.undo()
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     assert isinstance(refused, StructuredDataError), refused
-    # The core's refusal (the host words it), before anything was read.
+    # The core's refusal, before anything was read, worded as the
+    # reference words the same seed (python-ref at 6298913c; T2.14b moved
+    # the core's refusals into the reference's words).
     assert (refused.code, ran) == ('INVALID_REQUEST', 0)
-    assert 'core' in str(refused), refused
+    assert str(refused) == (
+        '[INVALID_REQUEST] random_seed is -1, and a seed is not negative; '
+        'pass a number from 0 upwards, or leave it out to let the sampler '
+        'choose'
+    ), refused
     assert shop.state.get('held') == held
     ran, made = shop.call(random_seed=7)
     assert (ran, _same(made, again)) == (second, True)

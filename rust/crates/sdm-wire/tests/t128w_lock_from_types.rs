@@ -116,6 +116,7 @@ fn full() -> StatePayload {
             },
             entity_table_names: vec![text("e")],
             anchor_time_column: Some(text("at")),
+            top_k: Some(3),
         },
         schema: PayloadSchema {
             instance_table: table.clone(),

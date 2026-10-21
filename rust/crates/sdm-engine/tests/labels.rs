@@ -9,14 +9,17 @@
 //! exactly: a window's offsets added to anchors at month ends, on leap days
 //! and with nanoseconds, as the sampler's `_by_time` seeds are made; the
 //! fixed step a window of months walks back by; the executor's
-//! aggregations, in float32 bits; its comparisons; and a decimal read at
-//! float32.
+//! aggregations, in float32 bits; its comparisons, each through
+//! `labels::label` as a condition target's labels (the function the product
+//! calls; T2.14c); and a decimal read at float32.
 //!
 //! [`problems`] fails closed: a perturbed answer, and evidence missing,
 //! empty or retyped, each fail (seeded below).
 
 use sdm_contract::pql::TimeUnit;
-use sdm_engine::labels::{self, Aggregation, Bounds, Constant, Labels, RelOp, Values};
+use sdm_engine::labels::{
+    self, Aggregation, Bounds, Column, Constant, Labels, RelOp, Target, Values,
+};
 use sdm_engine::time::offset::{Offset, timeframe};
 use serde_json::Value;
 
@@ -217,15 +220,18 @@ fn problems(document: &Value) -> (Vec<String>, Counts) {
             other => return Err(format!("an operator {other:?}")),
         };
         let rows = v["left"].as_array().ok_or("left: not a list")?;
-        let left = match v["kind"].as_str() {
-            Some("float32") => Labels::Float(
+        // The examples' column, as the executor reads a target's column:
+        // float32 or int64, every row holding a value (a NaN is a float
+        // value, which the column's mask leaves out).
+        let column = match v["kind"].as_str() {
+            Some("float32") => Column::Float(
                 rows.iter()
-                    .map(|r| bits(r, "left"))
+                    .map(|r| bits(r, "left").map(Some))
                     .collect::<Result<_, _>>()?,
             ),
-            Some("int64") => Labels::Int(
+            Some("int64") => Column::Int(
                 rows.iter()
-                    .map(|r| digits(r, "left").map(|d| d as i64))
+                    .map(|r| digits(r, "left").map(|d| Some(d as i64)))
                     .collect::<Result<_, _>>()?,
             ),
             other => return Err(format!("a kind {other:?}")),
@@ -242,8 +248,44 @@ fn problems(document: &Value) -> (Vec<String>, Counts) {
             .iter()
             .map(|a| a.as_bool().ok_or("answer: not a boolean"))
             .collect::<Result<_, _>>()?;
-        let mine = labels::compare(&left, op, constant).map_err(|e| format!("{e:?}"))?;
-        Ok((mine != wanted).then(|| format!("{op:?} {text}: {mine:?}, not {wanted:?}")))
+        // The rows with a value: all but a float's NaN, which `execute`
+        // masks out before the condition's labels are kept, and which
+        // `execute_rel_op` answers false (checked, so a perturbed answer
+        // there fails too).
+        let present: Vec<bool> = match &column {
+            Column::Float(values) => values
+                .iter()
+                .map(|f| f.is_some_and(|f| !f.is_nan()))
+                .collect(),
+            _ => vec![true; rows.len()],
+        };
+        if present.len() != wanted.len() {
+            return Err(format!("{} rows, {} answers", present.len(), wanted.len()));
+        }
+        if let Some(row) = (0..wanted.len()).find(|&i| !present[i] && wanted[i]) {
+            return Ok(Some(format!("row {row}, a NaN, answered true")));
+        }
+        let kept: Vec<bool> = wanted
+            .iter()
+            .zip(&present)
+            .filter(|(_, p)| **p)
+            .map(|(w, _)| *w)
+            .collect();
+        // Through `labels::label`, the function the product calls for a
+        // condition target (`target op constant`), not a helper beside it.
+        let target = Target::Condition {
+            target: Box::new(Target::Column(column)),
+            op,
+            constant: Some(constant),
+        };
+        let mine = labels::label(&target).map_err(|e| format!("{e:?}"))?;
+        let agree = mine.mask == present && mine.labels == Labels::Bool(kept.clone());
+        Ok((!agree).then(|| {
+            format!(
+                "{op:?} {text}: {:?} {:?}, not {kept:?} {present:?}",
+                mine.labels, mine.mask
+            )
+        }))
     });
     counts.decimals = each("decimals", &mut |v| {
         let unscaled = digits(&v["unscaled"], "unscaled")?;

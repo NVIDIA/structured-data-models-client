@@ -36,8 +36,10 @@ pub enum Value {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReadError {
     /// `syntax`, `eof` or `data`, as `serde_json` classifies the fault,
-    /// `depth` for text nested past [`MAX_DEPTH`], or `not_finite` for a
-    /// `NaN` or `Infinity` token.
+    /// `depth` for text nested past [`MAX_DEPTH`], `not_finite` for a
+    /// `NaN` or `Infinity` token, or `encoding` for an answer's bytes that
+    /// do not decode in the encoding they are detected in (UTF-16 or
+    /// UTF-32).
     pub category: &'static str,
     pub line: usize,
     pub column: usize,
@@ -96,7 +98,94 @@ pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
 /// character's number raised until no such text is in the answer), and the
 /// value whose raw text is that literal is read back as the token; so no
 /// text the endpoint wrote is read as a number.
+///
+/// The bytes are first decoded to UTF-8 text as Python's `json.loads`
+/// decodes bytes ([`answer_text`]), so an answer the reference reads in
+/// UTF-8 with a byte order mark, UTF-16 or UTF-32 is read alike.
+///
+/// A lone surrogate, which Python's reader keeps in a string and UTF-8
+/// cannot hold, is read as U+FFFD, the replacement character, and the
+/// answer is read on (register P1B-24, the owner's KO2-93): one escaped in
+/// text (`\ud800` with no low surrogate escaped after it, or a low one
+/// alone), one in UTF-16 or UTF-32 ([`answer_text`]), and one written in
+/// UTF-8 as its three bytes (`ED A0 80`), as Python's reader takes them
+/// with `surrogatepass`. Nothing else in the answer changes.
 pub fn read_answer(bytes: &[u8]) -> Result<Value, ReadError> {
+    let text = answer_text(bytes)?;
+    let text = lone_surrogates_replaced(&text);
+    read_answer_utf8(&text)
+}
+
+/// `bytes` with each lone surrogate replaced by U+FFFD, each replacement
+/// as long as what it replaces, so a fault's position stays where it was:
+/// an escape `\uD800`..`\uDFFF` in a string that is not a high one
+/// followed by an escaped low one becomes `\uFFFD`, and a surrogate's
+/// three UTF-8 bytes (`ED` then `A0`..`BF`, then a continuation byte)
+/// become `EF BF BD`. Escapes are read in order, so the `\u` after an
+/// escaped backslash (`\\u`) is text, not an escape.
+fn lone_surrogates_replaced(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    use std::borrow::Cow;
+    fn hex4(b: &[u8]) -> Option<u16> {
+        let s = std::str::from_utf8(b.get(..4)?).ok()?;
+        if !s.bytes().all(|c| c.is_ascii_hexdigit()) {
+            return None;
+        }
+        u16::from_str_radix(s, 16).ok()
+    }
+    let high = |u: u16| (0xD800..=0xDBFF).contains(&u);
+    let low = |u: u16| (0xDC00..=0xDFFF).contains(&u);
+    let mut out: Option<Vec<u8>> = None;
+    let mut in_string = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if b == 0xED
+            && matches!(bytes.get(i + 1), Some(0xA0..=0xBF))
+            && matches!(bytes.get(i + 2), Some(0x80..=0xBF))
+        {
+            out.get_or_insert_with(|| bytes.to_vec())[i..i + 3]
+                .copy_from_slice("\u{FFFD}".as_bytes());
+            i += 3;
+            continue;
+        }
+        if !in_string {
+            in_string = b == b'"';
+            i += 1;
+            continue;
+        }
+        match b {
+            b'"' => {
+                in_string = false;
+                i += 1;
+            }
+            b'\\' if bytes.get(i + 1) == Some(&b'u') => {
+                let Some(unit) = hex4(&bytes[i + 2..]) else {
+                    i += 2;
+                    continue;
+                };
+                let paired = high(unit)
+                    && bytes.get(i + 6) == Some(&b'\\')
+                    && bytes.get(i + 7) == Some(&b'u')
+                    && hex4(&bytes[(i + 8).min(bytes.len())..]).is_some_and(low);
+                if paired {
+                    i += 12;
+                } else if high(unit) || low(unit) {
+                    out.get_or_insert_with(|| bytes.to_vec())[i + 2..i + 6]
+                        .copy_from_slice(b"FFFD");
+                    i += 6;
+                } else {
+                    i += 6;
+                }
+            }
+            b'\\' => i += 2,
+            _ => i += 1,
+        }
+    }
+    out.map_or(Cow::Borrowed(bytes), Cow::Owned)
+}
+
+/// [`read_answer`] of bytes already decoded to UTF-8.
+fn read_answer_utf8(bytes: &[u8]) -> Result<Value, ReadError> {
     let tokens = non_finite_tokens(bytes);
     if tokens.is_empty() {
         return read(bytes);
@@ -124,6 +213,80 @@ pub fn read_answer(bytes: &[u8]) -> Result<Value, ReadError> {
     check_depth(&text)?;
     let raw: &RawValue = serde_json::from_slice(&text).map_err(|e| ReadError::of(&e))?;
     value_with(raw, Some(&marker)).map_err(|e| ReadError::of(&e))
+}
+
+/// An answer's bytes as UTF-8 text, decoded as Python's `json.loads`
+/// decodes bytes (`json.detect_encoding`, after RFC 8259 and RFC 4627): a
+/// UTF-32 or UTF-16 byte order mark, then a UTF-8 one, names the encoding
+/// and is dropped; without one, the zero bytes among the first four name
+/// UTF-16 or UTF-32 and their byte order, as the first character of JSON
+/// text is ASCII; anything else is UTF-8. UTF-8 without a mark is the bytes
+/// as they are. Text that does not decode is refused, category `encoding`,
+/// as Python's decoding raises; a lone surrogate, which Python's decoding
+/// keeps (`surrogatepass`), is read as U+FFFD, as [`read_answer`] reads one
+/// escaped (register P1B-24). The position is the first byte's.
+pub fn answer_text(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, ReadError> {
+    use std::borrow::Cow;
+    #[derive(Clone, Copy)]
+    enum Width {
+        Two,
+        Four,
+    }
+    let (width, big_endian, skip) = match bytes {
+        [0, 0, 0xFE, 0xFF, ..] => (Width::Four, true, 4),
+        [0xFF, 0xFE, 0, 0, ..] => (Width::Four, false, 4),
+        [0xFE, 0xFF, ..] => (Width::Two, true, 2),
+        [0xFF, 0xFE, ..] => (Width::Two, false, 2),
+        [0xEF, 0xBB, 0xBF, rest @ ..] => return Ok(Cow::Borrowed(rest)),
+        [0, 0, _, _, ..] => (Width::Four, true, 0),
+        [0, _, _, _, ..] | [0, _] => (Width::Two, true, 0),
+        [_, 0, 0, 0, ..] => (Width::Four, false, 0),
+        [_, 0, _, _, ..] | [_, 0] => (Width::Two, false, 0),
+        _ => return Ok(Cow::Borrowed(bytes)),
+    };
+    let undecodable = ReadError {
+        category: "encoding",
+        line: 1,
+        column: 0,
+    };
+    let body = &bytes[skip..];
+    let mut text = String::with_capacity(body.len());
+    match width {
+        Width::Two => {
+            if !body.len().is_multiple_of(2) {
+                return Err(undecodable);
+            }
+            let units = body.chunks_exact(2).map(|u| {
+                let u = [u[0], u[1]];
+                if big_endian {
+                    u16::from_be_bytes(u)
+                } else {
+                    u16::from_le_bytes(u)
+                }
+            });
+            for c in char::decode_utf16(units) {
+                text.push(c.unwrap_or(char::REPLACEMENT_CHARACTER));
+            }
+        }
+        Width::Four => {
+            if !body.len().is_multiple_of(4) {
+                return Err(undecodable);
+            }
+            for u in body.chunks_exact(4) {
+                let u = [u[0], u[1], u[2], u[3]];
+                let n = if big_endian {
+                    u32::from_be_bytes(u)
+                } else {
+                    u32::from_le_bytes(u)
+                };
+                text.push(match n {
+                    0xD800..=0xDFFF => char::REPLACEMENT_CHARACTER,
+                    _ => char::from_u32(n).ok_or(undecodable)?,
+                });
+            }
+        }
+    }
+    Ok(Cow::Owned(text.into_bytes()))
 }
 
 /// Whether `haystack` holds `needle`.

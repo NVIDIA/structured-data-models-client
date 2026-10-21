@@ -50,7 +50,7 @@ impl ParseFailure {
 pub enum ParseError {
     Failure(ParseFailure),
     Unplaced,
-    Packed(Option<crate::ast::Location>),
+    Packed(Option<crate::ast::Location>, String),
 }
 
 impl ParseError {
@@ -69,7 +69,7 @@ impl From<BuildError> for ParseError {
                 message,
             }),
             BuildError::Unplaced => ParseError::Unplaced,
-            BuildError::Packed(location) => ParseError::Packed(location),
+            BuildError::Packed(location, literal) => ParseError::Packed(location, literal),
         }
     }
 }

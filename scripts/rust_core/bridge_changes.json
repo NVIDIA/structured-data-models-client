@@ -3,7 +3,7 @@
   "about": "Each change to frozen bridge code against the merge base, with one reason: moved (a rule moved into Rust, naming its task), refactor (behaviour kept), gone (an entry that left the freeze) or main (a change main made, merged by this change: the full SHA of the main commit, then its title). Entries the merge base already holds are spent and may be pruned.",
   "changes": {
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::<module>": {
-      "moved": "T2.18: the module gains Unresolved, a query only the core resolves, and asked, the host's reading of what the core resolved of a query (Materialized.query, contract v26)"
+      "moved": "T2.11: the sampling options (context_anchor_time, exclude_cols_dict, max_pq_iterations, num_hops, num_neighbors, return_embeddings, use_prediction_time) join the options whose values the core reads (TAKEN, VALUED); their types, bounds and effects are the core's (sdm-request options, sdm-core materialize and subgraph); no rule added here; T2.14b: the candidate-repeat rule (MID2 P2-2) is the core's (sdm-request's ranking::distinct, Python's equality by key): the host passes each candidate as given, a value it cannot hash unreadable; T2.14b fix 1: imports datetime for _kind (MID2 P2-2); T2.14b fix 2: _kind replaced by _typed (MID2 P2-2); T2.14b fix 4: _typed replaced by _kind (MID2 P2-2)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_indices": {
       "moved": "T1.32a: the cast to the key's type with pandas (pd.Series(indices, dtype=...)) and its INVALID_REQUEST and INTERNAL_ERROR split are the core's rule table; the bridge hands over the values as pyarrow infers them, or as their text where it infers no one type"
@@ -15,7 +15,7 @@
       "moved": "T1.32a: the bridge's key_type refusal, for a key type it had no cast for, is the core's (sdm_engine::keys::cast refuses a key type no rule casts to)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::gather": {
-      "moved": "T2.18: the run's answer of what the core resolved of the query (Materialized.query) is kept beside the state's version for asked; the caller's forecast step limit (decompose.MOST_PARTS) is sent for a query only the core resolves, whose kind only the core knows, as for a forecast; no rule added"
+      "moved": "T2.11: the call's values carry context_anchor_time as _context_anchor writes it; the context's anchor, its checks and warnings are sdm-core materialize's"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_text": {
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
@@ -24,40 +24,46 @@
       "refactor": "T2.1b: each table named is sent as contract v26 writes a source, a relation of one part (codec.relation), never split on a dot; T2.2: the provider choice and provider are the source's backend's (_provider), SQLite's beside DuckDB's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
-      "moved": "T1.36 fix 8: the module gains _id, the host's half of the entity reading moved into the core (sdm-request's predict::layout and entity, as the reference's _named_entities and as_declared): the bridge reads the id the core gives, as the JSON text of the reference's item value where the core's column cannot hold it"
+      "moved": "T2.13: the module gains _table (the result attachment as a table, keeping its schema's metadata) and _explanation (the result's explanation, a forecast's under by_forecast_step, keyed by the step); each item's explanation and metadata, and the result's, are made the reference's dict by T2.8's _mapping, the one reader of a mapping the core gives as JSON text; reading each as dict(value) and choosing the result's explanation are the core's (sdm-wire response::mapping, sdm-request predict's Part.explanation); T2.14b: _encoded and _ENCODED_DEPTH gone (the core reads the answer's bytes); math no longer imported"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_id": {
       "moved": "T1.36 fix 8: the host's half of the moved entity reading: a row's id as the core's id_as_written column gives it (the JSON text of the reference's item value, read as the transport reads JSON), else the id column's value, a missing one None; no rule of its own, as _as_answered for a prediction"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::predict": {
-      "moved": "T1.36 fix 21: a forecast's steps predicted and merged by the core in one run: each step's payload and query passed as RequestState.forecast, the endpoint's refusal noted with the call (the step) it answered, and the answer marked as naming its step; fix 24: each later step's call given its own request id, drawn with _request_id as the adapter draws one per call"
+      "moved": "T2.13: the result read as a table and its explanation taken from the schema's metadata, where the core puts the result's explanation (sdm-request predict's table); no rule added; T2.14b: the answer handed to the core as the bytes the endpoint sent (no re-encoding, no made-up too-deep body), and no host call counter: the refused part's forecast step and ranking candidate, and the parts answered, are the core's (MID2 P2-4)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_carry_the_answers": {
+      "moved": "T2.13: the carried answers' explanation, which the core puts on the result's schema with the model and metadata, handed to _result as the result's; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_result": {
+      "moved": "T2.11: an answer's embeddings, which the core reads and lays out (sdm-wire response, sdm-request predict), handed into each PredictionItem as the tuple the bindings hold; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._answer_in_parts": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "moved": "T2.8: a ranking the core gathered is predicted by the core, as a forecast is (T1.36 fix 21): its outputs' check, the check of every question before any is sent, the candidates left out, each question's call and the reassembly are the core's; the old route's are unchanged"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::<module>": {
-      "refactor": "T2.18: _alone, whether a resolved query is the core's alone, importing the bridge on the core route only; _refuse_the_task, the task= refusal both paths raise; the forecast's steps kept together by _kept_as_steps and a query only the core resolves gathered by _on_the_core_alone; a type-checking import; no rule added"
+      "moved": "T2.8: _in_steps_on_the_core and _on_the_core_alone become _on_the_core, every query on the core route gathered whole by the core (a forecast's steps, a ranking's candidates, a query only the core resolves), its refusals said by decompose.said_as_parts_are; _kept_as_parts keeps a ranking's questions as _kept_as_steps keeps a forecast's steps"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery.materialize": {
-      "moved": "T2.18: a query only the core resolves (KO2-36) is held to task= as any relational query, then gathered as itself (_on_the_core_alone): a forecast kept in the steps the core asked, the core's forecast top_k and too-many-steps refusals said in this client's words, a query the core does not resolve refused with the old validator's diagnostics, a ranking over candidates refused by name"
+      "moved": "T2.8: on the core route the question goes to the core whole: the ranking's decomposition and refusals, and the forecast's top_k and MOST_PARTS refusals, are the core's (parts_of is not run there), task= refused first as for any relational query"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::<module>": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
     },
     "packages/structured-data-models-client/src/sdm_client/decompose.py::parts_of": {
-      "moved": "T1.36 fix 21: on the core route a forecast is not split here, the core splitting it; the refusals before anything is gathered (top_k, more steps than MOST_PARTS) stay the client's, worded as before"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/base.py::check_request_against_model": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::<module>": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "moved": "T2.8: the module gains _said_of_the_part and _ranking_said, the words of the core's refusals of a ranking at predict (the part it names, its candidates as given), as _answer_in_parts said them; no rule of their own; T2.14b: _said_of_the_part reads the core's forecast_step and ranking_candidate only, the host's call counter gone (MID2 P2-4)"
     },
     "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient.predict": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::<module>": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "refactor": "T2.8: RelationalMaterializer.materialize takes a ranking's candidates, which it passes to the core on the core route; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_entity_count": {
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
@@ -66,13 +72,13 @@
       "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._gather": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer.materialize": {
-      "moved": "T2.18: on the core route the target's window and the entity table are read through _rust.materialize.asked, what the core resolved for a query only it resolves (KO2-36); the old route reads them as before"
+      "moved": "T2.8: a ranking's candidates passed to the core's gather on the core route, the core asking the ranking's questions; the old route unchanged; T2.14b: asked takes the core's state alone (MID2 P2-4, the facts the core resolved)"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._in_parts": {
-      "main": "1fc5a68632c760568416ac64a7f499d235b620b8 Gather more entities than one call scores as several calls (#36)"
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
     },
     "packages/structured-data-models-client/src/sdm_client/schema.py::<module>": {
       "moved": "T2.18: names_a_query_cannot_say, whether a schema holds a column the old validator's language cannot say, which only the core route keeps and only the core resolves a query naming (KO2-36); it refuses nothing"
@@ -99,7 +105,7 @@
       "refactor": "T2.3: picks Postgres's dialect and provider for a Postgres source, beside DuckDB's and SQLite's; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::asked": {
-      "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps"
+      "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps; T2.14b: the target's windowing and entity table (MID2 P2-4) are the core's Materialized.query facts for every query, never the old validator's tree"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
       "moved": "T2.18: where a relational materialize runs on the core over a schema holding a column the old validator's language cannot say, a query the old validator refuses is the core's to resolve as it gathers it (Unresolved, KO2-36), holding the old validator's refusal; every other query as before, the shadow check kept; the route is decided here, the interface unchanged"
@@ -109,6 +115,342 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.to_string": {
       "moved": "T2.18: such a query is sent to materialize as the caller wrote it; the core resolves it and writes it back"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_candidates": {
+      "moved": "T2.8: the host's half of the ranking's decomposition moved into the core: each candidate as the contract's given candidate of its own type (a NumPy value as the Python value it holds, a missing one null, an integer past int64 and a finite decimal by their exact digits, a value no scalar holds spelled as its str, as the reference's _as_literal reads it); one equal to a value given before it a repeat, as dict.fromkeys leaves it out, and one Python cannot hash unreadable (E101), which the core refuses by name (register P2D-1); how each is written into its question, and every refusal of one, are the core's (sdm_request::ranking); T2.14b: the candidate-repeat rule (MID2 P2-2) moved into sdm-request (ranking::distinct): no 'repeat' is written; each candidate is handed over as given, one Python cannot hash unreadable; T2.14b fix 1 (Codex r1 P2-1): a date, time of day or timestamp candidate given typed, its kind and text, so the core holds two equal ones one candidate as dict.fromkeys does (MID2 P2-2); T2.14b fix 2: a temporal candidate written by _typed (MID2 P2-2); T2.14b fix 4 (Codex r3 P2-1): the temporal candidates grouped as dict.fromkeys groups them, by Python's own == and hash, each given the position of its group's first (first), so the core keeps the reference's repeats with no equality of its own (MID2 P2-2); T2.14b fix 7 (Claude r4 P3-2, P3-3, the orchestrator's): which candidates repeat is Python's own (dict.fromkeys over every hashable candidate, by Python's == and hash), each later one sent as the contract's repeat, so the contract carries no host equality field; the core leaves a repeat out (MID2 P2-2); T2.14b fix 8 (Codex r6): a temporal candidate Python holds distinct from an earlier one of the same kind and text is sent spelled, which the core merges with none, so the core never merges what the host's grouping kept apart (MID2 P2-2)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_ranked": {
+      "moved": "T2.8: the host's half of the moved reassembly (SDMClient._ranked): the core's ranked candidates, by their positions among those given, and scores given back as prediction and rankings items, each candidate as the caller gave it, the outputs the core names, and the unscored candidates by their positions"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_unscored": {
+      "moved": "T2.8: the words of the core's CANDIDATES_UNSCORED notice, as _candidates_no_context_teaches words them, naming each candidate as the caller gave it; no rule of its own"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_mapping": {
+      "moved": "T2.8: the host's half of the moved rankings reading (sdm_wire's response::mappings): a member the core gives as a JSON object, or as the list of its pairs where a key is not text, made the mapping the reference's item holds; no rule of its own"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_explanation": {
+      "moved": "T2.13: the result's explanation as the core gives it, for a forecast each step's under by_forecast_step keyed by the step's number, as the client's _by_step holds it; which steps explain is sdm-request predict's by_step"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_table": {
+      "refactor": "T2.13: the result attachment read as a table, as _rows reads it, so its schema's metadata is read too; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::<module>": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: spelled and SPELLED_MOST, a value no contract type holds written as its repr for the core to name (KO2-86)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_bits32": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_digits": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_exact": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_float32": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_float64": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_integral": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_json": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_of_bits32": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::_scalar": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::attachment": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::decode_scalar": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::encode": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_key": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: a key no contract type holds given spelled (its repr) rather than bare unreadable (KO2-86); what it means is the core's"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_name_or_none": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::given_text": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: a value that is not text given spelled (its repr) rather than bare unreadable (KO2-86); what it means is the core's"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::integer": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::read": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::relation": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::relation_name": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::seed": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::<module>": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: imports spelled in place of UNREADABLE (KO2-86)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_link": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: a relationship that is not one given spelled (its repr), which the core names in its refusal (KO2-86)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_made": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_schema_holding": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::_store": {
+      "moved": "T2.21: a column's data type after an edit is the core's, decided by its role in the schema (sdm_schema::assemble::read_exact_numbers); the host stores the dtype the core answers, as _rust/schema.py's build does, and decides nothing of it (T2.14a brought it under the freeze unchanged)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::column": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::leave_out": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::relationships": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/edits.py::table": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::<module>": {
+      "moved": "T2.11: the sampling options' three warnings (CONTEXT_AFTER_ANCHOR, CONTEXT_LEAKS, HOPS_IGNORED) added to WARNINGS, the class each is shown as, and to SAID, the engine's words over the fields the core gives; the rules that give them (when a context is anchored after the predictions or leaks into them, when num_hops is ignored) are sdm-core materialize's and sdm-request options'; the host only words them, as E59 has it word every core warning; T2.13b: FILTER_CHOSE_EXAMPLES added to SAID, the client's words for the notice that an entity filter chooses the labelled examples and not the entities scored (_warn_the_filter_chose_only_the_examples), and WORDED gains the words of a context no example was collected for, by the reason the core found (_diagnose_empty_sample's); whether to warn, and why a context is empty, are sdm-core materialize's (FILTER_CHOSE_EXAMPLES, empty_sample); the host only words them; T2.14b: the host wording rows G15, M4, FX-1 and FX-4 (KO2-32) and the generic refusals said as the reference says them: WORDED's and SAID's templates over the fields the core decides (rule, table, columns, value given, times), FLOAT32_OVERFLOW shown as RuntimeWarning; no rule beyond the tables; T2.14b fix 2: WORDED says VALUE_OUT_OF_RANGE text_not_utf8 (a Postgres JSON string with a lone surrogate, register P2D-3) by the column the core names; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_Words.convert_field": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: the conversions the reference's words need (!R, !G, !S, !N) over the core's fields; formatting only"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_as_timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_detail": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_duckdb_text": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_instance": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_shown_timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_time_of_day": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_timestamp": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_worded": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: the template of a context left empty chosen by the facts the core gives (later, the count of tables), as most_entities_parts is; no rule added; T2.14b: a template looked up by the core's variant beside its field and rule, as the one-class refusal names the target as the constant-context notice names it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::error_from_core": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2); T2.13b: a refusal's template filled by _Words, the conversions SAID's warnings use (a timestamp shown as the reference shows it, names listed), so a refusal names times and tables as the reference's does; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::raise_from_core": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::said": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_from_core": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::warn_held": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the docstring and constants say the value rules are the core's (DECLARED_SCALE_MARKER added; _INT64 bounds gone with _Numeric); T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__call__": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the key set bound through _bound_text, its spelling moved into sdm-data's Postgres value rules"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__init__": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_Numeric.__init__": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): how a numeric past 76 digits is read (a double, an int64, its digits past int64, a NaN missing) is sdm-data's Postgres value rule (pg_values::conform, by the declared scale the provider marks); the provider hands over each value's exact text"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_Numeric.field": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the field of a numeric past 76 digits is chosen by sdm-data's Postgres value rule from its declared scale (pg_values::conform); the provider marks the declaration (_numeric_field)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_after_read": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the conversions after the read (json_text, _interval) are gone from the provider; the JSON rule is sdm-data's (pg_values::conform)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_array": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a JSON column's cells written as the JSON text of the value the driver read; what the reference makes of it is sdm-data's Postgres value rule (pg_values::conform); T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_table": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_type": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_cell": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a numeric no Arrow decimal holds is no longer read as an integer here; its exact text goes to the core (pg_values::conform)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_element_type": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_elements": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_interval": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the interval built with months 0 is gone; the provider hands pyarrow the driver's timedelta as a MonthDayNano and the core refuses the column by name as before"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_isoformat": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a seed time as pandas' Timestamp.isoformat writes it is sdm-data's Postgres value rule (pg_values::bound_keys)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_own_transaction": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_psycopg_text": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_result": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): no conversion after the read and no NaN rule for a whole numeric's column; each column's field from _field, the value rules sdm-data's (pg_values::conform)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_scalar_type": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a numeric no Arrow decimal holds is the field _numeric_field marks, its reading sdm-data's Postgres value rule"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_tags": {
+      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::json_text": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a JSON value's text as the reference writes it (Python's str of a scalar, compact ASCII JSON of an object or array) is sdm-data's Postgres value rule (pg_values::conform); the provider hands over the JSON text of the value the driver read"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::key_set_json": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the key set's spelling past Arrow's text (a time without a zone as pandas' isoformat, binary as \\x and hex) is sdm-data's Postgres value rule (pg_values::bound_keys), applied by the core before the host takes the key set; the provider writes Arrow's text of each cell (_bound_text)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send_body": {
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b: response bytes untouched (Phase 1 ledger, design scope item 5): the answer handed to the core as the endpoint sent it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_context_anchor": {
+      "moved": "T2.11: context_anchor_time written for the core as anchor_time is (a ts scalar), the literal 'entity' and none as they are, any other value as the text 'unreadable', which the core refuses where the engine refuses it (sdm-request options); no type check here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_bound_text": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the moved key_set_json's host half: the key set's rows as a JSON array of Arrow's text of each cell, the cells the reference spells otherwise already that text from the core (pg_values::bound_keys)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_field": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a result column's field, by its Postgres type and tags, the numeric rules (_Numeric) moved into sdm-data's Postgres value rules"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_numeric_field": {
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the host half of the moved numeric rule: a numeric no Arrow decimal holds handed over as exact text, its declaration marked (sdm:exact_number, or sdm:declared_scale past 76 digits), read by sdm-data's Postgres value rule"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::_encoded": {
+      "moved": "T2.14b: the answer re-encoding and the made-up too-deep body (Phase 1 ledger, design scope item 5) are gone: the transport hands the core the answer's bytes, which the core reads and refuses past its depth itself"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::spelled": {
+      "moved": "T2.14b: a value no contract type holds given as its repr (Given::Spelled), which the core names in its refusal as a value of the caller's own call (KO2-86, G15); the host decides nothing of it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_is_json": {
+      "moved": "T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_json_text": {
+      "moved": "T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here; T2.14b fix 1 (Codex r1 P2-3): the driver's JSON value written as ASCII JSON, so an escaped lone surrogate travels as its escape, which sdm-data's Postgres rule reads (MID2 P2-3)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_kind": {
+      "moved": "T2.14b fix 4: the kind a date, time of day or timestamp candidate is given with (GivenCandidate::Typed), its equality left to Python (MID2 P2-2)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::numpy_warns_on_cast_overflow": {
+      "moved": "T2.14b fix 5 (KO2-88, the orchestrator's): FX-1's FLOAT32_OVERFLOW, which the core reports on every runtime, is shown as RuntimeWarning only where the installed NumPy warns of a float32 cast's overflow (1.24 or later), as the reference's NumPy shows it; how a warning is shown is the host's (KO2-32)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::_empty_answer": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::_names_its_rows": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._send": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/client.py::SDMClient._spec": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_columns_to_leave_out": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_drop_context_that_answers_the_question": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_entities_at_anchors": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_instances_matching": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_joins_nothing": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_positions": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_record_the_statistic": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._check_shape": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._refuse_a_name_the_wire_reserves": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._run_mode_for": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._unreserved": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::RelationalMaterializer._warn_two_whole_numbers_are_being_asked_as_quantities": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_remove_instances": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_statistic_asked_for": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_tables_sent": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_a_context_the_default_mode_capped": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_columns_the_model_does_not_read": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_relationships_that_join_nothing": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_of_tables_left_out": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/materializers/relational.py::_warn_the_filter_chose_only_the_examples": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/result.py::PredictionResult.merge": {
+      "gone": "T2.14c: the core route no longer enters it (measured: python-core on every case and database under coverage); the old route keeps it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/base.py::<module>": {
+      "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
+    },
+    "packages/structured-data-models-client/src/sdm_client/result.py::<module>": {
+      "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
     }
   }
 }

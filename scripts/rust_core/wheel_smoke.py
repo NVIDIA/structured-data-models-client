@@ -13,7 +13,10 @@ never the source tree. Each lane is a pinned runtime of decision E16:
   1.23.5, the floors every distribution declares;
 - ``newest``: Python 3.14 with pandas 3, NumPy 2 and pyarrow at the newest
   releases those admit, resolved afresh on every run (no upper bound, a new
-  environment, pip's newest).
+  environment, pip's newest);
+- ``aarch64-floor`` and ``aarch64-newest``: the same two on an aarch64
+  machine, with the aarch64 wheels (decision KO2-40): the probe must find
+  the interpreter running on aarch64.
 
 With ``--container`` it runs itself in the lane's image, the official
 Python image of the lane's version pinned by digest, which holds the
@@ -77,10 +80,10 @@ counts, and the warnings pyarrow's own ``to_pandas()`` raises in the lane
 before the client is imported (register HOST-3's evidence, recorded, not
 judged).
 
-    scripts/rust_core/wheel_smoke.py --lane floor|newest \\
+    scripts/rust_core/wheel_smoke.py --lane floor|newest|aarch64-floor|aarch64-newest \\
         --wheel SHIPPED.whl --test-ops-wheel TEST_OPS.whl --out DIR \\
         [--inputs TREE] [--commit SHA] [--container | --python PATH]
-    scripts/rust_core/wheel_smoke.py image floor|newest
+    scripts/rust_core/wheel_smoke.py image LANE
 
 ``image`` prints the lane's image, which CI pulls first, with retries
 (``pull_image.sh``, decision E131).
@@ -196,6 +199,9 @@ class Lane:
     #: Each pinned distribution's version as it must resolve: exact, or
     #: its major version (`3.`), compared as a prefix.
     resolved: dict[str, str]
+    #: The machine the lane must run on, as `platform.machine()` names it,
+    #: or any (a reviewer's own machine, for the lanes above).
+    machine: str | None = None
 
 
 LANES = {
@@ -214,6 +220,12 @@ LANES = {
         resolved={'pandas': '3.', 'numpy': '2.'},
     ),
 }
+# The same lanes on aarch64 (KO2-40): the images are multi-architecture
+# indexes, so one digest serves both machines.
+LANES['aarch64-floor'] = dataclasses.replace(LANES['floor'], machine='aarch64')
+LANES['aarch64-newest'] = dataclasses.replace(
+    LANES['newest'], machine='aarch64'
+)
 
 #: Run in each environment with -I: where the client was imported from,
 #: which build it is, and what resolved. First, before anything of the
@@ -235,6 +247,7 @@ def where(module):
 print(json.dumps({
     'python': platform.python_version(),
     'platform': platform.platform(),
+    'machine': platform.machine(),
     'libc': ' '.join(platform.libc_ver()).strip(),
     'client': where(sdm_client),
     'native': where(native),
@@ -532,6 +545,10 @@ def _environment(
         raise SmokeFailed(f'{build}: TEST_OPS is {probe["test_ops"]}')
     if not probe['python'].startswith(f'{lane.python}.'):
         raise SmokeFailed(f'{build}: Python {probe["python"]}')
+    if lane.machine and probe['machine'] != lane.machine:
+        raise SmokeFailed(
+            f'{build}: runs on {probe["machine"]}, not {lane.machine}'
+        )
     check_resolved(lane, probe['versions'])
     _checked([*pip, 'check'], cwd=work)
     freeze = _checked([*pip, 'freeze', '--all'], cwd=work)

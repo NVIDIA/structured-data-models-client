@@ -101,7 +101,8 @@ import time
 import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from datetime import time as time_of_day
 from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
@@ -910,6 +911,10 @@ def encode(value: Any) -> dict[str, Any]:
         return {'t': 'datetime', 'v': value.isoformat()}
     if isinstance(value, date):
         return {'t': 'date', 'v': value.isoformat()}
+    if isinstance(value, time_of_day):
+        return {'t': 'time', 'v': value.isoformat()}
+    if isinstance(value, timedelta):
+        return {'t': 'timedelta', 'v': str(value // timedelta(microseconds=1))}
     raise TypeError(f'no encoding for {type(value).__name__}')
 
 
@@ -948,6 +953,10 @@ def decode(tagged: dict[str, Any]) -> Any:
         return datetime.fromisoformat(tagged['v'])
     if kind == 'date':
         return date.fromisoformat(tagged['v'])
+    if kind == 'time':
+        return time_of_day.fromisoformat(tagged['v'])
+    if kind == 'timedelta':
+        return timedelta(microseconds=int(tagged['v']))
     raise ValueError(f'unknown tag {kind!r}')
 
 
@@ -1030,6 +1039,14 @@ def _scalar(value: Any, arrow_type: Any) -> dict[str, Any]:
         }
     if pa.types.is_date32(arrow_type):
         return {'t': 'date32', 'v': str((value - date(1970, 1, 1)).days)}
+    # T2.12 (FR P3-8): a timedelta or a time of day, as pyarrow infers
+    # them, a count of microseconds.
+    one = timedelta(microseconds=1)
+    if pa.types.is_duration(arrow_type) and arrow_type.unit == 'us':
+        return {'t': 'duration', 'unit': 'us', 'v': str(value // one)}
+    if pa.types.is_time64(arrow_type) and arrow_type.unit == 'us':
+        since = datetime.combine(date(1970, 1, 1), value) - datetime(1970, 1, 1)
+        return {'t': 'time64', 'unit': 'us', 'v': str(since // one)}
     raise TypeError(f'no scalar for {arrow_type}')
 
 

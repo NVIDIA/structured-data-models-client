@@ -25,6 +25,7 @@ import subprocess
 import sys
 import textwrap
 import warnings
+from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -194,42 +195,338 @@ def test_the_regression_s_statistic_is_recorded_as_on_the_old_route(
     assert core._payloads[0]['output'] == old._payloads[0]['output']
 
 
+#: A time column of users, a distinct time each, for an anchor at each
+#: entity's own time (T2.11).
+SIGNED_UP = (
+    'ALTER TABLE users ADD COLUMN signup TIMESTAMP',
+    "UPDATE users SET signup = TIMESTAMP '2023-01-01' + to_days((user_id * 11)::INTEGER)",
+)
+STATIC = 'PREDICT users.age FOR EACH users.user_id'
+
+
 @pytest.mark.parametrize(
-    ('options', 'rule'),
+    'query',
     [
-        ({'num_neighbors': [8, 8]}, 'num_neighbors'),
-        # A sequence JSON does not know, written as its items (fix round 1,
-        # the subagent's P2-1), so refused by name as a list is.
-        ({'num_neighbors': range(2)}, 'num_neighbors'),
-        ({'context_anchor_time': ANCHOR}, 'context_anchor_time'),
-        ({'anchor_time': 'entity'}, 'anchor_entity'),
-        # A seed given as None, which the reference reads as unseeded.
-        ({'random_seed': None}, 'unseeded'),
-        # The first in name order, before the seed, as the bridge refused
-        # them until T1.24.
-        (
-            {'top_k': 3, 'num_hops': 2, 'random_seed': None},
-            'num_hops',
-        ),
+        QUERY,
+        BINARY,
+        'PREDICT users.age FOR EACH users.user_id',
     ],
 )
-def test_what_the_core_does_not_take_yet_is_refused_by_name(
-    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any], rule: str
+def test_lag_timesteps_builds_the_request_the_old_route_builds(
+    monkeypatch: pytest.MonkeyPatch, query: str
 ) -> None:
-    # Every option passes through to the core, which refuses by name what
-    # it does not take (T1.24, decision E61): the bridge refuses none of
-    # its own, so the refusal is the core's, mapped by the host.
+    # T2.9: the target's past as features, __kumo_arl0__ and __kumo_arl1__
+    # after the label in both halves, the same request the old route
+    # builds; a static target takes the option and adds nothing.
+    payload = _both_routes(monkeypatch, query=query, lag_timesteps=2)
+    columns = payload['context']['instance_table']['columns']
+    lagged = [c for c in columns if c.startswith('__kumo_arl')]
+    assert lagged == (
+        [] if 'users.age' in query else ['__kumo_arl0__', '__kumo_arl1__']
+    )
+
+
+@pytest.mark.parametrize('per_call', [1, 2])
+def test_each_call_of_a_multi_call_request_takes_its_own_rows_lags(
+    monkeypatch: pytest.MonkeyPatch, per_call: int
+) -> None:
+    # T2.9 with T2.8c's multi-call materialize: the lags are read once for
+    # every entity, and each call's payload carries its own entities' lags,
+    # the same as one call would give each, and the same context's.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_source(DuckDBSource(_connection()))
-        arguments = {'indices': [0, 1], 'anchor_time': ANCHOR, **options}
+    indices = [0, 1, 3, 5, 6]
+    one = _materialize(indices=indices, lag_timesteps=2)._payloads
+    several = _materialize(
+        indices=indices, lag_timesteps=2, rows_per_call=per_call
+    )._payloads
+    assert len(one) == 1
+    assert len(several) == -(-len(indices) // per_call)
+
+    def lags(table: dict[str, Any]) -> list[list[Any]]:
+        at = [
+            i
+            for i, c in enumerate(table['columns'])
+            if c.startswith('__kumo_arl')
+        ]
+        assert len(at) == 2
+        return [[row[i] for i in at] for row in table['rows']]
+
+    assert [
+        cells
+        for payload in several
+        for cells in lags(payload['predict']['instance_table'])
+    ] == lags(one[0]['predict']['instance_table'])
+    for payload in several:
+        assert lags(payload['context']['instance_table']) == lags(
+            one[0]['context']['instance_table']
+        )
+
+
+def test_an_average_s_lag_is_each_row_s_own_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T2.9 fix 1 (registered, decided under KO2-70): the reference's engine
+    # lines an average's lagged values up by position, so they land on the
+    # first rows rather than their own; the core puts each on its own row.
+    # Each predicted row's lag is its own window's average, read here from
+    # the data, and nothing else of the request differs from the old route.
+    query = 'PREDICT AVG(orders.price, 0, 30, days) FOR EACH users.user_id'
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    core = _materialize(query=query, lag_timesteps=2)._payloads[0]
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    table = core['predict']['instance_table']
+    at = table['columns'].index('__kumo_arl0__')
+    connection = _connection()
+    for row, user in zip(table['rows'], [0, 1], strict=True):
+        for k, (start, end) in enumerate(
+            [('2024-01-31', '2024-03-01'), ('2024-01-01', '2024-01-31')]
+        ):
+            [(mean,)] = connection.execute(
+                'SELECT AVG(price) FROM orders WHERE user_id = ? '
+                'AND ts > ?::TIMESTAMP AND ts <= ?::TIMESTAMP',
+                [user, start, end],
+            ).fetchall()
+            got = row[at + k]
+            if mean is None:
+                assert got is None
+            else:
+                assert got == float(np.float32(mean))
+    if _old_route_needs_the_engine():
+        return
+    old = _materialize(query=query, lag_timesteps=2)._payloads[0]
+    old = json.loads(json.dumps(old, default=str))
+
+    def without_lags(payload: dict[str, Any]) -> dict[str, Any]:
+        payload = json.loads(json.dumps(payload))
+        for half in ('context', 'predict'):
+            table = payload[half]['instance_table']
+            keep = [
+                i
+                for i, c in enumerate(table['columns'])
+                if not c.startswith('__kumo_arl')
+            ]
+            table['columns'] = [table['columns'][i] for i in keep]
+            table['rows'] = [[r[i] for i in keep] for r in table['rows']]
+        return payload
+
+    assert without_lags(core) == without_lags(old)
+
+
+@pytest.mark.parametrize(
+    ('value', 'reason'),
+    [
+        (-1, 'negative'),
+        (1.5, 'not_a_whole_number'),
+        (2.0, 'not_a_whole_number'),
+        (True, 'not_a_whole_number'),
+        ('2', 'not_a_number'),
+    ],
+)
+def test_a_refused_lag_is_said_plainly_under_the_reference_s_code(
+    monkeypatch: pytest.MonkeyPatch, value: Any, reason: str
+) -> None:
+    # T2.9: the reference's engine refuses these with Python's own errors
+    # (a TypeError, a ValueError), INVALID_REQUEST; the core's refusal has
+    # the code, and this client says what lag_timesteps takes.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(lag_timesteps=value)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details['field'] == 'lag_timesteps'
+    assert refused.value.details['reason'] == reason
+    assert 'a whole number of zero or more' in str(refused.value)
+    # Plain words, never a reason's token (not_a_whole_number).
+    assert '(' not in str(refused.value)
+    assert 'not_a_' not in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    ('query', 'value', 'lags'),
+    [
+        # Whole, fractional and zero decimals and fractions, as the
+        # reference's engine meets them: a static query takes and ignores
+        # them; a temporal one adds none for zero, else refuses (T2.9 fix 2).
+        ('PREDICT users.age FOR EACH users.user_id', Decimal(2), 0),
+        ('PREDICT users.age FOR EACH users.user_id', Fraction(2, 1), 0),
+        ('PREDICT users.age FOR EACH users.user_id', Decimal('0.1'), 0),
+        # Past what a double reaches, held at the nearest of the same sign
+        # (T2.9 fix 3): taken on a static query, refused on a temporal one.
+        ('PREDICT users.age FOR EACH users.user_id', Decimal('1e-400'), 0),
+        ('PREDICT users.age FOR EACH users.user_id', Decimal('1e400'), 0),
+        (QUERY, Decimal('1e-400'), None),
+        (QUERY, Decimal('1e400'), None),
+        (QUERY, Decimal(0), 0),
+        (QUERY, Fraction(0), 0),
+        (QUERY, Decimal(2), None),
+        (QUERY, Fraction(1, 3), None),
+        (QUERY, Decimal(-1), None),
+    ],
+)
+def test_a_decimal_or_fraction_lag_is_met_as_the_reference_meets_it(
+    monkeypatch: pytest.MonkeyPatch, query: str, value: Any, lags: int | None
+) -> None:
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    if lags is None:
         with pytest.raises(StructuredDataError) as refused:
-            PredictiveQuery(QUERY, schema).materialize(**arguments)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert type(refused.value).__name__ == 'UnsupportedRequestError'
-    assert refused.value.details['operation'] == 'materialize'
-    assert refused.value.details['rule'] == rule
+            _materialize(query=query, lag_timesteps=value)
+        assert refused.value.code == 'INVALID_REQUEST'
+        assert refused.value.details['field'] == 'lag_timesteps'
+        return
+    columns = _materialize(query=query, lag_timesteps=value)._payloads[0][
+        'context'
+    ]['instance_table']['columns']
+    assert len([c for c in columns if c.startswith('__kumo_arl')]) == lags
+
+
+def test_a_decimal_seed_is_said_as_the_reference_says_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # T2.9 fix 3 (round 2's P3-2): a Decimal seed reaches the core as a
+    # float and is refused there, in the reference's words.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(random_seed=Decimal(3))
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert 'random_seed must be a whole number' in str(refused.value)
+
+
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf')])
+def test_a_nan_lag_is_refused_on_the_core_route_only(
+    monkeypatch: pytest.MonkeyPatch, value: float
+) -> None:
+    # Register P2B-19 (approved, KO2-70): the reference adds no lag for a
+    # NaN and refuses an infinity after labelling (a TypeError, or as
+    # negative); the core route cannot send either as the JSON the call's
+    # values travel in, and refuses each before anything is read, naming
+    # lag_timesteps.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(lag_timesteps=value)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details == {'field': 'lag_timesteps'}
+    assert str(refused.value).startswith(
+        '[INVALID_REQUEST] lag_timesteps carries a value'
+    )
+    monkeypatch.delenv(_routing.ENVIRONMENT)
+    if value == value and not _old_route_needs_the_engine():
+        with pytest.raises(StructuredDataError) as old:
+            _materialize(lag_timesteps=value)
+        assert old.value.code == 'INVALID_REQUEST'
+    elif not _old_route_needs_the_engine():
+        columns = _materialize(lag_timesteps=float('nan'))._payloads[0][
+            'context'
+        ]['instance_table']['columns']
+        assert not [c for c in columns if c.startswith('__kumo_arl')]
+
+
+@pytest.mark.parametrize(
+    ('setup', 'options'),
+    [
+        ((), {'num_hops': 3}),
+        ((), {'num_hops': 1}),
+        ((), {'num_neighbors': [3, 2, 1]}),
+        ((), {'num_neighbors': [3, 0, 5]}),
+        ((), {'num_neighbors': [2, 0.5, 4]}),
+        # A sequence JSON does not know, written as its items.
+        ((), {'num_neighbors': range(2, 4)}),
+        ((), {'max_pq_iterations': 2}),
+        ((), {'use_prediction_time': True}),
+        ((), {'return_embeddings': True}),
+        ((), {'exclude_cols_dict': {'orders': ['price'], 'users': ['age']}}),
+        ((), {'context_anchor_time': pd.Timestamp('2023-12-01')}),
+        (SIGNED_UP, {'query': STATIC, 'anchor_time': 'entity'}),
+        (SIGNED_UP, {'query': STATIC, 'max_pq_iterations': 1.5}),
+    ],
+    ids=lambda value: (
+        'signed-up'
+        if value == SIGNED_UP
+        else '-'.join(sorted(value))
+        if isinstance(value, dict)
+        else 'shop'
+    ),
+)
+def test_the_sampling_options_are_taken_as_the_old_route_takes_them(
+    monkeypatch: pytest.MonkeyPatch,
+    setup: tuple[str, ...],
+    options: dict[str, Any],
+) -> None:
+    # T2.11: the core reads each sampling option's value and samples as the
+    # reference's engine does, payload for payload.
+    options = dict(options)
+    if options.get('anchor_time') == 'entity':
+        arguments = {**options}
+        monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            connection = _connection(*setup)
+            schema = Schema.from_source(DuckDBSource(connection))
+            query = arguments.pop('query')
+            core = (
+                PredictiveQuery(query, schema)
+                .materialize(indices=[0, 1], **arguments)
+                ._payloads[0]
+            )
+        monkeypatch.delenv(_routing.ENVIRONMENT)
+        if importlib.util.find_spec('sdm_relational_engine') is not None:
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore')
+                old = (
+                    PredictiveQuery(query, schema)
+                    .materialize(indices=[0, 1], **arguments)
+                    ._payloads[0]
+                )
+            assert json.loads(json.dumps(core)) == json.loads(
+                json.dumps(old, default=str)
+            )
+        anchors = core['context']['instance_table']['columns']
+        assert '__kumo_anchor_time' in anchors
+        return
+    core = _both_routes(monkeypatch, *setup, **options)
+    if options.get('use_prediction_time'):
+        assert core['inference']['use_prediction_time'] is True
+
+
+@pytest.mark.parametrize(
+    ('options', 'field'),
+    [
+        ({'num_hops': None}, 'num_hops'),
+        ({'num_neighbors': ['x']}, 'num_neighbors'),
+        # A negative size, which the reference's databases read three ways
+        # (P2I-4, KO2-82).
+        ({'num_neighbors': [2, -1]}, 'num_neighbors'),
+        ({'max_pq_iterations': 0}, 'max_pq_iterations'),
+        ({'use_prediction_time': None}, 'use_prediction_time'),
+        ({'exclude_cols_dict': {'orders': ['order_id']}}, 'exclude_cols_dict'),
+        ({'exclude_cols_dict': {'nowhere': []}}, 'exclude_cols_dict'),
+        ({'context_anchor_time': 'entity'}, 'context_anchor_time'),
+    ],
+    ids=lambda value: (
+        '-'.join(map(str, value)) if isinstance(value, dict) else value
+    ),
+)
+def test_a_sampling_option_the_engine_refuses_is_the_caller_s_error(
+    monkeypatch: pytest.MonkeyPatch, options: dict[str, Any], field: str
+) -> None:
+    # Refused as the reference refuses it, INVALID_REQUEST, naming the
+    # option (T2.11).
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    with pytest.raises(StructuredDataError) as refused:
+        _materialize(**options)
+    assert refused.value.code == 'INVALID_REQUEST'
+    assert refused.value.details.get('field') == field
+
+
+def test_an_unseeded_sample_is_a_new_sample_of_the_entities_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `random_seed=None` draws a new sample each call (T2.11, KO2-76): the
+    # same entities predicted, each context row one of the source's users.
+    monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
+    for _ in range(3):
+        payload = _materialize(random_seed=None)._payloads[0]
+        assert payload['metadata']['num_prediction_examples'] == 2
+        rows = payload['context']['related_tables']
+        assert set(rows) <= {'users', 'orders'}
 
 
 @pytest.mark.parametrize(
@@ -822,6 +1119,13 @@ def test_a_numpy_context_size_reaches_the_core(
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
+    if isinstance(count, np.uint64) and int(np.__version__.split('.')[0]) < 2:
+        # NumPy 1 promotes a uint64 with a signed integer to float64, and
+        # the engine slices the context by that float, which pandas refuses:
+        # on NumPy 1 the old route crashes where the core takes the count.
+        with pytest.raises(TypeError, match='cannot do positional indexing'):
+            _materialize(num_context_samples=count)
+        return
     old = _materialize(num_context_samples=count)
     assert core._payloads == old._payloads
 
@@ -958,11 +1262,16 @@ OUT_OF_RANGE = {
         'ELSE ts::TIMESTAMPTZ END AS ts FROM orders',
         'INTERNAL_ERROR',
     ),
+    # On pandas 2 the old route reads no text of year 1 as a time (a
+    # nanosecond count cannot hold it), so orders has no time column and it
+    # refuses the windowed question; on pandas 3 the engine fails converting.
     'text 0001': (
         'CREATE OR REPLACE TABLE orders AS SELECT order_id, user_id, price, '
         "strftime(DATE '0001-01-01' + (order_id * 7)::INTEGER, '%Y-%m-%d') "
         'AS ts FROM orders',
-        'INTERNAL_ERROR',
+        'INTERNAL_ERROR'
+        if int(pd.__version__.split('.')[0]) >= 3
+        else 'INVALID_REQUEST',
     ),
 }
 
@@ -1076,15 +1385,15 @@ def test_two_materializers_each_check_their_source_once(
 def test_a_call_the_core_refuses_before_its_check_leaves_it_to_the_next(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # An option the core does not take is refused before anything is read
-    # (P1B-3): the state that run leaves says nothing was read, so the next
+    # An option refused before anything is read (more hops than the
+    # endpoint reads): the state that run leaves says nothing was read, so the next
     # call checks the indexes and warns; one refused after the check (an
     # entity missing, refused before the time bounds are read) keeps it,
     # and the next call skips it, reading the bounds.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     connection, schema = _shop_logged()
     query = PredictiveQuery(QUERY, schema)
-    assert _calls([query], connection, indices=[0, 1], num_hops=1) == [(0, 0)]
+    assert _calls([query], connection, indices=[0, 1], num_hops=7) == [(0, 0)]
     assert _calls([query], connection, indices=[0, 1]) == [(6, 1)]
     other = PredictiveQuery(QUERY, schema)
     assert _calls([other], connection, indices=[None, 1]) == [(1, 1)]
@@ -1741,7 +2050,6 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     # same code, raised as UnsupportedRequestError, its subclass.
     monkeypatch.setenv(_routing.ENVIRONMENT, CORE)
     for options in (
-        {'indices': list(range(1_001))},
         {'num_context_samples': 10_001},
         {'num_hops': 7},
     ):
@@ -1749,6 +2057,23 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
         assert core.code == 'UNSUPPORTED_REQUEST', options
         assert type(core).__name__ == 'UnsupportedRequestError', options
         assert 'rule' not in core.details, options
+    # main's 1fc5a686 ceilings, which its client raises as the base class:
+    # the core route keeps that class (T2.8c fix 2), naming the rule.
+    for options, rule in (
+        ({'indices': list(range(100_001))}, 'most_entities'),
+        ({'indices': list(range(101)), 'rows_per_call': 1}, 'most_calls'),
+    ):
+        core = _refusal_of(**options)
+        assert (type(core), core.code) == (
+            StructuredDataError,
+            'UNSUPPORTED_REQUEST',
+        ), options
+        assert core.details.get('rule') == rule, options
+    # From T2.8c the core gathers 1,001 entities as the reference does, and
+    # refuses these (the shop has 8 users) for the reference's reason
+    # (register P2B-3, retired).
+    core = _refusal_of(indices=list(range(1_001)))
+    assert (type(core), core.code) == (StructuredDataError, 'INVALID_REQUEST')
     monkeypatch.delenv(_routing.ENVIRONMENT)
     if _old_route_needs_the_engine():
         return
@@ -1756,8 +2081,7 @@ def test_a_limit_is_raised_as_the_subclass_on_the_core_register_p1b_20(
     assert (type(old), old.code) == (StructuredDataError, 'UNSUPPORTED_REQUEST')
     # Since main's 1fc5a686 (the reference at 6298913c) the old route has no
     # 1,000-entity limit: it refuses these 1,001 indices for another reason
-    # (the shop has 8 users), INVALID_REQUEST, where the core's limit
-    # refuses them first (register P2B-3, until T2.8c).
+    # (the shop has 8 users), INVALID_REQUEST, as the core does from T2.8c.
     old = _refusal_of(indices=list(range(1_001)))
     assert (type(old), old.code) == (StructuredDataError, 'INVALID_REQUEST')
 

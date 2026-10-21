@@ -414,6 +414,14 @@ impl CoreError {
         self
     }
 
+    /// This error, carrying the answers its request had received before it
+    /// ([`CoreError::answered`]).
+    #[must_use]
+    pub fn answering(mut self, answered: AnsweredParts) -> Self {
+        self.answered = Some(answered);
+        self
+    }
+
     #[must_use]
     pub fn caused_by(mut self, cause: CoreError) -> Self {
         self.cause = Some(Box::new(cause));

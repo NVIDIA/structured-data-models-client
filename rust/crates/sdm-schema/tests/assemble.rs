@@ -36,6 +36,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> InferredColumn {
         },
         nullable: true,
         unique: false,
+        exact_number: None,
     }
 }
 
@@ -47,7 +48,8 @@ fn table(name: &str, columns: Vec<InferredColumn>, key: Option<&str>) -> Inferre
         left_out: Vec::new(),
         unread_times: Vec::new(),
         day_first: Vec::new(),
-        primary_key: key.map(Into::into),
+        tied_keys: Vec::new(),
+        primary_key: key.map(Into::into).into_iter().collect(),
         time: TimeChoice::default(),
         time_column: None,
         unique: Vec::new(),
@@ -378,7 +380,7 @@ fn a_keyless_table_is_keyed_by_the_one_column_foreign_keys_refer_to() {
     let mut tables = vec![codes_table()];
     let declared = vec![link(("coded", "tag"), ("codes", "tag"))];
     assemble::key_by_reference(&mut tables, &declared).unwrap();
-    assert_eq!(tables[0].primary_key.as_deref(), Some("tag"));
+    assert_eq!(tables[0].primary_key, ["tag"]);
     assert_eq!(tables[0].columns[0].stype, Stype::Id);
     assert_eq!(
         tables[0].columns[0].stype_before_key,
@@ -391,7 +393,7 @@ fn a_keyless_table_is_keyed_by_the_one_column_foreign_keys_refer_to() {
         link(("other", "label"), ("codes", "label")),
     ];
     assemble::key_by_reference(&mut tables, &two).unwrap();
-    assert_eq!(tables[0].primary_key, None);
+    assert!(tables[0].primary_key.is_empty());
     // A column that cannot identify a row, or the time column, is refused.
     let mut dated = vec![table(
         "days",
@@ -443,6 +445,7 @@ fn the_columns_joined_on_are_marked_again_from_what_the_host_holds() {
         nullable: true,
         unique: false,
         declared_type: None,
+        exact_number: None,
     };
     assemble::mark_keys(&mut stamped);
     assert_eq!(stamped.tables[0].time_column.as_deref(), Some("user_id"));
@@ -560,7 +563,7 @@ fn a_warning_s_message_names_nothing_and_its_fields_name_everything() {
 /// reading and the count as the reference applies them, each refusal
 /// seeded: a table or column the schema does not hold, a key that cannot
 /// identify a row or is the time column, a time column that is the key or
-/// cannot hold a time, an empty key, and a key of two columns.
+/// cannot hold a time, an empty key; and a key of two columns taken.
 #[test]
 fn keys_and_time_columns_named_are_applied_and_checked() {
     let named = |keys: &[(&str, &[&str])], times: &[(&str, Option<&str>)]| {
@@ -587,7 +590,7 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
     };
     // A key moved: the new column an identifier, what it meant kept.
     let tables = named(&[("users", &["age"])], &[]).unwrap();
-    assert_eq!(tables[1].primary_key.as_deref(), Some("age"));
+    assert_eq!(tables[1].primary_key, ["age"]);
     assert_eq!(tables[1].columns[1].stype, Stype::Id);
     assert_eq!(
         tables[1].columns[1].stype_before_key,
@@ -649,13 +652,20 @@ fn keys_and_time_columns_named_are_applied_and_checked() {
         rule(named(&[], &[("orders", Some("price"))])),
         invalid("time_columns")
     );
+    // A key of several columns is applied as the reference's setter takes
+    // one: each column an identifier, the key the columns in order; a
+    // column of it that is the time column, or cannot identify a row, is
+    // refused as a key of one is.
+    let tables = named(&[("orders", &["user_id", "order_id"])], &[]).unwrap();
+    assert_eq!(tables[0].primary_key, ["user_id", "order_id"]);
+    assert!(tables[0].columns[..2].iter().all(|c| c.stype == Stype::Id));
     assert_eq!(
-        rule(named(&[("orders", &["order_id", "user_id"])], &[])),
-        (
-            ErrorCode::UnsupportedRequest,
-            Some(Detail::text("composite_key"))
-        )
+        rule(named(&[("orders", &["order_id", "ts"])], &[])),
+        invalid("primary_keys")
     );
+    // A float among them is taken, as the reference's `from_source` takes
+    // one (its engine refuses it only as it folds the key).
+    assert!(named(&[("orders", &["order_id", "price"])], &[]).is_ok());
 }
 
 /// The relationships a caller gives (T1.23) are the schema's, in place of
@@ -973,6 +983,18 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
     assert_eq!(said[0].fields["format"], Detail::text("%d/%m/%Y"));
     assert_eq!(said[0].fields["column"], Detail::text("seen"));
     given.extend(said);
+    let mut tied = refused.clone();
+    tied.tied_keys = vec!["a_key".into(), "a_code".into()];
+    let said = assemble::key_tied(&tied);
+    assert_eq!(
+        said[0].fields["columns"],
+        Detail::List(vec![
+            Scalar::Utf8("a_key".into()),
+            Scalar::Utf8("a_code".into())
+        ])
+    );
+    assert!(assemble::key_tied(&refused).is_empty());
+    given.extend(said);
     let mut seen: BTreeSet<(String, Option<String>)> = BTreeSet::new();
     for warning in &given {
         let variant = warning.fields.get("variant").map(|v| match v {
@@ -1003,4 +1025,58 @@ fn every_warning_given_is_listed_and_every_listed_one_is_given() {
         })
         .collect();
     assert_eq!(seen, listed);
+}
+
+/// Once every table is read, the tied key candidates of each table are
+/// said, in table order, before any table's left-out columns: the
+/// reference infers every table's key after it types every table's columns
+/// (whose unread times and day-first dates `describe_source` says as it
+/// reads each table), and leaves columns out as it describes the tables
+/// (T2.12 fix 1; probed on DuckDB: `zzz`'s day-first dates, then `aaa`'s
+/// tie, then `aaa`'s list left out).
+#[test]
+fn tied_keys_are_said_after_every_table_is_read_and_before_left_out_columns() {
+    use sdm_schema::infer::LeftOut;
+    let mut aaa = table(
+        "aaa",
+        vec![
+            column("aaa_id", Dtype::Int, Stype::Id),
+            column("aaaid", Dtype::Int, Stype::Id),
+        ],
+        None,
+    );
+    aaa.tied_keys = vec!["aaa_id".into(), "aaaid".into()];
+    aaa.left_out = vec![LeftOut {
+        name: "tags".into(),
+        dtype: Dtype::Intlist,
+    }];
+    let mut zzz = table(
+        "zzz",
+        vec![column("zzz_id", Dtype::Int, Stype::Id)],
+        Some("zzz_id"),
+    );
+    zzz.tied_keys = vec!["a".into(), "b".into()];
+    zzz.left_out = vec![LeftOut {
+        name: "blob".into(),
+        dtype: Dtype::Binary,
+    }];
+    let said: Vec<(String, Detail)> = assemble::after_reading(&[aaa, zzz])
+        .into_iter()
+        .map(|w| (w.code, w.fields["table"].clone()))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            (
+                assemble::KEY_CANDIDATES_TIED.to_owned(),
+                Detail::text("aaa")
+            ),
+            (
+                assemble::KEY_CANDIDATES_TIED.to_owned(),
+                Detail::text("zzz")
+            ),
+            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("aaa")),
+            (assemble::COLUMNS_LEFT_OUT.to_owned(), Detail::text("zzz")),
+        ]
+    );
 }

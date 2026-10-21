@@ -114,6 +114,7 @@ pub fn messages() -> Vec<ControlMessage> {
         query: AttachmentId(2),
         forecast: None,
         batches: None,
+        ranking: None,
     };
     vec![
         start(Operation::ValidateQuery(validate)),
@@ -146,6 +147,7 @@ pub fn messages() -> Vec<ControlMessage> {
             most_parts: None,
             most_entities: None,
             most_calls: None,
+            candidates: None,
             sampler_state: Some(SamplerState {
                 version: 1,
                 memo: AttachmentId(4),
@@ -300,6 +302,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         keys: vec![TableKey {
                             table: "orders".into(),
                             columns: vec!["order_id".into()],
+                            label: None,
                         }],
                     },
                     plan: FetchPlan::Host {
@@ -421,6 +424,7 @@ pub fn messages() -> Vec<ControlMessage> {
                 request_id: "r1".into(),
                 metadata: AttachmentId(12),
                 outputs: vec!["prediction".into(), "probabilities".into()],
+                unscored_candidates: vec![],
             }),
         }),
         ControlMessage::Attached {

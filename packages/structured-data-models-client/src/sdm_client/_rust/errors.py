@@ -10,7 +10,10 @@ and a sentence written for people, and a test iterates every code the core
 has. The kind is fixed by the code in ``sdm-contract``, so it decides
 nothing here, and the core's message text is never read: the exception's
 text is the table's sentence, and what a caller branches on is ``code`` and
-``details``. A warning's class is chosen by its code alone.
+``details``. A warning's class is chosen by its code alone. One narrow
+exception (:data:`AS_THE_BASE_CLASS`, T2.8c fix 2): the refusals the
+reference raises as ``StructuredDataError`` under their code, by the rule
+the core names, keep the reference's class.
 
 A warning the core gives as a code and fields is worded here, from
 :data:`SAID`'s templates, in the reference's words (decision E59): the
@@ -29,8 +32,10 @@ from __future__ import annotations
 import builtins
 import contextlib
 import datetime
+import json
 import string
 import warnings
+from collections.abc import Callable, Mapping
 from typing import Any, NoReturn
 
 from sdm_client._rust import codec
@@ -125,20 +130,535 @@ ERRORS: dict[str, tuple[type[StructuredDataError], str]] = {
 
 
 #: Refusals this client words beyond their code's sentence, by code and
-#: the ``field`` the error names: a request or call past the endpoint's
-#: size says the size and the limit, as the old route's refusal does
-#: (T1.28b, carried from T1.28a's review). A template is ``str.format``'s
-#: over the error's fields; one its fields cannot fill gives the code's
-#: sentence.
+#: the ``field`` the error names, and, where one field says several
+#: things, by its ``rule`` or ``remedy`` too: a request or call past the
+#: endpoint's size says the size and the limit, as the old route's refusal
+#: does (T1.28b, carried from T1.28a's review), and from T2.8c what to
+#: change, in the reference's words (``main``'s 1fc5a686,
+#: ``_said_in_this_client_s_terms``); the ceilings on what one
+#: ``materialize`` gathers, and a forecast over more entities than one call
+#: scores, say the counts, as the reference does. A template is
+#: ``str.format``'s over the error's fields; one its fields cannot fill
+#: gives the code's sentence.
 _TOO_LARGE = (
     'the request is {bytes:,} bytes and the endpoint takes at most {limit:,} '
     'bytes; reduce the number of tables in the graph, their columns, the '
     'neighbourhood sampled or the context gathered (num_context_samples)'
 )
-WORDED: dict[tuple[str, str], str] = {
-    ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
-    ('INVALID_REQUEST', 'call'): _TOO_LARGE,
+#: ``lag_timesteps`` refused (T2.9): the reference's engine says these with
+#: Python's own errors (a TypeError's ``'<' not supported between ...`` or
+#: ``unsupported operand type(s) for *``, an OverflowError), which this
+#: client says plainly, the code the reference's.
+_LAG_IS = (
+    'lag_timesteps is how many past steps of the target are added as '
+    'features, a whole number of zero or more'
+)
+_LAG = _LAG_IS + '; this one is refused'
+_LAG_RANGE = (
+    'lag_timesteps reaches further back than a time can be held (before '
+    '1677); ask for fewer steps'
+)
+_SIZE = (
+    'Context size exceeds the 30MB limit. This call is {bytes:,} bytes, and '
+    'the endpoint takes at most {limit:,}. '
+)
+_ASK_IN_SMALLER_CALLS = _SIZE + (
+    'What comes down is one of three. For an ordinary question it is the '
+    'call: materialize(rows_per_call=N) below the {rows_per_call:,} this one '
+    'holds asks for the same entities in more and smaller calls. Where the '
+    'context is itself over the limit, no call is small enough, and it is '
+    'num_context_samples, num_neighbors or the columns the graph carries. '
+    'For a ranking or a forecast, which is one call per candidate or step '
+    'and is never batched, it is the entities.'
+)
+_NO_CALL_IS_SMALLER = _SIZE + (
+    'A call already scores one row, so there is no smaller one to ask for: '
+    'what comes down is num_context_samples, num_neighbors or the columns '
+    'the graph carries.'
+)
+_ONE_MATERIALIZE_HOLDS = (
+    'is past the {limit:,} one materialize() will hold at once, since every '
+    'batch is built, with its own context, before any is sent; ask about '
+    'fewer entities at a time'
+)
+_UNREAD_OPTIONS = (
+    '{model} does not read inference option(s) {unsupported!r}; drop them '
+    'from inference_config to send the request without them. The keys this '
+    'client forwards are {forwarded!r}, and the endpoint decides for itself '
+    'whether it serves the value given for one'
+)
+_NO_CONTEXT = 'Failed to collect any context examples.'
+_NO_ENTITY_AT_ANCHOR = (
+    ' No row of {entity_table!r} existed at the anchor: it is {anchor!t}, '
+    'and the earliest {column!r} is {earliest!t}. Context examples only ask '
+    'about an entity that existed by its anchor. If {column!r} does not '
+    'record when each entity began, set the time column of {entity_table!r} '
+    'to None'
+)
+_HOLDS = (
+    'it is {{anchor!t}}, and {{tables!j}} {holds} data from {{min_time!t}} '
+    'to {{max_time!t}}'
+)
+#: A relationship as the reference shows one (``Relationship.__repr__``).
+_LINK = '{source_table}.{source_column} -> {target_table}.{target_column}'
+#: The fields a schema's refusal names, by operation: ``describe_source``'s
+#: keys and time columns, and each edit's (T2.14b).
+_SCHEMA_FIELDS = (
+    'primary_keys',
+    'time_columns',
+    'primary_key',
+    'time_column',
+    'stype',
+    'column',
+    'relationships',
+)
+#: The schema's refusals (G15, KO2-32), in the
+#: reference's words (``main``'s ``schema.py``: ``_require_table``,
+#: ``_check_column``, ``_check_key``, ``_check_time_column``,
+#: ``_check_stype``, ``_check_supports_dtype``, ``__delitem__``,
+#: ``_checked_links`` and ``_require_joinable``): the table, the column, the
+#: value given where it is text, and what the table or schema has, by the
+#: core's rule or reason.
+_SCHEMA_SAID = {
+    'no_table': 'no table {table!r} in this schema; it has {tables!r}',
+    'key_not_names': (
+        'a primary key of {table!r} names a column or a sequence of them, '
+        'and the one given is neither'
+    ),
+    'time_column_not_a_name': (
+        'table {table!r} has no column of the name given: a time column is '
+        'named by its name, as text'
+    ),
+    'empty_key': 'table {table!r} was given an empty primary key',
+    'no_column': (
+        'table {table!r} has no column {column!r}; it has {columns!r}'
+    ),
+    'key_cannot_identify': (
+        'column {column!r} holds {dtype!r}, which cannot identify a row, so '
+        'it cannot be a primary key'
+    ),
+    'key_is_time_column': (
+        'column {column!r} is already the time column of table {table!r}, '
+        'so it cannot also be its primary key'
+    ),
+    'time_is_key': (
+        'column {column!r} is already the primary key of table {table!r}, '
+        'so it cannot also be its time column'
+    ),
+    'meaning_not_carried': (
+        'column {column!r} holds {dtype!r}, which cannot mean {stype!r}'
+    ),
+    'not_a_semantic_type': (
+        '{given_text!r} is not a semantic type; use one of {stypes!r}'
+    ),
+    **{
+        f'left_out_{rule}': (
+            "{table}.{column} is the table's "
+            + role
+            + '; set that to something else, or None, before leaving the '
+            'column out'
+        )
+        for rule, role in (
+            ('key', 'primary key'),
+            ('time_column', 'time column'),
+        )
+    },
+    **{
+        rule: (
+            _LINK
+            + ' does not join to a primary key: table {target_table!r} has '
+            + has
+            + '. A relationship points at the key that identifies a row, so '
+            'set that key first if it is not the one inference found'
+        )
+        for rule, has in (
+            ('not_the_key', '{key[0]!r}'),
+            ('no_key', 'no primary key'),
+        )
+    },
+    'composite_key': (
+        _LINK + ' points at {target_table!r}, whose primary key is {key!r}. '
+        'An edge joins one column to one key, so a table with a composite '
+        'key cannot be the target of a relationship'
+    ),
+    'types': (
+        _LINK + ' joins {source_dtype!r} to {target_dtype!r}, which cannot '
+        'match. Give both columns the same kind of value'
+    ),
 }
+#: The schema's refusals that name a value the caller gave, as the host
+#: spelled it (``given``, the core's variant ``given``; KO2-86).
+_SCHEMA_GIVEN = {
+    'key_not_names': (
+        'a primary key names a column or a sequence of them, got {given}'
+    ),
+    'time_column_not_a_name': (
+        'table {table!r} has no column {given}; it has {columns!r}'
+    ),
+    'column_not_a_name': (
+        'table {table!r} has no column {given}; it has {columns!r}'
+    ),
+    'not_a_semantic_type_spelled': (
+        '{given} is not a semantic type; use one of {stypes!r}'
+    ),
+    'not_a_relationship': (
+        'a relationship must be a Relationship, got {given}. Build one with '
+        'Relationship(source_table, source_column, target_table, '
+        'target_column)'
+    ),
+}
+WORDED: dict[tuple[str, ...], str] = {
+    **{
+        ('INVALID_REQUEST', field, rule): said
+        for field in _SCHEMA_FIELDS
+        for rule, said in _SCHEMA_SAID.items()
+    },
+    **{
+        ('INVALID_REQUEST', field, rule, 'given'): said
+        for field in _SCHEMA_FIELDS
+        for rule, said in _SCHEMA_GIVEN.items()
+    },
+    # A request whose kept state is of a version this client's core does
+    # not read (H23, T2.14b).
+    ('INVALID_REQUEST', 'state.version'): (
+        "the request's state is of version {version}, and this client reads "
+        'version {reads}: materialize the request again with this client '
+        'to predict it'
+    ),
+    # A Postgres JSON cell whose whole value is a string holding a lone
+    # surrogate, which no UTF-8 text holds (T2.14b fix 2; register P2D-3).
+    ('VALUE_OUT_OF_RANGE', 'column', 'text_not_utf8'): (
+        'column {column!r} holds a JSON string with a lone surrogate, text '
+        'with no UTF-8 form, which the core cannot read'
+    ),
+    ('INVALID_REQUEST', 'payload'): _TOO_LARGE,
+    ('INVALID_REQUEST', 'payload', 'smaller_calls'): _ASK_IN_SMALLER_CALLS,
+    ('INVALID_REQUEST', 'payload', 'no_smaller_call'): _NO_CALL_IS_SMALLER,
+    ('INVALID_REQUEST', 'call'): _TOO_LARGE,
+    ('INVALID_REQUEST', 'rows_per_call'): (
+        'rows_per_call is not a whole number of at least one, and a call '
+        'scores a whole number of rows, at least one'
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'most_entities'): (
+        '{entities:,} entities ' + _ONE_MATERIALIZE_HOLDS
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'most_entities_parts'): (
+        '{entities:,} entities gathered {gathered_times:,} times over, '
+        '{total:,} in all, ' + _ONE_MATERIALIZE_HOLDS
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'most_calls'): (
+        '{entities:,} entities are gathered as {calls:,} calls of '
+        '{rows_per_call:,}, and every one is built, with its own context, '
+        'before any is sent. That is past the {limit:,} calls this will hold '
+        'at once; ask about fewer entities at a time'
+    ),
+    # T2.13: the refusals the long tail's options reach, said with what to
+    # change, as the reference's messages say it (the inference options'
+    # validation, the preflight of an explanation, an answer's item fields),
+    # never a value given.
+    ('INVALID_REQUEST', 'inference_config', 'not_an_object'): (
+        'inference_config is a mapping of option names to values'
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_an_option'): (
+        'inference_config holds {key!r}, which is not an inference option '
+        'of this task: the options are num_estimators, column_shuffle, '
+        'category_shuffle and hop_shuffle, with class_shuffle for a '
+        'classification and target_transforms and output_type for a '
+        'regression'
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_boolean'): (
+        "inference_config's {key!r} is true or false: a boolean, 0 or 1, or "
+        "text such as 'true', 'yes', 'on' or 'off'"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_whole_number'): (
+        "inference_config's {key!r} is a whole number from 1 to 4"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'out_of_range'): (
+        "inference_config's {key!r} is a whole number from 1 to 4"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_list'): (
+        "inference_config's {key!r} is a list of transforms, each 'clip', "
+        "'power', 'quantile' or None"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_a_transform'): (
+        "inference_config's {key!r} is a list of transforms, each 'clip', "
+        "'power', 'quantile' or None"
+    ),
+    ('INVALID_REQUEST', 'inference_config', 'not_an_output_type'): (
+        "inference_config's {key!r} is 'mean', 'median' or 'quantiles'"
+    ),
+    ('UNSUPPORTED_REQUEST', 'outputs', 'one_entity'): (
+        'an explanation covers exactly 1 entity, and this request scores '
+        '{scored:,}; ask for one at a time'
+    ),
+    ('UNSUPPORTED_REQUEST', 'outputs', 'smaller_context'): (
+        'an explanation is only produced in the mode the smaller context '
+        'budget selects, and this request was gathered with '
+        'num_context_samples above {context_rows_fast:,}. Re-materialize '
+        'with num_context_samples={context_rows_fast} or fewer'
+    ),
+    ('UNSUPPORTED_REQUEST', 'inference_config', 'drop'): _UNREAD_OPTIONS,
+    ('UNSUPPORTED_REQUEST', 'inference_config', 'drop_or_statistic'): (
+        _UNREAD_OPTIONS
+        + ". A regression's statistic is chosen with materialize(..., "
+        "prediction_statistic=...) instead: 'median', the default, or 'mean'"
+    ),
+    ('INVALID_RESPONSE', 'prediction.explanation', 'not_a_mapping'): (
+        "the model endpoint answered an item's explanation with something "
+        'that is not a mapping, where the contract requires an object'
+    ),
+    ('INVALID_RESPONSE', 'prediction.metadata', 'not_a_mapping'): (
+        "the model endpoint answered an item's metadata with something "
+        'that is not a mapping, where the contract requires an object'
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'batched_part'): (
+        '{entities:,} entities are more than the {rows_per_call:,} one call '
+        'scores, and this question is asked as {parts:,} of them, one per '
+        'step. A part is not batched, and the calls would be the batches '
+        'times the steps rather than the steps that were counted. Ask about '
+        'fewer entities at a time'
+    ),
+    ('UNSUPPORTED_REQUEST', 'indices', 'batched_part_ranking'): (
+        '{entities:,} entities are more than the {rows_per_call:,} one call '
+        'scores, and this question is asked as {parts:,} of them, one per '
+        'candidate. A part is not batched, and a candidate is reported '
+        'unscored for the whole ranking, so one cold batch would drop it '
+        'from every row rather than from its own. Ask about fewer entities '
+        'at a time'
+    ),
+    ('INVALID_REQUEST', 'lag_timesteps'): _LAG,
+    # A refused lag in plain words by the core's reason (T2.9 fix 2),
+    # never the reason's token.
+    # A seed given of another type than a whole number, as the reference
+    # says it (T2.9 fix 3, round 2's P3-2).
+    ('INVALID_REQUEST', 'random_seed', 'not_a_whole_number'): (
+        'random_seed must be a whole number'
+    ),
+    ('INVALID_REQUEST', 'lag_timesteps', 'negative'): (
+        _LAG_IS + '; it cannot be negative'
+    ),
+    ('INVALID_REQUEST', 'lag_timesteps', 'not_a_whole_number'): (
+        _LAG_IS + '; a fraction or a boolean is not one'
+    ),
+    ('INVALID_REQUEST', 'lag_timesteps', 'not_a_number'): (
+        _LAG_IS + '; text, None or a collection is not one'
+    ),
+    ('VALUE_OUT_OF_RANGE', 'lag_timesteps'): _LAG_RANGE,
+    # T2.13b: a context no example was collected for, with the reason the
+    # core found, in the reference sampler's words
+    # (`_diagnose_empty_sample`).
+    ('INVALID_REQUEST', 'anchor_time', 'too_restrictive'): (
+        _NO_CONTEXT + ' Is your predictive query too restrictive?'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'no_entity_at_anchor'): (
+        _NO_CONTEXT + _NO_ENTITY_AT_ANCHOR + '.'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'no_entity_at_anchor_later'): (
+        _NO_CONTEXT
+        + _NO_ENTITY_AT_ANCHOR
+        + ', or pass an anchor_time after {earliest!t}.'
+    ),
+    **{
+        ('INVALID_REQUEST', 'anchor_time', f'no_entity_passed{many}'): (
+            _NO_CONTEXT
+            + ' The anchor time is not the reason: '
+            + _HOLDS.format(holds=holds)
+            + ", which leaves room after it for the query's whole window. "
+            'No entity passed {condition!r}, so there was nothing to sample: '
+            'check that the values it compares against occur in the data, '
+            'including their case.'
+        )
+        for many, holds in (('', 'holds'), ('_several', 'hold'))
+    },
+    **{
+        ('INVALID_REQUEST', 'anchor_time', f'anchor_too_late{many}'): (
+            _NO_CONTEXT
+            + ' The anchor time is most likely the reason: '
+            + _HOLDS.format(holds=holds)
+            + '. Context examples come from before the anchor and each needs '
+            "the query's full window of data after it, so an anchor at or "
+            'near the end of the range leaves none to draw from. Pass an '
+            'earlier anchor_time, or shorten the window the query asks about.'
+        )
+        for many, holds in (('', 'holds'), ('_several', 'hold'))
+    },
+    # T2.14b: the generic refusals at materialize and predict, in the
+    # reference's words. A value the caller gave travels as the JSON text the
+    # host wrote it in (``given``), said with ``!G``, ``!S`` or ``!N``.
+    ('INVALID_REQUEST', 'num_hops', 'not_a_whole_number'): (
+        'num_hops must be a whole number, got {given!N} {given!G}'
+    ),
+    ('INVALID_REQUEST', 'num_neighbors', 'not_a_sequence'): (
+        'num_neighbors must be a sequence of hop sizes'
+    ),
+    **{
+        ('INVALID_REQUEST', field, 'no_hop'): (
+            spelled + ', which asks for no hop at all, and the endpoint reads '
+            'between 1 and {limit}. A request that crosses no relationship is '
+            'a single-table one: give a hop, such as num_neighbors=[8, 8], or '
+            'ask it of kumo-tabular'
+        )
+        for field, spelled in (
+            ('num_hops', 'num_hops is {hops}'),
+            ('num_neighbors', 'num_neighbors is empty'),
+        )
+    },
+    **{
+        ('UNSUPPORTED_REQUEST', field): (
+            'this request samples {hops} hops and the endpoint reads at most '
+            '{limit}'
+        )
+        for field in ('num_hops', 'num_neighbors')
+    },
+    ('INVALID_REQUEST', 'seed', 'negative'): (
+        'random_seed is {given}, and a seed is not negative; pass a number '
+        'from 0 upwards, or leave it out to let the sampler choose'
+    ),
+    ('INVALID_REQUEST', 'max_pq_iterations', 'below_one'): (
+        "'max_pq_iterations' must be greater than zero (got {given!S})"
+    ),
+    ('INVALID_REQUEST', 'max_pq_iterations', 'not_a_whole_number'): (
+        "'<' not supported between instances of '{given!N}' and 'int'"
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'not_a_mapping'): (
+        'exclude_cols_dict must map a table name to the columns to leave '
+        'out, got {given!N}'
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'not_a_sequence'): (
+        'exclude_cols_dict[{table!r}] must be a sequence of column names, '
+        'got {given!N}'
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'unknown_table'): (
+        "'exclude_cols_dict' names table '{table}', which is not in the "
+        'graph. Available tables: {tables!r}'
+    ),
+    ('INVALID_REQUEST', 'exclude_cols_dict', 'not_a_feature'): (
+        "'exclude_cols_dict' names column '{given!S}' of table '{table}', "
+        'which is not one of its feature columns (primary and foreign keys '
+        'are never sent as features). Excludable columns: {columns!r}'
+    ),
+    ('INVALID_REQUEST', 'context_anchor_time', 'entity_not_shared'): (
+        "Anchor time 'entity' needs to be shared for context and prediction "
+        'examples'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'entity_without_time_column'): (
+        "Anchor time 'entity' requires the entity table '{table}' to have a "
+        'time column'
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'entity_not_static'): (
+        "Anchor time 'entity' is only valid for static predictive queries"
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'anchor_before_data'): (
+        "Anchor timestamp '{anchor!t}' is before the earliest timestamp "
+        "'{earliest!t}' in the data."
+    ),
+    ('INVALID_REQUEST', 'anchor_time', 'context_before_data'): (
+        'Context anchor timestamp is too early or aggregation time range is '
+        'too large. To make this prediction, we would need data back to '
+        "'{context_anchor!t}', however, your data only contains data back "
+        "to '{earliest!t}'."
+    ),
+    ('INVALID_REQUEST', 'indices', 'empty'): (
+        'indices names no entity, and gathering a relational request means '
+        'sampling a neighbourhood around each one, so there is nothing here '
+        'to gather. An empty batch is still answered: build it as '
+        'Request(predict=<no rows>) and predict() returns the empty result '
+        'without sending'
+    ),
+    ('INVALID_REQUEST', 'indices', 'not_in_table'): (
+        '"The primary keys {keys!r} do not exist in the \'{table}\' table"'
+    ),
+    ('INVALID_REQUEST', 'request', 'past_int64'): (
+        "Column '{table}.{column}' row {row}: a value is outside the range "
+        '{dtype} represents (-9223372036854775808 to '
+        '9223372036854775807); send the column as strings'
+    ),
+    ('INVALID_REQUEST', 'request', 'not_finite'): (
+        'encountered a non-finite value ({value}); NIM requests must contain '
+        'finite numbers or nulls'
+    ),
+    **{
+        ('INVALID_REQUEST', 'schema', f'reserved_{many}'): (
+            '{reserved!c} '
+            + uses
+            + ' reserved by the SQL backends: a column may not start with '
+            '{prefix!r}, because the generated joins already select columns '
+            'of that name and the reference would be ambiguous. Rename the '
+            'column, or project it under another name.'
+        )
+        for many, uses in (('name', 'uses a name'), ('names', 'use names'))
+    },
+    ('INVALID_REQUEST', 'query', 'date_literal_packed'): (
+        '{query!r} is not a query a relational model can answer: {literal} '
+        'is not a valid instance of time'
+    ),
+    ('INVALID_REQUEST', 'query', 'unresolved'): (
+        '{query!r} is not a query a relational model can answer: {reasons!R}'
+    ),
+    **{
+        ('UNSUPPORTED_REQUEST', 'context', 'one_class', variant): (
+            'every context row has the same '
+            + said
+            + ', and a classification needs at least two classes to learn '
+            'from. Gather a wider context with num_context_samples, or ask '
+            'about entities whose answers differ'
+        )
+        for variant, said in (
+            ('column', '{target}'),
+            ('predicted', '{predicted}'),
+            ('question', 'answer to {question!r}'),
+            ('answer', 'answer'),
+        )
+    },
+}
+
+
+#: The refusals the reference raises as its base class under their code,
+#: by code and rule: ``main``'s 1fc5a686 ceilings on what one
+#: ``materialize`` gathers and its refusal of a batched forecast, each a
+#: ``StructuredDataError(code='UNSUPPORTED_REQUEST')`` in the reference's
+#: client, so a caller's ``except`` sees the class it would there (T2.8c fix
+#: 2). Every other refusal takes its code's class (:data:`ERRORS`).
+AS_THE_BASE_CLASS: frozenset[tuple[str, str]] = frozenset(
+    {
+        ('UNSUPPORTED_REQUEST', 'most_entities'),
+        ('UNSUPPORTED_REQUEST', 'most_calls'),
+        ('UNSUPPORTED_REQUEST', 'batched_part'),
+    }
+)
+
+
+def _worded(code: str, details: dict[str, Any]) -> str | None:
+    r"""The template :data:`WORDED` holds for an error of ``code`` with
+    ``details``: by its field and rule, remedy or reason where one is held,
+    else by its field."""
+    field = str(details.get('field'))
+    said = details.get('rule', details.get('remedy', details.get('reason')))
+    if said == 'most_entities' and details.get('gathered_times', 1) != 1:
+        said = 'most_entities_parts'
+    # A part's kind is the core's `part_kind`: `kind` is the error's own.
+    if said == 'batched_part' and details.get('part_kind') == 'ranking':
+        said = 'batched_part_ranking'
+    # A context left empty: the earliest time's remedy where the core found
+    # one, and the tables' verb by their count.
+    if said == 'no_entity_at_anchor' and details.get('later'):
+        said = 'no_entity_at_anchor_later'
+    if said in {'no_entity_passed', 'anchor_too_late'} and (
+        len(details.get('tables') or ()) > 1
+    ):
+        said = f'{said}_several'
+    # A rule said several ways, by the core's ``variant`` of it.
+    if 'variant' in details:
+        template = WORDED.get((code, field, str(said), str(details['variant'])))
+        if template is not None:
+            return template
+    return WORDED.get((code, field, str(said)), WORDED.get((code, field)))
+
+
+class RuntimeWarning(builtins.RuntimeWarning):  # noqa: A001 - the reference's name
+    r"""The class NumPy's warning of a cast that overflows is shown as
+    (FX-1): the reference's ``RuntimeWarning``, owned by this client, as
+    :class:`UserWarning` is."""
 
 
 class UserWarning(builtins.UserWarning):  # noqa: A001 - the reference's name
@@ -161,9 +681,17 @@ WARNINGS: dict[str, type[Warning]] = {
     'CONTEXT_BEFORE_DATA': UserWarning,
     'ANCHOR_AFTER_DATA': UserWarning,
     'CONTEXT_COVERAGE': UserWarning,
+    'FLOAT32_OVERFLOW': RuntimeWarning,
+    # From T2.11, the engine's warnings of the sampling options: a context
+    # anchored after the predictions, or whose window reaches past them,
+    # and num_hops ignored for num_neighbors.
+    'CONTEXT_AFTER_ANCHOR': UserWarning,
+    'CONTEXT_LEAKS': UserWarning,
+    'HOPS_IGNORED': UserWarning,
     'TIME_VALUES_UNREAD': UserWarning,
     'DATES_READ_DAY_FIRST': UserWarning,
     'DATE_LITERAL_DAY_FIRST': UserWarning,
+    'KEY_CANDIDATES_TIED': UserWarning,
 }
 
 #: The words of a link that does not refer to its table's key, around
@@ -314,6 +842,15 @@ SAID: dict[str, dict[str | None, str]] = {
             'to silence this warning.'
         )
     },
+    # The engine's key inference (`infer_primary_key`) leaving a table
+    # keyless for a tie, in its words.
+    'KEY_CANDIDATES_TIED': {
+        None: (
+            "Found multiple potential primary keys in table '{table}': "
+            '{columns!T}. Please specify the primary key for this table '
+            'manually.'
+        )
+    },
     # A query's date literal read day first (date rule D4), in pandas' words,
     # as the reference's `pd.to_datetime` gives them.
     'DATE_LITERAL_DAY_FIRST': {
@@ -352,21 +889,52 @@ SAID: dict[str, dict[str | None, str]] = {
             + index
             + ' in {tables} '
             + table
-            + ' for optimal database querying; indices on primary and foreign '
-            'keys speed sampling up'
+            + ' for optimal database querying. For improving runtime, we '
+            'strongly suggest to create indices for primary and foreign keys, '
+            'e.g., automatically by instantiating Kumo Relational via '
+            '`KumoRelational(graph, optimize=True)`.'
         )
         for index in ('index', 'indices')
         for table in ('table', 'tables')
     },
+    # M4: the engine's words for a context reaching back before the data
+    # and an anchor after it (`_validate_time`), naming the times.
     'CONTEXT_BEFORE_DATA': {
         None: (
-            "the context's anchor time is too early, or the aggregation's "
-            'window too long, for the data to reach back as far as the '
-            'examples need'
+            'Context anchor timestamp is too early or aggregation time range '
+            'is too large. To form proper input data, we would need data back '
+            "to '{back_to!t}', however, your data only contains data back to "
+            "'{earliest!t}'."
         )
     },
     'ANCHOR_AFTER_DATA': {
-        None: 'the anchor time is after the latest time in the data'
+        None: (
+            "Anchor timestamp '{anchor!t}' is after the latest timestamp "
+            "'{latest!t}' in the data. Please make sure this is intended."
+        )
+    },
+    # FX-1: NumPy's words for a double past float32's range cast to float32.
+    'FLOAT32_OVERFLOW': {None: 'overflow encountered in cast'},
+    # From T2.11, the engine's words for the sampling options' warnings.
+    'CONTEXT_AFTER_ANCHOR': {
+        None: (
+            "Context anchor timestamp (got '{context_anchor!t}') is set to a "
+            'later date than the prediction anchor timestamp (got '
+            "'{anchor!t}'). Please make sure this is intended."
+        )
+    },
+    'CONTEXT_LEAKS': {
+        None: (
+            'Aggregation for context examples at timestamp '
+            "'{context_anchor!t}' will leak information from the prediction "
+            "anchor timestamp '{anchor!t}'. Please make sure this is intended."
+        )
+    },
+    'HOPS_IGNORED': {
+        None: (
+            "Received custom 'num_neighbors' option; ignoring custom "
+            "'num_hops={num_hops}' option"
+        )
     },
     'CONTEXT_COVERAGE': {
         None: (
@@ -380,6 +948,17 @@ SAID: dict[str, dict[str | None, str]] = {
     # The client's notices of what a request leaves out, which the core
     # gives from T1.28a, in the client's words (SDMWarning, as the client
     # shows them).
+    # A ranking's candidates left out, unscored (T2.8): `predict` words it
+    # naming each candidate as the caller gave it; these words, by the
+    # candidates' positions among those given, are for a call that has no
+    # candidates to name.
+    'CANDIDATES_UNSCORED': {
+        None: (
+            'the candidates at positions {candidates!c} among those given are '
+            'left out of this ranking, unscored: the context sampled for each '
+            'holds one answer only.'
+        )
+    },
     'CONTEXT_CAPPED': {
         None: (
             '{cap:,} context examples were gathered, which is all this route '
@@ -439,6 +1018,18 @@ SAID: dict[str, dict[str | None, str]] = {
         )
         for many, them in (('one', 'it'), ('several', 'them'))
     },
+    # T2.13b: an entity filter chooses the labelled examples and not the
+    # entities scored, which the client says before it gathers
+    # (`_warn_the_filter_chose_only_the_examples`), in its words.
+    'FILTER_CHOSE_EXAMPLES': {
+        None: (
+            'the entity filter {condition!r} selects the labelled examples '
+            'the model learns from, and does not narrow the {entities} rows '
+            'named for scoring. Those are scored as given, whether or not '
+            'they satisfy it. Pass only indices that satisfy the condition '
+            'if that is what you meant.'
+        )
+    },
     'CONTEXT_ANSWERS': {
         variant: (
             '{examples} of the rows sampled as context are the rows being '
@@ -481,6 +1072,15 @@ SAID: dict[str, dict[str | None, str]] = {
             'the rest of the request is unaffected.'
         )
     },
+    # A forecast explained in some steps and not others (T2.13), as the
+    # client's _warn_of_steps_that_carry_no_explanation says it.
+    'STEPS_UNEXPLAINED': {
+        None: (
+            '{model} explained {explained} of {steps} forecast steps, and '
+            'step {missing!c} carries none, so the explanation this request '
+            'asked for is not there for every step.'
+        )
+    },
     'TWO_WAYS_TO_A_TABLE': {
         None: (
             '{source_table!r} reaches {target_table!r} through {columns!l}, '
@@ -517,6 +1117,11 @@ GROUPED: dict[str, tuple[tuple[str, ...], str, str, str]] = {
 }
 
 
+#: The codes of warnings about a key, which name a key of several columns
+#: by ``columns`` and show its repeated value as their list.
+_KEYS_OF_SEVERAL = frozenset({'KEY_REPEATS', 'KEY_NO_VALUE'})
+
+
 class _Words(string.Formatter):
     r"""``str.format`` with the conversions :data:`SAID` uses."""
 
@@ -530,6 +1135,18 @@ class _Words(string.Formatter):
             return ', '.join(repr(name) for name in value)
         if conversion == 'c':
             return ', '.join(str(name) for name in value)
+        if conversion == 'R':
+            return '; '.join(str(reason) for reason in value)
+        if conversion in ('G', 'S', 'N'):
+            # A value the caller gave, as the JSON text the host wrote it
+            # in: its ``repr``, its ``str`` or its type's name, as Python
+            # holds the value JSON reads back.
+            given = json.loads(value)
+            if conversion == 'G':
+                return repr(given)
+            if conversion == 'S':
+                return str(given)
+            return type(given).__name__
         if conversion == 't':
             if isinstance(value, str):
                 return str(_as_timestamp(value))
@@ -657,6 +1274,12 @@ def said(warning: dict[str, Any]) -> str:
         name: _detail(value)
         for name, value in warning.get('fields', {}).items()
     }
+    if warning['code'] in _KEYS_OF_SEVERAL and 'columns' in fields:
+        # A key of several columns, named as the reference names one
+        # (`table.a.b`), its repeated value the tuple it shows.
+        fields.setdefault('column', '.'.join(map(str, fields['columns'])))
+        if isinstance(fields.get('example'), list):
+            fields['example'] = tuple(fields['example'])
     template = (templates or {}).get(fields.get('variant'))
     if template is None:
         return str(warning['message'])
@@ -709,11 +1332,15 @@ def error_from_core(
     details['retryable'] = bool(error.get('retryable', False))
     if code == 'PROVIDER_ERROR' and driver_class is not None:
         details['driver_class'] = driver_class
-    template = WORDED.get((code, str(details.get('field'))))
+    if (code, details.get('rule')) in AS_THE_BASE_CLASS:
+        cls = StructuredDataError
+    template = _worded(code, details)
     if template is not None:
         # Fields its template cannot fill give the code's sentence.
-        with contextlib.suppress(KeyError, IndexError, TypeError, ValueError):
-            sentence = template.format(**details)
+        with contextlib.suppress(
+            KeyError, IndexError, TypeError, ValueError, AttributeError
+        ):
+            sentence = _Words().format(template, **details)
     return _instance(cls, sentence, code, details)
 
 
@@ -735,17 +1362,38 @@ def raise_from_core(
     ) from None
 
 
+def numpy_warns_on_cast_overflow() -> bool:
+    r"""Whether the installed NumPy warns when a cast to float32 overflows
+    (``RuntimeWarning: overflow encountered in cast``), as it does from
+    NumPy 1.24 on, which first warns on a cast that overflows (its 1.24.0
+    release notes); before it the cast is silent. The reference's warning
+    (FX-1) is NumPy's, so this client shows the core's ``FLOAT32_OVERFLOW``
+    only where the reference's NumPy would show it (T2.14b fix 5)."""
+    import re
+
+    import numpy as np
+
+    found = re.match(r'(\d+)\.(\d+)', np.__version__)
+    if found is None:
+        return True
+    return (int(found.group(1)), int(found.group(2))) >= (1, 24)
+
+
 def warn_from_core(
     control: bytes,
     attachments: dict[int, Any],
     quiet: frozenset[str] = frozenset(),
     given: set[str] | None = None,
     held: list[dict[str, Any]] | None = None,
+    words: Mapping[str, Callable[[dict[str, Any]], str]] | None = None,
 ) -> None:
     r"""Shows each warning of a ``warnings`` control message, in order, but
     those whose code ``quiet`` names: one the caller has shown already, or
     may show itself, kept in ``held`` when it is given (:func:`warn_held`).
-    Each code given is added to ``given``, shown or not."""
+    Each code given is added to ``given``, shown or not. A warning of a code
+    ``words`` names is said by its function, from its decoded fields, in
+    place of :data:`SAID`'s template (none of them a code :data:`GROUPED`
+    holds)."""
     message = codec.read(control, attachments)
     # Warnings of a code GROUPED holds, one after another with the same
     # values of its fields, are shown as one.
@@ -757,6 +1405,10 @@ def warn_from_core(
         if code in quiet:
             if held is not None:
                 held.append(warning)
+            continue
+        if code == 'FLOAT32_OVERFLOW' and not numpy_warns_on_cast_overflow():
+            # The core reports the cast's overflow on every runtime; this
+            # client shows it where the reference's NumPy warns of it.
             continue
         group = GROUPED.get(code)
         key = (
@@ -779,6 +1431,14 @@ def warn_from_core(
                 _Words().format(opening, **first)
                 + between.join(said(warning) for warning in together)
                 + closing
+            )
+        elif words is not None and code in words:
+            [warning] = together
+            text = words[code](
+                {
+                    name: _detail(value)
+                    for name, value in warning.get('fields', {}).items()
+                }
             )
         else:
             [warning] = together

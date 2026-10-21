@@ -1,0 +1,94 @@
+{
+  "format": "sdm-case/1",
+  "id": "multicall.body-30mib.several-rows",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "float64/target",
+    "utf8/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "DROP TABLE orders",
+      "DROP TABLE users",
+      "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (i % 7)::DOUBLE AS score, (i % 5)::VARCHAR || repeat('y', 40000) AS cat FROM range(1010) t(i)"
+    ],
+    "pql": "PREDICT users.score FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1,
+        2
+      ]
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        },
+        {
+          "t": "i64",
+          "v": "2"
+        }
+      ],
+      "anchor_time": null,
+      "seed": null
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "Context size exceeds the 30MB limit. Current context contains 1,003 nodes and 0 edges across 1 tables. Top-1 tables contributing most to the context size: users: 38.27MB What comes down is one of three. For an ordinary question it is the call: materialize(rows_per_call=N) below the 3 this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities."
+  },
+  "why": "a call of three rows whose body is past 30 MiB: refused INVALID_REQUEST at materialize, before anything is sent, naming a smaller call (rows_per_call below the 3 it holds), a narrower context, and for a question asked in parts fewer entities",
+  "source": "main's 1fc5a686 (multi-call predict), written by T2.8c's test author"
+}
