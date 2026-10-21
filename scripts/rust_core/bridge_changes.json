@@ -276,7 +276,7 @@
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::<module>": {
-      "moved": "T2.14b (with T2.14d, MID2 P2-3): the docstring and constants say the value rules are the core's (DECLARED_SCALE_MARKER added; _INT64 bounds gone with _Numeric)"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): the docstring and constants say the value rules are the core's (DECLARED_SCALE_MARKER added; _INT64 bounds gone with _Numeric); T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::PostgresProvider.__call__": {
       "moved": "T2.14b (with T2.14d, MID2 P2-3): the key set bound through _bound_text, its spelling moved into sdm-data's Postgres value rules"
@@ -294,13 +294,13 @@
       "moved": "T2.14b (with T2.14d, MID2 P2-3): the conversions after the read (json_text, _interval) are gone from the provider; the JSON rule is sdm-data's (pg_values::conform)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_array": {
-      "moved": "T2.14b (with T2.14d, MID2 P2-3): a JSON column's cells written as the JSON text of the value the driver read; what the reference makes of it is sdm-data's Postgres value rule (pg_values::conform)"
+      "moved": "T2.14b (with T2.14d, MID2 P2-3): a JSON column's cells written as the JSON text of the value the driver read; what the reference makes of it is sdm-data's Postgres value rule (pg_values::conform); T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_table": {
       "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_arrow_type": {
-      "refactor": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added"
+      "moved": "T2.14a: newly covered by the freeze (FR P3-2), unchanged; no rule added; T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_cell": {
       "moved": "T2.14b (with T2.14d, MID2 P2-3): a numeric no Arrow decimal holds is no longer read as an integer here; its exact text goes to the core (pg_values::conform)"
@@ -358,6 +358,12 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/codec.py::spelled": {
       "moved": "T2.14b: a value no contract type holds given as its repr (Given::Spelled), which the core names in its refusal as a value of the caller's own call (KO2-86, G15); the host decides nothing of it"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_is_json": {
+      "moved": "T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
+    },
+    "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py::_json_text": {
+      "moved": "T2.14b fix 1 (r1 review P3-6): a json[] column's elements marked as JSON and handed over as the JSON text of each value the driver read, so sdm-data's Postgres rule (Rule::JsonList) reads them as the reference does; no value rule here"
     }
   }
 }

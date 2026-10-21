@@ -259,7 +259,7 @@
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/providers/postgres.py": {
       "<module>": {
-        "fingerprint": "bdc010ffbfa37b37c865d65b2d0f73f35a36e7517769dcf8902881685d41cb28"
+        "fingerprint": "1114351ed2f96c2dc61255d18317171572ba378b11cd87c07a0f1e8e80dd848f"
       },
       "PostgresProvider.__call__": {
         "fingerprint": "ae9ec69188474bd8534f3b7e3a5b30f7ff2f4e792d91ba8dc136fe0e3aa80006"
@@ -268,13 +268,13 @@
         "fingerprint": "3e278560d028fd3cf21e43d5d3da95154b0daf3e1dc8cca7683d4ca59c9f97f4"
       },
       "_array": {
-        "fingerprint": "2b13aff19f58e653d3c27c79d4759390ba3527897b62edd56513e3cc8712bc5a"
+        "fingerprint": "8373cfcd4c2046e8068c0336c4d292064110aa7cf69989a24bd449f2323ed33d"
       },
       "_arrow_table": {
         "fingerprint": "b2a5f519b7973fc95916299c93e8756b9fa5bb52b2dbeec0f4a3d57230fc4332"
       },
       "_arrow_type": {
-        "fingerprint": "d047d9888b6d2e0775ab6eb475af3032f6456f728839891790ccebbbb833e150"
+        "fingerprint": "38f23ced009259c6d1a377c771107be728c232c53db4503284a882022652619b"
       },
       "_bound_text": {
         "fingerprint": "89c9d59cf663fd14adb697c36944a1b5a534d4bceb4e7762b3e719c1e2fa819b"
@@ -290,6 +290,12 @@
       },
       "_field": {
         "fingerprint": "2e5f9d99bb541092f3341dc6059aecf791ee9e3b742b4ca0fccf5733d333ce08"
+      },
+      "_is_json": {
+        "fingerprint": "b26e62b0ba57aa2ee3715bc3c4da81f837b9e847243c69adb48508ccda0f30c2"
+      },
+      "_json_text": {
+        "fingerprint": "46957cf04e30adb6443c0b31d02301452b0923ca0016010da49164daeb9933c8"
       },
       "_numeric_field": {
         "fingerprint": "f22634654aaf35750ff0e55acad1caab2de3afbb2129214ada466f5e0be0a5eb"

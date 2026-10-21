@@ -299,20 +299,32 @@ def _tags(column: Any, connection: Any) -> dict[str, str] | None:
     return None
 
 
+def _is_json(field: Any) -> bool:
+    return (field.metadata or {}).get(b'ARROW:extension:name') == b'arrow.json'
+
+
+def _json_text(value: Any) -> str | None:
+    r"""The JSON text of a value the driver read; what the reference makes
+    of it is the core's."""
+    if value is None:
+        return None
+    return json.dumps(value, separators=(',', ':'), ensure_ascii=False)
+
+
 def _array(values: Any, field: Any) -> Any:
     import pyarrow as pa
 
     kind = field.type
-    if (field.metadata or {}).get(b'ARROW:extension:name') == b'arrow.json':
-        # The JSON text of the value the driver read; what the reference
-        # makes of it is the core's.
+    if _is_json(field):
+        return pa.array([_json_text(value) for value in values], type=kind)
+    if pa.types.is_list(kind) and _is_json(kind.value_field):
+        # A JSON array's elements, each as its JSON text: an element that
+        # is itself a JSON array stays one value (never flattened).
         return pa.array(
             [
                 None
                 if value is None
-                else json.dumps(
-                    value, separators=(',', ':'), ensure_ascii=False
-                )
+                else [_json_text(item) for item in value]
                 for value in values
             ],
             type=kind,
@@ -376,6 +388,10 @@ def _arrow_type(column: Any, connection: Any) -> Any:
         # which it reads as text.
         return pa.string()
     if info.array_oid == column.type_code and info.oid != column.type_code:
+        if info.name in _JSON:
+            # A JSON array's elements, each the JSON text of the value the
+            # driver read, marked as JSON as a JSON column's are.
+            return pa.list_(pa.field('item', pa.string(), metadata=JSON_TAG))
         return pa.list_(_element_type(info.name))
     return _scalar_type(info.name, column, connection)
 

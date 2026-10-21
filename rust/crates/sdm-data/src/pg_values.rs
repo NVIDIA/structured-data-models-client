@@ -262,7 +262,7 @@ fn declared(
     scale: u32,
     to: &DataType,
 ) -> Result<ArrayRef, CoreError> {
-    let number = |text: &str| unreadable(column, &format!("a number ({text:.40})"));
+    let number = |_: &str| unreadable(column, "a number");
     Ok(match (scale, to) {
         (0, DataType::Int64) => Arc::new(
             texts
