@@ -142,6 +142,62 @@ pub fn read(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
     })
 }
 
+/// The keys `array` holds where its text writes numbers: a column of
+/// numbers a host provider hands over as their exact text (a Postgres
+/// `numeric` declared without a precision,
+/// `sdm_contract::data::EXACT_NUMBER_MARKER`), whose spellings of one
+/// value may differ (`1.0` and `1.00`, `1E-7` and `1.0E-7`). Each text is
+/// the key of the number it writes ([`Key::number_text`]), so two keys are
+/// the same exactly when their values are, as the source compares them,
+/// with nothing passed through a float (decision H22, register P2G-2 and
+/// P2C-3); an array of any other type is read as [`read`] reads it.
+pub fn read_numbers(array: &ArrayRef) -> Result<Vec<Option<Key>>, CoreError> {
+    if array.data_type() != &DataType::Utf8 {
+        return read(array);
+    }
+    let values = array.as_string::<i32>();
+    Ok((0..values.len())
+        .map(|i| (!values.is_null(i)).then(|| Key::number_text(values.value(i))))
+        .collect())
+}
+
+impl Key {
+    /// The key of the number `text` writes ([`written`]), by its value: a
+    /// whole one within 128 bits as [`Key::Int`] and one with up to 38
+    /// places as [`Key::Decimal`], as a decimal column's key of the same
+    /// value is; a wider one as its significant digits and the power of
+    /// ten they stand at, one text for every spelling of the value. Text
+    /// that writes no number (a `NaN`, an `Infinity`) is its own text.
+    pub fn number_text(text: &str) -> Key {
+        let Ok(written) = written(text) else {
+            return Key::Text(text.to_owned());
+        };
+        if written.digits.is_empty() {
+            return Key::Int(0);
+        }
+        let negative = written.negative;
+        let signed = |value: i128| if negative { -value } else { value };
+        if let Ok(value) = written.digits.parse::<i128>() {
+            if written.scale <= 0 {
+                if let Ok(value) = rescale(value, written.scale, 0) {
+                    return Key::Int(signed(value));
+                }
+            } else if written.scale <= 38 {
+                return Key::Decimal {
+                    value: signed(value),
+                    scale: written.scale as i8,
+                };
+            }
+        }
+        Key::Text(format!(
+            "{}{}e{}",
+            if negative { "-" } else { "" },
+            written.digits,
+            -written.scale
+        ))
+    }
+}
+
 // --- The entities' cast to the key's type (T1.32a) ---------------------------
 
 /// Why an entity does not cast to the key's type: the `reason` field of the

@@ -43,6 +43,7 @@ use arrow_array::{ArrayRef, RecordBatch, UInt32Array};
 use arrow_schema::{Field, Schema};
 use sdm_contract::data::NullOrder;
 use sdm_contract::ops::Stype;
+use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar};
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
@@ -226,7 +227,7 @@ impl Walk<'_> {
                 .primary_key
                 .as_deref()
                 .ok_or_else(|| internal("the entity table has no key"))?;
-            for (row, value) in keys::read(named(&entity_rows, key)?)?
+            for (row, value) in key_values(self.entity, key, named(&entity_rows, key)?)?
                 .into_iter()
                 .enumerate()
             {
@@ -290,7 +291,23 @@ impl Walk<'_> {
         // up in the table it refers to.
         for (fkey, dst) in self.graph.foreign_keys(name) {
             let dst_table = table_named(self.graph, dst)?;
-            let values = keys::read(named(&frame, fkey)?)?;
+            // Read as the key it refers to is read: by the numbers it writes
+            // where that key is a column of numbers handed over as their
+            // text, as text where that key is other text, and else by its
+            // own column; so a spelling never tells a row apart from the
+            // row it refers to.
+            let fkeys = named(&frame, fkey)?;
+            let values = match dst_table.primary_key.as_deref() {
+                Some(dst_key) if exact_text(dst_table, dst_key) => keys::read_numbers(fkeys)?,
+                Some(dst_key)
+                    if dst_table
+                        .column(dst_key)
+                        .is_some_and(|c| c.received == ColumnType::Utf8) =>
+                {
+                    keys::read(fkeys)?
+                }
+                _ => key_values(table, fkey, fkeys)?,
+            };
             let found = |visits: &[Visit], key: &Option<Key>, example: usize| {
                 let at = visits.iter().position(|v| v.name == dst)?;
                 visits[at].nodes.get(&(key.clone()?, example)).copied()
@@ -364,7 +381,7 @@ impl Walk<'_> {
                         .primary_key
                         .as_deref()
                         .ok_or_else(|| internal("a table referred to has no key"))?;
-                    let added_keys = keys::read(named(&added, dst_key)?)?;
+                    let added_keys = key_values(dst_table, dst_key, named(&added, dst_key)?)?;
                     let dst_at = reach(visits, dst);
                     let dst_visit = &mut visits[dst_at];
                     let known = dst_visit.rows();
@@ -471,7 +488,7 @@ impl Walk<'_> {
             let known = src_visit.rows();
             let (rows, kept) = match &src_table.primary_key {
                 Some(key) => {
-                    let values = keys::read(named(&fetched, key)?)?;
+                    let values = key_values(src_table, key, named(&fetched, key)?)?;
                     let mut rows = Vec::with_capacity(values.len());
                     let mut kept = Vec::new();
                     for (i, (value, &example)) in values.into_iter().zip(&examples).enumerate() {
@@ -551,7 +568,7 @@ impl Walk<'_> {
                         .collect(),
                     });
                 }
-                frame = first_of_each_key(frame, key)?;
+                frame = first_of_each_key(frame, table, key)?;
             }
             let entity = table.name == self.entity.name;
             let features = features(self.graph, table, self.excluded);
@@ -656,6 +673,32 @@ fn edge<'e>(
     &mut edges[at]
 }
 
+/// Whether `column` of `table` is a column of numbers the host provider
+/// handed over as their exact text (`sdm_contract::data::
+/// EXACT_NUMBER_MARKER`), described as that text.
+pub(crate) fn exact_text(table: &Table, column: &str) -> bool {
+    table
+        .column(column)
+        .is_some_and(|c| c.exact_number.is_some() && c.received == ColumnType::Utf8)
+}
+
+/// The keys `array`, column `column` of `table`, holds: by the numbers it
+/// writes for a column of numbers handed over as their exact text
+/// ([`exact_text`], [`keys::read_numbers`]), so `1.0` and `1.00` are one
+/// key as the source and the reference hold them; as [`keys::read`] reads
+/// any other.
+pub(crate) fn key_values(
+    table: &Table,
+    column: &str,
+    array: &ArrayRef,
+) -> Result<Vec<Option<Key>>, CoreError> {
+    if exact_text(table, column) {
+        keys::read_numbers(array)
+    } else {
+        keys::read(array)
+    }
+}
+
 fn position(visits: &[Visit], name: &str) -> Result<usize, CoreError> {
     visits
         .iter()
@@ -719,8 +762,12 @@ fn null_keys_beside_values(frame: &RecordBatch, key: &str) -> Result<Option<Vec<
 /// each given the values of the first row of its key, as the reference
 /// stores such a table's distinct rows once and reads each row through
 /// them (`inverse_dict`).
-fn first_of_each_key(frame: RecordBatch, key: &str) -> Result<RecordBatch, CoreError> {
-    let values = keys::read(named(&frame, key)?)?;
+fn first_of_each_key(
+    frame: RecordBatch,
+    table: &Table,
+    key: &str,
+) -> Result<RecordBatch, CoreError> {
+    let values = key_values(table, key, named(&frame, key)?)?;
     let mut first: BTreeMap<Key, usize> = BTreeMap::new();
     let mut nulls = 0;
     // A null key is no other row's: each such row is its own.

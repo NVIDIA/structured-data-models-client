@@ -7618,6 +7618,86 @@ entries:
     Postgres); the DuckDB and SQLite lines, and the given-key and link
     lines on Postgres, match the reference.
 
+- id: P2G-4
+  title: On Postgres a caller-keyed numeric key spelled two ways on a link's two ends is one key, kept as its text
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres numeric declared without a precision
+    that the caller keys or links, with no constraint in the database, as
+    a double (P2G-2), so 1.0 and 1.00 are one key, sent as a double. The
+    core read such a column as its exact text (P2G-2) and took each
+    spelling for its own key: a link from 1.00 to 1.0 reached the same
+    row twice, and materialize failed with INTERNAL_ERROR at the default
+    two hops and at num_hops=2 (the whole-phase review's finding).
+  new_behavior: >-
+    The core keys such a column by the number its text writes, exactly
+    (sdm_engine::keys::read_numbers; no float rounding, so 1.0 and 1.01
+    stay two keys past 2**53), and answers as the reference answers the
+    same tables with the keys declared and each link spelled as its key;
+    the column is still described and sent as its text, P2G-2's
+    difference from the reference's double.
+  affected_inputs: >-
+    Schema.from_source and PredictiveQuery.materialize on the core route
+    over a Postgres source whose unconstrained numeric column the caller
+    keys or links, with one value spelled with different scales on a
+    link's two ends.
+  cases: []
+  refs:
+  - P2G-2
+  - P2C-3
+  - KO2-88
+  - 'contract/numeric-spelling-vectors.json#given.* success -> success'
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-88}
+  notes: >-
+    Decided by the orchestrator on 2026-10-21 under the owner's overnight
+    delegation (KO2-88), approving the core's answer as right, and listed
+    for the owner's reading; not the owner's own approval. The schema's
+    approved_by takes only owner or reviewer, so the field holds the
+    non-owner value. P2G-2's text in place of the reference's double is
+    the only difference. Fixed and measured at T2.14c
+    (contract/tests/test_t214c_numeric_spelling.py on Postgres 17,
+    recorded from python-ref at 43e55f4f).
+
+- id: P2G-5
+  title: On Postgres a declared numeric key spelled two ways on a link's two ends is one key, where the reference makes two
+  kind: change
+  old_behavior: >-
+    The reference reads a Postgres numeric declared without a precision
+    that the catalog declares a key (primary or foreign) as its text, and
+    keys it by that text: a foreign key spelled 1.00 referring to a
+    primary key spelled 1.0, which Postgres's constraint holds equal,
+    reaches each user twice, once by each spelling.
+  new_behavior: >-
+    The core keys such a column by the number its text writes, exactly
+    (sdm_engine::keys::read_numbers; no float rounding), as the database's
+    constraint compares it: each user is reached once, and the request is
+    the one the reference sends for the same tables with each link spelled
+    as its key.
+  affected_inputs: >-
+    PredictiveQuery.materialize on the core route over a Postgres source
+    whose declared numeric key (declared without a precision) holds one
+    value spelled with different scales on a link's two ends.
+  cases: []
+  refs:
+  - P2C-3
+  - KO2-88
+  - 'contract/numeric-spelling-vectors.json#catalog.default success -> success'
+  - 'contract/numeric-spelling-vectors.json#catalog.hops-2 success -> success'
+  status: approved
+  approved_by: reviewer
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-88}
+  notes: >-
+    Decided by the orchestrator on 2026-10-21 under the owner's overnight
+    delegation (KO2-88), approving the core's answer as right (one value
+    is one key, as the database holds it), and listed for the owner's
+    reading; not the owner's own approval. The schema's approved_by takes
+    only owner or reviewer, so the field holds the non-owner value.
+    Fixed and measured at T2.14c (contract/tests/
+    test_t214c_numeric_spelling.py on Postgres 17, recorded from
+    python-ref at 43e55f4f).
+
 
 # --- lane C entries (P2C-1..19) ---
 

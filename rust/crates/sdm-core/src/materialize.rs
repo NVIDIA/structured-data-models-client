@@ -2949,7 +2949,9 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     if sampled.num_rows() == 0 {
         return Err(invalid("the entity table holds no row to sample", "query"));
     }
-    let sampled_keys = keys::read(named(&sampled, &key)?)?;
+    // One entity per key value: `1.0` and `1.00` of a column of numbers
+    // handed over as their text are one key (`subgraph::key_values`).
+    let sampled_keys = crate::subgraph::key_values(entity, &key, named(&sampled, &key)?)?;
     let mut seen = BTreeSet::new();
     let kept: Vec<usize> = (0..sampled_keys.len())
         .filter(|&row| seen.insert(sampled_keys[row].clone()))
