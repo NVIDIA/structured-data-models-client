@@ -6,12 +6,14 @@ The package brief above gives the scope, the exits, the design row and the decis
 - Work and push only from your lane worktree, to `rust-core-phase-N-lane-<x>`. Never switch branches there; `land.py` needs it on the lane. To work ahead, stack the next package in its own worktree off the approved SHA.
 - Every commit subject starts with the package ID: `<ID>: ...`, `<ID> fix <n>: ...`, `<ID> tracker: ...`, `<ID> docs: ...`. Cite other packages only in the body (`Refs: ...`). The first commit records the previous package's landing in the tracker.
 - The acceptance tests come from a separate test author (`<ID> tests: ...` commits). Make them pass without editing them. If one looks wrong, report it; the test author fixes it. Your own unit tests are welcome but aren't acceptance evidence.
-- While iterating, run only your package's tests. Before each push: `scripts/rust_core/prepush.sh` (the cheap tier; never `--full`) and `pytest contract/tests -q -n 4 --dist loadfile` once (as `CONTRIBUTING.md` runs it).
+- While iterating, run only your package's tests. Before each push: `scripts/rust_core/prepush.sh` (the cheap tier; the hook blocks `--full`).
+- Before you report "ready": `scripts/rust_core/handoff.py run --package <ID> --python <your lane environment's python>` (and `--previous <last round's SHA>` in a fix round, `--case <id>` for each case the brief lists). It runs your cases against the recorded old-client answers, your new tests on the previous SHA, every suite that reads a touched file, and lint, and stamps the SHA only when all pass. Review rounds refuse a SHA without the stamp.
+- A fix commit (`<ID> fix <n>: ...`) that changes product code carries `Rule: <the old client's rule it ports, one sentence>`; the commit-msg hook and `land.py` refuse it otherwise.
 - Push review-ready states, report the SHA at once and end your turn. Don't watch CI; the orchestrator sends you any CI failure as a fix item.
 - Final report: final SHA, each exit with its evidence, deviations, decision rows added, and anything needing the owner.
 
 **Judging paths and guards**
-- Before the first push, list every judging-path file you touch (`compare.py`, `run_python.py`, `ratchet.py`, `coverage.py`, `gate.sh`, `wheel_smoke.py`, `bridge_freeze.py`, `l0_*.py`, `ci.yml`). If the package relies on its own judging change for its gate, plan two parts up front: the judging change alone, then the rest.
+- The judging paths are listed in `scripts/rust_core/judging-paths.txt`. After the phase's first package, `land.py` refuses a package changing one unless it is the tooling train (`land.py --stack --train`, first in its stack). If you need a judging change, report it: the orchestrator moves it into the train.
 - Any guard or gate change must also pass in its post-landing state: the phase branch at the landing, judged against itself.
 - Guards are frozen at bug fixes. No new frameworks or harness layers; extend the existing runners, vectors and maps.
 - A new case-format key lands with accept and refuse vectors in `contract/tests/malformed-cases.json`, run by both loaders.
@@ -38,7 +40,7 @@ The package brief above gives the scope, the exits, the design row and the decis
 **Hard rules**
 - DCO sign-off only (`git commit -s`), no `Co-Authored-By`. No pull requests, no landing commits (`land.py` makes those). Never `git config`.
 - Keep credentials, hostnames, account and workspace names and internal infrastructure names out of everything you write. The repository is public.
-- Never run `rm -rf`, `rm -r`, `--force` or `-D` removals, `sudo`, `gh run watch`, or anything deleting outside your worktree or the session scratchpad. They trigger approval prompts that stall you for hours. `git worktree prune` is the only cleanup allowed. Never touch another lane's worktrees. If something seems to need approval, report it instead.
+- The command hook (`scripts/rust_core/orchestration/guard_cmd.py`) blocks `rm -r` outside your scratch, `--force` and `-D` removals, `--no-verify`, `sudo`, `git config`, `git stash`, `gh run watch` and `git fetch --prune`, naming the alternative. `git worktree prune` is the only cleanup allowed. Never touch another lane's worktrees. If something seems to need approval, report it instead.
 - Run every probe and subprocess under a timeout with stdin closed: `perl -e 'alarm shift; exec @ARGV' 600 <cmd> </dev/null`, with `GH_PROMPT_DISABLED=1 GIT_TERMINAL_PROMPT=0`.
 - Reuse your lane's Cargo target; don't create a fresh `CARGO_TARGET_DIR` per task.
 - Use non-editable installs in test venvs, so tests never import the lane checkout by accident.
