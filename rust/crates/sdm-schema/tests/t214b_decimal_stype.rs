@@ -100,11 +100,11 @@ fn scaled(step: i128) -> Vec<i128> {
         .collect()
 }
 
+/// The pending file, read as the other vector tests read theirs.
+const PENDING: &str = include_str!("../../../../contract/tests/t214b-pending.json");
+
 fn pending(name: &str) -> bool {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../contract/tests/t214b-pending.json");
-    let gating: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let gating: serde_json::Value = serde_json::from_str(PENDING).unwrap();
     let listed = |list: &str| {
         gating[list]
             .as_array()
