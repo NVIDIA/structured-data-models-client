@@ -59,6 +59,17 @@ fn typed(kind: &str, text: &str) -> serde_json::Value {
     serde_json::json!({"typed": {"text": text, "type": kind}})
 }
 
+/// A timestamp candidate as plain data, with the point in time its host's
+/// equality compares (`at`, nanoseconds since the epoch: a zoned one's UTC
+/// instant, a zone-less one's wall clock), as the Python host writes it.
+fn stamp(kind: &str, text: &str, at: &str) -> serde_json::Value {
+    serde_json::json!({"typed": {"text": text, "type": kind, "at": at}})
+}
+
+/// 2023-01-01 00:00 and 2023-01-02 00:00, in nanoseconds since the epoch.
+const JAN_1: &str = "1672531200000000000";
+const JAN_2: &str = "1672617600000000000";
+
 /// The positions `distinct` keeps of the candidates `given`, written as
 /// JSON and read as the core reads them.
 fn kept(given: &[serde_json::Value]) -> Vec<u32> {
@@ -89,8 +100,8 @@ fn two_of_one_kind_and_text_are_one_candidate() {
         );
         assert_eq!(
             kept(&[
-                typed("datetime", "2023-01-01 00:00:00"),
-                typed("datetime", "2023-01-01 00:00:00"),
+                stamp("datetime", "2023-01-01 00:00:00", JAN_1),
+                stamp("datetime", "2023-01-01 00:00:00", JAN_1),
             ]),
             [0]
         );
@@ -103,7 +114,7 @@ fn a_date_and_a_timestamp_of_one_day_are_two() {
         assert_eq!(
             kept(&[
                 typed("date", "2023-01-01"),
-                typed("datetime", "2023-01-01 00:00:00"),
+                stamp("datetime", "2023-01-01 00:00:00", JAN_1),
             ]),
             [0, 1]
         );
@@ -117,9 +128,9 @@ fn aware_timestamps_of_one_instant_are_one_candidate() {
         || {
             assert_eq!(
                 kept(&[
-                    typed("datetime_zoned", "2023-01-01 00:00:00+00:00"),
-                    typed("datetime_zoned", "2023-01-01 01:00:00+01:00"),
-                    typed("datetime_zoned", "2023-01-02 00:00:00+00:00"),
+                    stamp("datetime_zoned", "2023-01-01 00:00:00+00:00", JAN_1),
+                    stamp("datetime_zoned", "2023-01-01 01:00:00+01:00", JAN_1),
+                    stamp("datetime_zoned", "2023-01-02 00:00:00+00:00", JAN_2),
                 ]),
                 [0, 2]
             );
@@ -132,8 +143,8 @@ fn a_naive_and_an_aware_timestamp_are_two() {
     held("typed:a_naive_and_an_aware_timestamp_are_two", || {
         assert_eq!(
             kept(&[
-                typed("datetime", "2023-01-01 00:00:00"),
-                typed("datetime_zoned", "2023-01-01 00:00:00+00:00"),
+                stamp("datetime", "2023-01-01 00:00:00", JAN_1),
+                stamp("datetime_zoned", "2023-01-01 00:00:00+00:00", JAN_1),
             ]),
             [0, 1]
         );
