@@ -129,7 +129,7 @@ T2.14c lowers the bridge freeze to what the core route still enters, and carries
 
 ### What changed
 
-- The freeze lowering, measured, not guessed, and held back from this candidate (see Deviations): python-core ran every case on SQLite and Postgres (each call forced onto the core) and every DuckDB case whose routes take each of its calls to the core (275 of 315), under coverage, on T2.14b's candidate f16493e7.
+- The freeze lowered, measured, not guessed: python-core ran every case on SQLite and Postgres (each call forced onto the core) and every DuckDB case whose routes take each of its calls to the core (275 of 315), under coverage, on T2.14b's final candidate ab74bebc (the same list as on its earlier f16493e7).
   Each `COVERED` function whose body ran in none of them is out of `COVERED`, declared `gone`, the baseline rewritten with `--write`: 29 functions, and `base.py`, `result.py` and `decompose.py`, which then held none, leave `FROZEN` (their `<module>` declared `gone`).
   Out: `check_request_against_model`; `client.py`'s `_empty_answer`, `_names_its_rows`, `SDMClient._send`, `SDMClient._spec`; `parts_of`; `PredictiveQuery._in_parts`; `PredictionResult.merge`; and in `materializers/relational.py` `_gather`, `_check_shape`, `_refuse_a_name_the_wire_reserves`, `_run_mode_for`, `_unreserved`, `_warn_two_whole_numbers_are_being_asked_as_quantities` and the module functions `_columns_to_leave_out`, `_drop_context_that_answers_the_question`, `_entities_at_anchors`, `_instances_matching`, `_joins_nothing`, `_positions`, `_record_the_statistic`, `_remove_instances`, `_statistic_asked_for`, `_tables_sent` and the five module-level `_warn_*` functions.
   No function is deleted: the old route still runs each.
@@ -142,10 +142,11 @@ T2.14c lowers the bridge freeze to what the core route still enters, and carries
   Register: P2G-4 (caller-keyed, P2G-2's text kept) and P2G-5 (declared keys: one key where the reference reaches each user twice), decided by the orchestrator under KO2-88.
 - `labels::compare` deleted (rides item 1): only tests called it since T2.10; the reference's 480 condition vectors now run through `labels::label` (the test author's commit).
 - KO2-87 (P2D-1, P2J-1 and P2J-2 approved by the owner) and KO2-88 (the owner's overnight delegation of 2026-10-21), with the three entries approved citing KO2-87.
+- P2D-2 to P2D-5, which T2.14b proposed, approved by the orchestrator under KO2-88 and listed for the owner's reading.
+- Part B of T2.16a (rides item 7), prepared by T2.16a's implementer: `float64/target` back on the eight cases coverage now places, their python-ref lines and T2.13 option vectors re-recorded at 43e55f4f, and P2O-1 proposed for the reviewers.
+- Round 1 (Claude) P3s: `key_values`' comment says the reference splits a declared key's spellings (P2G-5); KO2-87's entries' notes no longer open with "Approver: reviewer"; T2.14b's section no longer lists P2-2 among the rows moved.
 
 ### Deviations
 
 - `approved_by` for P2G-4 and P2G-5 is `reviewer`: the register's schema takes only `owner` or `reviewer`, the decision is the orchestrator's under KO2-88, and each entry's notes say so.
-- The freeze lowering is on local branch `t214c-freeze`, not in this candidate: the gate judges a candidate with its checkpoint's `bridge_freeze.py`, which needs a baseline entry for every function its own `COVERED` names and every file its own `FROZEN` holds, while the candidate's own copy (strict, in `prepush.sh` and CI's `rust-lint`) refuses a baseline entry for a name it no longer freezes.
-  No baseline passes both, so a lowering needs the checkpoint's copy to take a covered entry missing from the baseline when the candidate declares it `gone` (a judging change that lands alone, first), or the orchestrator's other route.
-  Measured with the gate's `rust-host` and `python-core` legs: everything else passed; `l0` failed only on the three files left out of `FROZEN`, and the checkpoint's copy also refuses each function taken out of `COVERED`.
+- The freeze lowering lands with the product items, not alone: T2.16a's fix 4 taught the gate's checkpoint copy of the freeze to take an entry the candidate declares `gone` and leaves out of its baseline, so the gate judges this candidate's lower freeze with the checkpoint's `COVERED`.
