@@ -44,8 +44,8 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 | T2.19 | Two-path sampling | F | landed | dfdd532a | `main`'s eb6c68eb; [tracker-T2.19.md](tracker-T2.19.md) |
 | T2.21 | Exact numeric keys past 2**53 the caller names, links or edits | g | landed | 3e2342f2 | KO2-78; [tracker-T2.21.md](tracker-T2.21.md) |
 | T2.14a | Bridge freeze widened | A | landed | 24f5be66 | [tracker-T2.14.md](tracker-T2.14.md) |
-| T2.14b | Host clean-up | – | in review | 102fa1f9 (final candidate) | T2.14d merged into it; [tracker-T2.14.md](tracker-T2.14.md) |
-| T2.14c | Bridge freeze lowered | p | in review | be55838a (final candidate, on 102fa1f9) | [tracker-T2.14.md](tracker-T2.14.md) |
+| T2.14b | Host clean-up | – | landed | 0b6d9a12 | T2.14d merged into it; [tracker-T2.14.md](tracker-T2.14.md) |
+| T2.14c | Bridge freeze lowered | p | landed | f133c4b8 | [tracker-T2.14.md](tracker-T2.14.md) |
 | T2.15 | Offline L7 | C | dropped | – | Became T2.16a's `contract/tools/l7.py` (9a899950; KO2-53, KO2-76) |
 | T2.16a | The final gate's tooling | o | landed | 9a899950 | [tracker-T2.16a.md](tracker-T2.16a.md) |
 | T2.16 | The slice gate | q | in progress | – | [tracker-T2.16.md](tracker-T2.16.md) |

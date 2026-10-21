@@ -5,7 +5,7 @@ It reads the design's task table and choices, each package's `tracker-<ID>.md`, 
 A package built as its design row says gets one line with its landing SHA.
 Fix-round histories stay in the trackers; this file names only what changed against the design and where that change is decided.
 
-Written at T2.16 on the final tree: the phase head `9a899950` (`Land T2.16a`) with T2.14b's final candidate `102fa1f9` and T2.14c's `be55838a` on it, both in their last review round when this was written.
+Written at T2.16 on the final tree, the phase head `f133c4b8` (`Land T2.14c`, after `Land T2.14b` 0b6d9a12).
 Phase 2 was merged into `rust-core` once mid-phase, through T2.1j, at `2e5fbd27`.
 
 ## Across the phase
