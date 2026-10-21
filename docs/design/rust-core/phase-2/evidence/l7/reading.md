@@ -1,7 +1,7 @@
 # Reading the L7 reports (hand-written)
 
-[l7.md](l7.md) is the full run: 5 repeats over every S0 and S1 case that expects a success, measured from 10:00 to 10:40 UTC on 2026-10-21 under a load average of 40 to 55 on 8 vCPUs (other agents' builds and test runs; the machine could not be emptied).
-[l7-rerun-r21.md](l7-rerun-r21.md) reran only what failed there, at 21 repeats, under a load average of about 40.
+[l7.md](l7.md) is the full run: 5 repeats over every S0 and S1 case that expects a success, measured from 09:49 to 09:54 UTC on 2026-10-21 under a load average of about 44 to 48 on 8 vCPUs (other agents' builds and test runs; the machine could not be emptied).
+[l7-rerun-r21.md](l7-rerun-r21.md) reran only what failed there, at 21 repeats at 11:08 UTC, under a load average of about 43.
 
 | Limit | 5 repeats, all 175 judged scenarios | 21 repeats, the two that failed |
 |---|---|---|
