@@ -121,3 +121,30 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 - `core/transport.py`'s `predict_body` still decodes each answer to keep the transport's not-a-JSON-object refusal and the depth check, so an answer is parsed twice; the core could own that refusal (Claude r1 P3-4).
 - A custom transport with no `predict_body` is served through `json.dumps`, which recurses: a very deep answer raises `RecursionError` there rather than the core's `too_deep` (Claude r1 P3-5).
 - Typed candidates and the core's equality: the core could hold typed candidates never equal to each other, every host grouping its own with `repeat`, which would retire both fix 8's collision check (a distinct value of a repeated kind and text sent `spelled`) and the core's kind-and-text rule. It changes what contract 27 promises a host that does not group its candidates, so it belongs with Phase 3's Java host work (the orchestrator, T2.14b fix 8).
+
+## T2.14c
+
+T2.14c lowers the bridge freeze to what the core route still enters, and carries four items that ride along (the orchestrator's rides file of 2026-10-21): the whole-phase review's Postgres numeric-key finding, `labels::compare`'s deletion, and the owner's register answers and overnight delegation.
+
+### What changed
+
+- The freeze lowering, measured, not guessed, and held back from this candidate (see Deviations): python-core ran every case on SQLite and Postgres (each call forced onto the core) and every DuckDB case whose routes take each of its calls to the core (275 of 315), under coverage, on T2.14b's candidate f16493e7.
+  Each `COVERED` function whose body ran in none of them is out of `COVERED`, declared `gone`, the baseline rewritten with `--write`: 29 functions, and `base.py`, `result.py` and `decompose.py`, which then held none, leave `FROZEN` (their `<module>` declared `gone`).
+  Out: `check_request_against_model`; `client.py`'s `_empty_answer`, `_names_its_rows`, `SDMClient._send`, `SDMClient._spec`; `parts_of`; `PredictiveQuery._in_parts`; `PredictionResult.merge`; and in `materializers/relational.py` `_gather`, `_check_shape`, `_refuse_a_name_the_wire_reserves`, `_run_mode_for`, `_unreserved`, `_warn_two_whole_numbers_are_being_asked_as_quantities` and the module functions `_columns_to_leave_out`, `_drop_context_that_answers_the_question`, `_entities_at_anchors`, `_instances_matching`, `_joins_nothing`, `_positions`, `_record_the_statistic`, `_remove_instances`, `_statistic_asked_for`, `_tables_sent` and the five module-level `_warn_*` functions.
+  No function is deleted: the old route still runs each.
+- Kept in `COVERED` though the core route no longer enters them, because `selftest.py` seeds faults in them: `SDMClient._prepare`, `RelationalMaterializer._check_limits`, `_tables_linked_to`, `RelationalAdapter._preflight` and `Schema.check_consistent` (the last already kept for that reason).
+  The brief's likely list held: `_in_parts`, `parts_of` and `merge` are out; `SDMClient._answer_in_parts` is still entered on the core route and stays.
+- One number spelled two ways is one graph key (rides item 6): a Postgres `numeric` declared without a precision reaches the core as its exact text, and the walk took `1.0` and `1.00` for two keys, so the second hop failed with `INTERNAL_ERROR` where the reference answers.
+  The walk and the entity sample key such a column by the number its text writes (`sdm_engine::keys::read_numbers`, `Key::number_text`), exactly, with no float: `1.0` and `1.01` stay two keys past 2**53.
+  A foreign key is read as the key it refers to is read.
+  The number text parser moves into `sdm_contract::data` (`written_number`, `exact_number_text`), which `sdm-testkit`'s non-SQL provider uses to join such a column by value, as Postgres does.
+  Register: P2G-4 (caller-keyed, P2G-2's text kept) and P2G-5 (declared keys: one key where the reference reaches each user twice), decided by the orchestrator under KO2-88.
+- `labels::compare` deleted (rides item 1): only tests called it since T2.10; the reference's 480 condition vectors now run through `labels::label` (the test author's commit).
+- KO2-87 (P2D-1, P2J-1 and P2J-2 approved by the owner) and KO2-88 (the owner's overnight delegation of 2026-10-21), with the three entries approved citing KO2-87.
+
+### Deviations
+
+- `approved_by` for P2G-4 and P2G-5 is `reviewer`: the register's schema takes only `owner` or `reviewer`, the decision is the orchestrator's under KO2-88, and each entry's notes say so.
+- The freeze lowering is on local branch `t214c-freeze`, not in this candidate: the gate judges a candidate with its checkpoint's `bridge_freeze.py`, which needs a baseline entry for every function its own `COVERED` names and every file its own `FROZEN` holds, while the candidate's own copy (strict, in `prepush.sh` and CI's `rust-lint`) refuses a baseline entry for a name it no longer freezes.
+  No baseline passes both, so a lowering needs the checkpoint's copy to take a covered entry missing from the baseline when the candidate declares it `gone` (a judging change that lands alone, first), or the orchestrator's other route.
+  Measured with the gate's `rust-host` and `python-core` legs: everything else passed; `l0` failed only on the three files left out of `FROZEN`, and the checkpoint's copy also refuses each function taken out of `COVERED`.
