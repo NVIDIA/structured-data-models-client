@@ -127,7 +127,14 @@ NAMED: dict[str, list[str]] = {
     # The generic refusals at materialize and predict.
     'date.day-first-then-packed': ['99999-01-01'],
     'empty.indices': ['indices'],
-    'key.uint64-above-int64-max': ['9223372036854775810'],
+    # The value past int64 is a context example's key read from the data,
+    # which the core keeps out (KO2-86, register P2A-2): the column, the
+    # row and the remedy, as the reference names them.
+    'key.uint64-above-int64-max': [
+        "Column 'instance_table.__kumo_entity_ref_0' row 0",
+        'outside the range int64 represents',
+        'send the column as strings',
+    ],
     'rank.entities-by-candidates.at': ["'users'", '499', 'candidate 0'],
     'rule.composite-key-given': ['orders'],
     'sample.anchor-entity.context-time': ["'entity'", 'context'],

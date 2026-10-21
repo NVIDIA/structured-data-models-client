@@ -5862,6 +5862,43 @@ entries:
 
 # --- lane B entries (P2B-1..19) ---
 
+- id: P2A-2
+  title: A key past int64 read from the data is not named in the core's refusal, where the reference names it
+  kind: change
+  old_behavior: >-
+    The reference refuses a request whose context examples hold a key
+    past int64 (key.uint64-above-int64-max, a UBIGINT key, on DuckDB)
+    with INVALID_REQUEST at materialize, its message naming the value it
+    read from the data: "Column 'instance_table.__kumo_entity_ref_0' row
+    0: value 9223372036854775810 is outside the range int64 represents
+    (-9223372036854775808 to 9223372036854775807); send the column as
+    strings".
+  new_behavior: >-
+    The core refuses the same request with the same class and code, and
+    the host words it as the reference does but for the value: "Column
+    'instance_table.__kumo_entity_ref_0' row 0: a value is outside the
+    range int64 represents (...); send the column as strings". The value
+    is a context example's key read from the data, not one the caller
+    passed in the call, so KO2-86 keeps it out of the error.
+  affected_inputs: >-
+    PredictiveQuery.materialize over a source whose entity key holds a
+    value past int64 in the rows gathered as context; the refusal's
+    message only.
+  cases: [key.uint64-above-int64-max]
+  status: approved
+  approved_by: owner
+  decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
+  notes: >-
+    Text only: the outcome, class, code and stage are the reference's.
+    KO2-86 (the owner's "Echo own args", 2026-10-21) lets an error name a
+    value the caller passed in the same call and keeps values read from
+    data out; this value is read from the data. Decided at T2.14b's round
+    1 by the orchestrator under the owner's overnight delegation, applying
+    KO2-86: the core keeps its wording without the value. Held by
+    contract/tests/test_t214b_wording.py, whose NAMED words for the case
+    are the column, the row and the remedy (the key
+    wording:named:key.uint64-above-int64-max out of pending).
+
 - id: P2B-1
   title: Exact decimals, where the reference at 6298913c rounds, merges or refuses
   kind: change
