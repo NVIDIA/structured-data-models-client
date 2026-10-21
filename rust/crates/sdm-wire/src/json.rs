@@ -96,7 +96,17 @@ pub fn read(bytes: &[u8]) -> Result<Value, ReadError> {
 /// character's number raised until no such text is in the answer), and the
 /// value whose raw text is that literal is read back as the token; so no
 /// text the endpoint wrote is read as a number.
+///
+/// The bytes are first decoded to UTF-8 text as Python's `json.loads`
+/// decodes bytes ([`answer_text`]), so an answer the reference reads in
+/// UTF-8 with a byte order mark, UTF-16 or UTF-32 is read alike.
 pub fn read_answer(bytes: &[u8]) -> Result<Value, ReadError> {
+    let text = answer_text(bytes)?;
+    read_answer_utf8(&text)
+}
+
+/// [`read_answer`] of bytes already decoded to UTF-8.
+fn read_answer_utf8(bytes: &[u8]) -> Result<Value, ReadError> {
     let tokens = non_finite_tokens(bytes);
     if tokens.is_empty() {
         return read(bytes);
@@ -124,6 +134,77 @@ pub fn read_answer(bytes: &[u8]) -> Result<Value, ReadError> {
     check_depth(&text)?;
     let raw: &RawValue = serde_json::from_slice(&text).map_err(|e| ReadError::of(&e))?;
     value_with(raw, Some(&marker)).map_err(|e| ReadError::of(&e))
+}
+
+/// An answer's bytes as UTF-8 text, decoded as Python's `json.loads`
+/// decodes bytes (`json.detect_encoding`, after RFC 8259 and RFC 4627): a
+/// UTF-32 or UTF-16 byte order mark, then a UTF-8 one, names the encoding
+/// and is dropped; without one, the zero bytes among the first four name
+/// UTF-16 or UTF-32 and their byte order, as the first character of JSON
+/// text is ASCII; anything else is UTF-8. UTF-8 without a mark is the bytes
+/// as they are. Text that does not decode is refused, category `encoding`,
+/// as Python's decoding raises; a surrogate code point is refused alike,
+/// where Python's reader keeps it, as an answer escaping a lone surrogate
+/// is (register P1B-24). The position is the first byte's.
+pub fn answer_text(bytes: &[u8]) -> Result<std::borrow::Cow<'_, [u8]>, ReadError> {
+    use std::borrow::Cow;
+    #[derive(Clone, Copy)]
+    enum Width {
+        Two,
+        Four,
+    }
+    let (width, big_endian, skip) = match bytes {
+        [0, 0, 0xFE, 0xFF, ..] => (Width::Four, true, 4),
+        [0xFF, 0xFE, 0, 0, ..] => (Width::Four, false, 4),
+        [0xFE, 0xFF, ..] => (Width::Two, true, 2),
+        [0xFF, 0xFE, ..] => (Width::Two, false, 2),
+        [0xEF, 0xBB, 0xBF, rest @ ..] => return Ok(Cow::Borrowed(rest)),
+        [0, 0, _, _, ..] => (Width::Four, true, 0),
+        [0, _, _, _, ..] | [0, _] => (Width::Two, true, 0),
+        [_, 0, 0, 0, ..] => (Width::Four, false, 0),
+        [_, 0, _, _, ..] | [_, 0] => (Width::Two, false, 0),
+        _ => return Ok(Cow::Borrowed(bytes)),
+    };
+    let undecodable = ReadError {
+        category: "encoding",
+        line: 1,
+        column: 0,
+    };
+    let body = &bytes[skip..];
+    let mut text = String::with_capacity(body.len());
+    match width {
+        Width::Two => {
+            if !body.len().is_multiple_of(2) {
+                return Err(undecodable);
+            }
+            let units = body.chunks_exact(2).map(|u| {
+                let u = [u[0], u[1]];
+                if big_endian {
+                    u16::from_be_bytes(u)
+                } else {
+                    u16::from_le_bytes(u)
+                }
+            });
+            for c in char::decode_utf16(units) {
+                text.push(c.map_err(|_| undecodable)?);
+            }
+        }
+        Width::Four => {
+            if !body.len().is_multiple_of(4) {
+                return Err(undecodable);
+            }
+            for u in body.chunks_exact(4) {
+                let u = [u[0], u[1], u[2], u[3]];
+                let n = if big_endian {
+                    u32::from_be_bytes(u)
+                } else {
+                    u32::from_le_bytes(u)
+                };
+                text.push(char::from_u32(n).ok_or(undecodable)?);
+            }
+        }
+    }
+    Ok(Cow::Owned(text.into_bytes()))
 }
 
 /// Whether `haystack` holds `needle`.

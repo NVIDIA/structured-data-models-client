@@ -207,14 +207,17 @@ class DatabricksServingTransport:
         failure the answer reports by its status is raised as :meth:`predict`
         raises it, as is an answer that is not a JSON object; one nested
         past this interpreter's reader is handed over as written, for the
-        core to refuse as too deep (register P1B-22)."""
+        core to refuse as too deep (register P1B-22). A lone surrogate the
+        text holds is encoded as it is (``surrogatepass``), for the core to
+        refuse by name as it refuses one escaped (register P1B-24), rather
+        than failing here as an encoding error."""
         text = self._answered(json.loads(body))
         try:
             self._decoded(text)
         except StructuredDataError as failed:
             if not failed._response_too_deep:
                 raise
-        return text.encode('utf-8')
+        return text.encode('utf-8', 'surrogatepass')
 
     def _answered(self, payload: dict[str, Any]) -> str:
         r"""The served model's answer to ``payload``, as the text it
