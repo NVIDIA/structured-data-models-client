@@ -68,7 +68,7 @@ By the orchestrator's scope change the first wave's SQLite legs (T2.17, T2.18, T
 
 - T2.1d settled the S0 schema pin and the routes that stopped at `from_source`: on SQLite every call a case makes runs on the core on both hosts, which agree on every core field but `s0.boundary.depth-999`'s operations, a diagnostic case (python-core stops after validation on the host's RecursionError, as the reference does; rust-host goes on to materialize).
 - With validation and materialize both run, the four P2B-16 cases answer an accepted query and then materialize's error; T2.1d's outcome rule judges the last call reached, so that pair is one error outcome.
-- The `decimal.*` SQLite legs are T2.17's; the two S1 tests stay pending on them alone.
+- The `decimal.*` SQLite legs are T2.17's; the two S1 tests stay pending on them alone (later: T2.17 was done inside T2.0c, KO2-91, and these legs became T2.2's, orchestrator's decision 2026-10-18).
 - `contract-python (ref-pandas3, sqlite)` compares with no effective expectations, so it fails on every registered SQLite difference until its expectations are wired (the round 1 review's P3-1).
 - rust-host's SQLite pass needs a Python with DuckDB and pyarrow for the contract loader (`SDM_PYTHON`, else `python3`); this machine's `python3` has neither, and T2.1d's `rust-test` job sets one.
 

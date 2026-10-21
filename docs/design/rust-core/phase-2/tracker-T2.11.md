@@ -41,7 +41,7 @@ Everything is in the core; the Python host only passes the option values and wor
   A fresh seed per call gives the customer what they asked for (a new sample each call, of the right size, from the source's rows), passes KO2-76's property checks, and keeps one sampling path.
   Recommended to the owner as is; reviewers may approve it as a stream difference only.
 - **Hop sizes and iteration counts read as DuckDB reads them on every database** (P2I-1): matching the reference wherever its DuckDB sampler answers, and answering where its SQLite or Postgres samplers fail.
-  Text that is no number is refused by name, where the reference fails or runs the text as SQL; owner-pending, recommended as is.
+  Text that is no number is refused by name, where the reference fails or runs the text as SQL; owner-pending then, recommended as is; approved under KO2-82 (P2I-1).
 
 ### `sample.parent-table.relbench-stack` and P1B-13
 

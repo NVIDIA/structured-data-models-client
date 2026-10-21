@@ -33,10 +33,10 @@ The acceptance tests are the test author's (`T2.3 tests:` commits on `t2.3-tests
 
 ## Deviations and what is left
 
-- The statement counts (P2C-2, owner-pending): the reference reads `current_schema()` and counts every table's rows, reads it never uses; no wasted query is added meanwhile.
-- P2C-1 (owner-pending): a one-part name a temporary or `pg_catalog` relation shadows is refused by name where the reference reads its schema's table; a plan would have to name `current_schema()`'s schema, which the core does not know when it plans.
-- P2C-5: a text time value Postgres cannot read as a timestamp fails the bounds as the provider's error; `time.text-one-bad-value`, where the reference refuses by name too, is E66's named refusal; the census's `rule:text_time` probe, where the reference answers, needs the bounds as text, which the contract's `time_bounds` answer does not carry (owner-pending under KO2-28).
-- P2C-6 (owner-pending): a seed past 2**64 - 1, which `max_seed`'s type cannot declare.
+- The statement counts (P2C-2, owner-pending then; answered by the owner as KO2-58): the reference reads `current_schema()` and counts every table's rows, reads it never uses; no wasted query is added meanwhile.
+- P2C-1 (owner-pending then; answered by the owner as KO2-63): a one-part name a temporary or `pg_catalog` relation shadows is refused by name where the reference reads its schema's table; a plan would have to name `current_schema()`'s schema, which the core does not know when it plans.
+- P2C-5: a text time value Postgres cannot read as a timestamp fails the bounds as the provider's error; `time.text-one-bad-value`, where the reference refuses by name too, is E66's named refusal; the census's `rule:text_time` probe, where the reference answers, needs the bounds as text, which the contract's `time_bounds` answer does not carry (owner-pending under KO2-28 then; answered by the owner as KO2-64).
+- P2C-6 (owner-pending then; answered by the owner as KO2-59): a seed past 2**64 - 1, which `max_seed`'s type cannot declare.
 - KO2-20 as built replays the Postgres server's answers to the core's own statements, not the reference's (whose statements differ and whose capture keeps digests only): KO2-60.
 - The owner's rows: P2C-1 KO2-63, P2C-2 KO2-58, P2C-5 KO2-64, P2C-6 KO2-59, each approved by the owner; P2C-3 approved by the owner as KO2-35, as P2B-1; P2C-4 (E66) stays proposed for the reviewers.
   KO2-63's wording says the reference reads the shadowing relation; it reads its own schema's table (it qualifies every read), which P2C-1 records.

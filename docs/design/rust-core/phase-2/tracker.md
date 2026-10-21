@@ -10,41 +10,49 @@ A package's own notes go in its own file, `tracker-<ID>.md`, so lanes never edit
 |---|---|---|---|---|---|
 | T2.0 | Tooling phase-aware, first checkpoint, rust-core's CI green | A | landed | 292f8d8a; merged into `rust-core` as 3b81df85 (KO2-6) | [tracker-T2.0.md](tracker-T2.0.md) |
 | T2.0e | Gate rules for `main` first: the reference approval row, the bridge freeze's `main` reason, a merge of `main` landing | A | landed | 912d9051 | Split out of T2.0b (KO2-3, KO2-15) |
-| T2.0a | Design, decisions, tracker, locked-set file; learnings 17-22 | – | in review | Rounds below | Revised with the owner's answers (fix 12) |
+| T2.0a | Design, decisions, tracker, locked-set file; learnings 17-22 | – | landed | 5e972867 | Revised with the owner's answers (fix 12) |
 | T2.0f | The locked-set reader for Phase 2, check 7's `main` ancestry, the `<case>@<database>` keys | H | landed | b8f704e3 | Lands after T2.0e and before T2.0a, so the lock reads with the checkpoint's reader |
-| T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | B | in progress | – | Lands from lane B after T2.0e and T2.0a (orchestrator's decision) |
-| T2.0d | Refusal census | H | dropped | – | Folded into T2.1a, which landed the census tool and its first DuckDB run (abd6846b, [tracker-T2.1a.md](tracker-T2.1a.md)); a one-time report at the phase end, not a gate step (KO2-53, KO2-76) |
-| T2.0b | Carried tooling rows | H | not started | – | After T2.0e (both change `ratchet.py`) |
-| T2.1a | The S1 judging path, all cases on three databases | A | not started | – | |
-| T2.1b | Contract v26, with the table source | A | not started | – | |
-| T2.2 | SQLite | B | not started | – | |
-| T2.2b | SQLite CI | B | not started | – | Judging, alone, right after T2.2 |
-| T2.3 | Postgres | B | not started | – | Rust host by replay (KO2-20) |
-| T2.3b | Postgres CI | B | not started | – | Judging, alone, right after T2.3 |
-| T2.4 | Full L4 and L5 | B | not started | – | |
-| T2.5 | Conformance kit | C | not started | – | |
-| T2.6 | In-memory fallback | C | not started | – | |
-| T2.7 | Non-SQL provider and swapped data layer | C | not started | – | |
-| T2.8a | Ranking, materialize side | D | not started | – | |
-| T2.8b | Ranking, predict side | D | not started | – | |
-| T2.8c | Multi-call `predict` | G (run in lane f's worktree) | landed | 34639b61 | `main`'s 1fc5a686; 6–8 h; first wave; [tracker-T2.8c.md](tracker-T2.8c.md) |
-| T2.9 | Forecasting | E | not started | – | |
-| T2.10 | PQL targets | E (run in lane f's worktree) | in progress | – | [tracker-T2.10.md](tracker-T2.10.md) |
-| T2.13 | Query and option long tail | D | not started | – | |
-| T2.12 | Schema rules | F | not started | – | `float_nan` first; lands after T2.3 |
-| T2.11 | Sampling options | F | not started | – | |
-| T2.17 | Exact decimals | D | not started | – | KO2-35; first wave |
-| T2.18 | Any column name | E | not started | – | KO2-36; first wave |
-| T2.19 | Two-path sampling | F | landed | dfdd532a | `main`'s eb6c68eb; first wave; [tracker-T2.19.md](tracker-T2.19.md) |
-| T2.14a | Bridge freeze widened | A | not started | – | |
-| T2.14b | Host clean-up | A | not started | – | |
-| T2.14c | Bridge freeze lowered | A | not started | – | |
-| T2.15 | Offline L7 | C | not started | – | |
-| T2.16 | The slice gate | A | not started | – | |
-| HO2 | The new held-out set | orchestrator | not started | – | Not a landing; frozen after T2.1a |
-| CI5 | Faster CI | H | not started | – | |
-| CI6 | Merge-queue landing | H | not started | – | |
-| CI7 | aarch64 wheels and runtime cells | H | not started | – | KO2-38, KO2-40 |
+| T2.0c | `main` 327fda03 merged, the reference re-recorded at 6298913c | B | landed | 5a33dd7d | T2.17's exact decimals done inside it (KO2-91) |
+| T2.0d | Refusal census | H | dropped | – | Folded into T2.1a, which landed the census tool and its first DuckDB run (abd6846b, [tracker-T2.1a.md](tracker-T2.1a.md)); a one-time report at the phase end, not a gate step (KO2-53, KO2-76, KO2-91) |
+| T2.0b | Carried tooling rows | H | dropped | – | Shrunk by the owner to the watchdog and temp-cleanup fixes (KO2-91), which never landed; its carried rows go to "Carried into Phase 3" in migration-plan.md section 8 |
+| T2.0g | The gate judges the merge of `main` (a deleted covered function, more-exact fields, new cases moved) | – | landed | 95259022 | [tracker-T2.0g.md](tracker-T2.0g.md) |
+| T2.0h | The floor cell at its new pins | – | landed | 5520d634 | [tracker-T2.0h.md](tracker-T2.0h.md) |
+| T2.0i | `main` merged again, the reference re-recorded at 43e55f4f | n | landed | 2df155b6 | KO2-81, KO2-84; [tracker-T2.0i.md](tracker-T2.0i.md) |
+| T2.1a | The S1 judging path, all cases on three databases | A | landed | abd6846b | [tracker-T2.1a.md](tracker-T2.1a.md) |
+| T2.1b | Contract v26, with the table source | A | landed | f6881b3d | [tracker-T2.1b.md](tracker-T2.1b.md) |
+| T2.1c | The gate's tools moved out of T2.1a | – | dropped | – | Its tools became end-of-phase reports (KO2-53, KO2-76), made by T2.16a and T2.16 |
+| T2.1d to T2.1v | Small judging and product packages | various | landed | T2.1d 1a37efe2, T2.1e a921e455, T2.1f dfce343e, T2.1g 1486a8f1, T2.1h 54b0d828, T2.1i 36bb2b73, T2.1j c8075715, T2.1k cfdbbaa4, T2.1l 4404e28a, T2.1m 3cb8fd7f, T2.1n cb8d6fb4, T2.1o dd285821, T2.1p e154a8cc, T2.1q b2b0f36c, T2.1r 44e1c9a7, T2.1s ec64b077, T2.1t 6ae80743, T2.1u fedaf7cd, T2.1v 4e5e26c9 | T2.1v is T2.14a1 landed again after its rollback |
+| T2.2 | SQLite | B | landed | 5efb35e2 | [tracker-T2.2.md](tracker-T2.2.md) |
+| T2.2b | SQLite CI | B | dropped | – | Done inside T2.4 (8006efce, [tracker-T2.4.md](tracker-T2.4.md)) |
+| T2.3 | Postgres | B | landed | 68f9b8e4 | Rust host by replay (KO2-20) |
+| T2.3b | Postgres CI | B | dropped | – | Done inside T2.4 (8006efce) |
+| T2.4 | Full L4 and L5 | B | landed | 8006efce | [tracker-T2.4.md](tracker-T2.4.md) |
+| T2.5 | Conformance kit | C | landed | d339e88c | T2.6 done with it ([tracker-T2.5.md](tracker-T2.5.md)) |
+| T2.6 | In-memory fallback | C | dropped | – | Done with T2.5 (d339e88c) |
+| T2.7 | Non-SQL provider and swapped data layer | C | landed | e1fac9ee | [tracker-T2.7.md](tracker-T2.7.md) |
+| T2.8a | Ranking, materialize side | D | dropped | – | Done as T2.8 (11d05883, [tracker-T2.8.md](tracker-T2.8.md)) |
+| T2.8b | Ranking, predict side | D | dropped | – | Done as T2.8 (11d05883) |
+| T2.8c | Multi-call `predict` | G (run in lane f's worktree) | landed | 34639b61 | `main`'s 1fc5a686; [tracker-T2.8c.md](tracker-T2.8c.md) |
+| T2.9 | Forecasting | E | landed | 1d85bce3 | [tracker-T2.9.md](tracker-T2.9.md) |
+| T2.10 | PQL targets | E (run in lane f's worktree) | landed | fbdc6ee9 | [tracker-T2.10.md](tracker-T2.10.md) |
+| T2.13 | Query and option long tail | D | landed | 4ad09482 | [tracker-T2.13.md](tracker-T2.13.md) |
+| T2.13b | The entity filter and ASSUMING choose the examples in the core | o | landed | b2732c12 | KO2-85; [tracker-T2.13b.md](tracker-T2.13b.md) |
+| T2.12 | Schema rules | F | landed | 347ffa31 | [tracker-T2.12.md](tracker-T2.12.md) |
+| T2.11 | Sampling options | F | landed | c301dd1f | Kept in Phase 2 (KO2-79); [tracker-T2.11.md](tracker-T2.11.md) |
+| T2.17 | Exact decimals | D | dropped | – | Done inside T2.0c (5a33dd7d; KO2-35, KO2-50, KO2-91) |
+| T2.18 | Any column name | E | landed | f42d92ea | KO2-36; [tracker-T2.18.md](tracker-T2.18.md) |
+| T2.19 | Two-path sampling | F | landed | dfdd532a | `main`'s eb6c68eb; [tracker-T2.19.md](tracker-T2.19.md) |
+| T2.21 | Exact numeric keys past 2**53 the caller names, links or edits | g | landed | 3e2342f2 | KO2-78; [tracker-T2.21.md](tracker-T2.21.md) |
+| T2.14a | Bridge freeze widened | A | landed | 24f5be66 | [tracker-T2.14.md](tracker-T2.14.md) |
+| T2.14b | Host clean-up | – | in review | 102fa1f9 (final candidate) | T2.14d merged into it; [tracker-T2.14.md](tracker-T2.14.md) |
+| T2.14c | Bridge freeze lowered | p | in review | be55838a (final candidate, on 102fa1f9) | [tracker-T2.14.md](tracker-T2.14.md) |
+| T2.15 | Offline L7 | C | dropped | – | Became T2.16a's `contract/tools/l7.py` (9a899950; KO2-53, KO2-76) |
+| T2.16a | The final gate's tooling | o | landed | 9a899950 | [tracker-T2.16a.md](tracker-T2.16a.md) |
+| T2.16 | The slice gate | q | in progress | – | [tracker-T2.16.md](tracker-T2.16.md) |
+| HO2 | The new held-out set | orchestrator | landed | Not a landing: frozen 2026-10-19, 47 cases | Used once, by T2.16's held-out run |
+| CI5 | Faster CI | H | dropped | – | Dropped by the owner (KO2-91) |
+| CI6 | Merge-queue landing | H | dropped | – | Dropped by the owner (KO2-91) |
+| CI7 | aarch64 wheels and runtime cells | H | landed | 3d7aaf8f | KO2-38, KO2-40, KO2-79; [tracker-CI7.md](tracker-CI7.md) |
 | CI8 | cargo-deny exception for `zip` | C | landed | 8bcc85e4 | KO2-49; lands alone, first |
 
 ## Stop-rule counters
@@ -53,6 +61,10 @@ Integers per H20 as revised by E29: a check failing twice the same way goes to t
 
 | Package | Same-way failures | Fix rounds on one divergence | Escalated |
 |---|---|---|---|
+| T2.0 | 2 (rule `epic`, 5 rounds the same way) | – | To the owner; answered (Q31, "yes", 2026-10-16) |
+| T2.0e | 2 (the citation rule, twice in review) | – | Method changed by the orchestrator (log 2026-10-16T22:18:53Z); not sent to the owner; landed 912d9051 |
+| T2.1a | 2 (the census's "which site was reached") | – | Method changed by the orchestrator; on the owner's morning list; settled when KO2-53 and KO2-76 made the census a report, and KO2-90 records the owner's answer on its counts |
+| T2.14b | – | 4 (fixes 2, 4, 7 and 8 on how ranking candidates of the same text count as one) | Decided by the orchestrator under the overnight delegation (KO2-88), listed for the owner's reading; not an owner answer |
 
 ## Design review rounds (T2.0a)
 

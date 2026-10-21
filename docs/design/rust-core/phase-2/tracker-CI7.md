@@ -27,7 +27,7 @@ It changes judging files (`ci.yml` and scripts under `scripts/rust_core/`), so i
 
 ### Open
 
-- The aarch64 build image comes from quay.io by digest; mirroring it to ghcr.io is the owner's (on the morning list).
+- The aarch64 build image comes from quay.io by digest; mirroring it to ghcr.io is the owner's (on the morning list). Closed: the owner allowed the copy (2026-10-20) and ci.yml pulls it from ghcr.io since T2.0i.
 
 ### For the landing
 
