@@ -129,8 +129,10 @@ PARTS = (
 #: (``contract/tests/test_t214b_wording.py``, the same column refused at
 #: materialize) is pending; after, the core's warnings are held whole.
 FX1_KEY = 'wording:warned:runtime-warning:wording.float32-classification'
+#: The vectors the reference gives pandas' RuntimeWarning on (FX-1).
+FX1_VECTORS = ('refuse.double-past-float32',)
 RUNTIME_WARNINGS = (
-    {'refuse.double-past-float32': ['RuntimeWarning']}
+    dict.fromkeys(FX1_VECTORS, ['RuntimeWarning'])
     if FX1_KEY
     in json.loads(
         (ROOT / 'contract/tests/t214b-pending.json').read_text(encoding='utf-8')
@@ -530,10 +532,14 @@ def test_the_reference_s_classes_are_its_float32_labels() -> None:
     assert all(BY_ID[v]['reference']['payload'] is None for v in refused), (
         'a refused vector sent a request'
     )
-    # The runtime's warnings left out of the core's comparison are the
-    # reference's, and only where named.
+    # The reference's own RuntimeWarning (FX-1): given beside its refusal
+    # of a double past float32's range, and on no other vector, whether or
+    # not the core's comparison still leaves it out. Where it is left out
+    # (while T2.14b's FX-1 key is pending), it is the reference's.
     for vector in RECORDED['vectors']:
-        runtime = RUNTIME_WARNINGS.get(vector['id'], [])
         warned = vector['reference']['warnings']
+        assert ('RuntimeWarning' in warned) == (vector['id'] in FX1_VECTORS), (
+            vector['id']
+        )
+        runtime = RUNTIME_WARNINGS.get(vector['id'], [])
         assert all(w in warned for w in runtime), vector['id']
-        assert ('RuntimeWarning' in warned) == bool(runtime), vector['id']
