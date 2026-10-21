@@ -16,6 +16,7 @@ not pinned by digest, and logs in to ghcr.io alone.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -2327,3 +2328,452 @@ def test_t20i_every_engine_artifact_downloaded_is_one_engine_wheels_uploads() ->
     assert set(downloaded) <= uploaded, (sorted(downloaded), sorted(uploaded))
     aarch64 = jobs['native-wheel-aarch64']['env']['MANYLINUX']
     assert aarch64.startswith('ghcr.io/'), aarch64
+
+
+# --- T3.0: the judging-tool tests in a job of their own, the timing guard,
+# and the comparison base taken at push time ---------------------------------
+#
+# The names assumed until T3.0's second implementer's are relayed: the
+# pytest marker ``T30_MARKER``; a job of its own whose pytest runs select it
+# (``-m <marker>``), run only when an output of a job it needs, computed by
+# a ``run:`` step, says a path under scripts/rust_core/, contract/tools/,
+# contract/runners/ or the gate files changed; every other pytest run over
+# tests/ or contract/tests leaves it out (``not <marker>``). The timing
+# guard ``T30_TIMING`` (``--workflow FILE --durations FILE``, the durations
+# a list of runs, newest first, each ``{"run": id, "jobs": [{"name",
+# "minutes"}]}``), named by a step of the workflow. The comparison base: a
+# step that runs ``ratchet.py where`` reads the base from an output of a job
+# it needs, through its env. Listed in tests/t30-pending.json until done.
+
+T30_MARKER = 'tooling'
+T30_TIMING = ROOT / 'scripts/rust_core/orchestration/ci_timing.py'
+T30_PHASE = 'rust-core-phase-3'
+T30_LANE = f'{T30_PHASE}-lane-a'
+T30_PENDING = ROOT / 'tests/t30-pending.json'
+T30_TOOLS = re.compile(r'gate\.sh|ratchet\.py|compare\.py|coverage\.py')
+T30_COPIES = re.compile(
+    r"""['"](?:init|clone)['"]|['"]worktree['"]\s*,\s*['"]add['"]"""
+    r'|git init|git clone|worktree add|copytree\('
+)
+T30_LOADS = re.compile(
+    r"""(?:_module|load|import_module|spec_from_file_location)\([^)]*?"""
+    r"""['"]([\w/.]*?test_\w+)(?:\.py)?['"]|^\s*(?:from|import)\s+(test_\w+)""",
+    re.M,
+)
+
+
+def _t30_pending(test: Any) -> Any:
+    names = set(json.loads(T30_PENDING.read_text(encoding='utf-8'))['pending'])
+    if test.__name__ in names:
+        return pytest.mark.xfail(
+            strict=True,
+            reason='T3.0: failing until implemented; once it passes, take '
+            'it out of tests/t30-pending.json pending',
+        )(test)
+    return test
+
+
+def _t30_gate_copying() -> list[Path]:
+    r"""The test files that copy the contract into a temporary repository
+    (git init, clone, a worktree or a tree copy) and rerun the gate, the
+    ratchet, the comparator or coverage there, and the files that load one
+    of them: the tests that belong in the judging-tool job."""
+    files = sorted(
+        [*ROOT.glob('tests/test_*.py'), *ROOT.glob('contract/tests/test_*.py')]
+    )
+    text = {f: f.read_text(encoding='utf-8') for f in files}
+    found = {
+        f
+        for f, s in text.items()
+        if T30_TOOLS.search(s) and T30_COPIES.search(s)
+    }
+    by_name = {f.stem: f for f in files}
+    grew = True
+    while grew:
+        grew = False
+        for f in files:
+            if f in found:
+                continue
+            loaded = {
+                (m.group(1) or m.group(2)).split('/')[-1]
+                for m in T30_LOADS.finditer(text[f])
+            }
+            if any(by_name.get(name) in found for name in loaded):
+                found.add(f)
+                grew = True
+    return sorted(found)
+
+
+def _t30_marked(node: ast.AST) -> bool:
+    return any(
+        isinstance(n, ast.Attribute)
+        and n.attr == T30_MARKER
+        and isinstance(n.value, ast.Attribute)
+        and n.value.attr == 'mark'
+        for n in ast.walk(node)
+    )
+
+
+@_t30_pending
+def test_t30_every_gate_copying_test_carries_the_marker() -> None:
+    pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
+    markers = pyproject.partition('[tool.pytest.ini_options]')[2]
+    assert re.search(rf'^\s*"{T30_MARKER}:', markers, re.M), 'not registered'
+    files = _t30_gate_copying()
+    # The detection finds the families the test-speed investigation names.
+    names = {f.name for f in files}
+    assert {'test_gate_modes.py', 'test_contract_ratchet.py'} <= names, names
+    unmarked = []
+    for path in files:
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        whole = any(
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(t, ast.Name) and t.id == 'pytestmark'
+                for t in node.targets
+            )
+            and _t30_marked(node.value)
+            for node in tree.body
+        )
+        if whole:
+            continue
+        unmarked += [
+            f'{path.relative_to(ROOT)}::{node.name}'
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+            and node.name.startswith('test')
+            and not any(_t30_marked(d) for d in node.decorator_list)
+        ]
+    assert not unmarked, f'{len(unmarked)} unmarked: {unmarked[:20]}'
+
+
+def _t30_pytest_steps() -> list[tuple[str, str]]:
+    return [
+        (name, str(step.get('run', '')))
+        for name, job in _workflow()['jobs'].items()
+        for step in job.get('steps', [])
+        if 'pytest' in str(step.get('run', ''))
+        and re.search(
+            r'(?<![\w/-])(?:contract/)?tests(?![\w/-])', str(step['run'])
+        )
+    ]
+
+
+def _t30_selects(run: str) -> bool:
+    """Whether a pytest run selects the marker: ``-m <marker>``, quoted or
+    not, or an expression holding it but not as ``not <marker>``."""
+    expressions = [
+        quoted or bare
+        for _, quoted, bare in re.findall(
+            r"-m\s+(?:(['\"])(.*?)\1|([^\s'\"]+))", run
+        )
+    ]
+    return any(
+        re.search(rf'\b{T30_MARKER}\b', expr)
+        and not re.search(rf'not {T30_MARKER}\b', expr)
+        for expr in expressions
+    )
+
+
+def _t30_tooling_job() -> tuple[str, dict[str, Any]]:
+    jobs = _workflow()['jobs']
+    names = sorted(
+        {name for name, run in _t30_pytest_steps() if _t30_selects(run)}
+    )
+    assert len(names) == 1, f'jobs selecting -m {T30_MARKER}: {names}'
+    return names[0], jobs[names[0]]
+
+
+@_t30_pending
+def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
+    name, job = _t30_tooling_job()
+    matrix = job.get('strategy', {}).get('matrix', {})
+    assert not matrix, f'{name} runs in a matrix: {matrix}'
+    runs = ' '.join(r for n, r in _t30_pytest_steps() if n == name)
+    assert re.search(r'(?<![\w/])tests(?![\w/-])', runs), runs
+    assert 'contract/tests' in runs, runs
+    for other, run in _t30_pytest_steps():
+        if other != name:
+            assert f'not {T30_MARKER}' in run, f'{other} runs them: {run}'
+
+
+def _t30_substitute(text: str, values: dict[str, str]) -> str:
+    def one(match: re.Match[str]) -> str:
+        return values.get(match.group(1).strip(), '')
+
+    return re.sub(r'\$\{\{\s*(.*?)\s*\}\}', one, text)
+
+
+def _t30_output(
+    job_name: str,
+    output: str,
+    repo: Path,
+    tmp_path: Path,
+    values: dict[str, str],
+) -> str:
+    """A job's output, its producing step's text run in ``repo`` as CI
+    runs it, with GitHub's environment for a push of the lane."""
+    job = _workflow()['jobs'][job_name]
+    source = str(job.get('outputs', {}).get(output, ''))
+    found = re.search(r'steps\.([\w-]+)\.outputs\.([\w-]+)', source)
+    assert found, f'{job_name}.outputs.{output} is {source!r}, no step output'
+    step = next(s for s in job['steps'] if s.get('id') == found.group(1))
+    assert 'run' in step, f'{job_name}: step {found.group(1)} is no run: step'
+    out = tmp_path / f'output-{job_name}-{output}'
+    out.write_text('')
+    event = tmp_path / 'event.json'
+    event.write_text(json.dumps({'before': values['github.event.before']}))
+    env = {
+        **os.environ,
+        **GIT_ENV,
+        **{
+            k: _t30_substitute(str(v), values)
+            for k, v in {**job.get('env', {}), **step.get('env', {})}.items()
+        },
+        'GITHUB_OUTPUT': str(out),
+        'GITHUB_EVENT_NAME': 'push',
+        'GITHUB_REF_NAME': T30_LANE,
+        'GITHUB_REF': f'refs/heads/{T30_LANE}',
+        'GITHUB_EVENT_PATH': str(event),
+        'GITHUB_SHA': values['github.sha'],
+        'GITHUB_REPOSITORY': 'o/r',
+    }
+    done = subprocess.run(
+        ['bash', '--noprofile', '--norc', '-e', '-c',
+         _t30_substitute(step['run'], values)],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )  # fmt: skip
+    assert done.returncode == 0, done.stdout + done.stderr
+    lines = dict(
+        line.partition('=')[::2]
+        for line in out.read_text().splitlines()
+        if '=' in line
+    )
+    return lines.get(found.group(2), '')
+
+
+@_t30_pending
+@pytest.mark.parametrize(
+    ('path', 'runs'),
+    [
+        ('scripts/rust_core/ratchet.py', True),
+        ('scripts/rust_core/gate.sh', True),
+        ('contract/tools/differential.py', True),
+        ('contract/runners/run_python.py', True),
+        ('.github/workflows/ci.yml', True),
+        ('docs/design/rust-core/README.md', False),
+        ('rust/crates/sdm-core/src/lib.rs', False),
+        ('packages/structured-data-models-client/README.md', False),
+    ],
+)
+def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
+    tmp_path: Path, path: str, runs: bool
+) -> None:
+    name, job = _t30_tooling_job()
+    condition = str(job.get('if', ''))
+    referenced = sorted(
+        set(re.findall(r'needs\.([\w-]+)\.outputs\.([\w-]+)', condition))
+    )
+    assert any(o != 'skip' for _, o in referenced), f'{name} if: {condition!r}'
+    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
+    subprocess.run(
+        ['git', 'clone', '-q', '--bare', '--shared', str(ROOT), str(origin)],
+        env={**os.environ, **GIT_ENV}, check=True, capture_output=True,
+    )  # fmt: skip
+    _git(tmp_path, 'clone', '-q', '--shared', str(origin), str(repo))
+    _git(
+        repo, 'checkout', '-q', '-b', T30_LANE, _git(ROOT, 'rev-parse', 'HEAD')
+    )
+    base = _git(repo, 'rev-parse', 'HEAD')
+    _git(repo, 'push', '-q', 'origin', f'{base}:refs/heads/{T30_PHASE}')
+    _git(repo, 'fetch', '-q', 'origin')
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open('a', encoding='utf-8') as handle:
+        handle.write('\n')
+    _git(repo, 'add', path)
+    _git(repo, 'commit', '-q', '-m', 'T3.99: one path')
+    head = _git(repo, 'rev-parse', 'HEAD')
+    values = {
+        'github.event.before': base,
+        'github.sha': head,
+        'github.ref_name': T30_LANE,
+        'github.ref': f'refs/heads/{T30_LANE}',
+        'github.event_name': 'push',
+        'github.repository': 'o/r',
+    }
+    context = dict(values)
+    for job_name, output in referenced:
+        key = f'needs.{job_name}.outputs.{output}'
+        context[key] = (
+            'false'
+            if output == 'skip'
+            else _t30_output(job_name, output, repo, tmp_path, values)
+        )
+    assert _evaluate(condition, context) is runs, (condition, context)
+
+
+def _t30_durations(tmp_path: Path, minutes: list[float]) -> Path:
+    """Runs newest first: rust-test (timeout 120, 80% is 96 minutes) at
+    these minutes, every other job at one minute."""
+    path = tmp_path / 'durations.json'
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    'run': 1000 - n,
+                    'jobs': [
+                        {'name': 'rust-test', 'minutes': m},
+                        {'name': 'lint', 'minutes': 1.0},
+                    ],
+                }
+                for n, m in enumerate(minutes)
+            ]
+        )
+    )
+    return path
+
+
+@_t30_pending
+@pytest.mark.parametrize(
+    ('minutes', 'fails'),
+    [
+        ([100.0, 50.0, 97.0], True),
+        ([100.0, 97.0, 50.0], True),
+        ([100.0, 50.0, 50.0, 100.0], False),
+        ([95.0, 95.0, 95.0], False),
+    ],
+    ids=['two-of-three', 'the-last-two', 'once-in-three', 'under-80'],
+)
+def test_t30_the_timing_guard_fails_a_job_over_80_percent_twice_in_three(
+    tmp_path: Path, minutes: list[float], fails: bool
+) -> None:
+    named = [
+        step
+        for job in _workflow()['jobs'].values()
+        for step in job.get('steps', [])
+        if T30_TIMING.name in str(step.get('run', ''))
+    ]
+    assert named, f'no step of ci.yml runs {T30_TIMING.name}'
+    state = tmp_path / 'state'
+    done = subprocess.run(
+        [sys.executable, str(T30_TIMING), '--workflow', str(CI),
+         '--durations', str(_t30_durations(tmp_path, minutes))],
+        env={**os.environ, 'SDM_ORCH_STATE': str(state)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )  # fmt: skip
+    said = done.stdout + done.stderr
+    written = (
+        [
+            p
+            for p in state.rglob('*')
+            if p.is_file() and 'rust-test' in p.read_text()
+        ]
+        if state.exists()
+        else []
+    )
+    if fails:
+        assert done.returncode != 0, said
+        assert 'rust-test' in said and 'lint' not in said.replace(
+            'rust-test', ''
+        ), said
+        assert written, 'no fix item for the heartbeat'
+    else:
+        assert done.returncode == 0, said
+        assert not written
+
+
+def _t30_landing(repo: Path, package: str, base: str) -> str:
+    _git(
+        repo, 'commit', '-q', '--allow-empty', '-m',
+        f'Land {package}: a package\n\nBoth reviews approve it.\n\n'
+        f'Reviewed-by: two reviewers\nProtected-paths: none\n'
+        f'Base-SHA: {base}\nCheckpoint-SHA: {base}',
+    )  # fmt: skip
+    return _git(repo, 'rev-parse', 'HEAD')
+
+
+@_t30_pending
+def test_t30_comparison_jobs_take_the_base_recorded_at_push_time(
+    tmp_path: Path,
+) -> None:
+    r"""The candidate lands while its run is still going: the phase branch
+    now holds the candidate, so a base read from its tip at run time makes
+    the candidate its own checkpoint. Each step that runs ``ratchet.py
+    where`` takes the base recorded when the run started, from an output of
+    a job it needs, and judges against the head the candidate was pushed
+    on."""
+    jobs = _workflow()['jobs']
+    steps = [
+        (name, job, step)
+        for name, job in jobs.items()
+        for step in job.get('steps', [])
+        if 'ratchet.py where' in str(step.get('run', ''))
+        # The phase check judges a push to the phase branch on the push's
+        # own previous tip, already the base at push time.
+        and 'ratchet.py checkpoint' not in str(step.get('run', ''))
+    ]
+    assert steps, 'no step runs ratchet.py where'
+    origin, repo = tmp_path / 'origin.git', tmp_path / 'repo'
+    _git(tmp_path, 'init', '-q', '--bare', str(origin))
+    _git(tmp_path, 'clone', '-q', str(origin), str(repo))
+    _git(repo, 'checkout', '-q', '-b', 'start')
+    (repo / 'a.txt').write_text('a\n')
+    _git(repo, 'add', 'a.txt')
+    _git(repo, 'commit', '-q', '-m', 'Merge Phase 2 into rust-core')
+    epic = _git(repo, 'rev-parse', 'HEAD')
+    pushed_on = _t30_landing(repo, 'T3.98', epic)
+    (repo / 'b.txt').write_text('b\n')
+    _git(repo, 'add', 'b.txt')
+    _git(repo, 'commit', '-q', '-m', 'T3.99: the candidate')
+    candidate = _git(repo, 'rev-parse', 'HEAD')
+    landed = _t30_landing(repo, 'T3.99', pushed_on)
+    _git(
+        repo, 'push', '-q', 'origin', f'{epic}:refs/heads/rust-core',
+        f'{landed}:refs/heads/{T30_PHASE}', f'{candidate}:refs/heads/{T30_LANE}',
+    )  # fmt: skip
+    _git(repo, 'checkout', '-q', '-B', T30_LANE, candidate)
+    _git(repo, 'fetch', '-q', 'origin')
+    event = tmp_path / 'event.json'
+    event.write_text(json.dumps({'before': '0' * 40}))
+    for name, job, step in steps:
+        env_text = {**job.get('env', {}), **step.get('env', {})}
+        recorded = {
+            k: v
+            for k, v in env_text.items()
+            if re.search(r'needs\.[\w-]+\.outputs\.', str(v))
+        }
+        assert recorded, f'{name}: the base is read from the branch at run time'
+        env = {
+            **os.environ,
+            **GIT_ENV,
+            **{k: _t30_substitute(str(v), {}) for k, v in env_text.items()},
+            **{
+                k: re.sub(r'\$\{\{.*?\}\}', pushed_on, str(v))
+                for k, v in recorded.items()
+            },
+            'GITHUB_EVENT_NAME': 'push',
+            'GITHUB_REF_NAME': T30_LANE,
+            'GITHUB_EVENT_PATH': str(event),
+            'SDM_PHASE_BRANCH': T30_PHASE,
+        }
+        where = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py'), 'where',
+             '--repo', str(repo)],
+            env=env, capture_output=True, text=True, timeout=120,
+        )  # fmt: skip
+        assert where.returncode == 0, where.stdout + where.stderr
+        point = subprocess.run(
+            [sys.executable, str(ROOT / 'scripts/rust_core/ratchet.py'),
+             'checkpoint', '--repo', str(repo), *where.stdout.split()],
+            env=env, capture_output=True, text=True, timeout=120,
+        )  # fmt: skip
+        said = point.stdout + point.stderr
+        assert point.returncode == 0, f'{name}: {where.stdout} {said}'
+        assert point.stdout.split()[0] == pushed_on, f'{name}: {said}'
