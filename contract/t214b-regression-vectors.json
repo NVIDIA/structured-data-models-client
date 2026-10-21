@@ -299,6 +299,33 @@
    ],
    "refusal": null
   },
+  "timestamp-beside-datetime64": {
+   "parts": 2,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-01-02\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-02"
+      },
+      "score": 0.1
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "date",
+       "text": "2023-01-02"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
   "naive-beside-aware": {
    "parts": 3,
    "asked": [

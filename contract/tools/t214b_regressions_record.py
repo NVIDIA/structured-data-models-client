@@ -116,6 +116,16 @@ CANDIDATES: dict[str, tuple[str, Any]] = {
             dt.time(2, tzinfo=UTC),
         ],
     ),
+    # Claude r4: a pandas Timestamp and NumPy's datetime64[ns] of the same
+    # moment (one key of dict.fromkeys), beside a date.
+    'timestamp-beside-datetime64': (
+        'date',
+        lambda: [
+            _pandas_stamp('2023-01-01'),
+            _numpy_stamp('2023-01-01T00:00:00.000000000'),
+            dt.date(2023, 1, 2),
+        ],
+    ),
     'naive-beside-aware': (
         'stamp',
         lambda: [
@@ -137,6 +147,18 @@ DOCUMENTS = (
 JSON_TABLE = 't214b_json_lone_surrogate'
 #: The code a core warning's text is prefixed with on python-core.
 CODE_PREFIX = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
+
+
+def _pandas_stamp(text: str) -> Any:
+    import pandas as pd
+
+    return pd.Timestamp(text)
+
+
+def _numpy_stamp(text: str) -> Any:
+    import numpy as np
+
+    return np.datetime64(text)
 
 
 def _zone() -> Any:
