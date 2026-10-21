@@ -21,7 +21,7 @@
 //!   once to the nearest float32 (T2.0c).
 //!   An example with no row is 0 for `SUM` and `COUNT` and has no label
 //!   for the others.
-//! - A condition ([`compare`], `execute_rel_op`) compares the values its
+//! - A condition (`column_compare`, `execute_rel_op`) compares the values its
 //!   target has with a constant read at the target's type: at float32 for a
 //!   float32 target, at float64 for an integer target and a float constant,
 //!   at int64 for an integer target and an integer constant; a decimal
@@ -523,44 +523,6 @@ fn float32(constant: &Constant) -> Result<f32, CoreError> {
         Constant::Float(f) => Ok(*f as f32),
         _ => Err(unpaired()),
     }
-}
-
-/// `left op constant` for each value, as `execute_rel_op` compares them: a
-/// NaN equal to nothing and, unlike IEEE, not unequal either; a boolean
-/// with a boolean, text with text. An integer constant past int64 against
-/// an integer target, which the reference cannot read at the target's
-/// type, is refused by name (`condition_value`).
-pub fn compare(left: &Labels, op: RelOp, constant: Constant) -> Result<Vec<bool>, CoreError> {
-    Ok(match (left, &constant) {
-        (Labels::Float(values), Constant::Int(_) | Constant::Float(_)) => {
-            // The constant at the target's float32, by way of float64, as
-            // numpy reads a Python number at float32.
-            let value = float32(&constant)?;
-            values
-                .iter()
-                .map(|&v| !v.is_nan() && apply(v, op, value))
-                .collect()
-        }
-        (Labels::Int(values), Constant::Float(f)) => values
-            .iter()
-            .map(|&v| {
-                let v = v as f64;
-                !f.is_nan() && apply(v, op, *f)
-            })
-            .collect(),
-        (Labels::Int(values), Constant::Int(i)) => {
-            let value = i64::try_from(*i).map_err(|_| not_yet("condition_value"))?;
-            values.iter().map(|&v| apply(v, op, value)).collect()
-        }
-        (Labels::Bool(values), Constant::Bool(b)) => {
-            values.iter().map(|&v| apply(v, op, *b)).collect()
-        }
-        (Labels::Text(values), Constant::Text(t)) => values
-            .iter()
-            .map(|v| apply(v.as_str(), op, t.as_str()))
-            .collect(),
-        _ => return Err(unpaired()),
-    })
 }
 
 /// `a op b`.
@@ -1690,30 +1652,6 @@ mod tests {
             decimal_aggregate(Aggregation::Avg, &[above * 2 - 1, 1], 38, 30).unwrap(),
             up
         );
-    }
-
-    #[test]
-    fn a_condition_reads_its_constant_at_the_target_s_type() {
-        let left = Labels::Float(vec![0.0, 0.1, 1.0, f32::NAN]);
-        assert_eq!(
-            compare(&left, RelOp::Gt, Constant::Int(0)).unwrap(),
-            [false, true, true, false]
-        );
-        // 0.1 at float32 equals the float32 0.1.
-        assert_eq!(
-            compare(&left, RelOp::Eq, Constant::Float(0.1)).unwrap(),
-            [false, true, false, false]
-        );
-        assert_eq!(
-            compare(&left, RelOp::Ne, Constant::Int(1)).unwrap(),
-            [true, true, false, false]
-        );
-        let ints = Labels::Int(vec![1, 2]);
-        assert_eq!(
-            compare(&ints, RelOp::Lt, Constant::Float(1.5)).unwrap(),
-            [true, false]
-        );
-        assert!(compare(&ints, RelOp::Lt, Constant::Int(1 << 70)).is_err());
     }
 
     #[test]
