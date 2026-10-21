@@ -1864,9 +1864,15 @@ jobs:
         with:
           name: wheels
           path: dist
+      # The candidate's own wheels first, without their dependencies, as
+      # runtime-install installs them: --find-links alone lets pip take a
+      # published distribution of the same version from the index instead
+      # (it took the published connectors, whose duckdb extra admits 2.0;
+      # T2.16), so the job would test that rather than the candidate.
       - run: |
           pip install --upgrade pip pytest requests-mock
           VERSION=$(cat dist/VERSION)
+          pip install --no-deps "$GITHUB_WORKSPACE"/dist/*.whl
           pip install --find-links "$GITHUB_WORKSPACE/dist" \
             "structured-data-models-client[sqlite,duckdb]==$VERSION"
       - name: The installed distribution is what gets imported, and it is typed

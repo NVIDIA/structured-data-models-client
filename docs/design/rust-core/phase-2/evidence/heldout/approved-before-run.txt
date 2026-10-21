@@ -1,0 +1,7 @@
+# Approved before the run, from register-at-run-start.yaml only (reviewer: Claude, 2026-10-21).
+# P2G-1 (decision E45): rust-host ends a predict whose endpoint refuses a call with the core's INVALID_RESPONSE.
+# Its affected_inputs name "call 2 of a request asked in several calls" and "call 1 of a two-step forecast", on DuckDB, SQLite and Postgres.
+h2.calls.last-of-three-calls-fails
+h2.forecast.second-step-call-fails
+# Not approved: h2.calls.only-call-fails (a request asked in one call is outside the entry's enumeration).
+# Not approved: h2.rank.second-candidate-call-fails (a ranking's candidate call is outside the entry's enumeration).

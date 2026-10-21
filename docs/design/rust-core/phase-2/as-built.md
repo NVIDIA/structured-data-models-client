@@ -255,6 +255,7 @@ The final package: the phase-end docs (KO2-90 and KO2-92 for check 2's kept rule
   The Databricks transport encodes the served answer's text with `surrogatepass`, so a raw lone surrogate reaches the core and is refused by name.
   Register P1B-24 is widened to raw lone surrogates (the orchestrator's decision under KO2-88; on Databricks this refuses an answer the reference accepts).
 - **DuckDB below 2.0**: DuckDB 2.0 came out during the phase end and broke CI's `engine` and `installed-wheel` jobs, so the connectors' `duckdb` extra is capped `duckdb>=1.5.0,<2` (uv.lock's specifier with it), the orchestrator's decision under KO2-88; supporting 2.0 is carried as P2-T2.16-12.
+  CI's `installed-wheel` job installed the published connectors of the same version from the index instead of the candidate's (`--find-links` alone), so it now installs the candidate's own wheels first without their dependencies, as `runtime-install` does.
 - **`scripts/rust_core/cells.sh`** installs the connectors with the `sqlite` and `postgres` extras, as `ci.yml`'s "Install the cell" step does, with one test.
 Its gaps found at the phase end are in the next section.
 
