@@ -227,7 +227,7 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 - **One environment per lane, reused until what it installs changes.**
   `scripts/rust_core/cells.sh /mnt/localssd/cells/<lane>` builds the lane's cells into `env-<key>`, keyed by `uv.lock`, `rust/`, the packages' sources, `native_wheel.py` and the cells in `ci.yml` (`cells.sh --print-key` prints it).
   A docs, cases or tests commit reuses the environment in under a second; a new key builds a new one (about 3 minutes, most of it from the shared cache) and removes the lane's older one.
-  Export `SDM_LANE_ENV=/mnt/localssd/cells/<lane>` and run with the cell python it prints (`$SDM_LANE_ENV/current/cell-ref-pandas3/bin/python`).
+  Export `SDM_LANE_ENV=/mnt/localssd/cells/<lane>` and `SDM_KIT_PYTHON=$SDM_LANE_ENV/current/kit/bin/python` (the provider kit's test-ops build, as CI's contract jobs have it), and run with the cell python it prints (`$SDM_LANE_ENV/current/cell-ref-pandas3/bin/python`).
 - **The runners refuse the shared `.venv`.**
   On this machine `run_python.py` and the provider kit refuse a checkout's `.venv`, and with `SDM_LANE_ENV` set any interpreter outside it, naming the right one; Phase 2 lost twelve hours to a stale shared environment read as an environment fault.
 - **One Rust build cache.**
