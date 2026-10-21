@@ -1,0 +1,148 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Runs a heavy command only when the machine can take it (T3.0, item 5):
+#
+#   heavy <command> [args...]
+#
+# A heavy command (any gate.sh leg, a full pytest of contract/tests or tests,
+# a gate-machinery test file, cargo test/build/clippy of the workspace, a
+# wheel build) starts only when all three allow it:
+#   - a CPU slot: one of SLOTS lock files in the state directory is free
+#     (heavy.lock, heavy-2.lock, ...; the slot is held while the command runs);
+#   - memory: MemAvailable is at least MIN_FREE_MEM_GB;
+#   - disk: every path in DISK has at least MIN_FREE_DISK_GB free. When one
+#     has less, clean_tmp.sh --apply runs first (at most once every
+#     CLEAN_EVERY seconds), and the disk is read again.
+# Otherwise it queues: it says what it waits for, once per change, and looks
+# again every POLL seconds. A threshold the machine can never meet (more
+# memory than it has, more free disk than the disk holds) is refused at once,
+# exit 2 (the disk's after a clean-up). The command's own exit status is heavy's, whatever it is.
+#
+# The thresholds are one KEY=VALUE file: $SDM_HEAVY_CONFIG, else heavy.conf
+# beside this script. The state directory is $SDM_ORCH_STATE (default
+# ~/.local/share/sdm-orchestration); clean_tmp.sh is $SDM_CLEAN_TMP, else the
+# one beside this script. $SDM_ORCH_STATE/bin/heavy calls this script.
+set -u
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+CONFIG=${SDM_HEAVY_CONFIG:-$HERE/heavy.conf}
+STATE=${SDM_ORCH_STATE:-$HOME/.local/share/sdm-orchestration}
+CLEAN=${SDM_CLEAN_TMP:-$HERE/clean_tmp.sh}
+
+[ $# -gt 0 ] || { sed -n '6,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+SLOTS=2
+MIN_FREE_MEM_GB=6
+MIN_FREE_DISK_GB=40
+DISK="/ /mnt/localssd"
+POLL=20
+CLEAN_EVERY=600
+if [ -f "$CONFIG" ]; then
+  while IFS='=' read -r key value; do
+    case "$key" in
+      '' | \#*) continue ;;
+      SLOTS | MIN_FREE_MEM_GB | MIN_FREE_DISK_GB | DISK | POLL | CLEAN_EVERY)
+        printf -v "$key" '%s' "$value" ;;
+      *) echo "heavy: $CONFIG: unknown setting $key" >&2; exit 2 ;;
+    esac
+  done <"$CONFIG"
+else
+  echo "heavy: no config at $CONFIG; the defaults hold" >&2
+fi
+for number in "$SLOTS" "$MIN_FREE_MEM_GB" "$MIN_FREE_DISK_GB" "$POLL" "$CLEAN_EVERY"; do
+  [[ "$number" =~ ^[0-9]+$ ]] || { echo "heavy: $CONFIG: '$number' is not a whole number" >&2; exit 2; }
+done
+[ "$SLOTS" -ge 1 ] || { echo "heavy: SLOTS must be at least 1" >&2; exit 2; }
+mkdir -p "$STATE"
+
+# Sizes in whole GiB, rounded down.
+mem_free() { awk '/^MemAvailable:/ { print int($2 / 1048576) }' /proc/meminfo; }
+mem_total() { awk '/^MemTotal:/ { print int($2 / 1048576) }' /proc/meminfo; }
+disk_free() { df -Pk -- "$1" 2>/dev/null | awk 'NR == 2 { print int($4 / 1048576) }'; }
+disk_total() { df -Pk -- "$1" 2>/dev/null | awk 'NR == 2 { print int($2 / 1048576) }'; }
+
+# Never-satisfiable thresholds are refused, not queued for ever.
+if [ "$MIN_FREE_MEM_GB" -gt "$(mem_total)" ]; then
+  echo "heavy: refused: MIN_FREE_MEM_GB=$MIN_FREE_MEM_GB GiB of free memory, and the machine has $(mem_total) GiB in all" >&2
+  exit 2
+fi
+for path in $DISK; do
+  [ -n "$(disk_total "$path")" ] || { echo "heavy: refused: DISK names $path, which df cannot read" >&2; exit 2; }
+done
+# After a clean-up: free disk the disk cannot hold is refused.
+disk_never() {
+  local path total
+  for path in $DISK; do
+    total=$(disk_total "$path")
+    if [ "$MIN_FREE_DISK_GB" -gt "$total" ]; then
+      echo "heavy: refused: MIN_FREE_DISK_GB=$MIN_FREE_DISK_GB GiB free on $path, a disk of $total GiB" >&2
+      exit 2
+    fi
+  done
+}
+
+# What is short, as one line, or nothing.
+short() {
+  local free path
+  free=$(mem_free)
+  [ "$free" -ge "$MIN_FREE_MEM_GB" ] || { echo "memory: $free GiB available, $MIN_FREE_MEM_GB wanted"; return; }
+  for path in $DISK; do
+    free=$(disk_free "$path")
+    [ "${free:-0}" -ge "$MIN_FREE_DISK_GB" ] || { echo "disk: $free GiB free on $path, $MIN_FREE_DISK_GB wanted"; return; }
+  done
+}
+
+# clean_tmp.sh --apply, at most once every CLEAN_EVERY seconds machine-wide.
+clean() {
+  local stamp=$STATE/heavy-clean.stamp now last
+  now=$(date +%s)
+  last=$(stat -c %Y "$stamp" 2>/dev/null || echo 0)
+  [ $((now - last)) -ge "$CLEAN_EVERY" ] || [ "$last" = 0 ] || return 0
+  touch "$stamp"
+  echo "heavy: disk below MIN_FREE_DISK_GB=$MIN_FREE_DISK_GB GiB: running $CLEAN --apply first"
+  "$CLEAN" --apply >"$STATE/heavy-clean.log" 2>&1 || echo "heavy: $CLEAN failed; see $STATE/heavy-clean.log"
+}
+
+said=''
+wait_for() { # $1 = why; said once per change
+  [ "$1" = "$said" ] || echo "heavy: queued: $1 (looking again every ${POLL}s)"
+  said=$1
+  sleep "$POLL"
+}
+
+while true; do
+  why=$(short)
+  if [ "${why%%:*}" = disk ]; then
+    clean
+    why=$(short)
+    [ "${why%%:*}" != disk ] || disk_never
+  fi
+  if [ -n "$why" ]; then
+    wait_for "$why"
+    continue
+  fi
+  slot=1
+  while [ "$slot" -le "$SLOTS" ]; do
+    lock=$STATE/heavy.lock
+    [ "$slot" = 1 ] || lock=$STATE/heavy-$slot.lock
+    exec 9>>"$lock"
+    if flock -n 9; then
+      # The slot is held; a job that started meanwhile may have taken the
+      # memory or the disk.
+      why=$(short)
+      if [ -z "$why" ]; then
+        "$@"
+        exit $?
+      fi
+      exec 9>&-
+      break
+    fi
+    exec 9>&-
+    slot=$((slot + 1))
+  done
+  [ -n "$why" ] || why="cpu: all $SLOTS slots taken"
+  wait_for "$why"
+done

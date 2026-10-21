@@ -3236,6 +3236,50 @@ def legs_main(argv: list[str]) -> int:
     return 1 if problems else 0
 
 
+def environment_refusal(
+    environ: Mapping[str, str], prefix: str = sys.prefix
+) -> str | None:
+    r"""Why this interpreter may not run the client's routes, or None (T3.0).
+
+    On the orchestration machine (``SDM_ORCH_STATE`` set, outside CI), a
+    checkout's own ``.venv`` is shared and holds whatever client was last
+    installed there: Phase 2 read a stale one as an environment fault for
+    twelve hours. A runner under it refuses, naming the lane's environment,
+    which ``scripts/rust_core/cells.sh`` builds for the lane's tree. With
+    ``SDM_LANE_ENV`` set (that environment's directory), any interpreter
+    outside it refuses. CI builds its environment per run and is not held."""
+    if environ.get('GITHUB_ACTIONS') == 'true':
+        return None
+    here = Path(prefix).resolve()
+    lane = environ.get('SDM_LANE_ENV')
+    right = (
+        f'{lane}/current/cell-<cell>/bin/python (cells.sh prints each cell)'
+        if lane
+        else "your lane's environment: build it with scripts/rust_core/cells.sh "
+        '$SDM_CELLS_ROOT/<lane>, set SDM_LANE_ENV to that directory, and run '
+        'with the cell python it prints'
+    )
+    if lane:
+        root = Path(lane).resolve()
+        if here == root or root in here.parents:
+            return None
+        return (
+            f'this runner runs under {prefix}, outside the lane environment '
+            f'{lane} (SDM_LANE_ENV): run it with {right}'
+        )
+    if (
+        environ.get('SDM_ORCH_STATE')
+        and here.name == '.venv'
+        and (here.parent / '.git').exists()
+    ):
+        return (
+            f"this runner runs under {prefix}, a checkout's shared .venv, "
+            'whose client is whatever was last installed there, not this '
+            f"tree's: run it with {right}"
+        )
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     given = sys.argv[1:] if argv is None else argv
     if given[:1] == ['legs']:
@@ -3275,6 +3319,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument('cases', type=Path, nargs='*')
     arguments = parser.parse_args(argv)
+    if arguments.mode != 'python-ref':
+        refused = environment_refusal(os.environ)
+        if refused is not None:
+            print(f'runner failure: {refused}', file=sys.stderr)
+            return 1
     if arguments.record_fetches is not None and arguments.mode != 'python-core':
         parser.error('--record-fetches is given in python-core mode only')
     if (arguments.mode == 'python-ref') != (arguments.reference is not None):

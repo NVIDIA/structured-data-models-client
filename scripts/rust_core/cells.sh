@@ -7,6 +7,7 @@
 # "Install the cell" step does, from wheels rather than source trees:
 #
 #   cells.sh [--rev REV] [OUT]
+#   cells.sh --print-key [--rev REV]
 #
 # OUT is one lane's environment directory (T3.0), from the argument, else
 # $SDM_CELLS_DIR, else $SDM_LANE_ENV; one is required. By convention it is
@@ -19,7 +20,8 @@
 # REV's ci.yml. A commit that changes none of them (docs, cases, tests,
 # the checking tools) reuses the environment as it is, in seconds; a new
 # key builds a new one and then removes the lane's older one, unless a
-# process still runs from it (clean_tmp.sh sweeps it later):
+# process still runs from it (clean_tmp.sh sweeps it later). --print-key
+# prints the key and builds nothing:
 #
 #   tools/               maturin (native_wheel.py's MATURIN pin) and build
 #   src/                 one detached worktree, moved to REV when the key
@@ -50,26 +52,24 @@ set -euo pipefail
 usage() { sed -n '/^# Builds/,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; }
 
 REV=HEAD
+PRINT_KEY=0
 OUT=${SDM_CELLS_DIR:-${SDM_LANE_ENV:-}}
 while [ $# -gt 0 ]; do
   case $1 in
     -h | --help) usage; exit 0 ;;
     --rev) REV=${2:?--rev needs a revision}; shift 2 ;;
+    --print-key) PRINT_KEY=1; shift ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) OUT=$1; shift ;;
   esac
 done
-[ -n "$OUT" ] || { echo 'give OUT or set SDM_CELLS_DIR or SDM_LANE_ENV' >&2; exit 2; }
+[ -n "$OUT" ] || [ "$PRINT_KEY" = 1 ] || { echo 'give OUT or set SDM_CELLS_DIR or SDM_LANE_ENV' >&2; exit 2; }
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(git -C "$HERE" rev-parse --show-toplevel)
 COMMIT=$(git -C "$REPO" rev-parse "$REV^{commit}")
 TREE=$(git -C "$REPO" rev-parse "$COMMIT^{tree}")
 T12=${TREE:0:12}
-mkdir -p "$OUT/sib" "$OUT/logs"
-OUT=$(cd "$OUT" && pwd)
-SRC=$OUT/src
-export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$OUT/cargo-target}
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
 
 # The cells as REV's ci.yml defines them: one line per job that sets CELL
@@ -82,7 +82,7 @@ CELLS=$(printf '%s\n' "$CI_YML" | awk '
   /^      CELL_PINS: / { sub(/^      CELL_PINS: /, ""); pins = $0 }
   /python-version:/ { py = $2; gsub(/["\047]/, "", py) }
   END { flush() }
-')
+' | awk '!seen[$0]++')
 [ -n "$CELLS" ] || { echo "no CELL/CELL_PINS jobs in $REV's ci.yml" >&2; exit 3; }
 DUCKDB=$(printf '%s\n' "$CI_YML" | grep -o 'CELL_PINS duckdb==[0-9.]*' | sort -u | awk '{print $2}')
 [ "$(printf '%s\n' "$DUCKDB" | wc -l | tr -d ' ')" = 1 ] && [ -n "$DUCKDB" ] \
@@ -104,7 +104,15 @@ KEY=$(
     printf '%s\n' "$CELLS" "$DUCKDB" "$MATURIN"
   } | git hash-object --stdin
 )
+if [ "$PRINT_KEY" = 1 ]; then
+  printf '%s\n' "$KEY"
+  exit 0
+fi
 K12=${KEY:0:12}
+mkdir -p "$OUT/sib" "$OUT/logs"
+OUT=$(cd "$OUT" && pwd)
+SRC=$OUT/src
+export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$OUT/cargo-target}
 ENV=$OUT/env-$K12
 CLIENT_DIR=$ENV/client
 log "source ${COMMIT:0:12} (tree $T12), environment key $K12"
