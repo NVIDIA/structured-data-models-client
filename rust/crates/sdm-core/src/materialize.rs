@@ -4387,6 +4387,34 @@ fn big_integers(table: &Table, batch: RecordBatch) -> Result<(RecordBatch, bool)
         .map_err(|_| internal("a fetch's big integers do not read back into its rows"))
 }
 
+/// One entity the caller gave, as a scalar a refusal names it by: an
+/// integer, a float or text as itself, any other unnamed (null).
+fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
+    use arrow_array::types::{
+        Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, UInt8Type, UInt16Type, UInt32Type,
+        UInt64Type,
+    };
+    use arrow_schema::DataType;
+    if array.is_null(row) {
+        return Scalar::Null;
+    }
+    match array.data_type() {
+        DataType::Int8 => Scalar::Int8(array.as_primitive::<Int8Type>().value(row)),
+        DataType::Int16 => Scalar::Int16(array.as_primitive::<Int16Type>().value(row)),
+        DataType::Int32 => Scalar::Int32(array.as_primitive::<Int32Type>().value(row)),
+        DataType::Int64 => Scalar::Int64(array.as_primitive::<Int64Type>().value(row)),
+        DataType::UInt8 => Scalar::UInt8(array.as_primitive::<UInt8Type>().value(row)),
+        DataType::UInt16 => Scalar::UInt16(array.as_primitive::<UInt16Type>().value(row)),
+        DataType::UInt32 => Scalar::UInt32(array.as_primitive::<UInt32Type>().value(row)),
+        DataType::UInt64 => Scalar::UInt64(array.as_primitive::<UInt64Type>().value(row)),
+        DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
+        DataType::LargeUtf8 => Scalar::Utf8(array.as_string::<i64>().value(row).to_owned()),
+        DataType::Utf8View => Scalar::Utf8(array.as_string_view().value(row).to_owned()),
+        DataType::Float64 => Scalar::Float64(array.as_primitive::<Float64Type>().value(row)),
+        _ => Scalar::Null,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4534,33 +4562,5 @@ mod tests {
             time_constant("2263-01-01T00:00:00", None).unwrap_err().code,
             ErrorCode::InvalidRequest
         );
-    }
-}
-
-/// One entity the caller gave, as a scalar a refusal names it by: an
-/// integer, a float or text as itself, any other unnamed (null).
-fn key_scalar(array: &dyn Array, row: usize) -> Scalar {
-    use arrow_array::types::{
-        Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, UInt8Type, UInt16Type, UInt32Type,
-        UInt64Type,
-    };
-    use arrow_schema::DataType;
-    if array.is_null(row) {
-        return Scalar::Null;
-    }
-    match array.data_type() {
-        DataType::Int8 => Scalar::Int8(array.as_primitive::<Int8Type>().value(row)),
-        DataType::Int16 => Scalar::Int16(array.as_primitive::<Int16Type>().value(row)),
-        DataType::Int32 => Scalar::Int32(array.as_primitive::<Int32Type>().value(row)),
-        DataType::Int64 => Scalar::Int64(array.as_primitive::<Int64Type>().value(row)),
-        DataType::UInt8 => Scalar::UInt8(array.as_primitive::<UInt8Type>().value(row)),
-        DataType::UInt16 => Scalar::UInt16(array.as_primitive::<UInt16Type>().value(row)),
-        DataType::UInt32 => Scalar::UInt32(array.as_primitive::<UInt32Type>().value(row)),
-        DataType::UInt64 => Scalar::UInt64(array.as_primitive::<UInt64Type>().value(row)),
-        DataType::Utf8 => Scalar::Utf8(array.as_string::<i32>().value(row).to_owned()),
-        DataType::LargeUtf8 => Scalar::Utf8(array.as_string::<i64>().value(row).to_owned()),
-        DataType::Utf8View => Scalar::Utf8(array.as_string_view().value(row).to_owned()),
-        DataType::Float64 => Scalar::Float64(array.as_primitive::<Float64Type>().value(row)),
-        _ => Scalar::Null,
     }
 }
