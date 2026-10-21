@@ -57,9 +57,12 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -423,7 +426,19 @@ def _msg_repo(tmp_path: Path, staged: str) -> Path:
     repo = tmp_path / 'repo'
     repo.mkdir()
     _git(repo, 'init', '-q', '-b', TOPIC)
-    _commit(repo, 'Land T3.98: the phase so far', {'README.md': 'x\n'})
+    judging = ROOT / 'scripts/rust_core/judging-paths.txt'
+    _commit(
+        repo,
+        'Land T3.98: the phase so far',
+        {
+            'README.md': 'x\n',
+            'scripts/rust_core/judging-paths.txt': (
+                judging.read_text(encoding='utf-8')
+                if judging.is_file()
+                else 'scripts/rust_core/**\n'
+            ),
+        },
+    )
     path = repo / staged
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('changed\n', encoding='utf-8')
@@ -453,8 +468,22 @@ def _msg_repo(tmp_path: Path, staged: str) -> Path:
         ),
         ('rust/crates/sdm-core/src/lib.rs', 'T3.99: the first round', False),
         ('docs/notes.md', 'T3.99 fix 1: a wording fix', False),
+        ('tests/test_order.py', 'T3.99 fix 1: the test reads it', False),
+        (
+            'rust/crates/sdm-core/src/lib.rs',
+            'T3.99 fix 1: keep the order\n\nRule: keep order',
+            True,
+        ),
     ],
-    ids=['fix-crates', 'fix-packages', 'with-rule', 'not-a-fix', 'docs-fix'],
+    ids=[
+        'fix-crates',
+        'fix-packages',
+        'with-rule',
+        'not-a-fix',
+        'docs-fix',
+        'tests-fix',
+        'rule-too-short',
+    ],
 )
 def test_t30_the_commit_msg_check_wants_a_rule_on_a_product_fix(
     tmp_path: Path, staged: str, message: str, refused: bool
@@ -539,12 +568,26 @@ def test_t30_codex_pane_refuses_a_round_on_an_unstamped_sha(
 
 # --- 6. the banned-command hook ----------------------------------------------
 
+#: A session with no directory of its own, and where a Bash call runs:
+#: neither under any scratch, wherever the tests run.
 SESSION = '0f3c2a1e-7d6b-4c5a-9e8f-1a2b3c4d5e6f'
-OTHER_SESSION = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d'
+CWD = '/home/user/code/sdmc-rust-core-lane-a'
 
 
-def _scratch(session: str) -> str:
-    return f'/tmp/claude-1000/-home-user-code-repo/{session}/scratchpad'
+@pytest.fixture
+def sessions() -> Any:
+    """Two Claude sessions' directories, as Claude Code makes them
+    (``/tmp/claude-*/<project>/<session id>/scratchpad``): this agent's and
+    another's, as (session id, its scratchpad, the other's scratchpad)."""
+    top = Path(tempfile.mkdtemp(prefix='claude-t30-', dir='/tmp'))
+    own, other = str(uuid.uuid4()), str(uuid.uuid4())
+    pads = []
+    for session in (own, other):
+        pad = top / '-home-user-code-repo' / session / 'scratchpad'
+        (pad / 'probe' / 'build').mkdir(parents=True)
+        pads.append(str(pad))
+    yield own, pads[0], pads[1]
+    shutil.rmtree(top)
 
 
 def _hook(
@@ -553,12 +596,13 @@ def _hook(
     tool: str = 'Bash',
     cwd: Path | None = None,
     tool_input: dict[str, Any] | None = None,
+    session: str = SESSION,
 ) -> tuple[str | None, str, subprocess.CompletedProcess[str]]:
     """The hook's decision on one tool call: 'deny' or None, and why."""
     event = {
-        'session_id': SESSION,
-        'transcript_path': f'/tmp/claude-1000/transcripts/{SESSION}.jsonl',
-        'cwd': str(cwd or ROOT),
+        'session_id': session,
+        'transcript_path': f'/tmp/claude-1000/transcripts/{session}.jsonl',
+        'cwd': str(cwd or CWD),
         'hook_event_name': 'PreToolUse',
         'tool_name': tool,
         'tool_input': tool_input or {'command': command},
@@ -566,7 +610,11 @@ def _hook(
     done = subprocess.run(
         [sys.executable, str(GUARD)],
         input=json.dumps(event),
-        env=_env(tmp_path, SDM_SCRATCH=_scratch(SESSION)),
+        env=_env(
+            tmp_path,
+            SDM_SCRATCH=str(tmp_path),
+            SDM_OWNER_ANSWERS=str(_answers_file(tmp_path)),
+        ),
         capture_output=True,
         text=True,
         timeout=60,
@@ -592,15 +640,17 @@ def test_t30_the_guard_is_the_repository_s_pretooluse_hook_for_bash_and_agent() 
     for entry in settings['hooks']['PreToolUse']:
         for hook in entry['hooks']:
             if 'guard_cmd.py' in hook.get('command', ''):
-                for tool in entry.get('matcher', '').split('|'):
-                    matched[tool.strip()] = hook['command']
-    assert {'Bash', 'Agent'} <= set(matched), matched
+                for tool in ('Bash', 'Agent'):
+                    # A matcher is a regular expression on the tool's name.
+                    if re.fullmatch(entry.get('matcher', ''), tool):
+                        matched[tool] = hook['command']
+    assert set(matched) == {'Bash', 'Agent'}, matched
 
 
 BANNED = [
     'rm -rf /home/user/code/sdmc-rust-core/rust/target',
     'rm -r ../another-worktree',
-    f'rm -r {_scratch(OTHER_SESSION)}/probe',
+    'rm -r {other}/probe',
     'git push --force origin rust-core-phase-3-t3.99',
     'git push -f origin rust-core-phase-3-t3.99',
     'git push --force-with-lease origin rust-core-phase-3-t3.99',
@@ -620,6 +670,13 @@ BANNED = [
     'git fetch --prune origin',
     'cd /tmp && git stash',
     'echo start; sudo true',
+    'rm -rf /mnt/localssd/tmp',
+    'rm -rf /mnt/localssd/target',
+    'rm -r "$HOME/old-probe"',
+    'rm -r $(git rev-parse --show-toplevel)/rust/target',
+    'ls -d build-* | xargs rm -r',
+    "find . -name '*.pyc' -delete",
+    'find . -name build -exec rm -rf {{}} +',
 ]
 
 ALLOWED = [
@@ -628,8 +685,11 @@ ALLOWED = [
     'git branch -d rust-core-phase-3-t3.98',
     'git fetch origin',
     'rm notes.txt',
-    f'rm -r {_scratch(SESSION)}/probe',
-    f'rm -rf {_scratch(SESSION)}/probe/build',
+    'rm -r {scratch}/probe',
+    'rm -rf {scratch}/probe/build',
+    'find {scratch}/probe -name build -exec rm -rf {{}} +',
+    'rm -rf /mnt/localssd/tmp/t30-probe/build',
+    'rm -r /mnt/localssd/target/t30-probe',
     'gh run list --limit 5',
     'git commit -s -m "T3.99: never git stash or --no-verify"',
     "grep -rn 'git config' docs",
@@ -640,9 +700,11 @@ ALLOWED = [
 @pending
 @pytest.mark.parametrize('command', BANNED)
 def test_t30_the_guard_denies_each_banned_command_with_its_alternative(
-    tmp_path: Path, command: str
+    tmp_path: Path, sessions: Any, command: str
 ) -> None:
-    decision, why, done = _hook(tmp_path, command)
+    session, scratch, other = sessions
+    command = command.format(scratch=scratch, other=other)
+    decision, why, done = _hook(tmp_path, command, session=session)
     assert decision == 'deny', done.stdout + done.stderr
     rule, _, instead = why.partition('; instead: ')
     assert rule.strip() and instead.strip(), why
@@ -651,17 +713,35 @@ def test_t30_the_guard_denies_each_banned_command_with_its_alternative(
 @pending
 @pytest.mark.parametrize('command', ALLOWED)
 def test_t30_the_guard_lets_the_allowed_forms_through(
-    tmp_path: Path, command: str
+    tmp_path: Path, sessions: Any, command: str
 ) -> None:
-    decision, why, done = _hook(tmp_path, command)
+    session, scratch, other = sessions
+    command = command.format(scratch=scratch, other=other)
+    decision, why, done = _hook(tmp_path, command, session=session)
     assert decision is None, f'{decision}: {why}'
     assert done.stdout.strip() == ''
 
 
+def _answers_file(tmp_path: Path) -> Path:
+    return tmp_path / 'state' / 'phase-3' / 'owner-answers-2026-10-22.md'
+
+
+@pending
+def test_t30_the_guard_lets_rm_r_through_in_the_listed_scratch(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / 'probe' / 'build').mkdir(parents=True)
+    for command in (
+        f'rm -r {tmp_path}/probe',
+        f'find {tmp_path}/probe -name build -exec rm -rf {{}} +',
+    ):
+        decision, why, _ = _hook(tmp_path, command)
+        assert decision is None, f'{command}: {why}'
+
+
 def _owner_answers(tmp_path: Path) -> None:
-    folder = tmp_path / 'state' / 'phase-3'
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / 'owner-answers-2026-10-22.md').write_text(
+    _answers_file(tmp_path).parent.mkdir(parents=True, exist_ok=True)
+    _answers_file(tmp_path).write_text(
         '# Owner answers\n\n'
         '## 2026-10-22: branch cleanup approval\n\n'
         'Owner, verbatim: "Yes, delete the superseded rounds."\n',
@@ -683,7 +763,7 @@ def test_t30_an_approval_token_lets_a_one_off_through_and_is_logged(
     _owner_answers(tmp_path)
     listed = subprocess.run(
         [sys.executable, str(GUARD), '--tokens'],
-        env=_env(tmp_path),
+        env=_env(tmp_path, SDM_OWNER_ANSWERS=str(_answers_file(tmp_path))),
         capture_output=True,
         text=True,
         timeout=60,
