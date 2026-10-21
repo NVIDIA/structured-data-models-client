@@ -306,12 +306,9 @@ fn an_answer_is_decoded_as_python_s_reader_decodes_bytes() {
     assert_eq!(read_answer(&twice).unwrap_err().category, "syntax");
     for bad in [
         // An odd byte count in UTF-16, a count not a multiple of four in
-        // UTF-32, a lone surrogate in UTF-16 and as a UTF-32 code point,
-        // and a UTF-32 code point past Unicode.
+        // UTF-32, and a UTF-32 code point past Unicode.
         marked(&[0xFE, 0xFF], vec![0, b'{', 0, b'}', 0]),
         marked(&[0, 0, 0xFE, 0xFF], vec![0, 0, 0, b'1', 0, 0]),
-        vec![0, b'"', 0xD8, 0, 0, b'"'],
-        vec![0, 0, 0, b'"', 0, 0, 0xD8, 0, 0, 0, 0, b'"'],
         vec![0, 0, 0, b'"', 0, 0x11, 0, 0, 0, 0, 0, b'"'],
     ] {
         assert_eq!(
@@ -320,7 +317,15 @@ fn an_answer_is_decoded_as_python_s_reader_decodes_bytes() {
             "{bad:?}"
         );
     }
-    // A surrogate written in UTF-8, which Python's `surrogatepass` keeps,
-    // is refused as text that is not UTF-8, as its escape is.
-    assert!(read_answer(b"[\"\xED\xA0\x80\"]").is_err());
+    // A lone surrogate in UTF-16, as a UTF-32 code point, and written in
+    // UTF-8 as Python's `surrogatepass` keeps it, is read as U+FFFD, as its
+    // escape is (register P1B-24, KO2-93).
+    let replaced = Value::Text("\u{FFFD}".into());
+    for lone in [
+        vec![0, b'"', 0xD8, 0, 0, b'"'],
+        vec![0, 0, 0, b'"', 0, 0, 0xD8, 0, 0, 0, 0, b'"'],
+        b"\"\xED\xA0\x80\"".to_vec(),
+    ] {
+        assert_eq!(read_answer(&lone).unwrap(), replaced, "{lone:?}");
+    }
 }

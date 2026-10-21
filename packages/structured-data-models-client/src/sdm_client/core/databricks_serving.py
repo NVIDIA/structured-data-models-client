@@ -209,8 +209,8 @@ class DatabricksServingTransport:
         past this interpreter's reader is handed over as written, for the
         core to refuse as too deep (register P1B-22). A lone surrogate the
         text holds is encoded as it is (``surrogatepass``), for the core to
-        refuse by name as it refuses one escaped (register P1B-24), rather
-        than failing here as an encoding error."""
+        read as U+FFFD as it reads one escaped (register P1B-24, KO2-93),
+        rather than failing here as an encoding error."""
         text = self._answered(json.loads(body))
         try:
             self._decoded(text)
