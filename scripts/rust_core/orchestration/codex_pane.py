@@ -12,7 +12,8 @@ so the herdr and Codex details are written once:
   review worktree for it, and start Codex there with the owner's ``cx``
   alias (``codex --yolo``) on gpt-6-astra at high reasoning effort.
 - ``review``: check the worktree out at the exact SHA and send the round's
-  prompt, which points at a brief file and names a fresh report file.
+  prompt, which points at a brief file and names a fresh report file. It
+  refuses (exit 2) a SHA with no handoff stamp (T3.0, ``handoff.py``).
   At most ``SDM_CODEX_CAP`` (default 4) reviews run at once; ``--queue``
   waits for a free slot, otherwise the command exits 3.
 - ``wait``: block until the round settles and print one line:
@@ -47,6 +48,8 @@ STATE = Path(
 
 
 REPO = Path(os.environ.get('SDM_REPO', Path.home() / 'code/sdmc-rust-core'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import handoff  # noqa: E402
 HERDR = os.environ.get('SDM_HERDR', 'herdr')
 CAP = int(os.environ.get('SDM_CODEX_CAP', '4'))
 MODEL = os.environ.get('SDM_CODEX_MODEL', 'gpt-6-astra')
@@ -317,6 +320,20 @@ def cmd_review(args: argparse.Namespace) -> int:
     if not brief.is_file():
         raise Failure(f'no brief at {brief}')
     report = Path(args.report).resolve() if args.report else None
+    # T3.0: a round starts only on a SHA its implementer or test author
+    # handed off (handoff.py), whose stamp is in the clone's git directory.
+    git('fetch', '--quiet', 'origin')
+    stamped = git('rev-parse', '--verify', f'{args.sha}^{{commit}}')
+    common = Path(
+        git('rev-parse', '--path-format=absolute', '--git-common-dir')
+    )
+    why = handoff.stamp_problem(common, stamped)
+    if why:
+        raise Failure(
+            f'{why}; a review round needs the handoff stamp: the implementer '
+            'or test author runs scripts/rust_core/handoff.py run --package '
+            f'{args.package} on that SHA before reporting ready'
+        )
     while True:
         with registry() as reg:
             entry = reg.get(args.package)

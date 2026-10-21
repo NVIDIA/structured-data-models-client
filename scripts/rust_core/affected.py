@@ -18,7 +18,9 @@ A path's suites come from :data:`MAP` (a path pattern, in
 ``contract/protected-paths.txt``'s syntax, and its suites), plus every test
 file that names the path's file name (``tests/``, ``contract/tests/``, the
 binding's tests and the self-tests under ``scripts/rust_core/``), plus the
-file itself when it is a test. A path no pattern of the map covers gets
+file itself when it is a test (a path under ``docs/`` names none: people
+read docs, and a test naming one only cites it; a test file is its own
+suite). A path no pattern of the map covers gets
 only those, and ``--unmapped`` lists each tracked path under ``contract/``,
 ``scripts/rust_core/`` and ``rust/crates/`` that the map does not cover,
 exiting 1 when there is one: a new kind of file there needs its row.
@@ -202,7 +204,14 @@ def suites(paths: Iterable[str], files: Sequence[str] | None = None) -> list[Sui
             found.append((*PYTEST, path))
         if path.endswith('selftest.py') and (ROOT / path).is_file():
             found.append(('python3', path))
-        if (ROOT / path).is_file() and not path.startswith('rust/'):
+        # Docs are read by people; a test naming one is an example, not a
+        # reader. The crates' suites are cargo's.
+        # A test is its own suite.
+        if (
+            (ROOT / path).is_file()
+            and not path.startswith(('rust/', 'docs/'))
+            and not judging.matches(IS_TEST, path)
+        ):
             found.extend(naming_tests(path, files))
         if not found and (ROOT / path).is_file():
             found.extend(syntax(path))
