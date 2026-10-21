@@ -23,11 +23,17 @@
 //! - `run.<form>`: a predict run answered with it is done, with the
 //!   result and the endpoint's metadata it gives for the UTF-8 text.
 //!
-//! And bytes no such encoding decodes, or holding a lone surrogate, which
-//! the reference keeps and the core refuses (register P1B-24), are refused
-//! ([`refused`]): `read_answer` refuses them with the category named, and
-//! the run ends `INVALID_RESPONSE`, `field=response`, `reason=not_json`,
-//! that `category`, holding nothing of the answer. Text under four bytes is
+//! An answer holding lone surrogates, which the reference keeps, is read
+//! with each one U+FFFD (register P1B-24, the owner's rule of 2026-10-21),
+//! as a JSON escape and written as itself in UTF-8, UTF-16 and UTF-32
+//! ([`LONE_FORMS`]): `reader.<form>` and `run.<form>` hold it to the UTF-8
+//! text with U+FFFD in each one's place, and nothing else differing; an
+//! escaped surrogate pair beside them is still its one character.
+//!
+//! And bytes no such encoding decodes are still refused ([`refused`]):
+//! `read_answer` refuses them with the category named, and the run ends
+//! `INVALID_RESPONSE`, `field=response`, `reason=not_json`, that
+//! `category`, holding nothing of the answer. Text under four bytes is
 //! decoded as `json.detect_encoding` decodes it.
 //!
 //! The core's decoding is `sdm_wire::json::answer_text`, which
@@ -39,8 +45,9 @@
 //! Gating: `contract/tests/t216-pending.json`'s `pending` names, as
 //! `rust:reader.<form>` and `rust:run.<form>`, the checks that failed when
 //! written. Each must still fail (strict); once one passes it fails, naming
-//! itself, until it is taken out. Written on the fix, so none is pending;
-//! on `f133c4b8`, before it, every form's but `utf-8` failed.
+//! itself, until it is taken out. Written on the fixes, so none is pending:
+//! on `f133c4b8` every form's but `utf-8` failed, and on `8d17da50` every
+//! lone-surrogate form's.
 
 #![allow(
     clippy::disallowed_methods,
@@ -144,49 +151,82 @@ fn swapped(mut bytes: Vec<u8>, unit: &[u8], with: &[u8]) -> Vec<u8> {
     bytes
 }
 
-/// Bytes the core refuses, each with the category its refusal names:
-///
-/// - no encoding the reference's reader finds decodes them, and
-///   `json.loads` refuses them too (`UnicodeDecodeError`): UTF-16 with no
-///   mark one byte short, UTF-16 with its mark one byte short, and UTF-8
-///   holding a byte UTF-8 never holds;
-/// - they hold a lone surrogate, which `json.loads` decodes
-///   (`surrogatepass`) and keeps, and the core refuses (register P1B-24):
-///   UTF-16 and UTF-32 with their marks, and UTF-8 (a Databricks
-///   `response_json` holding one, as the serving transport encodes it).
+/// The answer with lone surrogates where it has `#` and `%`: its id
+/// `x#y` (a high one) and its metadata's `c%af` (a low one), each with a
+/// character either side, so neither is in a pair.
+fn lone_answer() -> String {
+    ANSWER
+        .replacen("\"r9\"", "\"x#y\"", 1)
+        .replacen("caf", "c%af", 1)
+}
+
+/// The lone-surrogate forms, by the names
+/// `contract/tools/t216_encoding_record.py` gives them, each the bytes of
+/// [`lone_answer`] with its surrogates written so.
+const LONE_FORMS: [&str; 4] = [
+    "lone-surrogate-escaped",
+    "lone-surrogate-utf-8",
+    "lone-surrogate-utf-16",
+    "lone-surrogate-utf-32",
+];
+
+fn lone_bytes(form: &str) -> Vec<u8> {
+    let text = lone_answer();
+    match form {
+        // Escaped, and the answer's character past the first plane as an
+        // escaped pair, which is one character, not two lone surrogates.
+        "lone-surrogate-escaped" => text
+            .replacen('#', "\\ud800", 1)
+            .replacen('%', "\\udc00", 1)
+            .replacen('\u{1F600}', "\\ud83d\\ude00", 1)
+            .into_bytes(),
+        // Written as themselves, as Python's `surrogatepass` writes them.
+        "lone-surrogate-utf-8" => swapped(
+            swapped(text.into_bytes(), b"#", b"\xed\xa0\x80"),
+            b"%",
+            b"\xed\xb0\x80",
+        ),
+        "lone-surrogate-utf-16" => marked(
+            b"\xff\xfe",
+            swapped(
+                swapped(utf16(&text, false), b"#\x00", b"\x00\xd8"),
+                b"%\x00",
+                b"\x00\xdc",
+            ),
+        ),
+        "lone-surrogate-utf-32" => marked(
+            b"\xff\xfe\x00\x00",
+            swapped(
+                swapped(utf32(&text, false), b"#\x00\x00\x00", b"\x00\xd8\x00\x00"),
+                b"%\x00\x00\x00",
+                b"\x00\xdc\x00\x00",
+            ),
+        ),
+        _ => unreachable!("{form}"),
+    }
+}
+
+/// [`lone_answer`] as the core is to read it: each lone surrogate U+FFFD.
+fn lone_replaced() -> String {
+    lone_answer().replace(['#', '%'], "\u{FFFD}")
+}
+
+/// Bytes the core refuses, each with the category its refusal names: no
+/// encoding the reference's reader finds decodes them, and `json.loads`
+/// refuses them too (`UnicodeDecodeError`): UTF-16 with no mark one byte
+/// short, UTF-16 with its mark one byte short, and UTF-8 holding a byte
+/// UTF-8 never holds.
 fn refused() -> Vec<(&'static str, Vec<u8>, &'static str)> {
     let mut odd = utf16(ANSWER, false);
     odd.pop();
     let mut marked_odd = marked(b"\xff\xfe", utf16(ANSWER, false));
     marked_odd.pop();
-    let text = canary_answer();
     vec![
         ("utf-16-odd", odd, "encoding"),
         ("utf-16-bom-odd", marked_odd, "encoding"),
         (
             "utf-8-invalid",
-            swapped(text.clone().into_bytes(), b"#", b"\xff"),
-            "syntax",
-        ),
-        (
-            "utf-16-lone-surrogate",
-            marked(
-                b"\xff\xfe",
-                swapped(utf16(&text, false), b"#\x00", b"\x00\xd8"),
-            ),
-            "encoding",
-        ),
-        (
-            "utf-32-lone-surrogate",
-            marked(
-                b"\xff\xfe\x00\x00",
-                swapped(utf32(&text, false), b"#\x00\x00\x00", b"\x00\xd8\x00\x00"),
-            ),
-            "encoding",
-        ),
-        (
-            "utf-8-lone-surrogate",
-            swapped(text.into_bytes(), b"#", b"\xed\xa0\x80"),
+            swapped(canary_answer().into_bytes(), b"#", b"\xff"),
             "syntax",
         ),
     ]
@@ -223,7 +263,9 @@ fn gated(key: &str, check: impl FnOnce() + std::panic::UnwindSafe) {
 fn the_pending_list_only_shrinks() {
     let authored: BTreeSet<String> = FORMS
         .iter()
-        .flat_map(|(form, _)| [format!("reader.{form}"), format!("run.{form}")])
+        .map(|(form, _)| *form)
+        .chain(LONE_FORMS)
+        .flat_map(|form| [format!("reader.{form}"), format!("run.{form}")])
         .collect();
     assert!(named("pending").is_subset(&named("authored")));
     assert_eq!(named("authored"), authored);
@@ -405,7 +447,40 @@ fn a_run_answered_in_each_form_gives_what_the_utf_8_text_gives() {
 }
 
 #[test]
-fn bytes_no_encoding_decodes_and_lone_surrogates_are_refused_by_name() {
+fn the_reader_reads_each_lone_surrogate_as_u_fffd() {
+    let want = read_answer(lone_replaced().as_bytes()).unwrap();
+    // Control: the text the forms are held to holds U+FFFD where each lone
+    // surrogate is, and the rest of the answer as it was.
+    let written = String::from_utf8(want.to_bytes()).unwrap();
+    assert!(written.contains("\"id\":\"x\u{FFFD}y\""), "{written}");
+    assert!(
+        written.contains("c\u{FFFD}af\u{e9} \u{1F600} \u{4E2D}"),
+        "{written}"
+    );
+    for form in LONE_FORMS {
+        let bytes = lone_bytes(form);
+        let want = want.clone();
+        gated(&format!("reader.{form}"), move || {
+            let got = read_answer(&bytes).unwrap_or_else(|e| panic!("{form}: refused as {e:?}"));
+            assert_eq!(got, want, "{form}");
+        });
+    }
+}
+
+#[test]
+fn a_run_answered_with_lone_surrogates_gives_what_u_fffd_in_their_place_gives() {
+    let want = given(lone_replaced().as_bytes());
+    for form in LONE_FORMS {
+        let bytes = lone_bytes(form);
+        let want = want.clone();
+        gated(&format!("run.{form}"), move || {
+            assert_eq!(given(&bytes), want, "{form}");
+        });
+    }
+}
+
+#[test]
+fn bytes_no_encoding_decodes_are_refused_by_name() {
     for (name, bytes, category) in refused() {
         let read = read_answer(&bytes).expect_err(name);
         assert_eq!(read.category, category, "{name}: read");
