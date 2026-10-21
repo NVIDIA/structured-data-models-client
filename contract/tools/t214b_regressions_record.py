@@ -108,6 +108,17 @@ CANDIDATES: dict[str, tuple[str, Any]] = {
             dt.datetime(2023, 11, 6, 1, 30, tzinfo=_zone()),
         ],
     ),
+    # Codex r6: the same wall time in New York and in Toronto, whose texts
+    # are the same and which Python holds unequal (two zones), and a third
+    # day: three candidates.
+    'same-text-two-zones': (
+        'ends',
+        lambda: [
+            dt.datetime(2023, 11, 5, 1, 30, tzinfo=_zone()),
+            dt.datetime(2023, 11, 5, 1, 30, tzinfo=_zone('America/Toronto')),
+            dt.datetime(2023, 11, 6, 1, 30, tzinfo=_zone()),
+        ],
+    ),
     'times-one-instant': (
         'literal',
         lambda: [
@@ -161,10 +172,10 @@ def _numpy_stamp(text: str) -> Any:
     return np.datetime64(text)
 
 
-def _zone() -> Any:
+def _zone(name: str = 'America/New_York') -> Any:
     from zoneinfo import ZoneInfo
 
-    return ZoneInfo('America/New_York')
+    return ZoneInfo(name)
 
 
 def _module(name: str, path: Path) -> ModuleType:
@@ -200,10 +211,18 @@ def _refusal(error: BaseException) -> dict[str, Any]:
 def _keyed(kind: str, given: list[Any]) -> Any:
     r"""The shop, the ranking's items keyed by text of ``kind``, or, for
     ``literal``, items 0 to 2 keyed by the ``str`` of the candidates
-    given, in order (Codex r3's reproducer), the fourth ``other``."""
+    given, in order (Codex r3's reproducer), the fourth ``other``; for
+    ``ends``, items 0 and 1 by the first and the last given."""
     connection = host()._connection()
     for table in ('items', 'buys'):
-        if kind == 'literal':
+        if kind == 'ends':
+            # Two of the candidates share a text: items 0 and 1 are keyed
+            # by the first and the last only (Codex r6's reproducer).
+            using = (
+                f"CASE item_id WHEN 0 THEN '{given[0]}' WHEN 1 THEN "
+                f"'{given[-1]}' ELSE item_id::VARCHAR END"
+            )
+        elif kind == 'literal':
             cases = ' '.join(
                 f"WHEN {at} THEN '{value}'" for at, value in enumerate(given)
             )

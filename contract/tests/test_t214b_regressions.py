@@ -142,6 +142,7 @@ def test_the_vectors_are_the_reference_s_and_exercise_what_they_name() -> None:
         'aware-distinct': 2,
         'zone-fold': 2,
         'zone-against-utc': 3,
+        'same-text-two-zones': 3,
         'times-one-instant': 2,
         'timestamp-beside-datetime64': 2,
         'naive-beside-aware': 3,

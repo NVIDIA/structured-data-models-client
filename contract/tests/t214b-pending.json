@@ -38,6 +38,7 @@
   "regress:candidates:dates-distinct",
   "regress:candidates:dates-repeated",
   "regress:candidates:naive-beside-aware",
+  "regress:candidates:same-text-two-zones",
   "regress:candidates:times-one-instant",
   "regress:candidates:timestamp-beside-datetime64",
   "regress:candidates:zone-against-utc",

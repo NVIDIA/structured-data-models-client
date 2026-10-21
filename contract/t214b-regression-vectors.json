@@ -257,6 +257,49 @@
    ],
    "refusal": null
   },
+  "same-text-two-zones": {
+   "parts": 3,
+   "asked": [
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-05 01:30:00-04:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-05 01:30:00-04:00\", 0, 30, days) > 0 FOR EACH users.user_id",
+    "PREDICT COUNT(buys.* WHERE buys.item_id = \"2023-11-06 01:30:00-05:00\", 0, 30, days) > 0 FOR EACH users.user_id"
+   ],
+   "rankings": [
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-06 01:30:00-05:00"
+      },
+      "score": 0.7
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 01:30:00-04:00"
+      },
+      "score": 0.4
+     }
+    ],
+    [
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 01:30:00-04:00"
+      },
+      "score": 0.9
+     },
+     {
+      "candidate": {
+       "type": "datetime",
+       "text": "2023-11-05 01:30:00-04:00"
+      },
+      "score": 0.6
+     }
+    ]
+   ],
+   "refusal": null
+  },
   "times-one-instant": {
    "parts": 2,
    "asked": [
