@@ -1,0 +1,83 @@
+# S1 coverage at be55838a14da280e628f4d7c40f0e04f553303c8: python manifest, acceptance cases only (315 cases read)
+paths in S0 and S1: 75; with an acceptance case: 17; empty: 58
+  empty path source.open/explicit/duckdb
+  empty path source.open/auto/duckdb
+  empty path source.open/explicit/sqlite
+  empty path source.open/auto/sqlite
+  empty path source.open/explicit/postgres
+  empty path source.open/auto/postgres
+  empty path schema.from-source/tables/sqlite
+  empty path schema.from-source/catalog-keys/sqlite
+  empty path schema.from-source/all-tables/sqlite
+  empty path schema.from-source/tables/postgres
+  empty path schema.from-source/catalog-keys/postgres
+  empty path schema.from-source/all-tables/postgres
+  empty path schema.construct/source-tables/any
+  empty path schema.edit/set-primary-key/any
+  empty path schema.edit/set-stype/any
+  empty path schema.edit/edit-relationships/any
+  empty path schema.edit/snapshot/any
+  empty path schema.inspect/attributes/any
+  empty path schema.inspect/check-consistent/any
+  empty path state.pickle/schema/any
+  empty path state.pickle/request/any
+  empty path state.pickle/reference-pickle/any
+  empty path query.materialize/indices-binary/sqlite
+  empty path query.materialize/indices-multiclass/sqlite
+  empty path query.materialize/indices-regression/sqlite
+  empty path query.materialize/indices-ranking/sqlite
+  empty path query.materialize/indices-forecast/sqlite
+  empty path query.materialize/indices-binary/postgres
+  empty path query.materialize/indices-multiclass/postgres
+  empty path query.materialize/indices-regression/postgres
+  empty path query.materialize/indices-ranking/postgres
+  empty path query.materialize/indices-forecast/postgres
+  empty path request.from-payloads/payloads/any
+  empty path request.inspect/attributes/any
+  empty path client.connect/url/any
+  empty path client.discover/models/any
+  empty path client.discover/health-ready/any
+  empty path client.capabilities/capabilities/any
+  empty path client.predict/binary/sqlite
+  empty path client.predict/multiclass/sqlite
+  empty path client.predict/regression/sqlite
+  empty path client.predict/ranking/sqlite
+  empty path client.predict/forecast/sqlite
+  empty path client.predict/binary/postgres
+  empty path client.predict/multiclass/postgres
+  empty path client.predict/regression/postgres
+  empty path client.predict/ranking/postgres
+  empty path client.predict/forecast/postgres
+  empty path result.read/binary/any
+  empty path result.read/multiclass/any
+  empty path result.read/regression/any
+  empty path result.read/ranking/any
+  empty path result.read/forecast/any
+  empty path result.inspect/absent/any
+  empty path result.inspect/explanation/any
+  empty path result.inspect/unscored-candidates/any
+  empty path connectors.quote/quote-ident/any
+  empty path connectors.quote/resolve-sql/any
+cells: 140; expect not 'unknown': 44; with an acceptance case: 22; empty: 22
+  empty cell int8/primary-key (expect accept)
+  empty cell int16/primary-key (expect accept)
+  empty cell int8/foreign-key (expect accept)
+  empty cell int16/foreign-key (expect accept)
+  empty cell timestamp-ns-tz/time-column (expect accept)
+  empty cell int8/feature (expect accept)
+  empty cell int16/feature (expect accept)
+  empty cell int64/feature (expect accept)
+  empty cell uint8/feature (expect accept)
+  empty cell uint16/feature (expect accept)
+  empty cell uint32/feature (expect accept)
+  empty cell uint64/feature (expect accept)
+  empty cell date32/feature (expect accept)
+  empty cell timestamp-ns/feature (expect accept)
+  empty cell timestamp-ns-tz/feature (expect accept)
+  empty cell timestamp-us-tz/feature (expect accept)
+  empty cell dictionary-utf8/feature (expect accept)
+  empty cell null/feature (expect accept)
+  empty cell int8/target (expect accept)
+  empty cell int16/target (expect accept)
+  empty cell float32/target (expect accept)
+  empty cell bool/target (expect accept)

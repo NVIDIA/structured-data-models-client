@@ -1,0 +1,35 @@
+diagnostic: outcome: s0.boundary.date-long-field@postgres: python-core against its effective expectation: outcome.result: expected 'success', observed 'refusal'
+diagnostic: outcome: s0.boundary.date-long-field@postgres: python-core against its effective expectation: outcome.error: expected None, observed 'StructuredDataError'
+diagnostic: outcome: s0.boundary.date-long-field@postgres: python-core against its effective expectation: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: sql.count: s0.boundary.date-long-field@postgres: python-core against python-ref: materialize: 0 statements, the reference 6
+diagnostic: outcome: s0.boundary.date-long-field@postgres: rust-host against its effective expectation: outcome.result: expected 'success', observed 'refusal'
+diagnostic: outcome: s0.boundary.date-long-field@postgres: rust-host against its effective expectation: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: outcome: s0.boundary.date-packed@postgres: python-core against its effective expectation: outcome.result: expected 'success', observed 'refusal'
+diagnostic: outcome: s0.boundary.date-packed@postgres: python-core against its effective expectation: outcome.error: expected None, observed 'StructuredDataError'
+diagnostic: outcome: s0.boundary.date-packed@postgres: python-core against its effective expectation: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: sql.count: s0.boundary.date-packed@postgres: python-core against python-ref: materialize: 0 statements, the reference 6
+diagnostic: outcome: s0.boundary.date-packed@postgres: rust-host against its effective expectation: outcome.result: expected 'success', observed 'refusal'
+diagnostic: outcome: s0.boundary.date-packed@postgres: rust-host against its effective expectation: outcome.code: expected None, observed 'INVALID_REQUEST'
+diagnostic: outcome: s0.boundary.depth-999@postgres: python-core: outcome against core: expected ('success', None), observed ('refusal', None)
+diagnostic: outcome: s0.boundary.depth-999@postgres: rust-host against its effective expectation: outcome.code: expected None, observed 'PROVIDER_ERROR'
+diagnostic: outcome: s0.boundary.escape-lone-surrogate@postgres: python-core against its effective expectation: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: s0.boundary.escape-lone-surrogate@postgres: python-core against its effective expectation: outcome.error: expected 'StructuredDataError', observed None
+diagnostic: outcome: s0.boundary.escape-lone-surrogate@postgres: python-core against its effective expectation: outcome.code: expected 'INVALID_REQUEST', observed None
+diagnostic: warnings: s0.boundary.escape-lone-surrogate@postgres: python-core against python-ref: host.warnings: differ
+diagnostic: sql.count: s0.boundary.escape-lone-surrogate@postgres: python-core against python-ref: materialize: 5 statements, the reference 3
+diagnostic: outcome: s0.boundary.escape-lone-surrogate@postgres: rust-host against its effective expectation: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: s0.boundary.escape-lone-surrogate@postgres: rust-host against its effective expectation: outcome.code: expected 'INVALID_REQUEST', observed None
+diagnostic: outcome: s0.boundary.escape-surrogate-pair@postgres: python-core against its effective expectation: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: s0.boundary.escape-surrogate-pair@postgres: python-core against its effective expectation: outcome.error: expected 'StructuredDataError', observed None
+diagnostic: outcome: s0.boundary.escape-surrogate-pair@postgres: python-core against its effective expectation: outcome.code: expected 'INVALID_REQUEST', observed None
+diagnostic: warnings: s0.boundary.escape-surrogate-pair@postgres: python-core against python-ref: host.warnings: differ
+diagnostic: sql.count: s0.boundary.escape-surrogate-pair@postgres: python-core against python-ref: materialize: 5 statements, the reference 3
+diagnostic: outcome: s0.boundary.escape-surrogate-pair@postgres: rust-host against its effective expectation: outcome.result: expected 'refusal', observed 'success'
+diagnostic: outcome: s0.boundary.escape-surrogate-pair@postgres: rust-host against its effective expectation: outcome.code: expected 'INVALID_REQUEST', observed None
+diagnostic: sql.count: rule.composite-key-given@postgres: python-core against python-ref: materialize: 0 statements, the reference 1
+diagnostic: sql.count: rule.composite-key-given@postgres: rust-host against python-ref: materialize: 0 statements, the reference 1
+diagnostic: sql.count: sample.num-neighbors.minus-one@postgres: python-core against python-ref: materialize: 4 statements, the reference 6
+diagnostic: sql.count: sample.num-neighbors.minus-one@postgres: rust-host against python-ref: materialize: 4 statements, the reference 6
+diagnostic: warnings: target.aggregation.list-distinct@postgres: python-core against python-ref: host.warnings: differ
+diagnostic: sql.count: target.aggregation.list-distinct@postgres: python-core against python-ref: materialize: 0 statements, the reference 8
+diagnostic: sql.count: target.aggregation.list-distinct@postgres: rust-host against python-ref: materialize: 0 statements, the reference 8
