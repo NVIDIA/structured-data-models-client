@@ -36,8 +36,10 @@ pub enum Value {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReadError {
     /// `syntax`, `eof` or `data`, as `serde_json` classifies the fault,
-    /// `depth` for text nested past [`MAX_DEPTH`], or `not_finite` for a
-    /// `NaN` or `Infinity` token.
+    /// `depth` for text nested past [`MAX_DEPTH`], `not_finite` for a
+    /// `NaN` or `Infinity` token, or `encoding` for an answer's bytes that
+    /// do not decode in the encoding they are detected in (UTF-16 or
+    /// UTF-32, a lone surrogate included).
     pub category: &'static str,
     pub line: usize,
     pub column: usize,
