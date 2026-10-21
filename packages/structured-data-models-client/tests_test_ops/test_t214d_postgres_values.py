@@ -457,9 +457,19 @@ def test_the_provider_hands_the_core_the_driver_s_values(
     def check() -> None:
         _, answers = _read(database, column)
         assert answers.answers, 'the provider answered nothing'
-        answer = answers.answers[-1].sort_by('id')
+        answer = answers.answers[-1]
         field = answer.schema.field('v')
-        values = answer.column('v').to_pylist()
+        # Rows put in id order in Python: Table.sort_by on PyArrow 14 (the
+        # floor) turns a month_day_nano_interval column's cells into nulls,
+        # so the Arrow table holding the interval is never sorted.
+        by_id = dict(
+            zip(
+                answer.column('id').to_pylist(),
+                answer.column('v').to_pylist(),
+                strict=True,
+            )
+        )
+        values = [by_id[key] for key in sorted(by_id)]
         unfaithful = [
             (value, cell)
             for value, cell in zip(values, driver, strict=True)
