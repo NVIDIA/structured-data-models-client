@@ -682,16 +682,17 @@ impl<T> Given<T> {
 /// - `{"spelled": "<text>"}`: a value of a type no scalar holds, by the
 ///   text the reference writes into its question (in Python, `str` of it);
 ///   it is no text candidate, and the core holds it equal to no other.
-/// - `{"typed": {"text": "<text>", "type": "<name>", "at": "<digits>"}}`:
-///   a value of a type no scalar holds, written into its question by its
-///   text as `spelled` is, with the name of the kind of value it is
-///   (`date`, `datetime` for a timestamp with no zone, `datetime_zoned` for
-///   one with, `time`) and, where the host's language compares such values
-///   by a point in time, that point (`at`: a count of nanoseconds since the
-///   epoch, a zoned one's UTC instant). Two of one kind are one candidate
-///   where their `at` is one, or, with none, their text: as the host's
-///   language holds them equal, the reference's `dict.fromkeys` keeping the
-///   first, and its text, for the question (T2.14b fixes 1 and 2).
+/// - `{"typed": {"text": "<text>", "type": "<name>", "first": <n>}}`: a
+///   value of a type no scalar holds, written into its question by its text
+///   as `spelled` is, with the name of the kind of value it is (`date`,
+///   `datetime` for a timestamp with no zone, `datetime_zoned` for one with
+///   one, `time`). Its equality is the host's language's own, never the
+///   core's: `first`, optional, is the position among the candidates given
+///   of the first one the host's language holds equal to it (its own where
+///   none before it is), as the reference's `dict.fromkeys` groups them, and
+///   the core keeps the first of each group and its text. A host that sends
+///   no `first` gets the core's own rule: two of one kind and one text are
+///   one candidate (T2.14b fixes 1, 2 and 4).
 /// - `repeat`: a value the host's own language holds equal to one given
 ///   before it, left out as the reference's `dict.fromkeys` leaves it out.
 ///   A host whose candidates are all scalars sends none, the core keeping
@@ -720,7 +721,7 @@ pub struct TypedCandidate {
     #[serde(rename = "type")]
     pub kind: TypedKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub at: Option<String>,
+    pub first: Option<u32>,
 }
 
 /// The kinds a typed candidate is of, a closed set: a kind no host may

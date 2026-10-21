@@ -246,7 +246,9 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
     r"""A ranking's candidates as the contract's given candidates (T2.8),
     each as the caller gave it, a repeat among them: which candidates
     repeat, as the reference's ``dict.fromkeys`` keeps the first of each by
-    Python's equality, is the core's (``sdm-request``'s ranking, T2.14b).
+    Python's equality, is the core's (``sdm-request``'s ranking, T2.14b),
+    but for a date, a time of day or a timestamp, whose group this names
+    by Python's own equality (``first``).
     One Python cannot hash, which ``dict.fromkeys`` fails on, is
     ``unreadable``, the contract's word for a value of the host's no
     contract type holds (decision E101), which the core refuses by name.
@@ -265,12 +267,17 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
     from sdm_client.wire.dtypes import _is_missing
 
     written: list[Any] = []
-    for value in candidates:
+    # The temporal candidates grouped as dict.fromkeys groups them, by
+    # Python's own == and hash: each one's group named by the position of
+    # its first.
+    firsts: dict[Any, int] = {}
+    for position, value in enumerate(candidates):
         try:
             hash(value)
         except TypeError:
             written.append(codec.UNREADABLE)
             continue
+        given = value
         if hasattr(value, 'item'):
             with contextlib.suppress(AttributeError, ValueError):
                 value = value.item()
@@ -292,42 +299,34 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
             written.append({'value': {'t': 'utf8', 'v': value}})
         elif isinstance(value, (datetime.date, datetime.time)):
             # A date, a time of day or a timestamp (pandas' among them), with
-            # its kind and, for a timestamp, the point in time Python
-            # compares it by, so the core holds two equal ones one
-            # candidate (T2.14b fixes 1 and 2); its text is the question's.
-            written.append({'typed': _typed(value)})
+            # its kind and the position of the first candidate Python holds
+            # equal to it, its own where none before it is: Python's
+            # equality, never the core's (T2.14b fix 4); its text is the
+            # question's.
+            written.append(
+                {
+                    'typed': {
+                        'text': str(value),
+                        'type': _kind(value),
+                        'first': firsts.setdefault(given, position),
+                    }
+                }
+            )
         else:
             written.append({'spelled': str(value)})
     return written
 
 
-def _typed(value: Any) -> dict[str, Any]:
-    r"""A date, a time of day or a timestamp as the contract's typed
-    candidate: its text (``str``), its kind, and for a timestamp the point
-    in time Python's equality compares (``at``, nanoseconds since the
-    epoch): a zoned one's UTC instant (``datetime_zoned``), a zone-less
-    one's wall clock (``datetime``), which Python never holds equal to each
-    other, nor either to a date."""
-    typed: dict[str, Any] = {'text': str(value)}
+def _kind(value: Any) -> str:
+    r"""The kind of a date, a time of day or a timestamp, as the contract's
+    typed candidate names it: ``datetime_zoned`` for a timestamp with a
+    zone, ``datetime`` for one without (a ``pandas.Timestamp`` among
+    them), ``date`` and ``time``."""
     if isinstance(value, datetime.datetime):
-        nanos = getattr(value, 'nanosecond', 0)
-        zoned = value.utcoffset() is not None
-        moment = (
-            value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
-            if zoned
-            else value.replace(tzinfo=None)
-        )
-        delta = moment - datetime.datetime(1970, 1, 1)
-        micros = (delta.days * 86_400 + delta.seconds) * 1_000_000 + (
-            delta.microseconds
-        )
-        typed['type'] = 'datetime_zoned' if zoned else 'datetime'
-        typed['at'] = str(micros * 1_000 + nanos)
-    elif isinstance(value, datetime.date):
-        typed['type'] = 'date'
-    else:
-        typed['type'] = 'time'
-    return typed
+        return 'datetime' if value.utcoffset() is None else 'datetime_zoned'
+    if isinstance(value, datetime.date):
+        return 'date'
+    return 'time'
 
 
 def _text(value: Any) -> str:

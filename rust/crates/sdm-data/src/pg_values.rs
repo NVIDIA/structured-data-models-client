@@ -197,8 +197,8 @@ pub fn conform(
 /// not JSON is the provider's fault; one whose whole value is a string
 /// holding a lone surrogate, which no UTF-8 text holds, is refused by name
 /// (`VALUE_OUT_OF_RANGE`, rule `text_not_utf8`), where the reference fails
-/// unnamed (`UnicodeEncodeError`); in a list, whose column the reference
-/// leaves out, such an element is missing (`in_list`).
+/// unnamed (`UnicodeEncodeError`); in a list, a column the core leaves
+/// out (register P2D-5), such an element is missing (`in_list`).
 fn json_column(
     column: &str,
     texts: &StringArray,

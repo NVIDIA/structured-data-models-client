@@ -91,8 +91,14 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 
 - Codex P2-1: a timestamp candidate carries the point in time Python's equality compares (`at`: a zoned one's UTC instant, a zone-less one's wall clock, in nanoseconds), beside its kind and text, so two zoned timestamps of one instant are one candidate, the first one's text written into the question.
 - Claude: the typed candidate's kind is a closed set in the contract (`TypedKind`: `date`, `datetime`, `datetime_zoned`, `time`); the contract's reader refuses another by name.
-- Claude P3-3: a Postgres `json` cell whose whole value is a string holding a lone surrogate is refused by name (`VALUE_OUT_OF_RANGE`, rule `text_not_utf8`), where the reference fails unnamed (register P2D-3, proposed); in a `json[]`, whose column the reference leaves out, such an element is missing.
+- Claude P3-3: a Postgres `json` cell whose whole value is a string holding a lone surrogate is refused by name (`VALUE_OUT_OF_RANGE`, rule `text_not_utf8`), where the reference fails unnamed (register P2D-3, proposed); in a `json[]`, a column the core leaves out where the reference refuses the table (register P2D-5, proposed), such an element is missing.
 - Claude P3-4: `key.uint64-above-int64-max`'s wording without the data's value is registered (P2D-4, proposed, under KO2-86).
+
+### Fix 4 (round 3 reviews)
+
+- Codex P2-1: a temporal candidate's equality is Python's own, never the core's: the host groups the candidates as `dict.fromkeys` does, by Python's `==` and `hash`, and gives each date, time or timestamp the position of the first candidate equal to it (`first`); the core keeps the first of each group and its text. A host that sends no `first` gets the core's rule by kind and text. The `at` instant is gone, and with it the bare `OverflowError` of an aware timestamp at the end of the date range (Claude r3 P3-1); the fold and aware-time cases (Claude r3 P3-2) group as Python groups them.
+- Claude r3 P3-3: P2D-3 says the reference refuses a table with a `json[]` column; that older difference is registered (P2D-5, proposed).
+- Claude r3 P3-4: P2D-4's note names the NAMED pin as it now stands.
 
 ### Carried to Phase 3 (P3)
 

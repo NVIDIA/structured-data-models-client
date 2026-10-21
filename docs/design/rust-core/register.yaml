@@ -6819,7 +6819,8 @@ entries:
     column, said as a JSON string with a lone surrogate, text with no UTF-8
     form. A lone surrogate inside an object or an array is kept, escaped,
     as the reference keeps it; one as a json[] element is missing, the
-    column being one the reference leaves out.
+    core leaving that column out (P2D-5), where the reference refuses the
+    table.
   affected_inputs: >-
     Schema.from_source and materialize on the core route over a Postgres
     json or jsonb column holding a cell whose whole value is a string
@@ -6857,9 +6858,37 @@ entries:
   decision_ref: {file: docs/design/rust-core/phase-2/decisions.md, row: KO2-86}
   notes: >-
     Approver: reviewer, under KO2-86 (the owner's: a value read from data
-    stays out). Only the message's text differs. Its wording key stays in
-    contract/tests/t214b-pending.json. The ID is from lane D's block; the
-    orchestrator may renumber.
+    stays out). Only the message's text differs. The wording test's NAMED
+    pin for the case holds the table, the column, the row, the range and
+    the remedy, and not the value (contract/tests/test_t214b_wording.py,
+    the test author's t3). The ID is from lane D's block; the orchestrator
+    may renumber.
+
+- id: P2D-5
+  title: A Postgres json[] column is left out on the core route, where the reference refuses the table
+  kind: change
+  old_behavior: >-
+    The reference's Schema.from_source over a Postgres table holding a
+    json[] (or jsonb[]) column refuses the whole table with an unnamed
+    ValueError ("Encountered unsupported data type for column ...").
+  new_behavior: >-
+    On the core route the column is left out with COLUMNS_LEFT_OUT, as the
+    core leaves out any column of a type it does not send, and the rest of
+    the table is described and answered. Unchanged by T2.14b (the provider
+    already handed it over as a list of text); registered at T2.14b.
+  affected_inputs: >-
+    Schema.from_source and materialize on the core route over a Postgres
+    table with a json[] or jsonb[] column.
+  cases: [T2.14b]
+  refs: [T2.14b, E66]
+  status: proposed
+  approved_by: null
+  decision_ref: null
+  notes: >-
+    Found by T2.14b's round 3 review (Claude, P3-3), measured on
+    PostgreSQL 17. The core answers where the reference fails unnamed, so
+    the approver is the owner unless the orchestrator rules it E66(b)'s
+    class. The ID is from lane D's block; the orchestrator may renumber.
 
 # --- lane E entries (P2E-1..19) ---
 
