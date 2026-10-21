@@ -111,6 +111,10 @@ Its tests are the test author's (`contract/tests/test_t214b_*.py`, `rust/crates/
 - Claude r4 P3-2 and P3-3 (the orchestrator's decision): `first` is gone from the contract before contract 27 ships. Which candidates repeat is Python's own again: the host runs `dict.fromkeys`'s grouping over every hashable candidate, by Python's `==` and `hash`, and sends each later one as the contract's `repeat`, which the core leaves out; a typed candidate keeps its closed set of kinds, and two of one kind and one text are one candidate where a host sends no `repeat`. This also groups a `pandas.Timestamp` with an equal `numpy.datetime64`. MID2 P2-2's row is therefore not moved into the core: its rule stays the host's, by the host language's own equality, with no field carrying it. No position index remains in the contract (P3-4).
 - Claude r4 P3-1: CI's reference-cell Postgres job runs `contract/tests/test_t214b_regressions.py -k json`.
 
+### Fix 8 (round 6 review)
+
+- Codex r6: after the host's grouping, the core still held two typed candidates of one kind and text one, merging values Python keeps distinct (one wall time in New York and in Toronto). The host now sends a temporal candidate Python holds distinct from an earlier one of the same kind and text as `spelled`, which the core merges with none; `repeat` stays for values Python holds equal.
+
 ### Carried to Phase 3 (P3)
 
 - Decimal stype on Postgres: inference reads a scaled decimal by Arrow's `ToDouble`, where the reference's Postgres double is `float(Decimal)`, correctly rounded (0.700 as 0.7000000000000001 here, 0.7 there); distinct counts agree but near collisions (Claude r1 P3-3).

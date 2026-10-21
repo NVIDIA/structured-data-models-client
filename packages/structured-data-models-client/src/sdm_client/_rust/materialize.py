@@ -271,6 +271,8 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
     # and hash: each later one equal to one given before it is a repeat
     # (T2.14b fix 7).
     kept: dict[Any, None] = {}
+    # The kinds and texts of the typed candidates sent.
+    spoken: set[tuple[str, str]] = set()
     for value in candidates:
         try:
             repeat = value in kept
@@ -302,10 +304,17 @@ def _candidates(candidates: Sequence[Any]) -> list[Any]:
             written.append({'value': {'t': 'utf8', 'v': value}})
         elif isinstance(value, (datetime.date, datetime.time)):
             # A date, a time of day or a timestamp (pandas' among them), with
-            # its kind; its text is the question's.
-            written.append(
-                {'typed': {'text': str(value), 'type': _kind(value)}}
-            )
+            # its kind; its text is the question's. The core holds two of
+            # one kind and text one candidate, so one Python holds distinct
+            # from an earlier one of the same kind and text (one wall time
+            # in two zones) is sent spelled, which the core merges with
+            # none (T2.14b fix 8).
+            typed = (_kind(value), str(value))
+            if typed in spoken:
+                written.append({'spelled': typed[1]})
+            else:
+                spoken.add(typed)
+                written.append({'typed': {'text': typed[1], 'type': typed[0]}})
         else:
             written.append({'spelled': str(value)})
     return written
