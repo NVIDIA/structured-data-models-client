@@ -314,7 +314,8 @@ def cmd_measure(args: argparse.Namespace) -> int:
         'repeats': args.repeats,
         'cell': run._cell(versions),
         'versions': versions,
-        'commit': run._git(run.REPO),
+        # The client measured: the reference checkout's, or this tree's.
+        'commit': run._git(args.reference or run.REPO),
         'import_cpu': _import_cpu(args.mode == 'python-core', args.repeats),
         'crossing_cpu': (
             _crossing_cpu(args.repeats) if args.mode == 'python-core' else None
