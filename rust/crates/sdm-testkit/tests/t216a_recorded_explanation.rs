@@ -65,7 +65,11 @@ fn same(a: &Value, b: &Value) -> bool {
 
 #[test]
 fn the_result_s_explanation_is_recorded() {
-    for id in ["explain.answered", "explain.forecast", "metadata.items-explained"] {
+    for id in [
+        "explain.answered",
+        "explain.forecast",
+        "metadata.items-explained",
+    ] {
         let wanted = vector(id)["explanation"].clone();
         assert!(!wanted.is_null(), "{id}: the vector holds no explanation");
         let answer = predicted(id);
@@ -73,7 +77,10 @@ fn the_result_s_explanation_is_recorded() {
             panic!("{id}: no explanation recorded: {}", answer["result"]);
         };
         let read: Value = serde_json::from_str(text).unwrap();
-        assert!(same(&read, &wanted), "{id}: {read} where the reference has {wanted}");
+        assert!(
+            same(&read, &wanted),
+            "{id}: {read} where the reference has {wanted}"
+        );
     }
 }
 
