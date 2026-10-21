@@ -207,9 +207,11 @@ fn text_field(error: &CoreError, name: &str) -> Option<String> {
 /// T1.6c's refusal by name of a D8 literal: `INVALID_REQUEST`, kind
 /// invalid request, naming `operation` `validate_query` and `rule`
 /// `date_literal_packed`, with the literal's place as D4's warning gives
-/// it (`start_row`, `start_col`, `end_row`, `end_col`), and never the
-/// literal's text, in its message or any field.
-fn assert_refused_as_packed(error: &CoreError, literal: &str) {
+/// it (`start_row`, `start_col`, `end_row`, `end_col`). From KO2-86 (an
+/// error may name a value of the caller's own call) it names the literal
+/// (`literal`) and the query given (`query`), exactly, and the literal's
+/// text is in no other field and not in its message.
+fn assert_refused_as_packed(error: &CoreError, literal: &str, query: &str) {
     assert_eq!(
         (error.kind, error.code),
         (ErrorKind::InvalidRequest, ErrorCode::InvalidRequest),
@@ -234,7 +236,20 @@ fn assert_refused_as_packed(error: &CoreError, literal: &str) {
             "{literal}: no {name} in {error:?}"
         );
     }
-    let written = serde_json::to_string(error).unwrap();
+    assert_eq!(
+        text_field(error, "literal").as_deref(),
+        Some(literal),
+        "{literal}: {error:?}"
+    );
+    assert_eq!(
+        text_field(error, "query").as_deref(),
+        Some(query),
+        "{literal}: {error:?}"
+    );
+    let mut rest = error.clone();
+    rest.fields.remove("literal");
+    rest.fields.remove("query");
+    let written = serde_json::to_string(&rest).unwrap();
     assert!(!written.contains(literal), "{literal}: {written}");
     for run in literal
         .split([' ', '/', '-', '.', ':'])
@@ -272,7 +287,7 @@ const PACKED: &[&str] = &[
 fn a_packed_date_or_long_field_is_refused_by_name() {
     for literal in PACKED {
         let query = filtered(&format!("orders.ts > {literal}"));
-        assert_refused_as_packed(&refusal_of(&query, &facts()), literal);
+        assert_refused_as_packed(&refusal_of(&query, &facts()), literal, &query);
         let validated = validate(
             &query,
             &shop(),
@@ -280,7 +295,7 @@ fn a_packed_date_or_long_field_is_refused_by_name() {
             &facts(),
             &NoZones,
         );
-        assert_refused_as_packed(&validated.expect_err(literal), literal);
+        assert_refused_as_packed(&validated.expect_err(literal), literal, &query);
     }
 }
 
@@ -289,8 +304,9 @@ fn a_packed_date_or_long_field_is_refused_by_name() {
 /// row's 41st column after the filter's `orders.ts > `.
 #[test]
 fn the_packed_refusal_names_the_literal_s_place_as_d4_s_warning_does() {
-    let error = refusal_of(&filtered("orders.ts > 13/1/20240"), &facts());
-    assert_refused_as_packed(&error, "13/1/20240");
+    let query = filtered("orders.ts > 13/1/20240");
+    let error = refusal_of(&query, &facts());
+    assert_refused_as_packed(&error, "13/1/20240", &query);
     let (found, warnings) = read_literal("13/01/2024");
     assert_eq!(found, Some(("2024-01-13T00:00:00".to_owned(), None)));
     let [warning] = &warnings[..] else {
@@ -321,7 +337,7 @@ fn a_packed_date_in_an_array_is_refused_by_name() {
     );
     for literal in ["20240101-01-01", "2024-01-01 00000:00:00"] {
         let query = filtered(&format!("orders.ts IN (2024-01-01, {literal})"));
-        assert_refused_as_packed(&refusal_of(&query, &facts()), literal);
+        assert_refused_as_packed(&refusal_of(&query, &facts()), literal, &query);
     }
 }
 
@@ -374,9 +390,13 @@ fn an_earlier_refusal_wins_and_the_first_packed_literal_ends_the_parse() {
         ["PQL_VALUE_INVALID_LITERAL"]
     );
     let d8_first = filtered("orders.ts > 20240101-01-01 AND orders.ts < 2023-02-29");
-    assert_refused_as_packed(&refusal_of(&d8_first, &facts()), "20240101-01-01");
+    assert_refused_as_packed(
+        &refusal_of(&d8_first, &facts()),
+        "20240101-01-01",
+        &d8_first,
+    );
     let two = filtered("orders.ts > 230203-06-09 AND orders.ts < 20240101-01-01");
-    assert_refused_as_packed(&refusal_of(&two, &facts()), "230203-06-09");
+    assert_refused_as_packed(&refusal_of(&two, &facts()), "230203-06-09", &two);
     // The first one's place.
     let error = refusal_of(&two, &facts());
     assert_eq!(
@@ -865,7 +885,7 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
                     &Bundled,
                 )
                 .expect_err(literal);
-                assert_refused_as_packed(&error, literal);
+                assert_refused_as_packed(&error, literal, &query);
             }
             continue;
         }

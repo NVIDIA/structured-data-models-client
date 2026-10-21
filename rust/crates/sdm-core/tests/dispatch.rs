@@ -836,7 +836,21 @@ fn a_local_zone_the_run_cannot_resolve_refuses_only_a_year_it_must_place() {
             "{query}"
         );
         assert_eq!(named(&err, "rule"), "date_literal_packed", "{query}");
-        assert!(!err.fields.contains_key("field"), "{query}: {err:?}");
+        // The query's own refusal (field query, naming the query given and
+        // its first packed literal, KO2-86), not the local zone's.
+        assert_eq!(named(&err, "field"), "query", "{query}");
+        assert_eq!(named(&err, "query"), query, "{query}");
+        assert_eq!(
+            named(&err, "literal"),
+            query
+                .split(" > ")
+                .nth(1)
+                .unwrap()
+                .split(' ')
+                .next()
+                .unwrap(),
+            "{query}"
+        );
     }
 }
 
@@ -878,7 +892,14 @@ fn a_packed_date_literal_ends_validate_query_with_the_core_s_error() {
             sdm_contract::Detail::Scalar(Scalar::UInt64(39)),
             "{literal}"
         );
-        let written = serde_json::to_string(&err).unwrap();
+        // KO2-86: the literal and the query given are named, exactly, and
+        // the literal is in no other field.
+        assert_eq!(named(&err, "literal"), literal, "{literal}");
+        assert_eq!(named(&err, "query"), query, "{literal}");
+        let mut rest = err.clone();
+        rest.fields.remove("literal");
+        rest.fields.remove("query");
+        let written = serde_json::to_string(&rest).unwrap();
         assert!(!written.contains(literal), "{written}");
     }
     for (literal, accepted) in [("2023-02-03", true), ("2023-02-29", false)] {
