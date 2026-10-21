@@ -11,6 +11,8 @@
         [--no-ci] [--no-jobs] [--gh-repo OWNER/NAME] [--workflow NAME]
         [--since YYYY-MM-DD] [--limit N] [--max-job-fetch N]
         [--json OUT]
+    phase_stats.py --phase-branch REF --forecast FILE [--now TIME] [--repo PATH]
+        [--package-re RE] [--utc-offset HOURS]
 
 Read-only: it runs ``git log``, ``gh run list`` and ``gh api`` GETs, and
 reads the review files. It prints:
@@ -42,6 +44,19 @@ reads the review files. It prints:
   ``codex`` and ``subagent``), and, for each SHA both of the first two
   reviewers reported on, the pair is counted as both approve, one blocks,
   or both block (each reviewer's latest report on that SHA).
+
+With ``--forecast FILE`` it prints only the slip report (T3.0, item 1;
+the heartbeat runs it): the design's forecast, a JSON or YAML mapping
+``{"start": TIME, "packages": [{"id": ID, "hours": H}, ...]}``, the
+packages in landing order with the hours each holds the landing queue,
+against the landings by ``--now`` (default: now). Package i is forecast to
+land at ``start`` plus the hours of packages 1 to i. The slip is how late
+the newest forecast package that landed was, or, when a package due by
+``--now`` has not landed, how long past due it is, whichever is more. Its
+main cause is the package with the most hours over its own forecast (from
+the landing before it to its own), or the landings the forecast does not
+hold (judging and other unplanned packages), when they took more. It
+never blocks: the exit status is 0 whatever the slip.
 
 Commits between two landings belong to the second (the phase branch only
 fast-forwards). ``--base`` limits the commits to ``BASE..PHASE``; without
@@ -548,6 +563,117 @@ def report(res):
         )
 
 
+# --- the slip report (T3.0) -------------------------------------------------
+
+
+def read_forecast(path, tz):
+    text = Path(path).read_text(encoding='utf-8')
+    try:
+        document = json.loads(text)
+    except ValueError:
+        import yaml
+
+        document = yaml.safe_load(text)
+    if (
+        not isinstance(document, dict)
+        or 'start' not in document
+        or not isinstance(document.get('packages'), list)
+    ):
+        raise StatsError(
+            f'{path}: a forecast is {{start, packages: [{{id, hours}}]}}'
+        )
+    start = parse_time(str(document['start']), tz)
+    planned, at = [], start
+    for item in document['packages']:
+        if (
+            not isinstance(item, dict)
+            or 'id' not in item
+            or 'hours' not in item
+        ):
+            raise StatsError(f'{path}: each package has an id and hours')
+        at = at + dt.timedelta(hours=float(item['hours']))
+        planned.append((str(item['id']), float(item['hours']), at))
+    return start, planned
+
+
+def slip_report(rows, start, planned, now):
+    r"""The slip at ``now`` and its main cause, in plain words, as lines."""
+    landed = {}
+    order = []
+    for r in rows:
+        if r['land'] and r['committed'] <= now and r['land'] not in landed:
+            landed[r['land']] = r['committed']
+            order.append(r['land'])
+    ids = {p for p, _, _ in planned}
+    late, due = None, None
+    for package, _, forecast in planned:
+        if package in landed:
+            late = (package, forecast, landed[package])
+        elif forecast <= now and due is None:
+            due = (package, forecast)
+    slip, why = 0.0, 'on the forecast'
+    if late is not None and hours(late[1], late[2]) > 0:
+        slip = hours(late[1], late[2])
+        why = (
+            f'{late[0]} was forecast to land by {late[1]:%Y-%m-%d %H:%M} '
+            f'and landed at {late[2]:%Y-%m-%d %H:%M}'
+        )
+    if due is not None and hours(due[1], now) > slip:
+        slip = hours(due[1], now)
+        why = f'{due[0]} was due by {due[1]:%Y-%m-%d %H:%M} and has not landed'
+    # Each landing's own hours on the queue: from the landing before it
+    # (or the start) to its own.
+    over, unplanned, previous = [], [], start
+    forecast_hours = {p: h for p, h, _ in planned}
+    for package in order:
+        at = landed[package]
+        took = hours(max(previous, start), at) if at > start else 0.0
+        previous = max(previous, at)
+        if package in forecast_hours:
+            over.append(
+                (round(took - forecast_hours[package], 2), package, took)
+            )
+        elif took > 0:
+            unplanned.append((package, took))
+    # The next forecast package, not landed, holds the queue since then.
+    pending = next((p for p, _, _ in planned if p not in landed), None)
+    if pending is not None and now > previous:
+        took = hours(max(previous, start), now)
+        over.append(
+            (
+                round(took - forecast_hours[pending], 2),
+                f'{pending} (not landed)',
+                took,
+            )
+        )
+        forecast_hours[f'{pending} (not landed)'] = forecast_hours[pending]
+    lines = [
+        f'Slip at {now:%Y-%m-%d %H:%M}: {slip:.1f} hours behind the forecast ({why}).',
+        f'{sum(p in landed for p in ids)} of {len(planned)} forecast packages landed; '
+        f'{len(unplanned)} landings the forecast does not hold.',
+    ]
+    over.sort(reverse=True)
+    extra = round(sum(t for _, t in unplanned), 2)
+    if over and over[0][0] > 0 and over[0][0] >= extra:
+        first = over[0]
+        lines.append(
+            f'Main cause: {first[1]} held the queue {first[2]:.1f} hours against '
+            f'{forecast_hours[first[1]]:g} forecast, {first[0]:.1f} over.'
+        )
+        rest = [f'{p} {o:.1f} over' for o, p, _ in over[1:] if o > 0]
+        if rest:
+            lines.append('Then: ' + ', '.join(rest) + '.')
+    elif extra > 0:
+        lines.append(
+            f'Main cause: {extra:.1f} hours of landings the forecast does not hold: '
+            + ', '.join(f'{p} {t:.1f}' for p, t in unplanned)
+            + '.'
+        )
+    elif slip > 0:
+        lines.append(f'Main cause: {why}.')
+    return slip, lines
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__.split('\n\n')[0],
@@ -592,6 +718,10 @@ def main(argv=None):
     ap.add_argument('--infra-step-re', default=INFRA_STEP_RE)
     ap.add_argument('--infra-job-re', default=INFRA_JOB_RE)
     ap.add_argument('--json', help='also write everything as JSON')
+    ap.add_argument(
+        '--forecast', help="the design's forecast: print the slip report alone"
+    )
+    ap.add_argument('--now', help='the slip report at TIME (default: now)')
     args = ap.parse_args(argv)
 
     tz = (
@@ -610,6 +740,16 @@ def main(argv=None):
             commits(args.repo, args.phase_branch, args.base, tz),
             args.package_re,
         )
+        if args.forecast:
+            start, planned = read_forecast(args.forecast, tz)
+            now = (
+                parse_time(args.now, tz)
+                if args.now
+                else dt.datetime.now(dt.timezone.utc).astimezone(tz)
+            )
+            _, lines = slip_report(rows, start, planned, now)
+            print('\n'.join(lines))
+            return 0
         groups = landing_groups(rows, bool(args.base))
         branch = re.sub(
             rf'^(refs/remotes/)?{re.escape(args.remote)}/|^refs/heads/',
