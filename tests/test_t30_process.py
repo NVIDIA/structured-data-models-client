@@ -103,6 +103,9 @@ GIT_ENV = {
 #: core since Phase 1.
 SEEDED_CASE = 's0.accept.binary-classification'
 PENDING_FILE = ROOT / 'tests/t30-pending.json'
+#: These tests copy the checkout into temporary repositories and run the
+#: checking tools there: the judging-tool job's (T3.0, item 3).
+pytestmark = pytest.mark.tooling
 
 
 def _pending_names(key: str) -> set[str]:

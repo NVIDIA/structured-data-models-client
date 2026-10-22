@@ -16,7 +16,6 @@ not pinned by digest, and logs in to ghcr.io alone.
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import re
@@ -2342,16 +2341,7 @@ T30_TIMING = ROOT / 'scripts/rust_core/orchestration/ci_timing.py'
 T30_PHASE = 'rust-core-phase-3'
 T30_LANE = f'{T30_PHASE}-lane-a'
 T30_PENDING = ROOT / 'tests/t30-pending.json'
-T30_TOOLS = re.compile(r'gate\.sh|ratchet\.py|compare\.py|coverage\.py')
-T30_COPIES = re.compile(
-    r"""['"](?:init|clone)['"]|['"]worktree['"]\s*,\s*['"]add['"]"""
-    r'|git init|git clone|worktree add|copytree\('
-)
-T30_LOADS = re.compile(
-    r"""(?:_module|load|import_module|spec_from_file_location)\([^)]*?"""
-    r"""['"]([\w/.]*?test_\w+)(?:\.py)?['"]|^\s*(?:from|import)\s+(test_\w+)""",
-    re.M,
-)
+T30_SPLIT = ROOT / 'scripts/rust_core/tooling_tests.py'
 
 
 def _t30_pending(test: Any) -> Any:
@@ -2365,90 +2355,85 @@ def _t30_pending(test: Any) -> Any:
     return test
 
 
-def _t30_gate_copying() -> list[Path]:
-    r"""The test files that copy the contract into a temporary repository
-    (git init, clone, a worktree or a tree copy) and rerun the gate, the
-    ratchet, the comparator or coverage there, and the files that load one
-    of them: the tests that belong in the judging-tool job."""
-    files = sorted(
-        [*ROOT.glob('tests/test_*.py'), *ROOT.glob('contract/tests/test_*.py')]
+#: A test file that copies the contract into a temporary git repository
+#: and runs the ratchet there, as the judging-tool tests do. Its copy and
+#: init are filled in when it is written, so this file holds no builder of
+#: its own and stays unmarked.
+T30_COPYING = """\
+import shutil
+import subprocess
+from pathlib import Path
+{mark}
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_the_ratchet_on_a_copy(tmp_path):
+    shutil.{copy}(ROOT / 'contract', tmp_path / 'contract')
+    subprocess.run(['git', '{init}', '-q', str(tmp_path)], check=True)
+    subprocess.run(
+        ['python', str(ROOT / 'scripts/rust_core/ratchet.py'), 'check'],
+        cwd=tmp_path,
     )
-    text = {f: f.read_text(encoding='utf-8') for f in files}
-    found = {
-        f
-        for f, s in text.items()
-        if T30_TOOLS.search(s) and T30_COPIES.search(s)
-    }
-    by_name = {f.stem: f for f in files}
-    grew = True
-    while grew:
-        grew = False
-        for f in files:
-            if f in found:
-                continue
-            loaded = {
-                (m.group(1) or m.group(2)).split('/')[-1]
-                for m in T30_LOADS.finditer(text[f])
-            }
-            if any(by_name.get(name) in found for name in loaded):
-                found.add(f)
-                grew = True
-    return sorted(found)
+"""
 
 
-def _t30_marked(node: ast.AST) -> bool:
-    return any(
-        isinstance(n, ast.Attribute)
-        and n.attr == T30_MARKER
-        and isinstance(n.value, ast.Attribute)
-        and n.value.attr == 'mark'
-        for n in ast.walk(node)
+def _t30_split(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(T30_SPLIT), *args],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=300,
     )
 
 
 @_t30_pending
-def test_t30_every_gate_copying_test_carries_the_marker() -> None:
+def test_t30_every_gate_copying_test_carries_the_marker(tmp_path: Path) -> None:
+    r"""tooling_tests.py check passes on this tree, finds the families the
+    test-speed investigation names, and fails, naming it, on a copying
+    test file without the marker."""
     pyproject = (ROOT / 'pyproject.toml').read_text(encoding='utf-8')
     markers = pyproject.partition('[tool.pytest.ini_options]')[2]
     assert re.search(rf'^\s*"{T30_MARKER}:', markers, re.M), 'not registered'
-    files = _t30_gate_copying()
-    # The detection finds the families the test-speed investigation names.
-    names = {f.name for f in files}
-    assert {'test_gate_modes.py', 'test_contract_ratchet.py'} <= names, names
-    unmarked = []
-    for path in files:
-        tree = ast.parse(path.read_text(encoding='utf-8'))
-        whole = any(
-            isinstance(node, ast.Assign)
-            and any(
-                isinstance(t, ast.Name) and t.id == 'pytestmark'
-                for t in node.targets
-            )
-            and _t30_marked(node.value)
-            for node in tree.body
+    done = _t30_split('check')
+    assert done.returncode == 0, done.stdout + done.stderr
+    listed = _t30_split('list')
+    assert listed.returncode == 0, listed.stdout + listed.stderr
+    for name in ('test_gate_modes.py', 'test_contract_ratchet.py'):
+        assert name in listed.stdout, listed.stdout
+    root = tmp_path / 'root'
+    for suite in ('tests', 'contract/tests'):
+        (root / suite).mkdir(parents=True)
+    (root / 'tests/test_t30_unmarked_copy.py').write_text(
+        T30_COPYING.format(mark='', copy='copytree', init='init')
+    )
+    (root / 'tests/test_t30_marked_copy.py').write_text(
+        T30_COPYING.format(
+            mark='import pytest\n\npytestmark = pytest.mark.tooling\n',
+            copy='copytree',
+            init='init',
         )
-        if whole:
-            continue
-        unmarked += [
-            f'{path.relative_to(ROOT)}::{node.name}'
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-            and node.name.startswith('test')
-            and not any(_t30_marked(d) for d in node.decorator_list)
-        ]
-    assert not unmarked, f'{len(unmarked)} unmarked: {unmarked[:20]}'
+    )
+    seeded = _t30_split('--root', str(root), 'check')
+    said = seeded.stdout + seeded.stderr
+    assert seeded.returncode == 1, said
+    assert 'test_t30_unmarked_copy.py' in said, said
+    assert 'test_t30_marked_copy.py' not in said, said
 
 
 def _t30_pytest_steps() -> list[tuple[str, str]]:
-    return [
-        (name, str(step.get('run', '')))
-        for name, job in _workflow()['jobs'].items()
-        for step in job.get('steps', [])
-        if 'pytest' in str(step.get('run', ''))
-        and re.search(
-            r'(?<![\w/-])(?:contract/)?tests(?![\w/-])', str(step['run'])
-        )
-    ]
+    """Each pytest run over the root suite (``tests``) or contract/tests:
+    a run in a package's own directory (``cd packages/...``, the engine's
+    own ``tests``) or over a package's or binding's tests is neither."""
+    found = []
+    for name, job in _workflow()['jobs'].items():
+        for step in job.get('steps', []):
+            run = str(step.get('run', ''))
+            if 'pytest' not in run or re.search(r'(?m)^\s*cd\s', run):
+                continue
+            if _t30_suites(run):
+                found.append((name, run))
+    return found
 
 
 def _t30_selects(run: str) -> bool:
@@ -2467,25 +2452,36 @@ def _t30_selects(run: str) -> bool:
     )
 
 
-def _t30_tooling_job() -> tuple[str, dict[str, Any]]:
+def _t30_suites(run: str) -> set[str]:
+    """The suites a pytest run names: ``tests``, ``contract/tests``."""
+    return set(re.findall(r'(?<![\w/$-])((?:contract/)?tests)(?![\w/-])', run))
+
+
+def _t30_tooling_jobs() -> dict[str, dict[str, Any]]:
+    """The jobs whose pytest runs select the marker: the judging-tool
+    jobs (one per suite, when one job would outrun its limit)."""
     jobs = _workflow()['jobs']
     names = sorted(
         {name for name, run in _t30_pytest_steps() if _t30_selects(run)}
     )
-    assert len(names) == 1, f'jobs selecting -m {T30_MARKER}: {names}'
-    return names[0], jobs[names[0]]
+    assert names, f'no job selects -m {T30_MARKER}'
+    return {name: jobs[name] for name in names}
 
 
 @_t30_pending
 def test_t30_the_judging_tool_tests_run_once_in_their_own_job() -> None:
-    name, job = _t30_tooling_job()
-    matrix = job.get('strategy', {}).get('matrix', {})
-    assert not matrix, f'{name} runs in a matrix: {matrix}'
-    runs = ' '.join(r for n, r in _t30_pytest_steps() if n == name)
-    assert re.search(r'(?<![\w/])tests(?![\w/-])', runs), runs
-    assert 'contract/tests' in runs, runs
+    tooling = _t30_tooling_jobs()
+    for name, job in tooling.items():
+        matrix = job.get('strategy', {}).get('matrix', {})
+        assert not matrix, f'{name} runs in a matrix: {matrix}'
+    runs = [
+        r for n, r in _t30_pytest_steps() if n in tooling and _t30_selects(r)
+    ]
+    covered = [suite for run in runs for suite in sorted(_t30_suites(run))]
+    # Both suites, each once.
+    assert sorted(covered) == ['contract/tests', 'tests'], (covered, runs)
     for other, run in _t30_pytest_steps():
-        if other != name:
+        if other not in tooling:
             assert f'not {T30_MARKER}' in run, f'{other} runs them: {run}'
 
 
@@ -2557,7 +2553,7 @@ def _t30_output(
         ('contract/tools/differential.py', True),
         ('contract/runners/run_python.py', True),
         ('.github/workflows/ci.yml', True),
-        ('docs/design/rust-core/README.md', False),
+        ('docs/design/rust-core/migration-plan.md', False),
         ('rust/crates/sdm-core/src/lib.rs', False),
         ('packages/structured-data-models-client/README.md', False),
     ],
@@ -2565,8 +2561,10 @@ def _t30_output(
 def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
     tmp_path: Path, path: str, runs: bool
 ) -> None:
-    name, job = _t30_tooling_job()
-    condition = str(job.get('if', ''))
+    tooling = _t30_tooling_jobs()
+    conditions = {name: str(job.get('if', '')) for name, job in tooling.items()}
+    condition = ' && '.join(f'({c})' for c in conditions.values())
+    name = ', '.join(tooling)
     referenced = sorted(
         set(re.findall(r'needs\.([\w-]+)\.outputs\.([\w-]+)', condition))
     )
@@ -2606,7 +2604,8 @@ def test_t30_the_judging_tool_job_runs_only_when_its_paths_change(
             if output == 'skip'
             else _t30_output(job_name, output, repo, tmp_path, values)
         )
-    assert _evaluate(condition, context) is runs, (condition, context)
+    for job_name, each in conditions.items():
+        assert _evaluate(each, context) is runs, (job_name, each, context)
 
 
 def _t30_durations(tmp_path: Path, minutes: list[float]) -> Path:
