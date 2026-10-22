@@ -25,9 +25,12 @@ never commands:
 
 - ``rm -r`` (any spelling: ``-r``, ``-R``, ``-rf``, ``--recursive``) of a
   path outside the agent's own scratch: the session's scratchpad
-  (``/tmp/claude-*/<project>/<session id>/``), a directory under
-  ``/mnt/localssd/tmp/`` or ``/mnt/localssd/target/``, or one listed in
-  ``SDM_SCRATCH`` (colon-separated). A target with an unexpanded variable
+  (``/tmp/claude-*/<project>/<session id>/``), a directory listed in
+  ``SDM_SCRATCH`` (colon-separated), or a directory right under
+  ``/mnt/localssd/tmp/`` or ``/mnt/localssd/target/`` that this session
+  made with ``mkdir`` when it did not exist yet (recorded in
+  ``$SDM_ORCH_STATE/scratch-claims.json``); another agent's directory
+  there needs the owner's token. A target with an unexpanded variable
   or a command substitution cannot be checked and is refused;
 - ``git push`` with ``--force``, ``-f``, ``--force-with-lease``,
   ``--force-if-includes`` or a ``+`` refspec; ``git push --delete``,
@@ -119,10 +122,25 @@ def strip_heredocs(text: str) -> str:
 
 def substitutions(text: str) -> Iterator[str]:
     """The text of each ``$( ... )`` and backquoted command, outermost first;
-    the ones inside are found when that text is parsed in turn."""
-    i = 0
+    the ones inside are found when that text is parsed in turn. Text in
+    single quotes, and a character after a backslash, is literal, as the
+    shell reads it (Codex r1: a quoted commit message or search pattern is
+    no command)."""
+    i, quoted, doubled = 0, False, False
     while i < len(text):
-        if text.startswith('$(', i) and not text.startswith('$((', i):
+        ch = text[i]
+        if quoted:
+            quoted = ch != "'"
+            i += 1
+        elif ch == "'" and not doubled:
+            quoted = True
+            i += 1
+        elif ch == '"':
+            doubled = not doubled
+            i += 1
+        elif ch == '\\':
+            i += 2
+        elif text.startswith('$(', i) and not text.startswith('$((', i):
             depth, j = 1, i + 2
             while j < len(text) and depth:
                 if text[j] == '(':
@@ -132,7 +150,7 @@ def substitutions(text: str) -> Iterator[str]:
                 j += 1
             yield text[i + 2 : j - 1]
             i = j
-        elif text[i] == '`':
+        elif ch == '`':
             j = text.find('`', i + 1)
             if j < 0:
                 return
@@ -406,12 +424,59 @@ def inside_scratch(path: str, roots: list[str]) -> bool:
     for root in roots:
         if real == root or real.startswith(root.rstrip('/') + '/'):
             return True
-    for root in SCRATCH_ROOTS:
-        root = os.path.realpath(root)
-        rel = os.path.relpath(real, root)
-        if not rel.startswith('..') and rel != '.' and not os.path.isabs(rel):
-            return True
     return False
+
+
+CLAIMS = 'scratch-claims.json'
+
+
+def claims() -> dict[str, str]:
+    try:
+        found = json.loads((STATE / CLAIMS).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return found if isinstance(found, dict) else {}
+
+
+def claimed(session: str | None) -> list[str]:
+    """The directories under the shared build and temp roots this session
+    made (:func:`claim`)."""
+    return [d for d, owner in claims().items() if session and owner == session]
+
+
+def claim(argv: list[str], cwd: str, session: str | None) -> None:
+    """A ``mkdir`` of a new directory right under ``/mnt/localssd/tmp/`` or
+    ``/mnt/localssd/target/`` makes it this session's: ``rm -r`` inside it
+    is then allowed for this session alone. A directory that exists already
+    (another agent's, or one made before) is never claimed."""
+    if not session:
+        return
+    found = claims()
+    changed = False
+    for arg in argv[1:]:
+        if arg.startswith('-'):
+            continue
+        path = os.path.expandvars(os.path.expanduser(arg))
+        if '$' in path:
+            continue
+        path = os.path.realpath(
+            path if os.path.isabs(path) else os.path.join(cwd, path)
+        )
+        for root in SCRATCH_ROOTS:
+            root = os.path.realpath(root)
+            rel = os.path.relpath(path, root)
+            if rel.startswith('..') or rel == '.' or os.path.isabs(rel):
+                continue
+            top = os.path.join(root, rel.split(os.sep)[0])
+            if top not in found and not os.path.exists(top):
+                found[top] = session
+                changed = True
+    if changed:
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)
+            (STATE / CLAIMS).write_text(json.dumps(found, indent=1) + '\n')
+        except OSError:
+            pass
 
 
 def check_rm(argv: list[str], cwd: str, session: str | None) -> Verdict | None:
@@ -440,11 +505,12 @@ def check_rm(argv: list[str], cwd: str, session: str | None) -> Verdict | None:
 def check_targets(
     targets: list[str], cwd: str, session: str | None, what: str
 ) -> Verdict | None:
-    roots = scratch_roots(session)
+    roots = scratch_roots(session) + claimed(session)
     alternative = (
-        "remove only inside your own scratch (the session's scratchpad, or "
-        '/mnt/localssd/{tmp,target}/<yours>), written out literally; '
-        "anything else is the owner's, after a dry run, or clean_tmp.sh"
+        "remove only inside your own scratch (the session's scratchpad, a "
+        'directory in SDM_SCRATCH, or one this session made with mkdir under '
+        '/mnt/localssd/{tmp,target}/), written out literally; another '
+        "agent's directory needs the owner's token or clean_tmp.sh"
     )
     for target in targets:
         expanded = os.path.expandvars(os.path.expanduser(target))
@@ -596,6 +662,8 @@ def check_command(
                 )
         if not argv:
             continue
+        if os.path.basename(argv[0]) == 'mkdir':
+            claim(argv, cwd, session)
         if os.path.basename(argv[0]) == 'cd' and len(argv) > 1:
             target = os.path.expandvars(os.path.expanduser(argv[1]))
             cwd = target if os.path.isabs(target) else os.path.join(cwd, target)

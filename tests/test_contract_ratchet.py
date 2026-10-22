@@ -1326,6 +1326,45 @@ def test_a_push_that_lands_a_stack_is_judged_against_the_landing_below(
     assert found is None
 
 
+def test_a_package_above_an_unlanded_train_is_judged_by_the_train(
+    repo: Path,
+) -> None:
+    # T3.0 (Codex r1 P2): before a stack lands, its top's run is pushed
+    # while the phase branch still holds H. The base recorded at push time
+    # is the stack's tail, the train's landing L, so the top is judged with
+    # the train's harness, each landing's checkpoint the one below it.
+    head = checkpoint_of(repo)
+    train = land(repo, 'T1.15')
+    candidate = commit(repo, 'T1.16: a case the train reads')
+    git(
+        repo, 'push', '-q', '.', f'{head}:refs/remotes/origin/rust-core-phase-1'
+    )
+    env = {
+        'GITHUB_REF_NAME': 'rust-core-phase-1-lane-a',
+        'GITHUB_EVENT_NAME': 'push',
+    }
+    assert ratchet.stack_tail(repo, head, candidate) == train
+    assert ratchet.push_base(env, repo) == train
+    found, problems = resolve(repo, base=train)
+    assert problems == [] and found.sha == train
+    # A landing that does not stack on the one below it is no tail.
+    git(repo, 'checkout', '-q', '--detach', head)
+    commit(repo, 'T1.15: the train again')
+    stray = commit(
+        repo,
+        'Land T1.15: the train',
+        trailers={
+            'Reviewed-by': 'r',
+            'Protected-paths': 'none',
+            'Base-SHA': candidate,
+            'Checkpoint-SHA': candidate,
+        },
+    )
+    above = commit(repo, 'T1.16: above it')
+    assert ratchet.stack_tail(repo, head, above) == head
+    assert stray != head
+
+
 def test_a_landing_commit_is_judged_against_its_recorded_base(
     repo: Path,
 ) -> None:

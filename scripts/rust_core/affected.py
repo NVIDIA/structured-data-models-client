@@ -98,7 +98,19 @@ MAP: tuple[tuple[str, tuple[Suite, ...]], ...] = (
     ('contract/**', (LOADER,)),
     # The crates: each one's own tests.
     ('rust/crates/*/**', (cargo('{crate}'),)),
-    ('rust/bindings/**', ()),
+    # The binding: its Python tests, on the built wheel (CI's binding job).
+    ('rust/bindings/sdm-py/**', ((*PYTEST, 'rust/bindings/sdm-py/tests'),)),
+    # Each Python package: its own tests, and the client's also the root
+    # suites that drive it through the public routes.
+    ('packages/*/**', ((*PYTEST, 'packages/{pkg}/tests'),)),
+    (
+        'packages/structured-data-models-client/src/**',
+        (
+            (*PYTEST, 'tests/test_release_contract.py'),
+            (*PYTEST, 'tests/test_skills.py'),
+            RUNNERS,
+        ),
+    ),
     ('.github/workflows/ci.yml', (CI,)),
 )
 #: Where the test files are that may name a touched file.
@@ -198,11 +210,14 @@ def suites(
     for path in paths:
         found: list[Suite] = []
         crate = re.match(r'rust/crates/([^/]+)/', path)
+        package = re.match(r'packages/([^/]+)/', path)
         for row in rows(path):
             for suite in row:
                 found.append(
                     tuple(
-                        part.replace('{crate}', crate.group(1) if crate else '')
+                        part.replace(
+                            '{crate}', crate.group(1) if crate else ''
+                        ).replace('{pkg}', package.group(1) if package else '')
                         for part in suite
                     )
                 )

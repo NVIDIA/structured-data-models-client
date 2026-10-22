@@ -28,7 +28,11 @@ line each::
 
 and ``ok <kind> (<case id>)`` for a kind every tool that ran judged. A
 kind refused by the case format is judged no further (an invalid case
-file stops every tool that reads the corpus). The tools, each from HEAD:
+file stops every tool that reads the corpus). A tool that fails on no line
+naming a kind judged nothing: it prints ``INCOMPLETE <tool> failed ...``
+and the dry run exits 1. The tools are the checkpoint's, from a worktree
+of it, judging HEAD with the stubs, as the gate's harness judges a
+candidate:
 
 - ``format``: the runners' case reader and ``contract/case.schema.json``;
 - ``coverage``: ``coverage.py --check`` against the checkpoint (the scope
@@ -249,7 +253,40 @@ def dry_run(arguments: argparse.Namespace) -> int:
     git(repo, 'worktree', 'add', '--quiet', '--detach', str(tree), head)
     unattributed: list[str] = []
     notes: list[str] = []
+    #: Tools that failed on no line naming a kind: what they judged is
+    #: unknown, so the dry run is incomplete (Codex r1).
+    broken: list[str] = []
+    judge = scratch / 'judge'
     try:
+        # The checkpoint of a commit above HEAD, as the stubs' commit will
+        # be: HEAD itself may be the phase head, its own base.
+        above = git(
+            tree, *IDENTITY, 'commit-tree', git(tree, 'rev-parse', 'HEAD^{tree}'),
+            '-p', head, '-m', 'gate dry run: above HEAD',
+        )  # fmt: skip
+        git(tree, 'checkout', '--quiet', '--detach', above)
+        point = _run(
+            [python, 'scripts/rust_core/ratchet.py', 'checkpoint', '--repo',
+             '.', '--base', base],
+            tree,
+        )  # fmt: skip
+        if point.returncode != 0 or not point.stdout.split():
+            raise Unusable(
+                f'no checkpoint for --base {base}: {(point.stdout + point.stderr).strip()}'
+            )
+        checkpoint = point.stdout.split()[0]
+        # The checkpoint's tools judge, as the gate's harness does (Codex
+        # r1): a kind HEAD's tools accept but the landed ones refuse is the
+        # gap this dry run exists to find.
+        git(
+            repo,
+            'worktree',
+            'add',
+            '--quiet',
+            '--detach',
+            str(judge),
+            checkpoint,
+        )
         # A stub of an existing case (a kind the corpus already has) takes
         # an id of its own, so the corpus's case is not repeated.
         existing = set()
@@ -281,7 +318,7 @@ def dry_run(arguments: argparse.Namespace) -> int:
                     python,
                     '-c',
                     reader,
-                    str(tree / 'contract/runners/run_python.py'),
+                    str(judge / 'contract/runners/run_python.py'),
                     str(path),
                 ],
                 tree,
@@ -314,34 +351,17 @@ def dry_run(arguments: argparse.Namespace) -> int:
                 'commit-tree',
                 written,
                 '-p',
-                head,
+                above,
                 '-m',
                 'gate dry run: the stub cases',
             )
             git(tree, 'checkout', '--quiet', '--detach', stubbed)
-        point = _run(
-            [
-                python,
-                'scripts/rust_core/ratchet.py',
-                'checkpoint',
-                '--repo',
-                '.',
-                '--base',
-                base,
-            ],
-            tree,
-        )
-        if point.returncode != 0 or not point.stdout.split():
-            raise Unusable(
-                f'no checkpoint for --base {base}: {(point.stdout + point.stderr).strip()}'
-            )
-        checkpoint = point.stdout.split()[0]
         steps: list[tuple[str, list[str]]] = [
             (
                 'coverage',
                 [
                     python,
-                    'scripts/rust_core/coverage.py',
+                    str(judge / 'scripts/rust_core/coverage.py'),
                     '--check',
                     '--repo',
                     '.',
@@ -353,7 +373,7 @@ def dry_run(arguments: argparse.Namespace) -> int:
                 'ratchet',
                 [
                     python,
-                    'scripts/rust_core/ratchet.py',
+                    str(judge / 'scripts/rust_core/ratchet.py'),
                     'check',
                     '--repo',
                     '.',
@@ -366,11 +386,26 @@ def dry_run(arguments: argparse.Namespace) -> int:
             done = _run(command, tree)
             failed = done.returncode != 0
             loose = attribute(step, done.stdout + done.stderr, valid, failed)
+            gapped = any(
+                g.startswith(f'{step}:') for kind in valid for g in kind.gaps
+            )
+            if failed and (loose or not gapped):
+                # A failure no kind explains: nothing was judged by it.
+                broken.append(
+                    f'{step} failed (exit {done.returncode}): '
+                    + ' | '.join(
+                        (
+                            loose
+                            or (done.stdout + done.stderr)
+                            .strip()
+                            .splitlines()[-2:]
+                        )[:SHOWN]
+                    )
+                )
+                continue
             for kind in valid:
                 if not any(g.startswith(f'{step}:') for g in kind.gaps):
                     kind.judged.append(step)
-            if failed and loose:
-                unattributed += [f'{step}: {line}' for line in loose[:SHOWN]]
         # observe, rust-host and compare: each kind alone, so one kind a
         # runner refuses stops no other.
         observations = scratch / 'observations'
@@ -393,7 +428,7 @@ def dry_run(arguments: argparse.Namespace) -> int:
                     runs.append(
                         (
                             f'observe ({mode})',
-                            [arguments.python, '-I', 'contract/runners/run_python.py',
+                            [arguments.python, '-I', str(judge / 'contract/runners/run_python.py'),
                              '--mode', mode, '--out', str(out), str(stub)],
                             out,
                         )
@@ -431,7 +466,7 @@ def dry_run(arguments: argparse.Namespace) -> int:
             done = _run(
                 [
                     python,
-                    'scripts/rust_core/compare.py',
+                    str(judge / 'scripts/rust_core/compare.py'),
                     '--cases',
                     str(alone),
                     *map(str, made),
@@ -459,14 +494,30 @@ def dry_run(arguments: argparse.Namespace) -> int:
                 tree,
                 env={**os.environ, **({'PYTHON': arguments.python} if arguments.python else {})},
             )  # fmt: skip
-            loose = attribute(
-                'gate', done.stdout + done.stderr, valid, done.returncode != 0
+            failed = done.returncode != 0
+            loose = attribute('gate', done.stdout + done.stderr, valid, failed)
+            gapped = any(
+                g.startswith('gate') for kind in valid for g in kind.gaps
             )
-            unattributed += [f'gate: {line}' for line in loose[:SHOWN]]
-            for kind in valid:
-                if not any(g.startswith('gate') for g in kind.gaps):
-                    kind.judged.append('gate')
+            if failed and (loose or not gapped):
+                broken.append(
+                    f'gate failed (exit {done.returncode}): '
+                    + ' | '.join(
+                        (
+                            loose
+                            or (done.stdout + done.stderr)
+                            .strip()
+                            .splitlines()[-2:]
+                        )[:SHOWN]
+                    )
+                )
+            else:
+                for kind in valid:
+                    if not any(g.startswith('gate') for g in kind.gaps):
+                        kind.judged.append('gate')
     finally:
+        if judge.exists():
+            _run(['git', 'worktree', 'remove', str(judge)], repo)
         removed = _run(['git', 'worktree', 'remove', str(tree)], repo)
         if removed.returncode == 0:
             shutil.rmtree(scratch, ignore_errors=True)
@@ -488,6 +539,8 @@ def dry_run(arguments: argparse.Namespace) -> int:
         print(f'note: a tool failed on a line naming no kind: {line}')
     for note in notes:
         print(f'note: {note}')
+    for line in broken:
+        print(f'INCOMPLETE {line}')
     gapped = [k for k in kinds if k.gaps]
     print(
         f'gate dry run: {len(kinds)} kinds against checkpoint {checkpoint[:12]}; '
@@ -496,8 +549,14 @@ def dry_run(arguments: argparse.Namespace) -> int:
             if gapped
             else 'every tool that ran judges every kind'
         )
+        + (
+            f'; INCOMPLETE: {len(broken)} tool(s) failed naming no kind, so '
+            'their judgement is unknown'
+            if broken
+            else ''
+        )
     )
-    return 1 if gapped else 0
+    return 1 if gapped or broken else 0
 
 
 if __name__ == '__main__':

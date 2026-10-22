@@ -233,7 +233,12 @@ def from_api(run_id: int, most: int, known: list[Limit]) -> list[Run]:
             earlier = as_run(run, jobs_of(int(run['id'])))
             runs.append(earlier)
             for job in earlier['jobs']:
-                if job['conclusion'] not in ('skipped', ''):
+                # Only a sample the guard judges counts toward the history
+                # (Codex r1): a skipped job, or one cancelled short of its
+                # limit, is dropped by sample(), so it must not end the
+                # search early.
+                limit = limit_of(job['name'], known)
+                if limit is not None and sample(job, earlier, limit):
                     seen[job['name']] = seen.get(job['name'], 0) + 1
             if len(runs) > most:
                 break

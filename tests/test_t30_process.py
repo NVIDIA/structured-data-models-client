@@ -675,6 +675,8 @@ BANNED = [
     'echo start; sudo true',
     'rm -rf /mnt/localssd/tmp',
     'rm -rf /mnt/localssd/target',
+    'rm -rf /mnt/localssd/tmp/another-agent/build',
+    'rm -r /mnt/localssd/target/another-agent',
     'rm -r "$HOME/old-probe"',
     'rm -r $(git rev-parse --show-toplevel)/rust/target',
     'ls -d build-* | xargs rm -r',
@@ -691,8 +693,11 @@ ALLOWED = [
     'rm -r {scratch}/probe',
     'rm -rf {scratch}/probe/build',
     'find {scratch}/probe -name build -exec rm -rf {{}} +',
-    'rm -rf /mnt/localssd/tmp/t30-probe/build',
-    'rm -r /mnt/localssd/target/t30-probe',
+    # T3.0 fix 1 (Codex r1): a shared build or temp directory is the
+    # session's once it made it; one it did not make is another agent's.
+    'mkdir -p /mnt/localssd/tmp/t30-claim-probe-{session} && rm -rf /mnt/localssd/tmp/t30-claim-probe-{session}/build',
+    "git commit -s -m 'T3.99: document `git config` reads'",
+    "rg '$(sudo true)' docs",
     'gh run list --limit 5',
     'git commit -s -m "T3.99: never git stash or --no-verify"',
     "grep -rn 'git config' docs",
@@ -706,7 +711,7 @@ def test_t30_the_guard_denies_each_banned_command_with_its_alternative(
     tmp_path: Path, sessions: Any, command: str
 ) -> None:
     session, scratch, other = sessions
-    command = command.format(scratch=scratch, other=other)
+    command = command.format(scratch=scratch, other=other, session=session)
     decision, why, done = _hook(tmp_path, command, session=session)
     assert decision == 'deny', done.stdout + done.stderr
     rule, _, instead = why.partition('; instead: ')
@@ -719,7 +724,7 @@ def test_t30_the_guard_lets_the_allowed_forms_through(
     tmp_path: Path, sessions: Any, command: str
 ) -> None:
     session, scratch, other = sessions
-    command = command.format(scratch=scratch, other=other)
+    command = command.format(scratch=scratch, other=other, session=session)
     decision, why, done = _hook(tmp_path, command, session=session)
     assert decision is None, f'{decision}: {why}'
     assert done.stdout.strip() == ''

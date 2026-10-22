@@ -2679,7 +2679,9 @@ def push_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     self-comparison.
 
     On a push to a branch under a phase branch, the remote phase head
-    (``refs/remotes/origin/<phase>``, fetched by the caller), unless that
+    (``refs/remotes/origin/<phase>``, fetched by the caller), or, for a
+    candidate stacked on unlanded landings, the last of them
+    (:func:`stack_tail`), unless that
     head already holds the candidate (a rerun of every job after the
     candidate landed): then the ``Base-SHA`` of the oldest landing commit
     above the candidate, the head it landed on. Elsewhere, on the phase
@@ -2696,7 +2698,7 @@ def push_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
     ).strip()
     head = git(repo, 'rev-parse', 'HEAD^{commit}').strip()
     if head == tip or git(repo, 'merge-base', head, tip).strip() != head:
-        return tip
+        return stack_tail(repo, tip, head)
     out = git(
         repo, 'log', '--reverse', '--ancestry-path', '--format=%H%x00%s',
         f'{head}..{tip}',
@@ -2716,6 +2718,32 @@ def push_base(environ: dict[str, str], repo: Path = Path('.')) -> str:
         ):
             return recorded
     return tip
+
+
+def stack_tail(repo: Path, tip: str, head: str) -> str:
+    r"""The landing a candidate is stacked on (T3.0, ``land.py --stack``):
+    walking the first-parent history from the phase head ``tip`` to
+    ``head``, each landing commit whose ``Base-SHA`` is the landing before
+    it (``tip`` for the first) extends the stack; the last one is the
+    candidate's checkpoint, so a package above a tooling train is judged
+    with the train's harness, each landing's checkpoint the landing before
+    it. With no such landing, or a ``head`` not above ``tip``, ``tip``."""
+    if git(repo, 'merge-base', tip, head).strip() != tip:
+        return tip
+    out = git(
+        repo, 'log', '--first-parent', '--reverse', '--format=%H%x00%s',
+        f'{tip}..{head}',
+    )  # fmt: skip
+    below = tip
+    for line in out.splitlines():
+        commit, _, title = line.partition('\0')
+        if commit == head or not (
+            LANDING.match(title) and is_landing(repo, commit)
+        ):
+            continue
+        if trailers(repo, commit).get('Base-SHA') == below:
+            below = commit
+    return below
 
 
 def _checked_out(repo: Path) -> str | None:

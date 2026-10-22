@@ -149,7 +149,7 @@ Up to 4 approved packages land on one green CI run, the run on the stack's top (
 
 1. When both reviewers approve package P1's SHA, stack it from its worktree: `land.py --stack --candidate SHA --topic-branch <its branch> --review A --review B --title 'Land P1: ...' --protected-paths '...'`. It makes P1's empty landing commit locally (`Base-SHA` and `Checkpoint-SHA` the landing below it, or the phase head; `Stack-base` the phase head; `Topic-branch`), needs no CI run and pushes nothing. It prints `STACKED <sha>`.
 2. The next package is built (or rebased) on that landing commit, reviewed, and stacked the same way. `lane.py check` and the pre-push hook accept the stack below a lane's package; `--max-stack N` or `SDM_STACK_MAX` changes the limit of 4.
-3. Push the top package's commits for a CI run, then `land.py stack-land --tip <the top landing> [--topic-branch <the top's branch>]`. It checks the whole chain again and fast-forwards the phase branch over every landing in one atomic push, on the green run of the top. Each landing's checkpoint stays the landing before it; the ratchet's phase-push check accepts such a push, and CI skips it as it skips one landing.
+3. Push the top package's commits for a CI run: its base is the stack's tail (`ratchet.py push-base`), so the top is judged with the harness of the landing below it, a train's included. Then `land.py stack-land --tip <the top landing> [--topic-branch <the top's branch>]`. It checks the whole chain again and fast-forwards the phase branch over every landing in one atomic push, on the green run of the top. Each landing's checkpoint stays the landing before it; the ratchet's phase-push check accepts such a push, and CI skips it as it skips one landing.
 4. If the top's run is red, `stack-land` prints `IMPLICATED <job>: <commit>` (the stack's commits the failed jobs' logs name, or that touch the job's area) and the green prefix: `PREFIX RUN: git push ...` for a run on the prefix's top, then `GREEN PREFIX: land.py stack-land --tip <landing>`.
 5. If the phase head moved under a stack, `land.py restack --tip <top landing> [--train-first] [--move-branches]` replays it on the new head in a scratch worktree. Each patch must be the same (patch-id, `move_confirm.py`'s rule), so the reviews carry over; only the new top needs a CI run. A conflict or a changed patch refuses, and that package needs a review round. A single approved package moved before stacking is still confirmed with `move_confirm.py`.
 
@@ -169,8 +169,8 @@ To collect a find into the train, cherry-pick its judging-only commits onto the 
 Before an implementer or test author reports "ready", it runs `scripts/rust_core/handoff.py run --package <ID> [--python <lane environment python>] [--previous <last round's SHA>] [--case <id> ...]` with the tools' interpreter.
 On a clean worktree it runs:
 
-- the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names;
-- in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail;
+- the package's cases (changed or named) against the recorded old-client answers, on python-core and, when `rust/` changed, rust-host, on each database the case names (Postgres needs `SDM_POSTGRES_TEST_DSN`: without it a case on Postgres alone gets no stamp, and the stamp records Postgres as not run for the others);
+- in a fix round, the new or changed tests on the previous round's SHA, where at least one must fail: Python tests on the previous tree's package sources (the compiled core stays the installed one, so a Rust fix shows its failure through a Rust test), test files and changed `#[cfg(test)]` blocks with cargo on the previous tree;
 - every suite `scripts/rust_core/affected.py` names for the changed files;
 - lint (`ruff`, `cargo fmt`, `mypy` on changed packages).
 
@@ -185,7 +185,7 @@ A fix commit (`<ID> fix <n>: ...`) that changes product code carries a line `Rul
 ### The command hook (item 6)
 
 `.claude/settings.json` runs `scripts/rust_core/orchestration/guard_cmd.py` before every Bash and Agent call of a Claude agent started in the repository.
-It denies the banned commands, naming the rule and the alternative: `rm -r` (and `find -delete`) outside your scratch (the session's directory under `/tmp/claude-*`, a directory under `/mnt/localssd/tmp/` or `/mnt/localssd/target/`, or one in `SDM_SCRATCH`), `--force`, `-f`, `--force-with-lease` and `+` refspecs on `git push`, `git push --delete`, `git worktree remove --force`, `docker rm -f`, `--no-verify` and `git -c core.hooksPath`, `sudo`, `git config` (reads allowed), `git stash`, `git branch -D`, `gh run watch`, `git fetch --prune`, and `prepush.sh --full`.
+It denies the banned commands, naming the rule and the alternative: `rm -r` (and `find -delete`) outside your scratch (the session's directory under `/tmp/claude-*`, a directory in `SDM_SCRATCH`, or a directory under `/mnt/localssd/tmp/` or `/mnt/localssd/target/` the session made itself with `mkdir`; another agent's needs the owner's token), `--force`, `-f`, `--force-with-lease` and `+` refspecs on `git push`, `git push --delete`, `git worktree remove --force`, `docker rm -f`, `--no-verify` and `git -c core.hooksPath`, `sudo`, `git config` (reads allowed), `git stash`, `git branch -D`, `gh run watch`, `git fetch --prune`, and `prepush.sh --full`.
 An owner-approved one-off runs as `SDM_APPROVED=<id> <command>`, `<id>` the slug of the owner-answers heading that approves it (`guard_cmd.py --tokens` lists them); it is logged in `$SDM_ORCH_STATE/logs/approved-commands.log`, and every refusal in `guard-denied.log`.
 Codex panes keep `rule_watch.py`: the owner declined a Codex hook (2026-10-16) and kept the watcher for Codex (2026-10-21, decision 7).
 The orchestrator's own session gets the hook when it is started in a checkout holding `.claude/settings.json`.
@@ -232,8 +232,9 @@ The machine has 8 vCPUs, 30 GB of memory and 412 GB of fast disk at `/mnt/locals
 ### The dry run and the slip report (item 1)
 
 - **Before the design locks**, run `scripts/rust_core/gate_dryrun.sh kinds.yaml --python $SDM_LANE_ENV/current/cell-ref-pandas3/bin/python` over the design's planned case kinds (`kinds: [{name, case}]`, one stub case each).
-  It judges each stub with the case reader, `coverage.py`, `ratchet.py`, both Python runners and `compare.py` (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
+  It judges each stub with the checkpoint's own case reader, `coverage.py`, `ratchet.py`, Python runner and `compare.py` (a worktree of the checkpoint, as the gate's harness judges) (and with `--rust` the test kit, with `--gate HALF` the locked gate) on a throwaway commit, and prints a `GAP <kind> (<case>): <tool>: ...` line for every refusal.
   Those lines are the first package's tooling list, found up front instead of one judging package at a time mid-phase.
+  A tool that fails on no line naming a kind prints `INCOMPLETE` and the dry run exits 1: what it judged is unknown.
 - **The slip report**: the heartbeat runs `scripts/rust_core/orchestration/phase_stats.py --phase-branch origin/$SDM_PHASE_BRANCH --no-ci --forecast <the design's forecast>`, a `{start, packages: [{id, hours}]}` file, and reads how many hours the phase is behind and the package or unplanned landings that caused most of it.
   It never blocks anything.
 

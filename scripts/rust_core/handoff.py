@@ -22,8 +22,9 @@ default the same. The steps:
 
 - ``reference``: the package's cases (each case file it adds or changes,
   and each ``--case``) run on python-core, on each database the case names
-  (Postgres only with ``SDM_POSTGRES_TEST_DSN``; without it, noted as not
-  run), and on rust-host (DuckDB and SQLite) when the package changes
+  (Postgres only with ``SDM_POSTGRES_TEST_DSN``; without it, a case that
+  runs on Postgres alone refuses the stamp, and the others record Postgres
+  as not run), and on rust-host (DuckDB and SQLite) when the package changes
   ``rust/``, then ``compare.py`` holds them to the recorded old-client
   answers in ``contract/reference/`` (with the ratchet's effective
   expectations). No live old-client run, except for a case with no
@@ -33,8 +34,12 @@ default the same. The steps:
   otherwise;
 - ``fails-before``: in a fix round (a commit ``<ID> fix <n>: ...`` since the
   phase head) ``--previous`` is the previous round's SHA, and every new or
-  changed test file (pytest files, ``*selftest.py``, the crates' ``tests/``)
-  runs there, its HEAD copy over the previous tree: at least one must fail;
+  changed test (pytest files, ``*selftest.py``, the crates' ``tests/`` and
+  changed ``#[cfg(test)]`` blocks, spliced into the previous source) runs
+  on the previous tree: at least one must fail. Python tests run on the
+  previous tree's package sources, with the installed build's compiled
+  core linked in (the previous tree is not built), so a fix to the Rust
+  core shows its failure through a Rust test;
 - ``affected``: every suite ``affected.py`` names for the changed files;
 - ``lint``: ``ruff check`` and ``ruff format --check`` on the changed Python
   files, ``cargo fmt --check`` on the changed crates, and ``mypy`` on each
@@ -249,9 +254,26 @@ def step_reference(
         if database == 'postgres' and not os.environ.get(
             'SDM_POSTGRES_TEST_DSN'
         ):
+            # A case judged on no database at all is no handoff (Codex r1):
+            # one that names only Postgres needs the server here.
+            only = sorted(
+                case
+                for case, path in cases.items()
+                if set(
+                    json.loads(path.read_text()).get('databases') or DATABASES
+                )
+                == {'postgres'}
+            )
+            if only:
+                step.problems.append(
+                    f'{", ".join(only)} run(s) on Postgres alone, and '
+                    'SDM_POSTGRES_TEST_DSN is not set: point it at a server, '
+                    'or no stamp'
+                )
             step.notes.append(
-                f'postgres: not run (no SDM_POSTGRES_TEST_DSN) for '
-                f'{", ".join(sorted(cases))}; CI runs it'
+                f'NOT RUN postgres (no SDM_POSTGRES_TEST_DSN) for '
+                f'{", ".join(sorted(cases))}: judged on its other databases '
+                'here, on Postgres by CI only'
             )
             continue
         files = [str(p) for p in cases.values()]
@@ -361,6 +383,67 @@ def live_reference(
     ]
 
 
+INLINE = re.compile(r'rust/(crates|bindings)/([^/]+)/src/.+\.rs$')
+TEST_BLOCK = re.compile(
+    r'^[ \t]*#\[cfg\(test\)\][ \t]*\n[ \t]*(pub(\([^)]*\))?[ \t]+)?mod[ \t]+\w+[ \t]*\{',
+    re.MULTILINE,
+)
+
+
+def test_block(text: str) -> tuple[int, int] | None:
+    """Where a Rust file's ``#[cfg(test)] mod ... { ... }`` block is, as
+    (start, end), braces counted outside strings, chars and comments."""
+    found = TEST_BLOCK.search(text)
+    if found is None:
+        return None
+    depth, n = 0, found.end() - 1
+    while n < len(text):
+        ch = text[n]
+        if text.startswith('//', n):
+            n = text.find('\n', n)
+            n = len(text) if n < 0 else n
+            continue
+        if text.startswith('/*', n):
+            end = text.find('*/', n + 2)
+            n = len(text) if end < 0 else end + 2
+            continue
+        if ch == '"':
+            n += 1
+            while n < len(text) and text[n] != '"':
+                n += 2 if text[n] == '\\' else 1
+        elif ch == "'" and re.match(r"'(\\.|[^\\'])'", text[n : n + 4]):
+            n = text.index("'", n + 1 + (text[n + 1] == '\\'))
+        elif ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return found.start(), n + 1
+        n += 1
+    return None
+
+
+def inline_tests(root: Path, previous: str, path: str) -> str | None:
+    """For a Rust source file whose ``#[cfg(test)]`` block changed since
+    ``previous``, the previous file with HEAD's test block in place of its
+    own (the previous production code under the new tests); else None."""
+    if not INLINE.match(path) or not (root / path).is_file():
+        return None
+    new = (root / path).read_text(encoding='utf-8')
+    new_block = test_block(new)
+    if new_block is None:
+        return None
+    done = run(['git', 'show', f'{previous}:{path}'], root)
+    old = done.stdout if done.returncode == 0 else ''
+    old_block = test_block(old)
+    tests = new[new_block[0] : new_block[1]]
+    if old_block is not None:
+        if old[old_block[0] : old_block[1]] == tests:
+            return None
+        return old[: old_block[0]] + tests + old[old_block[1] :]
+    return old + ('\n' if old and not old.endswith('\n') else '') + tests + '\n'
+
+
 def is_test(path: str) -> bool:
     return bool(
         judging.matches(affected.IS_TEST, path)
@@ -369,9 +452,44 @@ def is_test(path: str) -> bool:
     )
 
 
+def source_path(tree: Path, python: str) -> str:
+    """``PYTHONPATH`` for running tests on the previous tree's Python
+    sources: each package's ``src``, with the compiled parts the installed
+    build has and the sources lack (the core's ``_native``) linked in, since
+    the previous tree is not built. A Rust fix's own test is a Rust test,
+    which runs on the previous tree's code with cargo."""
+    paths = []
+    for src in sorted(tree.glob('packages/*/src')):
+        paths.append(str(src))
+        for package in sorted(p for p in src.iterdir() if p.is_dir()):
+            done = run(
+                [python, '-c', 'import importlib.util, sys; '
+                 's = importlib.util.find_spec(sys.argv[1]); '
+                 'print(s.submodule_search_locations[0] if s and '
+                 's.submodule_search_locations else "")', package.name],
+                tree,
+            )  # fmt: skip
+            installed = (
+                Path(done.stdout.strip()) if done.stdout.strip() else None
+            )
+            if installed is None or not installed.is_dir():
+                continue
+            for compiled in installed.glob('*.so'):
+                target = package / compiled.name
+                if not target.exists():
+                    target.symlink_to(compiled)
+    return os.pathsep.join(paths)
+
+
 def step_fails_before(
     root: Path, base: str, previous: str | None, python: str, scratch: Path
 ) -> Step:
+    """A fix round's new or changed tests, on the previous round's tree:
+    Python tests on its sources (``source_path``: the previous tree's
+    packages ahead of the installed ones), self-tests and Rust tests
+    (``tests/*.rs`` files, and changed ``#[cfg(test)]`` blocks spliced into
+    the previous source) with cargo on the previous tree. At least one must
+    fail; pytest stops at the first failure."""
     step = Step('fails-before')
     subjects = git(root, 'log', '--format=%s', f'{base}..HEAD').splitlines()
     fixes = [s for s in subjects if FIX.match(s)]
@@ -385,14 +503,20 @@ def step_fails_before(
             step.notes.append('not a fix round')
         return step
     previous = git(root, 'rev-parse', f'{previous}^{{commit}}').strip()
-    changed = [
+    diffed = [
         p
         for p in git(root, 'diff', '--name-only', '-z', previous, 'HEAD').split(
             '\0'
         )
-        if p and is_test(p) and (root / p).is_file()
+        if p
     ]
-    if not changed:
+    changed = [p for p in diffed if is_test(p) and (root / p).is_file()]
+    spliced = {
+        p: text
+        for p in diffed
+        if (text := inline_tests(root, previous, p)) is not None
+    }
+    if not changed and not spliced:
         step.problems.append(
             f'the fix round adds or changes no test since {previous[:12]}; a fix '
             'comes with a test that fails without it'
@@ -405,24 +529,22 @@ def step_fails_before(
             target = tree / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(root / path, target)
+        for path, text in spliced.items():
+            (tree / path).parent.mkdir(parents=True, exist_ok=True)
+            (tree / path).write_text(text, encoding='utf-8')
         failed: list[str] = []
         passed: list[str] = []
         pytest_files = [
             p for p in changed if judging.matches(affected.IS_TEST, p)
         ]
         if pytest_files:
+            env = {**os.environ, 'PYTHONPATH': source_path(tree, python)}
             done = run(
-                [
-                    python,
-                    '-m',
-                    'pytest',
-                    '-q',
-                    '-p',
-                    'no:cacheprovider',
-                    *pytest_files,
-                ],
+                [python, '-m', 'pytest', '-q', '-x', '-p', 'no:cacheprovider',
+                 *pytest_files],
                 tree,
-            )
+                env,
+            )  # fmt: skip
             (failed if done.returncode in (1, 2) else passed).extend(
                 pytest_files
             )
@@ -443,6 +565,18 @@ def step_fails_before(
                     tree,
                 )  # fmt: skip
                 (failed if done.returncode else passed).append(path)
+        for path in spliced:
+            crate = INLINE.match(path)
+            assert crate is not None
+            # One workspace holds the crates and the binding (rust/Cargo.toml).
+            done = run(
+                ['cargo', 'test', '-q', '--manifest-path', 'rust/Cargo.toml',
+                 '-p', crate.group(2), '--lib'],
+                tree,
+            )  # fmt: skip
+            (failed if done.returncode else passed).append(
+                f'{path} (#[cfg(test)])'
+            )
         if not failed and not step.problems:
             step.problems.append(
                 f'every new or changed test passes on the previous round '
