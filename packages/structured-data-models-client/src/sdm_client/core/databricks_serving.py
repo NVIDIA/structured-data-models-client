@@ -213,8 +213,9 @@ class DatabricksServingTransport:
                 f'this request is {size:,} bytes once wrapped for serving '
                 f'endpoint {self._endpoint!r}, above the '
                 f'{self._max_request_bytes:,} byte limit it accepts. Send '
-                f'fewer rows per call: a smaller num_context_samples, or '
-                f'fewer entities to score',
+                f'fewer rows per call: fewer context rows (a smaller '
+                f'num_context_samples, where the model takes one), or fewer '
+                f'rows to score',
                 code='INVALID_REQUEST',
                 details={'bytes': size, 'limit': self._max_request_bytes},
             )
