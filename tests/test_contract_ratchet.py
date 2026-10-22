@@ -271,7 +271,15 @@ def append_entry(repo: Path, entry: dict[str, Any]) -> None:
         'decision_ref': None,
         'notes': 'Seeded by the ratchet tests.',
     }
-    text = yaml.safe_dump([{**defaults, **entry}], sort_keys=False)
+    seeded = {**defaults, **entry}
+    if seeded['approved_by'] == 'owner' and seeded['decision_ref'] is None:
+        # An owner's entry names the row holding the owner's approval
+        # (register.py, T3.2): a seed of one names an owner-approved row.
+        seeded['decision_ref'] = {
+            'file': 'docs/design/rust-core/phase-1/decisions.md',
+            'row': 'E1',
+        }
+    text = yaml.safe_dump([seeded], sort_keys=False)
     path.write_text(path.read_text() + '\n' + text)
 
 
