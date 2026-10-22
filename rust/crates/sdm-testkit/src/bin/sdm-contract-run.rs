@@ -130,9 +130,22 @@ fn run(arguments: &[String]) -> Result<(PathBuf, usize)> {
             _ => {}
         }
     }
-    let mut loaded = case::load(&cases)?;
-    if loaded.is_empty() {
+    // The cases that run on the database this run answers from: a
+    // warehouse-only case (S2's `warehouses`) runs on none of them, and is
+    // selected out, never run on DuckDB (`case::load_for`, T3.2).
+    let on = if sqlite {
+        case::Database::Sqlite
+    } else if recording.is_some() {
+        case::Database::Postgres
+    } else {
+        case::Database::Duckdb
+    };
+    if case::load(&cases)?.is_empty() {
         bail!("no cases");
+    }
+    let mut loaded = case::load_for(&cases, on)?;
+    if loaded.is_empty() {
+        bail!("no case runs on the database asked for");
     }
     if pre_given_specs {
         for each in &mut loaded {
