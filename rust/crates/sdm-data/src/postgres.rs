@@ -61,7 +61,7 @@ use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
     Filter, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities, Relation,
     SEED_BATCH, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm,
-    Window, catalog_columns as c, field, seed_key_columns,
+    Window, catalog_columns as c, field, seed_integer, seed_key_columns,
 };
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind, Scalar};
@@ -796,20 +796,6 @@ fn repeated_key(table: &str, key: &[String]) -> String {
     )
 }
 
-/// A seed's integer value, if the scalar is an integer.
-fn integer(seed: &Scalar) -> Option<i128> {
-    Some(match seed {
-        Scalar::Int32(v) => i128::from(*v),
-        Scalar::Int64(v) => i128::from(*v),
-        Scalar::UInt32(v) => i128::from(*v),
-        Scalar::UInt64(v) => i128::from(*v),
-        Scalar::Decimal128 {
-            scale: 0, value, ..
-        } => *value,
-        _ => return None,
-    })
-}
-
 /// The reference's sample of an entity table on Postgres
 /// (`_sample_entity_table`), `table` its rendered relation: `setseed` with
 /// the seed's place in its range ([`seed_value`]), then the columns asked
@@ -839,7 +825,7 @@ fn sample_entities(
             "a sample's key is not among the columns it projects",
         ));
     }
-    let Some(seed) = integer(seed) else {
+    let Some(seed) = seed_integer(seed) else {
         return Err(sdm_contract::data::refused(
             request,
             "seed",
