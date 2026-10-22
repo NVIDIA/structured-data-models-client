@@ -839,6 +839,28 @@ def capture_problems(
             f'{key}: its statements are not the {len(captured["statements"])} '
             'its reference line captured'
         )
+    else:
+        # Each statement whole: its parameters, its error and every read,
+        # as the reference line captured them, the Arrow aside (Codex r1,
+        # T3.2 fix 5: a lost parameter or read passed on the text alone).
+        for position, (raw, seen) in enumerate(
+            zip(statements, captured['statements'], strict=True)
+        ):
+            mine = {
+                **raw,
+                'results': [
+                    {k: v for k, v in result.items() if k != 'arrow'}
+                    if isinstance(result, dict)
+                    else result
+                    for result in raw.get('results') or []
+                ],
+            }
+            for field in sorted(set(mine) | set(seen)):
+                if mine.get(field) != seen.get(field):
+                    problems.append(
+                        f'{key}: statement {position}: its {field} is not what '
+                        'its reference line captured'
+                    )
     expected_draws = []
     for position, statement in enumerate(statements):
         where = f'{key}: statement {position}'
@@ -861,6 +883,24 @@ def capture_problems(
                     f'{where} read {read}: {table.num_rows} rows held, '
                     f'{result.get("rows")} read'
                 )
+            columns = (result.get('values') or {}).get('columns')
+            if table is not None and columns is not None:
+                if table.column_names != columns:
+                    problems.append(
+                        f'{where} read {read}: columns {table.column_names} '
+                        f'held, {columns} read'
+                    )
+            schema = result.get('schema')
+            if table is not None and isinstance(schema, list):
+                held_schema = [
+                    {'name': field.name, 'type': str(field.type)}
+                    for field in table.schema
+                ]
+                if held_schema != schema:
+                    problems.append(
+                        f'{where} read {read}: the Arrow held is not the '
+                        'schema read'
+                    )
         for draw in run.draws_of(statement['sql']):
             expected_draws.append({'statement': position, **draw})
             if not results and statement.get('error') is None:

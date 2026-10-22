@@ -3109,7 +3109,14 @@ def _keep(
     recorder = log.recorder
     if recorder is None:
         return
-    key = (log.statements.index(statement), len(statement['results']) - 1)
+    # By identity, not equality: two identical executions on one cursor are
+    # two statements, each with its own results (Codex r1, T3.2 fix 5).
+    position = next(
+        n
+        for n in range(len(log.statements) - 1, -1, -1)
+        if log.statements[n] is statement
+    )
+    key = (position, len(statement['results']) - 1)
     if hasattr(answer, 'schema') and hasattr(answer, 'num_rows'):
         recorder.kept[key] = answer
     else:
@@ -3686,9 +3693,34 @@ def raw_arrow(leg: str, connection: Any, sql: str) -> Any:
 _ZONE = {
     'databricks-sql': 'SELECT current_timezone() AS zone',
     'databricks-spark': 'SELECT current_timezone() AS zone',
-    'snowflake': "SELECT CURRENT_SETTING('TIMEZONE') AS ZONE",
+    # Snowflake's session parameter is read with SHOW PARAMETERS, whose
+    # answer is a row of (key, value, default, level, description, type);
+    # it has no CURRENT_SETTING (Codex r1, T3.2 fix 5).
+    'snowflake': "SHOW PARAMETERS LIKE 'TIMEZONE' IN SESSION",
     'lakebase': "SELECT current_setting('TimeZone') AS zone",
 }
+
+
+def session_zone(leg: str, connection: Any) -> str | None:
+    r"""The session time zone of ``leg``'s ``connection``, read outside
+    the capture: the one column of :data:`_ZONE`'s answer, or on Snowflake
+    the ``value`` column of ``SHOW PARAMETERS``, read through the cursor's
+    rows and description (a SHOW answer is no Arrow result)."""
+    if leg != 'snowflake':
+        zone = raw_arrow(leg, connection, _ZONE[leg]).to_pylist()
+        return str(next(iter(zone[0].values()))) if zone else None
+    cursor = connection.cursor()
+    try:
+        cursor.execute(_ZONE[leg])
+        rows = cursor.fetchall()
+        names = [str(column[0]).lower() for column in cursor.description or ()]
+    finally:
+        cursor.close()
+    if not rows or 'value' not in names:
+        return None
+    return str(rows[0][names.index('value')])
+
+
 #: Each leg's driver distributions, whose versions a capture records.
 _DRIVERS = {
     'databricks-sql': ('databricks-sql-connector', 'databricks-sdk'),
@@ -3868,8 +3900,7 @@ class Live:
                 )
                 for name in self.table_names
             ]
-            zone = raw_arrow(leg, writer, _ZONE[leg]).to_pylist()
-            self.zone = str(next(iter(zone[0].values()))) if zone else None
+            self.zone = session_zone(leg, writer)
         except RunnerFailure:
             self.close()
             raise
