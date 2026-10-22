@@ -1,0 +1,184 @@
+{
+  "format": "sdm-case/1",
+  "id": "adventureworks.notebook.recommend-top5",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "databricks-sql",
+    "databricks-spark",
+    "snowflake",
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "schema.from-source/tables/databricks-spark",
+    "query.materialize/indices-ranking/databricks-spark",
+    "client.predict/ranking/databricks-spark",
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "client.predict/ranking/snowflake",
+    "schema.from-source/tables/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "client.predict/ranking/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/databricks-sql",
+    "schema.from-source/catalog-keys/databricks-sql",
+    "query.materialize/indices-binary/databricks-sql",
+    "query.materialize/indices-multiclass/databricks-sql",
+    "query.materialize/indices-regression/databricks-sql",
+    "query.materialize/indices-link-prediction/databricks-sql",
+    "query.materialize/indices-ranking/databricks-sql",
+    "query.materialize/indices-forecast/databricks-sql",
+    "client.predict/binary/databricks-sql",
+    "client.predict/multiclass/databricks-sql",
+    "client.predict/regression/databricks-sql",
+    "client.predict/link-prediction/databricks-sql",
+    "client.predict/ranking/databricks-sql",
+    "client.predict/forecast/databricks-sql",
+    "schema.from-source/tables/databricks-spark",
+    "schema.from-source/catalog-keys/databricks-spark",
+    "query.materialize/indices-binary/databricks-spark",
+    "query.materialize/indices-multiclass/databricks-spark",
+    "query.materialize/indices-regression/databricks-spark",
+    "query.materialize/indices-link-prediction/databricks-spark",
+    "query.materialize/indices-ranking/databricks-spark",
+    "query.materialize/indices-forecast/databricks-spark",
+    "client.predict/binary/databricks-spark",
+    "client.predict/multiclass/databricks-spark",
+    "client.predict/regression/databricks-spark",
+    "client.predict/link-prediction/databricks-spark",
+    "client.predict/ranking/databricks-spark",
+    "client.predict/forecast/databricks-spark",
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake",
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "utf8/feature",
+    "float64/feature"
+  ],
+  "input": {
+    "base": "adventureworks",
+    "from_source": {
+      "tables": {
+        "customers": "adventureworks_customers",
+        "products": "adventureworks_products",
+        "sales_order_headers": "adventureworks_sales_order_headers",
+        "sales_order_details": "adventureworks_sales_order_details"
+      },
+      "primary_keys": {
+        "customers": "CustomerID",
+        "products": "ProductID",
+        "sales_order_details": "SalesOrderDetailID"
+      },
+      "time_columns": {
+        "sales_order_headers": "OrderDate",
+        "sales_order_details": "OrderDate"
+      },
+      "relationships": [
+        {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        },
+        {
+          "source_table": "sales_order_details",
+          "source_column": "ProductID",
+          "target_table": "products",
+          "target_column": "ProductID"
+        }
+      ]
+    },
+    "edits": [
+      {
+        "op": "clear_time_column",
+        "table": "products"
+      },
+      {
+        "op": "delete_column",
+        "table": "customers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "products",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_headers",
+        "column": "rowguid"
+      },
+      {
+        "op": "delete_column",
+        "table": "sales_order_details",
+        "column": "rowguid"
+      }
+    ],
+    "pql": "PREDICT LIST_DISTINCT(sales_order_details.ProductID, 0, 30, days) RANK TOP 5 FOR EACH customers.CustomerID",
+    "materialize": {
+      "indices": [
+        29945
+      ],
+      "candidates": [
+        921,
+        870,
+        873,
+        708,
+        871,
+        707,
+        878,
+        930,
+        711,
+        923
+      ],
+      "anchor_time": "2024-12-17"
+    },
+    "probabilities": true
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "The deleted AdventureWorks notebook (contract/fixtures/adventureworks/notebook-fa0637d4.ipynb), recommend_top5 (the five likeliest of the ten most widely bought products for the most frequent customer), a ranking over named candidates; the notebook's num_context_samples=1000 has no case field yet (T3.2), so the default context is asked, and the scripted endpoint answers with probabilities, as a model does, on the AdventureWorks base loaded into each warehouse's test schema (choice 1), with the schema and edits of base.adventureworks (the notebook's); the notebook's top product, popular products and frequent customers computed on the fixture, and its anchor the latest OrderDate (2025-06-15) less 180 days. Its other three table questions are the S1 cases base.adventureworks (demand_30d), .churn (inactivity_90d) and .color (product_color), which already run on every warehouse leg (choice 1), so they are not repeated here; one file for every leg whose engine stores the data (T3.4 brief, open question 1)",
+  "source": "written by T3.4's test author from the reference at 43e55f4f"
+}
