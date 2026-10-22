@@ -166,6 +166,10 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         index_advice: Some(IndexAdvice::SingleColumn),
         // Every optional request is rendered: none falls back.
         fallback: None,
+        opaque_vendor: Some(OPAQUE_VENDOR.to_owned()),
+        compares_stored_times: false,
+        samples_by_key_dtype: false,
+        reads_nan_as_missing: false,
     }
 }
 

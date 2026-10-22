@@ -182,10 +182,10 @@ pub const SEED_COUNT_UNREAD: &str = "sdm:count_unread";
 /// The metadata key, on a window bound's seed column, holding one value
 /// of the window's column as the source stores it, as text, which the
 /// core read before the table's first windowed read (a `scan` of one
-/// non-null value): set only for a provider whose data layer says its
-/// source compares a bound with that stored text
-/// (`DataLayer::compares_stored_times`, SQLite's, which has no time type),
-/// so the layer spells each bound as that value is spelled.
+/// non-null value): set only for a provider that declares its source
+/// compares a bound with that stored text
+/// ([`ProviderCapabilities::compares_stored_times`], SQLite's, which has
+/// no time type), so the layer spells each bound as that value is spelled.
 pub const SEED_STORED_TIME: &str = "sdm:stored_time";
 /// The value of a metadata flag the core sets ([`SEED_KEY_UNIQUE`],
 /// [`SEED_COUNT_UNREAD`]).
@@ -994,6 +994,39 @@ pub struct ProviderCapabilities {
     /// bound.
     #[serde(default, skip_serializing_if = "is_false")]
     pub neighbor_lookback: bool,
+    /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
+    /// metadata's `vendor_name`) the provider hands over: the host layer
+    /// reads an opaque column by that vendor's layout only when the column
+    /// names this vendor (register P1B-43). Left out, `None`: no opaque
+    /// column is read as anything but its storage (contract v28; before
+    /// it, a data-layer flag only a built-in dialect could set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opaque_vendor: Option<String>,
+    /// The provider compares a window's bounds with the stored text of the
+    /// window's column, as a source with no time type does (SQLite's
+    /// reference spells each bound as one stored value is spelled,
+    /// `_time_spelling`): the core then reads one non-null value of a
+    /// table's time column (a `scan` of one row) before that table's first
+    /// windowed read in a run, and names it on each bound's seed column
+    /// ([`SEED_STORED_TIME`]), for the provider to spell the bounds by.
+    /// Left out, `false`: the bounds are compared as times (contract v28).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub compares_stored_times: bool,
+    /// The provider orders a seeded sample by the key's data type, as
+    /// SQLite's does (it hashes an integer key and the `rowid` otherwise):
+    /// the core then names the schema's type of a key of one column on
+    /// each `sample_entities` (`key_dtype`). Left out, `false`: the request
+    /// leaves it out (contract v28).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub samples_by_key_dtype: bool,
+    /// The reference reads the provider's rows into a frame of
+    /// NumPy-backed floats, where a NaN is missing and `-0.0` is `0.0`
+    /// (Postgres's rows, read as Python objects); otherwise it reads them
+    /// as Arrow-backed pandas does (DuckDB's and SQLite's), where a NaN is
+    /// a value and the two zeros are two values. Left out, `false`
+    /// (T2.12; contract v28).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reads_nan_as_missing: bool,
 }
 
 /// The in-memory fallback's limits, as a provider declares them
@@ -1142,18 +1175,6 @@ pub trait DataLayer: Send + Sync {
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError>;
 
-    /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
-    /// metadata's `vendor_name`) the run's provider hands over, declared by
-    /// the layer that knows the source: the host layer reads an opaque
-    /// column by that vendor's layout only when the column names this
-    /// vendor (register P1B-43). `None`, the default and a host provider's,
-    /// declares none, and no opaque column is read as anything but its
-    /// storage.
-    fn opaque_vendor(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        let _ = provider;
-        None
-    }
-
     /// The run's provider's answer to a fetch, admitted, read as the
     /// reference reads its source's values where the provider hands over
     /// the driver's own (T2.14d, MID2 P2-3): a dialect's value rules, such
@@ -1186,41 +1207,6 @@ pub trait DataLayer: Send + Sync {
     ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
         let _ = (provider, schema, batches);
         Ok(None)
-    }
-
-    /// Whether the run's provider compares a window's bounds with the
-    /// stored text of the window's column, as a source with no time type
-    /// does (SQLite's reference spells each bound as one stored value is
-    /// spelled, `_time_spelling`): the core then reads one non-null value
-    /// of a table's time column (a `scan` of one row) before that table's
-    /// first windowed read in a run, and names it on each bound's seed
-    /// column ([`SEED_STORED_TIME`]), for the layer to spell the bounds by.
-    /// `false`, the default and a host provider's: the bounds are compared
-    /// as times.
-    fn compares_stored_times(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
-    }
-
-    /// Whether the run's provider orders a seeded sample by the key's data
-    /// type, as SQLite's does (it hashes an integer key and the `rowid`
-    /// otherwise): the core then names the schema's type of a key of one
-    /// column on each `sample_entities` (`key_dtype`). `false`, the default
-    /// and a host provider's: the request leaves it out.
-    fn samples_by_key_dtype(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
-    }
-
-    /// Whether the reference reads the run's provider's rows into a frame
-    /// of NumPy-backed floats, where a NaN is missing and `-0.0` is `0.0`
-    /// (Postgres's rows, read as Python objects); otherwise it reads them
-    /// as Arrow-backed pandas does (DuckDB's and SQLite's), where a NaN is
-    /// a value and the two zeros are two values. `false`, the default and a
-    /// host provider's (T2.12).
-    fn reads_nan_as_missing(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
     }
 }
 

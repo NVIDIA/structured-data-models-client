@@ -3555,6 +3555,25 @@
         "neighbor_lookback": {
           "description": "The provider's neighbor reads by a foreign key over a table with a\ntime column look back no further than the reference's warehouse\nsamplers do (`_by_fkey`): from each seed's anchor back by five\ntimes the rows asked over the table's rate of rows per referenced\nrow and second, at most five years, the seconds rounded up. The\ncore counts the table's and the referenced table's rows, reads the\ntable's time bounds, and bounds each such read from below by that\nlook-back, exclusive (contract v28). Left out, `false`: no lower\nbound.",
           "type": "boolean"
+        },
+        "opaque_vendor": {
+          "description": "The vendor whose opaque Arrow extension types (`arrow.opaque`, its\nmetadata's `vendor_name`) the provider hands over: the host layer\nreads an opaque column by that vendor's layout only when the column\nnames this vendor (register P1B-43). Left out, `None`: no opaque\ncolumn is read as anything but its storage (contract v28; before\nit, a data-layer flag only a built-in dialect could set).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "compares_stored_times": {
+          "description": "The provider compares a window's bounds with the stored text of the\nwindow's column, as a source with no time type does (SQLite's\nreference spells each bound as one stored value is spelled,\n`_time_spelling`): the core then reads one non-null value of a\ntable's time column (a `scan` of one row) before that table's first\nwindowed read in a run, and names it on each bound's seed column\n([`SEED_STORED_TIME`]), for the provider to spell the bounds by.\nLeft out, `false`: the bounds are compared as times (contract v28).",
+          "type": "boolean"
+        },
+        "samples_by_key_dtype": {
+          "description": "The provider orders a seeded sample by the key's data type, as\nSQLite's does (it hashes an integer key and the `rowid` otherwise):\nthe core then names the schema's type of a key of one column on\neach `sample_entities` (`key_dtype`). Left out, `false`: the request\nleaves it out (contract v28).",
+          "type": "boolean"
+        },
+        "reads_nan_as_missing": {
+          "description": "The reference reads the provider's rows into a frame of\nNumPy-backed floats, where a NaN is missing and `-0.0` is `0.0`\n(Postgres's rows, read as Python objects); otherwise it reads them\nas Arrow-backed pandas does (DuckDB's and SQLite's), where a NaN is\na value and the two zeros are two values. Left out, `false`\n(T2.12; contract v28).",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,

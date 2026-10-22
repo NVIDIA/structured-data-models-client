@@ -905,7 +905,7 @@ fn times_ns_from(
 /// reference drops it and warns.
 ///
 /// It also keeps, for a provider whose source compares a window's bounds
-/// with its stored text (`DataLayer::compares_stored_times`, SQLite's),
+/// with its stored text (`ProviderCapabilities::compares_stored_times`, SQLite's),
 /// one stored value of each windowed table's time column, read once before
 /// that table's first windowed read and kept in the sampler's memo across
 /// the materializer's runs (decision E52), as the reference's SQLite

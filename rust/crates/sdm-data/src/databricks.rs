@@ -131,6 +131,10 @@ pub(crate) fn capabilities() -> ProviderCapabilities {
         derived_relations: true,
         sample_rows: true,
         neighbor_lookback: true,
+        opaque_vendor: None,
+        compares_stored_times: false,
+        samples_by_key_dtype: false,
+        reads_nan_as_missing: false,
     }
 }
 
