@@ -317,8 +317,45 @@ def searcher(
 # --- Arrow ---------------------------------------------------------------------------
 
 
+def _metadata(
+    metadata: Mapping[bytes, bytes] | None, change: Callable[[str], str]
+) -> dict[bytes, bytes] | None:
+    if not metadata:
+        return metadata  # type: ignore[return-value]
+    return {
+        change(k.decode('utf-8', 'replace')).encode(): change(
+            v.decode('utf-8', 'replace')
+        ).encode()
+        for k, v in metadata.items()
+    }
+
+
+def _field(field: Any, kind: Any, change: Callable[[str], str]) -> Any:
+    r"""``field`` with its name and metadata through ``change`` and its type
+    ``kind``, its nullability kept."""
+    import pyarrow as pa
+
+    return pa.field(
+        change(field.name),
+        kind,
+        field.nullable,
+        _metadata(field.metadata, change),
+    )
+
+
+def _mask(array: Any) -> Any:
+    import pyarrow as pa
+
+    return pa.array(
+        [not valid for valid in array.is_valid().to_pylist()], pa.bool_()
+    )
+
+
 def _texts(array: Any, change: Callable[[str], str]) -> Any:
-    r"""``array`` with every text in it, at any depth, through ``change``."""
+    r"""``array`` with every text in it, at any depth, through ``change``:
+    cells, and each nested field's name and metadata; every other part of
+    each type (a child's nullability, a list's element name, a map's
+    sortedness) kept as it was."""
     import pyarrow as pa
 
     kind = array.type
@@ -337,55 +374,83 @@ def _texts(array: Any, change: Callable[[str], str]) -> Any:
             _texts(array.field(i), change) for i in range(kind.num_fields)
         ]
         fields = [
-            kind.field(i).with_name(change(kind.field(i).name))
+            _field(kind.field(i), children[i].type, change)
             for i in range(kind.num_fields)
         ]
         return pa.StructArray.from_arrays(
-            children, fields=fields, mask=array.is_null()
+            children, fields=fields, mask=_mask(array)
         )
     if t.is_map(kind):
-        return _map_texts(array, change)
+        keys = _texts(array.keys, change)
+        items = _texts(array.items, change)
+        mapped = pa.map_(
+            _field(kind.key_field, keys.type, change),
+            _field(kind.item_field, items.type, change),
+            kind.keys_sorted,
+        )
+        return pa.MapArray.from_arrays(
+            array.offsets, keys, items, type=mapped, mask=_mask(array)
+        )
     if t.is_list(kind) or t.is_large_list(kind):
         values = _texts(array.values, change)
-        cls = pa.ListArray if t.is_list(kind) else pa.LargeListArray
-        out = cls.from_arrays(array.offsets, values, mask=array.is_null())
-        return out
+        element = _field(kind.value_field, values.type, change)
+        if t.is_list(kind):
+            return pa.ListArray.from_arrays(
+                array.offsets, values, type=pa.list_(element), mask=_mask(array)
+            )
+        return pa.LargeListArray.from_arrays(
+            array.offsets,
+            values,
+            type=pa.large_list(element),
+            mask=_mask(array),
+        )
     if t.is_fixed_size_list(kind):
         values = _texts(array.values, change)
+        element = _field(kind.value_field, values.type, change)
         return pa.FixedSizeListArray.from_arrays(
-            values, kind.list_size, mask=array.is_null()
+            values, type=pa.list_(element, kind.list_size), mask=_mask(array)
         )
     return array
 
 
-def _map_texts(array: Any, change: Callable[[str], str]) -> Any:
+def _type_texts(kind: Any) -> Iterable[str]:
+    r"""Every nested field's name and metadata a type holds, at any depth."""
     import pyarrow as pa
 
-    keys = _texts(array.keys, change)
-    items = _texts(array.items, change)
-    return pa.MapArray.from_arrays(
-        array.offsets, keys, items, mask=array.is_null()
-    )
+    t = pa.types
+    if t.is_dictionary(kind):
+        yield from _type_texts(kind.value_type)
+        return
+    if t.is_map(kind):
+        fields = [kind.key_field, kind.item_field]
+    elif t.is_list(kind) or t.is_large_list(kind) or t.is_fixed_size_list(kind):
+        fields = [kind.value_field]
+    elif t.is_struct(kind) or t.is_union(kind):
+        fields = [kind.field(i) for i in range(kind.num_fields)]
+    else:
+        return
+    for field in fields:
+        yield field.name
+        for k, v in (field.metadata or {}).items():
+            yield k.decode('utf-8', 'replace')
+            yield v.decode('utf-8', 'replace')
+        yield from _type_texts(field.type)
 
 
-def _metadata(
-    metadata: Mapping[bytes, bytes] | None, change: Callable[[str], str]
-) -> dict[bytes, bytes] | None:
-    if not metadata:
-        return metadata  # type: ignore[return-value]
-    return {
-        change(k.decode('utf-8', 'replace')).encode(): change(
-            v.decode('utf-8', 'replace')
-        ).encode()
-        for k, v in metadata.items()
-    }
+def _changes(table: Any, change: Callable[[str], str]) -> bool:
+    r"""Whether ``change`` alters any text ``table`` holds."""
+    return any(change(text) != text for text in _table_texts(table))
 
 
 def scrubbed_table(table: Any, change: Callable[[str], str]) -> Any:
     r"""``table`` with every text through ``change``: its cells at any
-    depth, its field names and its metadata."""
+    depth, every field's name and metadata, nested ones included, and the
+    schema's metadata. A table ``change`` leaves alone comes back as it is,
+    every type exactly the driver's."""
     import pyarrow as pa
 
+    if not _changes(table, change):
+        return table
     table = table.combine_chunks()
     columns = []
     fields = []
@@ -396,14 +461,7 @@ def scrubbed_table(table: Any, change: Callable[[str], str]) -> Any:
         )
         array = _texts(chunk, change)
         columns.append(array)
-        fields.append(
-            pa.field(
-                change(field.name),
-                array.type,
-                field.nullable,
-                _metadata(field.metadata, change),
-            )
-        )
+        fields.append(_field(field, array.type, change))
     schema = pa.schema(
         fields, metadata=_metadata(table.schema.metadata, change)
     )
@@ -411,8 +469,9 @@ def scrubbed_table(table: Any, change: Callable[[str], str]) -> Any:
 
 
 def _table_texts(table: Any) -> Iterable[str]:
-    r"""Every text a table holds: field names, metadata, and each text or
-    byte cell (bytes read as UTF-8, invalid bytes replaced)."""
+    r"""Every text a table holds: every field's name and metadata, nested
+    fields' included, the schema's metadata, and each text or byte cell
+    (bytes read as UTF-8, invalid bytes replaced)."""
     import pyarrow as pa
 
     for field in table.schema:
@@ -420,6 +479,7 @@ def _table_texts(table: Any) -> Iterable[str]:
         for k, v in (field.metadata or {}).items():
             yield k.decode('utf-8', 'replace')
             yield v.decode('utf-8', 'replace')
+        yield from _type_texts(field.type)
     for k, v in (table.schema.metadata or {}).items():
         yield k.decode('utf-8', 'replace')
         yield v.decode('utf-8', 'replace')
@@ -821,14 +881,24 @@ def _parameter(value: Any) -> Any:
 
     if not isinstance(value, Mapping) or set(value) - {'type', 'value', 'name'}:
         return value
+    read: Any = dict(value)
     if str(value.get('type', '')).startswith('builtins.'):
         try:
-            read = ast.literal_eval(str(value['value']))
+            found = ast.literal_eval(str(value['value']))
         except (ValueError, SyntaxError):
-            return dict(value)
-        if read is None or isinstance(read, (bool, int, float, str)):
-            return read
-    return dict(value)
+            found = None
+            literal = False
+        else:
+            literal = found is None or isinstance(
+                found, (bool, int, float, str)
+            )
+        if literal:
+            read = found
+    # A named binding keeps its name (``%(x)s``, ``:x``): it is no
+    # positional one.
+    if 'name' in value:
+        return {'name': str(value['name']), 'value': read}
+    return read
 
 
 def _ipc_text(text: str) -> Any:
@@ -862,6 +932,8 @@ def from_recording(
             f'a recording line of format {line.get("format")!r} is not one of '
             f'{RECORDING_FORMATS}'
         )
+    import pyarrow as pa
+
     leg = line['leg']
     case = str(line['case']).rpartition('@')[0] or str(line['case'])
     recording = line.get('recording') or {}
@@ -870,15 +942,30 @@ def from_recording(
         return None if value is None else _ipc_text(value)
 
     statements = []
-    for statement in line.get('statements', []):
-        results = statement.get('results') or []
-        first = next((r for r in results if r.get('arrow') is not None), None)
+    for position, statement in enumerate(line.get('statements', [])):
+        reads = statement.get('results') or []
+        if any(read.get('arrow') is None for read in reads):
+            raise CaptureError(
+                f'{case}@{leg}: statement {position} has a read whose rows '
+                'the recording kept no table of; nothing is written'
+            )
+        result = None
+        if reads:
+            # Each read of the statement's cursor, in order (a fetchmany,
+            # then a fetchall), is part of its one result: every row kept.
+            parts = [table_of(read['arrow']) for read in reads]
+            if any(not part.schema.equals(parts[0].schema) for part in parts):
+                raise CaptureError(
+                    f'{case}@{leg}: statement {position} read with two '
+                    'schemas; nothing is written'
+                )
+            result = pa.concat_tables(parts) if len(parts) > 1 else parts[0]
         entry: dict[str, Any] = {
             'text': statement.get('sql') or '',
             'parameters': [
                 _parameter(value) for value in statement.get('parameters') or []
             ],
-            'result': table_of(first['arrow']) if first else None,
+            'result': result,
         }
         if statement.get('error') is not None:
             entry['error'] = statement['error']
