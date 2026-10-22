@@ -27,6 +27,9 @@ from typing import Any
 
 import pytest
 
+# It copies the checkout, so CI runs it in the tooling jobs (T3.0).
+pytestmark = pytest.mark.tooling
+
 ROOT = Path(__file__).resolve().parents[1]
 CLEAN = ROOT / 'scripts/rust_core/orchestration/clean_tmp.sh'
 CELLS = ROOT / 'scripts/rust_core/cells.sh'
