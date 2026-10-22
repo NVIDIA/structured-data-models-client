@@ -289,11 +289,8 @@ OUTCOME_FIELDS = (
 )
 
 
-#: The approval's own qualifier: the parenthesis right after its date, or
-#: the clause after ``; `` or ``, ``.
-QUALIFIER = re.compile(
-    r'approved by owner \d{4}-\d{2}-\d{2}(?: \(([^)]*)\)|[;,] ([^;,]*))?'
-)
+#: The approval's date, after which its own qualifier starts.
+APPROVAL_DATE = re.compile(r'approved by owner \d{4}-\d{2}-\d{2}')
 #: A qualifier that says the owner has not approved yet (U4): declined,
 #: pending, proposed, not yet answered.
 NOT_YET = re.compile(
@@ -301,50 +298,101 @@ NOT_YET = re.compile(
 )
 
 
-#: What an owner's approval's own qualifier may say, read by allowlist
-#: (U4, T3.2): where the approval was given or relayed, or what it covers,
-#: in the forms the decisions files write: a package or task ID ("T1.7b
-#: check-in", "recorded at T1.16"), a decision row it came with ("with
-#: KO3-17"), "relayed by the orchestrator", a checkpoint, a round, an
-#: answer or items, lettered parts
-#: ("(a) to (c)"), the rows it covers ("P2G-4, P2G-5 and KO2-89 only"),
-#: "including ...", or the owner's own words ("the owner chose ..."). Any
-#: other qualifier is no approval, whatever it says.
-APPROVAL_NOTES = re.compile(
-    r'(?:T\d+\.\d+[a-z]?\b'
-    r'|recorded at T\d+\.\d+[a-z]?\b'
+#: What each clause of an owner's approval's own qualifier may say, read
+#: by allowlist, the whole clause (U4, T3.2; Claude r1 P2-5): where the
+#: approval was given or relayed, or what it covers, in the forms the
+#: decisions files write: a package or task ID ("T1.7b check-in",
+#: "recorded at T1.16"), a decision row it came with ("with KO3-17"),
+#: "relayed by the orchestrator", a checkpoint, a round, an answer, items
+#: or lettered parts ("(a) to (c)"), the rows it covers ("P2G-4, P2G-5 and
+#: KO2-89 only"), "including ...", or the owner's own words ("the owner
+#: chose ..."). Any other clause is no approval, whatever it says.
+APPROVAL_CLAUSE = re.compile(
+    r'T\d+\.\d+[a-z]?(?: check-in)?'
+    r'|recorded at T\d+\.\d+[a-z]?(?: fix \d+| part \d+[a-z]?)?'
     r'|with [A-Z][A-Z0-9]*-\d+'
-    r'|relayed by the orchestrator\b'
-    r'|checkpoint \d'
-    r'|round \d'
-    r'|answers? \d'
-    r'|items? \d'
-    r'|\([a-z]\b'
-    r'|[A-Z][A-Z0-9]*-?\d+[a-z]?(?:\([a-z]\))?$'
-    r'|[A-Z][A-Z0-9]*-\d+[a-z]?(?:\([a-z]\))?(?:, | and | only\b)'
-    r'|including '
-    r'|the owner chose '
-    r'|the request\b)'
+    r'|relayed by the orchestrator'
+    r"|never the implementer's approval"
+    r'|checkpoint \d+'
+    r'|(?:round \d+ )?answers? \d+(?: and \d+)*'
+    r'|revised by round \d+ answers? \d+'
+    r'|items? \d+(?:\([a-z]\))?(?: (?:and|to) \d+)*'
+    r'|\d+(?: (?:and|to) \d+)*'
+    r'|option [A-Z]'
+    r'|\([a-z]\)(?: (?:and|to) \([a-z]\))?'
+    r"|\([a-z]\) and \([a-z]\) are CI\d+'s under them"
+    r'|[A-Z][A-Z0-9]*-?\d+[a-z]?(?:\([a-z]\))?'
+    r'(?: and [A-Z][A-Z0-9]*-?\d+[a-z]?)*(?: only)?'
+    r'|including [^;,()]+'
+    r'|the owner chose [^;()]+'
+    r'|the request\b[^;()]*'
+    r"|the tiers the orchestrator's"
+    r'|and the publishing of the four images'
 )
+
+
+def _groups(text: str) -> list[str] | None:
+    r"""The parenthesized groups ``text`` starts with, one after another
+    (" (a) (b)"), each its balanced content; None when one does not close."""
+    found: list[str] = []
+    n = 0
+    while text.startswith(' (', n):
+        depth, start = 0, n + 1
+        for end in range(start, len(text)):
+            depth += {'(': 1, ')': -1}.get(text[end], 0)
+            if depth == 0:
+                found.append(text[start + 1 : end])
+                n = end + 1
+                break
+        else:
+            return None
+    return found
+
+
+def approval_qualifier(status: str) -> list[str] | None:
+    r"""The clauses of the approval's own qualifier: every parenthesized
+    group right after its date ("(with KO3-17) (declined)" is two), each
+    split at ``; `` and ``, ``, else the one clause after ``; `` or ``, ``;
+    None when a group does not close."""
+    date = APPROVAL_DATE.match(status)
+    rest = status[date.end() :] if date else ''
+    if rest.startswith(' ('):
+        groups = _groups(rest)
+        if groups is None:
+            return None
+    elif rest[:2] in ('; ', ', '):
+        groups = [rest[2:].split(';', 1)[0]]
+    else:
+        groups = []
+    return [
+        clause.strip()
+        for group in groups
+        for clause in re.split(r'; |, ', group)
+        if clause.strip()
+    ]
 
 
 def owner_approved(status: str) -> bool:
     r"""The status is the owner's approval, read from its start, never a
     substring of another status ("not approved by owner ..."); shared with
     ``coverage.py``'s rule 8 (T1.15). The approval's own qualifier is read
-    by allowlist (U4): it must be one of :data:`APPROVAL_NOTES`' forms, so
-    "approved by owner D (declined)", "..., pending" and "(proposed ...,
-    not yet answered)" are no approvals, nor is any qualifier the list
-    does not name; a note anywhere withdrawing it (:data:`WITHDRAWN`) or
-    saying it is not yet given (:data:`NOT_YET`) voids it too."""
+    by allowlist (U4), the whole of it: each clause of each group after the
+    date must be one of :data:`APPROVAL_CLAUSE`'s forms, so
+    "approved by owner D (declined)", "(with KO3-17) (declined)",
+    "(T3.4, on hold until the review)", "(recorded at T1.16; the owner said
+    no)", "..., pending" and "(proposed ..., not yet answered)" are no
+    approvals, nor is any clause the list does not name; a note anywhere
+    withdrawing it (:data:`WITHDRAWN`) or a qualifier saying it is not yet
+    given (:data:`NOT_YET`) voids it too."""
     status = status.strip()
     if not OWNER.fullmatch(status) or WITHDRAWN.search(status):
         return False
-    found = QUALIFIER.match(status)
-    qualifier = (found.group(1) or found.group(2) or '') if found else ''
-    if NOT_YET.search(qualifier):
+    clauses = approval_qualifier(status)
+    if clauses is None:
         return False
-    return not qualifier or APPROVAL_NOTES.match(qualifier) is not None
+    if any(NOT_YET.search(clause) for clause in clauses):
+        return False
+    return all(APPROVAL_CLAUSE.fullmatch(clause) for clause in clauses)
 
 
 class Unreadable(Exception):

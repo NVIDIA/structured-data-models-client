@@ -906,7 +906,9 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     options = given.get('from_source') or {}
     named = options.get('tables') if isinstance(options, dict) else None
     if _strs(named):
-        # A list of tables names each as itself (Schema.from_source).
+        # A list of tables names each as itself (Schema.from_source); an
+        # empty one names no table, as the client reads it (G12: it chooses
+        # none and refuses, never every table).
         named = {name: name for name in named}
     if named is not None and not isinstance(named, dict):
         raise Unevidenced('table options it does not read')
@@ -947,7 +949,7 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
     # table could make it anything else (a refusal covers its rejected
     # input, and claims no later stage).
     for source, column in types:
-        name = to_name.get(source, None if named else source)
+        name = to_name.get(source, None if named is not None else source)
         if name is None or (name, column) in held:
             continue
         mine = declared.get((name, column), set())
@@ -960,7 +962,7 @@ def observed(case: dict[str, Any], line: dict[str, Any]) -> set[str]:
         roles.setdefault(target, set()).add('target')
     cells = set()
     for (name, column), played in roles.items():
-        source = (named or {}).get(name, None if named else name)
+        source = (named or {}).get(name, None if named is not None else name)
         for cell in types.get((source, column), set()) if source else set():
             cells.update(f'{cell}/{role}' for role in played)
     return cells

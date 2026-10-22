@@ -637,12 +637,25 @@ observe() {
           --out "$made/java.jsonl" "$tree/contract/cases" || return 1 ;;
       standin)
         # Each warehouse leg on the stand-in (choice 2): python-core with
-        # --database the leg, its observations keyed <case>@<leg>.
-        local leg
+        # --database the leg, its observations keyed <case>@<leg>. A leg
+        # no case runs on is not observed, and its file is no evidence
+        # (Claude r1 P1-2).
+        local leg said file kept
         for leg in databricks-sql databricks-spark snowflake lakebase; do
-          "$PYTHON" -I "$tree/contract/runners/run_python.py" --mode python-core \
-            --database "$leg" --out "$made/standin-$leg.jsonl" \
-            "$tree/contract/cases" || return 1
+          if ! said=$("$PYTHON" -I "$tree/contract/runners/run_python.py" \
+            --mode python-core --database "$leg" \
+            --out "$made/standin-$leg.jsonl" "$tree/contract/cases" 2>&1); then
+            printf '%s\n' "$said"
+            grep -qF "runner failure: no case runs on $leg" <<<"$said" || return 1
+            echo "standin: no case runs on $leg; that leg is not observed"
+            kept=()
+            for file in "${given[@]+"${given[@]}"}"; do
+              [ "$file" = "$made/standin-$leg.jsonl" ] || kept+=("$file")
+            done
+            given=("${kept[@]+"${kept[@]}"}")
+            continue
+          fi
+          printf '%s\n' "$said"
         done ;;
       *) echo "no runner $runner"; return 1 ;;
     esac
@@ -745,13 +758,46 @@ judge_compare() {
       find "$candidate/contract/captures" -name '*.json' -print0 2>/dev/null)
     verdicts=(--candidate "$final" ${verdicts[@]+--verdicts "${verdicts[@]}"} --)
   fi
-  local status=0
-  "$PYTHON" "$here/scripts/rust_core/compare.py" \
-    --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
-    --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
-    --expect "$scratch/effective.json" \
-    --register "$candidate/docs/design/rust-core/register.yaml" \
-    "${verdicts[@]+"${verdicts[@]}"}" "${given[@]}" || status=1
+  local status=0 leg file
+  # One comparison per leg the observations hold lines of (Claude r1
+  # P1-2): compare.py judges one database or warehouse leg a run, each with
+  # only the files that hold that leg's lines (a stand-in file per
+  # warehouse leg beside python-core's DuckDB one), so a warehouse or Java
+  # line is judged on its leg and a live-only item without its E-1 verdict
+  # fails the locked run.
+  local pairs
+  pairs=$("$PYTHON" -I -c '
+import json, sys
+for path in sys.argv[1:]:
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        continue
+    legs = set()
+    for line in text.splitlines():
+        if line.strip():
+            legs.add(json.loads(line).get("case", "").partition("@")[2] or "duckdb")
+    for leg in sorted(legs):
+        print(leg + "\t" + path)
+' "${given[@]}") || return 1
+  local legs
+  legs=$(cut -f1 <<<"$pairs" | sort -u | grep -v '^$')
+  [ -n "$legs" ] || { echo 'compare: no observation lines in the given files'; return 1; }
+  for leg in duckdb $(grep -vx duckdb <<<"$legs"); do
+    grep -qx "$leg" <<<"$legs" || continue
+    local files=()
+    while IFS=$'\t' read -r on file; do
+      [ "$on" = "$leg" ] && files+=("$file")
+    done <<<"$pairs"
+    echo "compare on $leg: ${files[*]}"
+    "$PYTHON" "$here/scripts/rust_core/compare.py" \
+      --cases "$candidate/contract/cases" --bases "$candidate/contract/bases.yaml" \
+      --reference "$(ls "$candidate"/contract/reference/*.jsonl)" \
+      --expect "$scratch/effective.json" \
+      --register "$candidate/docs/design/rust-core/register.yaml" \
+      --database "$leg" \
+      "${verdicts[@]+"${verdicts[@]}"}" "${files[@]}" || status=1
+  done
   # Locked check 1: no case pending live at the final run. From C-1's
   # captures on (contract/captures/), every case and warehouse leg needs a
   # capture of its current input (capture_check.py captures --locked).
