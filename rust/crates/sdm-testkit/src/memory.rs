@@ -315,6 +315,7 @@ impl Memory {
                 key,
                 columns,
                 seeds,
+                ..
             } => {
                 let rows = &self.table(table)?.rows;
                 let seeds = key_set(seeds)?;

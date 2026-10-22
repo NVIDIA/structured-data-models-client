@@ -394,6 +394,8 @@ fn a_key_of_another_integer_width_joins_its_seeds_exactly() {
         key: vec!["user".into()],
         columns: vec!["v".into()],
         seeds: key_set(&seeds),
+        key_unique: false,
+        count_unread: false,
     };
     let ran = run_with(
         host(&[], Some(limits(1_000, 1 << 30))),
@@ -414,6 +416,8 @@ fn a_lookup_gives_one_row_per_seed_found_with_its_count() {
         key: vec!["user".into()],
         columns: vec!["user".into()],
         seeds: key_set(&seeds),
+        key_unique: false,
+        count_unread: false,
     };
     let answer = fallback(request, Some(seeds)).answer.unwrap();
     let names: Vec<String> = answer

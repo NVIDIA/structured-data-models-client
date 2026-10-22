@@ -381,6 +381,8 @@ fn a_table_named_as_the_seeds_are_is_still_the_table_read() {
                     })
                     .into(),
             },
+            key_unique: false,
+            count_unread: false,
         };
         let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &duckdb()).unwrap()
         else {

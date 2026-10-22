@@ -3498,7 +3498,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         )?;
         let positions = batches(&looked_up, examples_total)?;
         // A key the source enforces unique is held by one row each: a
-        // dialect may leave its count out (`SEED_KEY_UNIQUE`), and any
+        // dialect may leave its count out (`key_unique`), and any
         // other count is read.
         let unique = entity.column(&key).is_some_and(|c| c.unique);
         let matches = match looked_up.column_by_name(MATCHES_COLUMN) {

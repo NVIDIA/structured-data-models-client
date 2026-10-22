@@ -304,6 +304,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             key,
             columns,
             seeds,
+            ..
         } => {
             let seeds_name = seeds_for(table);
             let cte = seed_cte(request, table, &seeds_name, key, seeds, None)?;

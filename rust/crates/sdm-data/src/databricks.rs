@@ -58,9 +58,9 @@ use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, KeySet, MARKED, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
-    Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_UNIQUE, SqlParam, SqlStatement,
-    TableColumn, TableKey, TextTimes, TieBreak, TieTerm, Window, refused, seed_integer,
+    Filter, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities, Relation,
+    SEED_BATCH, SEED_KEY, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak,
+    TieTerm, Window, refused, seed_integer,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
@@ -397,13 +397,23 @@ pub(crate) fn plan(request: &DataRequest, namespace: &[String]) -> Result<FetchP
             key,
             columns,
             seeds,
+            key_unique,
+            count_unread,
         } => {
             let table = from(request, "table", table, namespace)?;
             params.push(SqlParam::KeySet {
                 keys: seeds.clone(),
                 relation: TMP.to_owned(),
             });
-            lookup(request, &table, key, columns, seeds)?
+            lookup(
+                request,
+                &table,
+                key,
+                columns,
+                seeds,
+                *key_unique,
+                !*count_unread,
+            )?
         }
     };
     Ok(FetchPlan::Sql {
@@ -1217,29 +1227,23 @@ fn neighbors(
 
 /// The reference's key lookup (`_by_pkey`): the rows of `table` holding a
 /// seed's key, with the seed's batch position; where the source keeps the
-/// key unique (`SEED_KEY_UNIQUE`), the plain join the reference sends;
-/// otherwise one row per seed, as the reference keeps the first it read of
-/// a key several rows hold, with how many rows hold it unless the seeds say
-/// that count is not read (`SEED_COUNT_UNREAD`).
+/// key `unique` (the request's `key_unique`), the plain join the reference
+/// sends; otherwise one row per seed, as the reference keeps the first it
+/// read of a key several rows hold, with how many rows hold it where it is
+/// `counted` (the request is not `count_unread`).
 fn lookup(
     request: &DataRequest,
     table: &str,
     key: &[String],
     columns: &[String],
     seeds: &KeySet,
+    unique: bool,
+    counted: bool,
 ) -> Result<String, CoreError> {
     if columns.is_empty() {
         return Err(refused(request, "columns", "the request names no columns"));
     }
     let cte = seed_cte(request, key, seeds, None)?;
-    let flagged = |column: &str, flag: &str| {
-        seeds
-            .columns
-            .iter()
-            .any(|c| c.name == column && c.metadata.get(flag).map(String::as_str) == Some(MARKED))
-    };
-    let unique = flagged(SEED_KEY, SEED_KEY_UNIQUE);
-    let unread = flagged(SEED_BATCH, SEED_COUNT_UNREAD);
     let key = identifier(&key[0]);
     let mut text = format!(
         "{cte}SELECT {TMP}.{TMP_BATCH} AS {}, {}",
@@ -1252,7 +1256,7 @@ fn lookup(
         ));
         return Ok(text);
     }
-    if !unread {
+    if counted {
         text.push_str(&format!(
             ", COUNT(*) OVER (PARTITION BY {TMP}.{TMP_BATCH}) AS {}",
             identifier(MATCHES_COLUMN)

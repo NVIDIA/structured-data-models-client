@@ -50,10 +50,9 @@ use sdm_contract::catalog::{
 };
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, IndexAdvice, KeySet, MARKED, MATCHES_COLUMN, NullOrder, OptionalRequest,
-    ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY_UNIQUE,
-    SEED_STORED_TIME, SqlParam, SqlStatement, TableColumn, TableKey, TextTimes, TieBreak, TieTerm,
-    Window, field, seed_integer, seed_key_columns,
+    Filter, IndexAdvice, KeySet, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
+    Relation, SEED_BATCH, SEED_STORED_TIME, SqlParam, SqlStatement, TableColumn, TableKey,
+    TextTimes, TieBreak, TieTerm, Window, field, seed_integer, seed_key_columns,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{ColumnType, CoreError, Detail, ErrorCode, ErrorKind, Scalar};
@@ -312,6 +311,8 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             key,
             columns,
             seeds,
+            key_unique,
+            count_unread,
         } => {
             let seeds_name = seeds_for(request, table);
             let table = from(request, "table", table)?;
@@ -319,7 +320,15 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
                 keys: seeds.clone(),
                 relation: seeds_name.clone(),
             });
-            lookup(request, &table, &seeds_name, key, columns, seeds)?
+            lookup(
+                request,
+                &table,
+                &seeds_name,
+                key,
+                columns,
+                *key_unique,
+                !*count_unread,
+            )?
         }
         DataRequest::Scan {
             table,
@@ -884,20 +893,11 @@ fn neighbors(
     ))
 }
 
-/// Whether the seeds' column `name` carries the flag `key`.
-fn marked(seeds: &KeySet, name: &str, key: &str) -> bool {
-    seeds
-        .columns
-        .iter()
-        .find(|f| f.name == name)
-        .is_some_and(|f| f.metadata.get(key).map(String::as_str) == Some(MARKED))
-}
-
 /// The reference's key lookup on SQLite (`_by_pkey`): one row of `table`
 /// per seed whose key it holds. A key the source enforces unique is joined
-/// plainly ([`SEED_KEY_UNIQUE`]); any other by the `rowid` of its first
-/// row, with the count of rows holding it unless the seeds say it is not
-/// read ([`SEED_COUNT_UNREAD`]), as the reference counts only where it
+/// plainly (the request's `key_unique`); any other by the `rowid` of its
+/// first row, with the count of rows holding it where it is `counted` (the
+/// request is not `count_unread`), as the reference counts only where it
 /// scores.
 fn lookup(
     request: &DataRequest,
@@ -905,7 +905,8 @@ fn lookup(
     seeds_name: &str,
     key: &[String],
     columns: &[String],
-    seeds: &KeySet,
+    unique: bool,
+    counted: bool,
 ) -> Result<String, CoreError> {
     let projected = joined_columns(request, columns)?;
     let batch = format!(
@@ -914,9 +915,6 @@ fn lookup(
         identifier(BATCH_COLUMN)
     );
     let seeds_table = format!("temp.{}", identifier(seeds_name));
-    let unique = seed_key_columns(key.len())
-        .iter()
-        .all(|seed| marked(seeds, seed, SEED_KEY_UNIQUE));
     if unique {
         return Ok(format!(
             "SELECT {batch}, {projected}\nFROM {seeds_table} s\nJOIN {table} t\n  ON {}",
@@ -924,13 +922,13 @@ fn lookup(
         ));
     }
     let matching = key_join(key, "", "==");
-    let counted = if marked(seeds, SEED_BATCH, SEED_COUNT_UNREAD) {
-        String::new()
-    } else {
+    let counted = if counted {
         format!(
             "(SELECT COUNT(*) FROM {table} WHERE {matching}) AS {}, ",
             identifier(MATCHES_COLUMN)
         )
+    } else {
+        String::new()
     };
     Ok(format!(
         "SELECT {batch}, {counted}{projected}\nFROM {seeds_table} s\nJOIN {table} t\n  ON t.rowid = (\n    SELECT rowid\n    FROM {table}\n    WHERE {matching}\n    LIMIT 1\n)"
