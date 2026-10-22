@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# The client tests that claim a path the case format cannot express (T3.2;
+# carried row P2-T2.16-3): what a contract case cannot ask, such as an object
+# pickled and loaded again, is covered by a named test of the client's suite.
+# scripts/rust_core/coverage.py reads this file: each claim's path must be a
+# path of the Python manifest (docs/design/rust-core/phase-0/scope-python.yaml)
+# and its test, FILE::NAME, a test function the tree defines. A protected
+# path: a claim changes only in a landing whose trailer names it.
+format: sdm-test-claims/1
+claims:
+  - path: state.pickle/schema/any
+    test: packages/structured-data-models-client/tests/test_a_key_is_counted_where_its_rows_are.py::test_a_schema_pickled_before_sources_still_loads
+    why: a Schema pickled and loaded again, which no contract case can ask

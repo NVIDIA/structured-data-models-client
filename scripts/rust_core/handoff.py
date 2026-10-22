@@ -54,6 +54,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -863,6 +864,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if p
     ]
     python = args.python or sys.executable
+    finish_on_signals()
     scratch = Path(tempfile.mkdtemp(prefix='sdm-handoff-'))
     print(
         f'handoff of {args.package} at {sha} ({len(touched)} file(s) since {base[:12]})'
@@ -910,6 +912,26 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     print(f'STAMPED {sha}: {path}')
     return 0
+
+
+class Stopped(BaseException):
+    r"""The run was stopped by a signal: raised where it runs, so every
+    ``finally`` removes what the run made (its scratch, the previous
+    round's worktree) before the process ends (T3.2: a stopped run left its
+    ``previous`` worktree registered and dirty, which only a forced removal
+    could take away)."""
+
+
+def finish_on_signals() -> None:
+    r"""SIGTERM and SIGHUP stop the run as Ctrl-C does, through its
+    ``finally`` blocks, rather than ending the process where it stands."""
+
+    def stop(signum: int, frame: object) -> None:
+        raise Stopped(f'stopped by signal {signum}')
+
+    for name in ('SIGTERM', 'SIGHUP'):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), stop)
 
 
 def cmd_check(args: argparse.Namespace) -> int:

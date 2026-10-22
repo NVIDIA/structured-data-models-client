@@ -298,12 +298,9 @@ kinds:
       <<: *case
       id: dryrun.switch.pickle-request
       slice: S1
-      paths: [state.pickle/request/any]
+      paths: [query.materialize/indices-binary/duckdb]
       routes: [schema.from-source/all-tables/duckdb, query.materialize/indices-binary/duckdb, client.predict/binary/duckdb]
-      input:
-        <<: *input
-        pickle: request
-      why: a materialized request pickled and loaded again before predict, a path with no acceptance case today (carried row P2-T2.16-3)
+      why: the case a pickled request is made from; the path state.pickle/request/any itself is claimed by a named client test in contract/test-claims.yaml, which coverage.py reads (T3.2), since the case format has no pickle field (carried row P2-T2.16-3; T3.9 writes the test)
   - name: s1-key-repeating-once
     case:
       <<: *case
@@ -362,7 +359,7 @@ kinds:
         <<: *input
       until: materialize
       expect: {outcome: success, stage: materialize}
-      why: an S0 validation on the Java host, Java's first leg (T3.10)
+      why: an S0 validation on the Java host, Java's first leg (T3.11)
       source: Phase 3 design, dryrun-plan.yaml
   - name: java-s1-jdbc-duckdb
     case:
@@ -375,7 +372,7 @@ kinds:
       input:
         <<: *input
         pql: PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id
-      why: a regression read through DuckDB's JDBC driver into Arrow on the Java host, a JDBC conversion-table kind (T3.11)
+      why: a regression read through DuckDB's JDBC driver into Arrow on the Java host, a JDBC conversion-table kind (T3.12)
   - name: java-databricks-sql
     case:
       <<: *case
@@ -387,7 +384,7 @@ kinds:
       input:
         <<: *input
         pql: PREDICT users.country FOR EACH users.user_id
-      why: a multiclass question through the Databricks JDBC driver on the Java host, replayed from the early capture (T3.12)
+      why: a multiclass question through the Databricks JDBC driver on the Java host, replayed from the early capture (T3.13)
   # --- A and C, added in round 2 ---------------------------------------------
   - name: adventureworks-databricks-sql
     case:

@@ -336,3 +336,77 @@ def test_a_leg_claims_its_own_path() -> None:
     assert COVERAGE.claims(s2)['paths'] == {
         'schema.from-source/all-tables/snowflake'
     }
+
+
+# --- the orchestration fixes the dry run found -------------------------------------------
+
+
+def test_a_stopped_handoff_runs_its_cleanup(tmp_path: Path) -> None:
+    r"""A handoff stopped by SIGTERM leaves through its ``finally`` blocks,
+    so the previous round's worktree it made is removed and pruned."""
+    script = tmp_path / 'stopped.py'
+    marker = tmp_path / 'cleaned'
+    script.write_text(
+        'import os, signal, sys\n'
+        f'sys.path.insert(0, {str(ROOT / "scripts/rust_core")!r})\n'
+        'import handoff\n'
+        'handoff.finish_on_signals()\n'
+        'try:\n'
+        '    os.kill(os.getpid(), signal.SIGTERM)\n'
+        '    signal.pause()\n'
+        'finally:\n'
+        f'    open({str(marker)!r}, "w").close()\n'
+    )
+    done = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        stdin=subprocess.DEVNULL,
+        check=False,
+    )
+    assert marker.exists(), done.stderr
+    assert 'stopped by signal' in done.stderr
+
+
+def test_clean_tmp_keeps_a_directory_a_daemon_listens_in(
+    tmp_path: Path,
+) -> None:
+    r"""A directory holding a listening Unix socket (the Codex daemon's) is
+    in use however old its files are; an old one holding none is stale."""
+    import os
+    import socket
+
+    root = tmp_path / 'tmp-root'
+    live, dead = root / 'daemon', root / 'old'
+    live.mkdir(parents=True)
+    dead.mkdir()
+    (dead / 'file').write_text('x')
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        server.bind(str(live / 's'))
+        server.listen(1)
+        for path in (live / 's', live, dead / 'file', dead):
+            os.utime(path, (0, 0))
+        done = subprocess.run(
+            [
+                'bash',
+                str(ROOT / 'scripts/rust_core/orchestration/clean_tmp.sh'),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            stdin=subprocess.DEVNULL,
+            env={
+                **os.environ,
+                'SDM_TMP_ROOT': str(root),
+                'SDM_TARGET_ROOT': str(tmp_path / 'none-target'),
+                'SDM_CELLS_ROOT': str(tmp_path / 'none-cells'),
+                'SDM_SCRATCH': '',
+            },
+            check=False,
+        )
+    finally:
+        server.close()
+    assert f'skip listening {live}' in done.stdout, done.stdout
+    assert f'would remove {dead}' in done.stdout, done.stdout

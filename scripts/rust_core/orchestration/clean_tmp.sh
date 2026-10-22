@@ -134,9 +134,17 @@ if [ -n "$RELEASE" ]; then
 fi
 AGE=${AGE:-180}
 busy=$(lsof -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+# The Unix sockets a process listens on: a directory holding one (a live
+# daemon's, such as Codex's under /tmp/codex-daemon-*) is in use however old
+# its files are (T3.2).
+sockets=$(ss -xlH 2>/dev/null | awk '{print $5}')
+listens() { # $1 = path; true when a listening socket is inside it
+  [ -n "$sockets" ] && printf '%s\n' "$sockets" | grep -q "^$1/"
+}
 stale() { # $1 = path; stale if no file inside newer than AGE minutes and not a cwd prefix
   local p=$1
   echo "$busy" | grep -q "^$p" && { echo "skip busy $p"; return 1; }
+  listens "$p" && { echo "skip listening $p"; return 1; }
   [ -z "$(find "$p" -mmin -"$AGE" -print -quit 2>/dev/null)" ]
 }
 CAP_GIB=${CAP_GIB:-15}
