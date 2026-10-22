@@ -20,6 +20,7 @@ import pytest
 
 from sdm_client import PredictiveQuery, Schema
 from sdm_client.adapters.tabular import TabularAdapter
+from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
 
 QUERY = 'PREDICT users.churn FOR EACH users.user_id'
@@ -218,7 +219,7 @@ def fitted_on(schema: Schema, response: dict):
 
     client = SDMClient(url='http://localhost:8000')
     transport = StubTransport(response)
-    client._transport = transport
+    client._backend = NimBackend(transport)
     request = PredictiveQuery(QUERY, schema).materialize(indices=[3, 7])
     return client.fit(request, model='kumo-tabular'), transport, request
 
@@ -256,7 +257,7 @@ def test_the_adapter_reads_the_answer_against_the_whole_request():
     from sdm_client import SDMClient
 
     client = SDMClient(url='http://localhost:8000')
-    client._transport = StubTransport(answer(['[3]', '[7]']))
+    client._backend = NimBackend(StubTransport(answer(['[3]', '[7]'])))
     client._adapters['kumo-tabular'] = Recording()
     request = PredictiveQuery(QUERY, schema).materialize(indices=[3, 7])
     fitted = client.fit(request, model='kumo-tabular')

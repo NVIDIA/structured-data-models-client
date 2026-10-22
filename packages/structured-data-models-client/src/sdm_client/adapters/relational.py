@@ -23,10 +23,14 @@ import dataclasses
 import re
 import uuid
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Any
 
-from sdm_api.generated.tfm_api import PredictionResponse, ResponseContractError
+from sdm_api.generated.tfm_api import (
+    PredictionItem,
+    PredictionResponse,
+    ResponseContractError,
+)
 
 from sdm_client.base import ModelSpec
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
@@ -45,6 +49,7 @@ from sdm_client.request import Request
 from sdm_client.result import PredictionResult
 from sdm_client.wire import as_declared
 from sdm_client.wire.answers import as_declared_target
+from sdm_client.wire.inference import typed_inference
 
 # What to ask for when the caller named nothing, by task kind. Asking for
 # everything would make a regression request carry probabilities it cannot
@@ -66,6 +71,10 @@ _SENDS_A_CONTEXT = frozenset({'context'})
 _SENDS_ROWS_TO_SCORE = frozenset({'predict'})
 
 _SESSION_SCORING = ('predict', 'output', 'inference', 'metadata')
+
+#: The longest ``metadata.source_query`` the contract allows. It is kept for
+#: logging only, so a longer query is cut to fit rather than refused.
+_SOURCE_QUERY_MAX = 1024
 
 
 def _request_id() -> str:
@@ -130,11 +139,16 @@ class RelationalAdapter:
                 **(payload.get('metadata') or {}),
                 'request_id': _request_id(),
             }
+            source_query = envelope['metadata'].get('source_query')
+            if isinstance(source_query, str):
+                envelope['metadata']['source_query'] = source_query[
+                    :_SOURCE_QUERY_MAX
+                ]
             inference = self._inference(envelope.get('inference'), request)
             if inference is None:
                 envelope.pop('inference', None)
             else:
-                envelope['inference'] = inference
+                envelope['inference'] = typed_inference(inference)
             yield envelope
 
     def _inference(
@@ -249,22 +263,33 @@ class RelationalAdapter:
                 code='INVALID_RESPONSE',
             ) from error
 
-        explanation = next(
-            (
-                item.explanation
-                for item in parsed.predictions
-                if item.explanation
-            ),
-            None,
-        )
-        return PredictionResult(
+        return self.answered(
+            parsed.predictions,
+            outputs,
+            payload,
             model=parsed.model,
             request_id=parsed.id,
-            items=as_declared_target(
-                _named_entities(parsed.predictions, payload),
-                payload,
-            ),
             metadata=parsed.metadata,
+        )
+
+    def answered(
+        self,
+        items: Sequence[PredictionItem],
+        outputs: tuple[str, ...],
+        payload: dict[str, Any] | None,
+        *,
+        model: str,
+        request_id: str = '',
+        metadata: Mapping[str, Any] | None = None,
+    ) -> PredictionResult:
+        explanation = next(
+            (item.explanation for item in items if item.explanation), None
+        )
+        return PredictionResult(
+            model=model,
+            request_id=request_id,
+            items=as_declared_target(_named_entities(items, payload), payload),
+            metadata=dict(metadata or {}),
             outputs=outputs,
             explanation=explanation,
         )
@@ -720,7 +745,7 @@ def _columns_with_stype(payload: Mapping[str, Any], stype: str) -> list[str]:
 
 
 def _named_entities(
-    items: tuple[Any, ...], payload: dict[str, Any] | None
+    items: Sequence[Any], payload: dict[str, Any] | None
 ) -> list[Any]:
     """Put the caller's entity back on each row, and check it belongs there.
 

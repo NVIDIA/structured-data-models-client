@@ -31,6 +31,7 @@ from sdm_client import (
 from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.client import _held_back
+from sdm_client.core.backend import NimBackend
 from sdm_client.wire.keys import _named_by, keys_in
 
 RNG = np.random.default_rng(9)
@@ -188,7 +189,7 @@ def test_fit_holds_the_population_back_before_it_pins(monkeypatch):
         ).materialize(indices=[1, 2], num_context_samples=600)
 
     client = SDMClient('http://127.0.0.1:9', 'none')
-    monkeypatch.setattr(client, '_transport', Transport())
+    monkeypatch.setattr(client, '_backend', NimBackend(Transport()))
     population = list(range(200, 260))
 
     with warnings.catch_warnings():
@@ -230,7 +231,7 @@ def test_fit_without_a_holdout_pins_what_it_gathered(monkeypatch):
         ).materialize(indices=[1, 2], num_context_samples=600)
 
     client = SDMClient('http://127.0.0.1:9', 'none')
-    monkeypatch.setattr(client, '_transport', Transport())
+    monkeypatch.setattr(client, '_backend', NimBackend(Transport()))
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
