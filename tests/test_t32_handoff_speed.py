@@ -224,3 +224,35 @@ def test_the_previous_round_builds_in_one_target_per_lane(
     assert (
         HANDOFF.previous_cargo_env(given, ROOT)['CARGO_TARGET_DIR'] == '/t/kept'
     )
+
+
+def test_the_suites_run_with_a_short_temporary_directory(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A lane's long TMPDIR put a test's socket path past AF_UNIX's limit.
+    seen: list[str] = []
+    argvs: list[list[str]] = []
+
+    def fake(
+        argv: list[str], cwd: Path, env: dict[str, str] | None = None
+    ) -> object:
+        if argv[1:3] == ['-c', 'import xdist']:
+            return subprocess.CompletedProcess(argv, 1, '', '')
+        assert env is not None
+        seen.append(env['TMPDIR'])
+        argvs.append(argv)
+        return subprocess.CompletedProcess(argv, 0, '', '')
+
+    monkeypatch.setattr(HANDOFF, 'run', fake)
+    monkeypatch.setenv('TMPDIR', '/mnt/localssd/tmp/a-long-lane-directory/t32')
+    step = HANDOFF.run_suites(
+        HANDOFF.Step('own tests'),
+        ROOT,
+        [(*AFFECTED.PYTEST, 'tests/test_x.py'), ('python3', 'x_selftest.py')],
+        'py',
+    )
+    assert step.ok and len(seen) == 2
+    assert seen[0].startswith('/tmp/sdmh-') and len(seen[0]) < 30, seen
+    assert not Path(seen[0]).exists()
+    # pytest's base directly in it, not under pytest-of-<user>/pytest-<n>.
+    assert f'{seen[0]}/p' in argvs[0], argvs

@@ -107,6 +107,8 @@ from phases import PACKAGE_ID, PhaseError, phase_branch  # noqa: E402
 
 STAMPS = 'sdm-handoff'
 RUNNING = 'running'
+#: Where the suites' temporary files go: short, as CI's are.
+SHORT_TMP = '/tmp'
 EVENTS = 'events.jsonl'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 FIX = re.compile(rf'({PACKAGE_ID.pattern}) fix [0-9]+: ')
@@ -930,6 +932,12 @@ def run_suites(
     files = [s[len(prefix) :] for s in suites if s[: len(prefix)] == prefix]
     others = [s for s in suites if s[: len(prefix)] != prefix]
     batches: list[tuple[str, list[str]]] = []
+    # A short temporary directory, as CI's /tmp is, with pytest's base
+    # right in it: under a lane's long TMPDIR, and under pytest's own
+    # pytest-of-<user>/pytest-<n>, a test's socket path passed AF_UNIX's
+    # 108 bytes (T3.2's clean_tmp tests failed so in the handoff and pass in
+    # CI).
+    short = Path(tempfile.mkdtemp(prefix='sdmh-', dir=SHORT_TMP))
     if files:
         flat = [f for group in files for f in group]
         workers = (
@@ -940,7 +948,14 @@ def run_suites(
         batches.append(
             (
                 f'pytest on {len(flat)} test file(s)',
-                [python, *prefix[1:], *workers, *flat],
+                [
+                    python,
+                    *prefix[1:],
+                    *workers,
+                    '--basetemp',
+                    str(short / 'p'),
+                    *flat,
+                ],  # fmt: skip
             )
         )
     kit = os.environ.get('SDM_KIT_PYTHON', '')
@@ -958,18 +973,23 @@ def run_suites(
             for n, part in enumerate(suite)
         ]
         batches.append((' '.join(suite), argv))
-    for shown, argv in batches:
-        if step.problems:
-            break
-        begun = time.monotonic()
-        done = run(argv, root)
-        took = f'{time.monotonic() - begun:.0f}s'
-        if done.returncode != 0:
-            step.problems.append(
-                f'{shown} failed ({took}):\n' + tail(done.stdout + done.stderr)
-            )
-        else:
-            step.notes.append(f'{shown}: ok ({took})')
+    env = {**os.environ, 'TMPDIR': str(short)}
+    try:
+        for shown, argv in batches:
+            if step.problems:
+                break
+            begun = time.monotonic()
+            done = run(argv, root, env)
+            took = f'{time.monotonic() - begun:.0f}s'
+            if done.returncode != 0:
+                step.problems.append(
+                    f'{shown} failed ({took}):\n'
+                    + tail(done.stdout + done.stderr)
+                )
+            else:
+                step.notes.append(f'{shown}: ok ({took})')
+    finally:
+        shutil.rmtree(short, ignore_errors=True)
     return step
 
 
