@@ -460,8 +460,9 @@ def source_path(tree: Path, python: str) -> str:
     """``PYTHONPATH`` for running tests on the previous tree's Python
     sources: each package's ``src``, with the compiled parts the installed
     build has and the sources lack (the core's ``_native``) linked in, since
-    the previous tree is not built. A Rust fix's own test is a Rust test,
-    which runs on the previous tree's code with cargo."""
+    the previous tree is not built, each batch linking its own
+    interpreter's. A Rust fix's own test is a Rust test, which runs on the
+    previous tree's code with cargo."""
     paths = []
     for src in sorted(tree.glob('packages/*/src')):
         paths.append(str(src))
@@ -480,6 +481,11 @@ def source_path(tree: Path, python: str) -> str:
                 continue
             for compiled in installed.glob('*.so'):
                 target = package / compiled.name
+                # Each interpreter's own build: a link an earlier batch made
+                # for another interpreter (production against test-ops) is
+                # replaced (Codex r4).
+                if target.is_symlink():
+                    target.unlink()
                 if not target.exists():
                     target.symlink_to(compiled)
     return os.pathsep.join(paths)

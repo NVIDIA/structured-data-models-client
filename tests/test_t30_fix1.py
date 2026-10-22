@@ -784,3 +784,76 @@ def test_a_train_of_a_checker_fix_alone_is_allowed() -> None:
 )
 def test_the_guard_s_round_3_spellings(command: str) -> None:
     assert guard.check_command(command, '/home/user', None) is not None
+
+
+# --- fix round 4 ---------------------------------------------------------------------
+
+
+def _fake_python(where: Path, installed: Path) -> str:
+    """An interpreter whose installed package lives at ``installed``: it
+    answers source_path's find_spec probe, and runs pytest otherwise."""
+    script = where / 'python'
+    script.write_text(
+        '#!/usr/bin/env bash\n'
+        f'if [ "$1" = -c ]; then echo {installed}; exit 0; fi\n'
+        f'exec {sys.executable} "$@"\n'
+    )
+    script.chmod(0o755)
+    return str(script)
+
+
+def test_each_interpreter_gets_its_own_build_in_the_previous_tree(
+    tmp_path: Path,
+) -> None:
+    tree = tmp_path / 'tree'
+    (tree / 'packages/demo/src/demo_answer').mkdir(parents=True)
+    pythons = []
+    for name in ('production', 'test-ops'):
+        installed = tmp_path / name / 'demo_answer'
+        installed.mkdir(parents=True)
+        (installed / '_native.abi3.so').write_text(name)
+        (tmp_path / name / 'bin').mkdir()
+        pythons.append(_fake_python(tmp_path / name / 'bin', installed))
+    link = tree / 'packages/demo/src/demo_answer/_native.abi3.so'
+    handoff.source_path(tree, pythons[0])
+    assert link.read_text() == 'production'
+    handoff.source_path(tree, pythons[1])
+    assert link.read_text() == 'test-ops'
+
+
+def test_two_batches_that_pass_on_the_previous_tree_show_no_fix(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The control (Codex r4): a plain batch and a binding batch whose tests
+    # all pass on the previous implementation satisfy nothing.
+    conftest = (
+        'def pytest_addoption(parser):\n'
+        "    parser.addoption('--native-build', default='')\n"
+    )
+    passing = 'def test_it() -> None:\n    assert True\n'
+    base = _commit(repo, {'README.md': 'x\n'}, 'base')
+    previous = _commit(
+        repo,
+        {
+            'packages/demo/src/demo_answer/__init__.py': 'ANSWER = 1\n',
+            'rust/bindings/sdm-py/tests/conftest.py': conftest,
+        },
+        'T3.99: the answer',
+    )
+    _commit(
+        repo,
+        {
+            'packages/demo/src/demo_answer/__init__.py': 'ANSWER = 2\n',
+            'tests/test_demo_plain.py': passing,
+            'rust/bindings/sdm-py/tests/test_demo_binding.py': passing,
+        },
+        'T3.99 fix 1: the answer is 2',
+    )
+    monkeypatch.setenv('SDM_KIT_PYTHON', sys.executable)
+    scratch = tmp_path / 'scratch'
+    scratch.mkdir()
+    step = handoff.step_fails_before(
+        repo, base, previous, sys.executable, scratch, 'T3.99'
+    )
+    assert not step.ok
+    assert any('none shows the fix' in p for p in step.problems), step.problems
