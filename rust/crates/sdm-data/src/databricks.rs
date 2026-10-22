@@ -1564,6 +1564,67 @@ mod tests {
     }
 
     #[test]
+    fn a_column_is_typed_by_its_declaration_as_the_reference_types_it() {
+        for (declared, dtype) in [
+            ("BIGINT", Some(Dtype::Int)),
+            ("decimal(38,0)", Some(Dtype::Int)),
+            ("decimal(38,6)", Some(Dtype::Float)),
+            ("decimal(10)", Some(Dtype::Int)),
+            ("decimal", Some(Dtype::Float)),
+            ("double", Some(Dtype::Float)),
+            ("string", Some(Dtype::String)),
+            ("varchar(10)", Some(Dtype::String)),
+            ("timestamp_ntz", Some(Dtype::Date)),
+            ("date", Some(Dtype::Date)),
+            ("array<int>", Some(Dtype::Intlist)),
+            ("array<string>", Some(Dtype::Stringlist)),
+            ("array<date>", Some(Dtype::Unsupported)),
+            ("struct<a:int>", Some(Dtype::Unsupported)),
+            ("map<string,int>", Some(Dtype::Unsupported)),
+            ("interval day", Some(Dtype::Unsupported)),
+            ("boolean", Some(Dtype::Bool)),
+            ("binary", Some(Dtype::Binary)),
+            ("something_else", None),
+        ] {
+            assert_eq!(declared_dtype(declared), dtype, "{declared}");
+        }
+    }
+
+    #[test]
+    fn a_key_set_is_bound_as_the_reference_writes_its_json() {
+        use arrow_array::{Int32Array, Int64Array, TimestampNanosecondArray};
+        let schema = Arc::new(Schema::new(vec![
+            ArrowField::new(SEED_KEY, DataType::Int32, true),
+            ArrowField::new(SEED_BATCH, DataType::Int64, false),
+            ArrowField::new(
+                "time",
+                DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None),
+                true,
+            ),
+        ]));
+        let batch = RecordBatch::try_new(
+            Arc::clone(&schema),
+            vec![
+                Arc::new(Int32Array::from(vec![3, 4])),
+                Arc::new(Int64Array::from(vec![0, 1])),
+                Arc::new(TimestampNanosecondArray::from(vec![
+                    Some(1_709_251_200_500_000_000),
+                    None,
+                ])),
+            ],
+        )
+        .unwrap();
+        let (bound, batches) = bound_keys(&schema, &[batch]).unwrap().unwrap();
+        let names: Vec<&str> = bound.fields().iter().map(|f| f.name().as_str()).collect();
+        assert_eq!(names, [SEED_KEY, "time"]);
+        let keys = batches[0].column(0).as_primitive::<arrow_array::types::Int64Type>();
+        assert_eq!(keys.values().to_vec(), [3, 4]);
+        let times = batches[0].column(1).as_string::<i32>();
+        assert_eq!(times.value(0), "2024-03-01 00:00:00");
+        assert!(times.is_null(1));
+    }
+
+    #[test]
     fn a_wall_clock_is_written_to_the_second() {
         assert_eq!(wall_clock_text(0), "1970-01-01 00:00:00");
         assert_eq!(
