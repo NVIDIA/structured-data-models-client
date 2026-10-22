@@ -9,7 +9,16 @@
   "py:test_t33_a_nanosecond_is_refused_where_the_engine_holds_microseconds",
   "py:test_t33_a_null_stays_null_in_every_type",
   "py:test_t33_every_s1_case_loads_or_is_refused_by_name",
-  "py:test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema"
+  "py:test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema",
+  "py:test_t33_the_private_variables_cover_every_warehouse",
+  "py:test_t33_a_private_name_fails_the_write",
+  "py:test_t33_placeholders_are_put_in_before_anything_is_written",
+  "py:test_t33_the_converter_reads_a_version_1_capture",
+  "py:test_t33_a_capture_of_an_unknown_version_is_refused_by_name",
+  "py:test_t33_a_dropped_recorded_table_fails_by_name",
+  "py:test_t33_a_dropped_random_draw_fails_by_name",
+  "py:test_t33_a_draw_asked_with_another_seed_or_fraction_text_fails_by_name",
+  "py:test_t33_an_exact_replay_statement_serves_its_recorded_result"
  ],
  "authored": [
   "py:test_t33_the_type_map_has_each_warehouse_engine",
@@ -20,6 +29,15 @@
   "py:test_t33_a_nanosecond_is_refused_where_the_engine_holds_microseconds",
   "py:test_t33_a_null_stays_null_in_every_type",
   "py:test_t33_every_s1_case_loads_or_is_refused_by_name",
-  "py:test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema"
+  "py:test_t33_a_table_a_catalog_relation_shadows_loads_in_its_schema",
+  "py:test_t33_the_private_variables_cover_every_warehouse",
+  "py:test_t33_a_private_name_fails_the_write",
+  "py:test_t33_placeholders_are_put_in_before_anything_is_written",
+  "py:test_t33_the_converter_reads_a_version_1_capture",
+  "py:test_t33_a_capture_of_an_unknown_version_is_refused_by_name",
+  "py:test_t33_a_dropped_recorded_table_fails_by_name",
+  "py:test_t33_a_dropped_random_draw_fails_by_name",
+  "py:test_t33_a_draw_asked_with_another_seed_or_fraction_text_fails_by_name",
+  "py:test_t33_an_exact_replay_statement_serves_its_recorded_result"
  ]
 }
