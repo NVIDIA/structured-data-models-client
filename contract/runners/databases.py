@@ -1540,13 +1540,18 @@ def load(
       statement runner (Spark's ``spark.sql``; the write guard's wrapped
       connection), the tables created in ``namespace`` (catalog or
       database, then schema), replacing the case's tables already there
-      (:func:`warehouse_statements`).
+      (:func:`warehouse_statements`);
+    - a warehouse leg (:data:`ENGINE`'s keys): ``target`` the recording
+      mode's ``WarehouseTarget`` (``run_python.py``, T3.2), loaded by
+      :func:`load_leg`.
 
     A float -0.0, which SQLite stores as 0.0, is refused on SQLite unless
     ``refuse_negative_zero`` is false: a caller whose expected answers
     already read the zeros as SQLite stores them (the provider kit's
     ``zeros``) loads it as 0.0; a contract case, which names the value it
     holds, never does."""
+    if database in ENGINE and hasattr(target, 'connection'):
+        return load_leg(duck, database, target)
     if database == 'sqlite':
         _load_sqlite(duck, Path(target), refuse_negative_zero)
         return []
@@ -1591,6 +1596,7 @@ class CaseSchema:
         self.namespace = tuple(namespace)
         self.tables: list[str] = []
         self.types: list[str] = []
+        self.views: list[tuple[str, str]] = []
 
     def _run(self, statement: str) -> None:
         if self.database == 'lakebase':
@@ -1601,7 +1607,17 @@ class CaseSchema:
             statement_runner(self.target)(statement)
 
     def clear(self) -> None:
-        r"""Drops every table and type loaded so far, the last first."""
+        r"""Drops every view, table and type loaded so far, the last
+        first."""
+        for kind, name in reversed(self.views):
+            qualified = _qualified(
+                'postgres' if self.database == 'lakebase' else self.database,
+                self.namespace,
+                name,
+            )
+            what = 'SEMANTIC VIEW' if kind == 'semantic_view' else 'VIEW'
+            self._run(f'DROP {what} IF EXISTS {qualified}')
+        self.views = []
         for table in reversed(self.tables):
             if self.database == 'lakebase':
                 self._run(
@@ -1619,6 +1635,32 @@ class CaseSchema:
             self.target.commit()
         self.tables, self.types = [], []
 
+    def create_view(self, kind: str, name: str, yaml: str) -> None:
+        r"""The case's view, created in the schema from its YAML: a
+        Databricks metric view (``CREATE VIEW ... WITH METRICS LANGUAGE
+        YAML``), or a Snowflake semantic view
+        (``SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML``, the view named by the
+        YAML); dropped by the next :meth:`load` or :meth:`clear`."""
+        if '$$' in yaml:
+            raise Unloadable(f'{name}: a view YAML holding $$')
+        if kind == 'metric_view' and self.database == 'databricks':
+            qualified = _qualified('databricks', self.namespace, name)
+            self._run(
+                f'CREATE OR REPLACE VIEW {qualified} WITH METRICS LANGUAGE '
+                f'YAML AS $$\n{yaml}\n$$'
+            )
+        elif kind == 'semantic_view' and self.database == 'snowflake':
+            where = '.'.join(quote(part) for part in self.namespace)
+            self._run(
+                'CALL SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML('
+                f"'{where.replace(chr(39), chr(39) * 2)}', $$\n{yaml}\n$$)"
+            )
+        else:
+            raise Unloadable(
+                f'{name}: a {kind} is not created on {self.database}'
+            )
+        self.views.append((kind, name))
+
     def load(self, duck: Any) -> list[str]:
         r"""The case's tables in the schema, alone; :func:`load`'s notes."""
         self.clear()
@@ -1629,6 +1671,55 @@ class CaseSchema:
             )
             return []
         return load(duck, self.database, self.target, namespace=self.namespace)
+
+
+#: Each leg's test schema across the run's cases, by leg and schema: the
+#: recording mode opens a connection per case, and the schema must hold
+#: one case's tables at a time (:class:`CaseSchema`).
+_SCHEMAS: dict[tuple[str, ...], CaseSchema] = {}
+
+
+def _spark_runner(session: Any) -> Callable[[str], Any]:
+    r"""A statement runner over a Spark session."""
+
+    def run(statement: str) -> None:
+        session.sql(statement).collect()
+
+    return run
+
+
+def load_leg(duck: Any, leg: str, target: Any) -> list[str]:
+    r"""The case's tables in ``leg``'s test schema, alone, through
+    ``target`` (``run_python.py``'s ``WarehouseTarget``: ``connection``,
+    the leg's open connection or Spark session; ``names``, the private
+    ``catalog`` and ``schema``; ``view``, the case's resolved
+    ``input.view``): the tables an earlier case of the run loaded there
+    dropped first, then each table, and, for a view given by its YAML, the
+    view created from it. Returns the loader's notes."""
+    names = dict(target.names)
+    if leg == 'lakebase':
+        namespace: tuple[str, ...] = (names.get('schema', ''),)
+        database, writer = 'lakebase', target.connection
+    else:
+        namespace = (names.get('catalog', ''), names.get('schema', ''))
+        database = ENGINE[leg]
+        writer = (
+            _spark_runner(target.connection)
+            if leg == 'databricks-spark'
+            else target.connection
+        )
+    if not all(namespace):
+        raise Unloadable(f'{leg}: the test schema is not named')
+    key = (leg, *namespace)
+    schema = _SCHEMAS.get(key)
+    if schema is None:
+        schema = _SCHEMAS[key] = CaseSchema(database, writer, namespace)
+    schema.target = writer
+    notes = schema.load(duck)
+    view = target.view
+    if view and view.get('yaml'):
+        schema.create_view(view['kind'], view['name'], view['yaml'])
+    return notes
 
 
 def non_native(database: str) -> list[str]:

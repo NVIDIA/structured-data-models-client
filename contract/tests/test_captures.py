@@ -305,3 +305,63 @@ def test_a_leg_s_manifest_lists_its_captures(tmp_path: Path) -> None:
     )
     with pytest.raises(captures.CaptureError, match='2 recordings'):
         captures.write_manifest(leg)
+
+
+def test_a_recording_mode_line_is_written_as_a_capture(tmp_path: Path) -> None:
+    import base64
+    import io
+
+    def text(table: pa.Table) -> str:
+        sink = io.BytesIO()
+        with pa.ipc.new_stream(sink, table.schema) as writer:
+            writer.write_table(table)
+        return base64.b64encode(sink.getvalue()).decode()
+
+    sql = 'SELECT * FROM `{catalog}`.`{schema}`.`users` TABLESAMPLE (12.5 PERCENT) REPEATABLE (7)'
+    line = {
+        'format': 'sdm-capture/1',
+        'case': 'c1@databricks-sql',
+        'leg': 'databricks-sql',
+        'input': '0' * 64,
+        'recording': {'commit': 'a' * 40, 'reference': 'b' * 40},
+        'versions': {'python': '3.12'},
+        'zone': 'Etc/UTC',
+        'observation': {'case': 'c1@databricks-sql'},
+        'statements': [
+            {
+                'sql': sql,
+                'parameters': [{'type': 'builtins.int', 'value': '3'}],
+                'error': None,
+                'results': [{'arrow': text(pa.table({'id': [2]}))}],
+            }
+        ],
+        'tables': [{'name': 'users', 'arrow': text(pa.table({'id': [1, 2]}))}],
+        'relations': [],
+        'draws': [
+            {
+                'statement': 0,
+                'kind': 'tablesample',
+                'table': '`{catalog}`.`{schema}`.`users`',
+                'fraction': '12.5',
+                'seed': '7',
+            }
+        ],
+        'incomplete': [],
+    }
+    recording = tmp_path / 'recording.jsonl'
+    recording.write_text(json.dumps(line) + '\n')
+    (manifest,) = captures.import_recording(
+        recording, tmp_path / 'out', environ={}
+    )
+    back = captures.read(tmp_path / 'out/databricks-sql/c1')
+    assert (
+        back['case'] == 'c1' and back['session']['null_order'] == 'nulls_first'
+    )
+    assert back['statements'][0]['parameters'] == [3]
+    assert (
+        back['draws'][0]['seed'] == 7 and back['draws'][0]['fraction'] == '12.5'
+    )
+    assert back['draws'][0]['rows'].to_pylist() == [{'id': 2}]
+    assert json.loads(manifest.read_text())['cases'] == {
+        'c1@databricks-sql': {'input_hash': '0' * 64, 'capture': 'c1'}
+    }
