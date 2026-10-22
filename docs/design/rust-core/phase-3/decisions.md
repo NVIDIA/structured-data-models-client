@@ -115,6 +115,23 @@ The questions are numbered as they were sent: Q5 to Q13 as numbered in the desig
 | KO3-48 | G3, the design's "no" list of carried items, reopened only when the dry run or a Phase 3 case hits one | "G3: Accepted." | approved by owner 2026-10-22 |
 | KO3-49 | G4, a quota or capacity error in a live run is retried once, and only a failure after the retry counts toward the stop rule | "G4: Sure." | approved by owner 2026-10-22 |
 
+## Live resources, and the night's other answers (2026-10-22)
+
+Sources: the owner's answers on 2026-10-22 to the orchestrator's four live-resource questions (1 starting the stopped Lakebase instance; 2 write safety for Snowflake, whose credentials carry the account's admin role; 3 where the tests read and write on Databricks; 4 the model serving endpoint), in `$SDM_ORCH_STATE/phase-3/owner-answers-2026-10-21.md`, section "2026-10-22: live resource answers"; and, in section "2026-10-22 (night): overnight mandate and Q14, Q15", the owner's mandate for the night and answers to the design's questions on a bigger machine and on protecting `rust-core` (Q12 and Q11 as numbered at 050f68f7).
+Private names in the owner's words are replaced by a bracketed description; the unredacted words stay in the state file.
+
+| # | Decision | Owner's words | Status |
+|---|---|---|---|
+| KO3-50 | The stopped Lakebase instance may be started for the tests | "1. Lakebase: Yes you can start it" | approved by owner 2026-10-22 |
+| KO3-51 | A helper or safety lets the tests write only to one schema used for all testing; the client's own logic is read-only | "2. Create some helper script or safety that only writes to a certain schema (maybe a schema that we use for all our testing purpose). Then all our actual logic should be read-only within the client, so it's less of a concern." | approved by owner 2026-10-22 |
+| KO3-52 | On Databricks, the tests read the existing schema where AdventureWorks is already loaded (not the schema marked safe to drop), found by the orchestrator | "3. We should already have a schema in databricks [workspace name] I believe. Find it. It's not the "safe to drop" schema. Find it, it might be a kumo relational or kumo rfm naming or something else in which adventureworks tables are already loaded" | approved by owner 2026-10-22 |
+| KO3-53 | The tests use a serving endpoint for the Kumo relational model version 26, kept warm | "4. Use the Kumo relational / rfm v26 I believe. You can serve endpoint, no need to scale to zero since we need our testing to be quick" | approved by owner 2026-10-22 |
+| KO3-54 | The Java packages as the design proposed them | "As for the Java packages - it looks good. I'm really hopeful that this can go by faster, since Python already did a lot of the work with interface planning." | approved by owner 2026-10-22 |
+| KO3-55 | Q12, a bigger build machine: no | "Bigger machine: no" | approved by owner 2026-10-22 |
+| KO3-56 | Q11, protecting `rust-core`: a pre-commit check or similar stops agents pushing it | "You should add pre-commit check or something to avoid pushing rust-core" | approved by owner 2026-10-22 |
+| KO3-57 | Q10 of the simplified list also asked to confirm Phase 2's overnight decisions (P2D-2 to P2D-5, P2G-4, P2G-5, KO2-89); they are confirmed under the owner's rule of parity or better | "10: Sure, although you might potentially find bugs in the old client. Ideally our new client has feature parity or is even better than old client. Better means better error or more support." | approved by owner 2026-10-22 |
+| KO3-58 | The night's mandate: by the morning, T3.0 done and this design reviewed and approved with the Java work; Phase 3 may start in full if it looks good | "Ok - I'm going to bed. By the morning: ensure that T3.0 is done, the design doc is ready (after reviews and approval), includes the java work. In fact, you can even get started on phase 3 fully if it looks good. Add this to your memory. Any questions before I leave?" | approved by owner 2026-10-22 |
+
 ## Kickoff answers
 
 None yet beyond the rows above: the open questions are in [design.md](design.md), "Owner questions", each with a recommendation.
