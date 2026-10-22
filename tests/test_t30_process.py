@@ -975,7 +975,13 @@ def test_t30_the_runner_refuses_the_shared_venv(tmp_path: Path) -> None:
              '--mode', 'python-core', '--out', str(out),
              str(lane / 'contract/cases')],
             cwd=lane,
-            env=_env(tmp_path),
+            # CI holds no runner to the machine's environments (it builds its
+            # own per run), so this case runs as on the machine.
+            env={
+                k: v
+                for k, v in _env(tmp_path).items()
+                if k != 'GITHUB_ACTIONS'
+            },
             capture_output=True,
             text=True,
             timeout=300,
