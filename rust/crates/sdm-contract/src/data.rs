@@ -384,6 +384,13 @@ pub enum DescribePart {
     /// columns the catalog's list of keys or indexes does not give
     /// (SQLite's `index_info`, as the reference reads it).
     IndexColumns,
+    /// The namespace a relation of one part is read in, as the source names
+    /// a table it holds: one row per part, outermost first, its name
+    /// (contract v28, T3.8): a Postgres source's current schema, under
+    /// which the reference names a table it cannot find; no row for a
+    /// source whose tables are named alone (DuckDB's, SQLite's). Asked only
+    /// to name a table the source lacks.
+    Namespace,
 }
 
 /// A column of a table.
@@ -1221,6 +1228,7 @@ impl DataRequest {
                     field(c::COLUMNS, names(), false),
                 ],
                 DescribePart::IndexColumns => vec![field(c::NAME, Utf8, true)],
+                DescribePart::Namespace => vec![field(c::NAME, Utf8, false)],
             },
             DataRequest::KeyCounts { .. } => vec![
                 field(results::KEY_POSITION, Int32, false),

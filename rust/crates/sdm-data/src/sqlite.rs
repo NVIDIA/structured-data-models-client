@@ -432,6 +432,8 @@ fn describe(
         }
         DescribePart::ForeignKeys => pragma(request, "tables", "foreign_key_list", one()?)?,
         DescribePart::IndexColumns => pragma(request, "tables", "index_info", one()?)?,
+        // No row: the reference names a SQLite table it cannot find alone.
+        DescribePart::Namespace => "SELECT CAST(NULL AS TEXT) AS name WHERE 0".to_owned(),
     })
 }
 
@@ -1010,6 +1012,7 @@ pub(crate) fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
+        DescribePart::Namespace => crate::read::namespace(batches, c::NAME),
         DescribePart::Tables => {
             let mut found = Vec::new();
             for batch in batches {

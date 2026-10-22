@@ -21,7 +21,7 @@
       "moved": "T1.36 fix 4 (the final review's P2-2): the host's half of the moved cast: a float in a mix written as the core now writes a float entity (sdm_engine::keys's float_text), the reference's text of it, pyarrow's cast of the float to text at its own width (1e16 is 1e+16), so the core reads back the number the host was given; a boolean as before"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/schema.py::from_source": {
-      "moved": "T3.8: the provider choice from _rust/providers.for_source, which carries the source namespace (contract v28, P2-T2.16-11); a source holding no table refused as the reference names it ({source!r} holds no table to describe), from the core's rule no_tables"
+      "moved": "T3.8: the provider choice from _rust/providers.for_source, which carries the source namespace (contract v28, P2-T2.16-11); a source holding no table refused as the reference names it ({source!r} holds no table to describe), from the core's rule no_tables; T3.8 fix 2: the columns a schema keeps passed as the contract's NamedTable.columns (v28), so a column it leaves out is never read (Codex round 1, P2-1)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/predict.py::<module>": {
       "moved": "T2.13: the module gains _table (the result attachment as a table, keeping its schema's metadata) and _explanation (the result's explanation, a forecast's under by_forecast_step, keyed by the step); each item's explanation and metadata, and the result's, are made the reference's dict by T2.8's _mapping, the one reader of a mapping the core gives as JSON text; reading each as dict(value) and choosing the result's explanation are the core's (sdm-wire response::mapping, sdm-request predict's Part.explanation); T2.14b: _encoded and _ENCODED_DEPTH gone (the core reads the answer's bytes); math no longer imported"
@@ -108,7 +108,7 @@
       "moved": "T2.18: whether a query's target moves with time and its entity table, as the core resolved them (Materialized.query) for a query only the core resolves (KO2-36), else as the old validator did; the core's facts are taken out of the state the request keeps; T2.14b: the target's windowing and entity table (MID2 P2-4) are the core's Materialized.query facts for every query, never the old validator's tree"
     },
     "packages/structured-data-models-client/src/sdm_client/query.py::PredictiveQuery._resolve": {
-      "moved": "T3.8: the core chooses the validator (P2-MID2-1, design choice 9): on the core route the core validates, and a query the core gathers is resolved by the core alone (Unresolved), the old validator never asked; only an old-route materialize resolves the accepted query with the old validator"
+      "moved": "T3.8: the core chooses the validator (P2-MID2-1, design choice 9): on the core route the core validates, and a query the core gathers is resolved by the core alone (Unresolved), the old validator never asked; only an old-route materialize resolves the accepted query with the old validator; T3.8 fix 2: a query the core gathers alone, which no shadow validator reads, has the core's held day-first warning shown (s0.validate hands back what it held; Codex round 1, P3-1)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::Unresolved.__init__": {
       "moved": "T3.8: refusal None for a query the core validated (P2-MID2-1): the old validator is not asked on the core route"
@@ -447,7 +447,7 @@
       "gone": "T2.14c: the file leaves the freeze, the core route entering none of its ledgered functions (measured: python-core on every case and database under coverage)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/materialize.py::_described_now": {
-      "moved": "T3.8: the schema's tables described on the core through from_source, by their source names, its keys and time columns, no link inferred, keys not counted; the description taken, the schema built dropped (P2-T2.16-11)"
+      "moved": "T3.8: the schema's tables described on the core through from_source, by their source names, its keys and time columns, no link inferred, keys not counted; the description taken, the schema built dropped (P2-T2.16-11); T3.8 fix 2: only the columns the schema keeps are described (Codex round 1, P2-1)"
     },
     "packages/structured-data-models-client/src/sdm_client/_rust/errors.py::_derived": {
       "moved": "T3.8: the key, the database and the entities as the reference names them in its words, from the core's fields (_the_key_of, _BACKEND_NAMES, TableNotFoundError, _refuse_an_id_scored_twice): the database by the core's field database"

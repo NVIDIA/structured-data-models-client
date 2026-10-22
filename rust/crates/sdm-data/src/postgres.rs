@@ -412,7 +412,9 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
             field(k::COLUMN_NAME, Utf8, false),
             field(k::ORDINAL_POSITION, Int32, false),
         ],
-        DescribePart::Indexes | DescribePart::IndexColumns => return request.expected(),
+        DescribePart::Indexes | DescribePart::IndexColumns | DescribePart::Namespace => {
+            return request.expected();
+        }
     };
     ExpectedSchema::Schema { fields }
 }
@@ -534,7 +536,9 @@ pub(crate) fn read(
                     .collect(),
             ))
         }
-        DescribePart::Indexes | DescribePart::IndexColumns => crate::read::host(part, batches),
+        DescribePart::Indexes | DescribePart::IndexColumns | DescribePart::Namespace => {
+            crate::read::host(part, batches)
+        }
     }
 }
 
@@ -682,6 +686,15 @@ fn describe(
                 "SELECT tc.constraint_name, kcu.column_name,\n       target_kcu.table_schema, target_kcu.table_name,\n       target_kcu.column_name, kcu.ordinal_position\nFROM information_schema.table_constraints tc\nJOIN information_schema.referential_constraints rc\n  ON tc.constraint_catalog = rc.constraint_catalog\n AND tc.constraint_schema = rc.constraint_schema\n AND tc.constraint_name = rc.constraint_name\nJOIN information_schema.key_column_usage kcu\n  ON tc.constraint_catalog = kcu.constraint_catalog\n AND tc.constraint_schema = kcu.constraint_schema\n AND tc.constraint_name = kcu.constraint_name\nJOIN information_schema.key_column_usage target_kcu\n  ON rc.unique_constraint_catalog = target_kcu.constraint_catalog\n AND rc.unique_constraint_schema = target_kcu.constraint_schema\n AND rc.unique_constraint_name = target_kcu.constraint_name\n AND target_kcu.ordinal_position = kcu.position_in_unique_constraint\nWHERE tc.constraint_type = 'FOREIGN KEY'\n  AND tc.table_schema = {schema} AND tc.table_name = {name}\nORDER BY tc.constraint_name, kcu.ordinal_position"
             )
         }
+        // The schema a relation of one part is read in, the provider's
+        // namespace or the current one, under which the reference names a
+        // table it cannot find (`PostgresTable.source_name`); none where
+        // the search path holds no schema.
+        DescribePart::Namespace => format!(
+            "SELECT s.n AS {name}\nFROM (SELECT {schema} AS n) s\nWHERE s.n IS NOT NULL",
+            name = identifier(sdm_contract::data::catalog_columns::NAME),
+            schema = schema.as_deref().unwrap_or("current_schema()"),
+        ),
         // Never asked (no index advice is declared), and rendered: the
         // index's columns in order, an expression's position a null name.
         DescribePart::IndexColumns => {

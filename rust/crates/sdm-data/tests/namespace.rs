@@ -104,3 +104,25 @@ fn a_namespace_the_dialect_cannot_write_is_refused_by_name() {
             .is_ok()
     );
 }
+
+/// The namespace a relation of one part is read in, which the core asks for
+/// only to name a table the source lacks (T3.8 fix 2): a Postgres source's
+/// given schema, or its current one; none for DuckDB's and SQLite's, whose
+/// missing tables the reference names alone.
+#[test]
+fn the_namespace_asked_for_is_the_one_a_table_is_named_under() {
+    let asked = DataRequest::Describe {
+        tables: vec![],
+        part: DescribePart::Namespace,
+    };
+    assert!(text(&asked, &sql("postgres", &[])).contains("SELECT current_schema() AS n"));
+    assert!(text(&asked, &sql("postgres", &[None])).contains("SELECT current_schema() AS n"));
+    assert!(text(&asked, &sql("postgres", &[Some("sales")])).contains("SELECT 'sales' AS n"));
+    for alone in ["duckdb", "sqlite"] {
+        let statement = text(&asked, &sql(alone, &[]));
+        assert!(
+            statement.contains("WHERE FALSE") || statement.contains("WHERE 0"),
+            "{statement}"
+        );
+    }
+}

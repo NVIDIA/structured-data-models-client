@@ -670,12 +670,18 @@ class PredictiveQuery:
         if core:
             from sdm_client._rust import s0
 
-            accepted, messages = s0.validate(self.text, definition, profile)
+            accepted, messages, held = s0.validate(
+                self.text, definition, profile
+            )
             if not accepted:
                 raise self._refusal(messages, profile)
             if gathered_on_the_core:
+                from sdm_client._rust import errors
                 from sdm_client._rust.materialize import Unresolved
 
+                # No shadow check reads it to say its day-first literal, so
+                # the core's warning is shown.
+                errors.warn_held(held)
                 return Unresolved(self.text, None)
             return s0.shadow(self.text, definition, profile)
         from predictive_query import validate

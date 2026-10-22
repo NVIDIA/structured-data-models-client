@@ -89,6 +89,7 @@ fn attachments_of(operation: &Operation) -> Attachments {
                 tables: vec![NamedTable {
                     name: "t".into(),
                     source: "t".into(),
+                    columns: None,
                 }],
                 primary_keys: BTreeMap::new(),
                 time_columns: BTreeMap::new(),
@@ -683,6 +684,7 @@ fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
             .map(|(name, source)| NamedTable {
                 name: (*name).into(),
                 source: (*source).into(),
+                columns: None,
             })
             .collect(),
         primary_keys: BTreeMap::new(),

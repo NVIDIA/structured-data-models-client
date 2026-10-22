@@ -342,6 +342,8 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
         ],
         // Never planned: DuckDB lists an index's columns with the index.
         DescribePart::IndexColumns => return ExpectedSchema::Discover {},
+        // In the contract's own shape.
+        DescribePart::Namespace => return request.expected(),
     };
     ExpectedSchema::Schema { fields }
 }
@@ -354,6 +356,10 @@ pub(crate) fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
+        // None: the reference names a DuckDB table it cannot find alone.
+        DescribePart::Namespace => {
+            read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
+        }
         DescribePart::Tables => read::tables(batches, c::TABLE_NAME),
         DescribePart::Columns => read::columns(
             batches,
@@ -696,6 +702,11 @@ fn describe(
             "SELECT table_name FROM duckdb_tables() WHERE NOT temporary AND NOT internal AND {IN_CURRENT_SCHEMA}"
         ),
         DescribePart::Tables => held(tables),
+        // No row: the reference names a DuckDB table it cannot find alone.
+        DescribePart::Namespace => format!(
+            "SELECT CAST(NULL AS VARCHAR) AS {} WHERE FALSE",
+            identifier(sdm_contract::data::catalog_columns::NAME)
+        ),
         DescribePart::Columns => columns(one()?),
         DescribePart::Keys => format!(
             "SELECT constraint_type, constraint_column_names\nFROM duckdb_constraints()\nWHERE {}",

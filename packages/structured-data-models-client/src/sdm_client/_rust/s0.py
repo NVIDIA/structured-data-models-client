@@ -86,12 +86,16 @@ def _schema(definition: Any) -> dict[str, Any]:
 
 def validate(
     text: str, definition: Any, profile: Profile
-) -> tuple[bool, list[str]]:
-    r"""The core's answer: whether it accepts ``text``, and its reasons if not.
+) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    r"""The core's answer: whether it accepts ``text``, its reasons if not,
+    and the warnings it held of an accepted query (:data:`SHADOWED`).
 
     The query text and the schema travel as attachments, so neither the
     query's length nor the schema's width meets the control cap
-    (decision H5).
+    (decision H5). The shadow check's validator says an accepted query's
+    day-first literal itself; a caller that runs no shadow check (a query
+    the core gathers alone, T3.8) shows the held warnings
+    (``errors.warn_held``).
     """
     from sdm_client._rust import codec
 
@@ -118,12 +122,13 @@ def validate(
         # No shadow check follows a refusal: the core's warnings are the
         # only ones the caller gets.
         errors.warn_held(kept)
+        kept = []
     reasons = [
         diagnostic['message']
         for diagnostic in result['diagnostics']
         if diagnostic['severity'] == 'error'
     ]
-    return bool(result['accepted']), reasons
+    return bool(result['accepted']), reasons, kept
 
 
 def shadow(

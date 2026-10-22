@@ -122,6 +122,7 @@ pub(crate) async fn run(
             assemble::check_table_name(&name)?;
             tables.push(NamedTable {
                 source: Relation::named(name.clone()),
+                columns: None,
                 name,
             });
         }
@@ -164,19 +165,28 @@ pub(crate) async fn run(
                 // answer that does not read), since that says nothing of
                 // the table.
                 return Err(match holds(&asker, &table.source).await {
-                    Ok(false) => not_held(&asker, &table.source),
+                    Ok(false) => not_held(&asker, &table.source).await,
                     Ok(true) | Err(_) => failed,
                 });
             }
             Err(failed) => return Err(failed),
         };
-        let declared = declared_columns(columns)?;
+        let mut declared = declared_columns(columns)?;
         if declared.is_empty() {
             // A table the source answers with no columns, as the reference
             // refuses one it cannot read.
-            return Err(not_held(&asker, &table.source));
+            return Err(not_held(&asker, &table.source).await);
         }
-        let constraints = key_columns(&asker, &table.source, declared_keys(keys)?).await?;
+        let mut keys = declared_keys(keys)?;
+        if let Some(kept) = &table.columns {
+            // Only the columns the schema keeps are read, and only the keys
+            // over them, so a column it leaves out is never inferred, as the
+            // reference reads only the columns a schema describes; one it
+            // keeps that the source lacks is the description's to lack.
+            declared.retain(|c| kept.contains(&c.name));
+            keys.retain(|k| k.columns.iter().all(|c| kept.contains(c)));
+        }
+        let constraints = key_columns(&asker, &table.source, keys).await?;
         let column_names: Vec<String> = declared.iter().map(|c| c.name.clone()).collect();
         let preview = ask(
             &asker,
@@ -526,10 +536,23 @@ fn check_ranges(read: &ArrowData, asked: &[String], preview: &ArrowData) -> Resu
 /// The refusal of a table to describe that the source does not hold, or
 /// holds with no columns: `INVALID_REQUEST`, as the reference refuses a
 /// table it cannot read (its `TableNotFoundError`), naming the table as
-/// the source reads it (`source`, under the provider's namespace) and the
+/// the source reads it (`source`): under the provider's namespace, or, for
+/// a name of one part, under the namespace the source reads it in, which
+/// the source says (`describe` of its namespace: a Postgres source's
+/// current schema, as the reference names the table under it); and the
 /// database the source is (`database`), which the host words.
-fn not_held(asker: &Asker, table: &Relation) -> CoreError {
-    let read = asker.read_as(table);
+async fn not_held(asker: &Asker, table: &Relation) -> CoreError {
+    let mut read = asker.read_as(table);
+    if read.source.len() == 1 {
+        let asked = DataRequest::Describe {
+            tables: vec![],
+            part: DescribePart::Namespace,
+        };
+        // Only to name the table: a source that cannot say leaves it alone.
+        if let Ok(CatalogAnswer::Namespace(parts)) = describe(asker, asked).await {
+            read.source.splice(0..0, parts);
+        }
+    }
     let refused = CoreError::new(
         ErrorKind::InvalidRequest,
         ErrorCode::InvalidRequest,

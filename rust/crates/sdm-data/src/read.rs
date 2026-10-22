@@ -126,6 +126,17 @@ pub(crate) fn tables(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswe
     Ok(CatalogAnswer::Tables(found))
 }
 
+/// A `namespace` answer: the parts of `name`'s rows, in order, a row with
+/// none left out.
+pub(crate) fn namespace(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+    let mut found = Vec::new();
+    for batch in batches {
+        let names = strings(batch, name)?;
+        found.extend((0..batch.num_rows()).filter_map(|row| text(names, row)));
+    }
+    Ok(CatalogAnswer::Namespace(found))
+}
+
 /// The columns of a `columns` answer, by role.
 pub(crate) struct ColumnNames<'a> {
     pub name: &'a str,
@@ -223,6 +234,7 @@ pub(crate) fn host(
     batches: &[RecordBatch],
 ) -> Result<CatalogAnswer, CoreError> {
     match part {
+        DescribePart::Namespace => namespace(batches, c::NAME),
         DescribePart::Tables => tables(batches, c::TABLE),
         DescribePart::Columns => columns(
             batches,
