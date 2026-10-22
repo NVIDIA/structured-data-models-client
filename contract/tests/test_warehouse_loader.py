@@ -445,3 +445,33 @@ def test_a_leg_s_schema_holds_one_case_at_a_time_through_its_target() -> None:
         _Target(Spark(), names),
     )
     assert any(s.startswith('CREATE TABLE `cat_t`.`sch_t`.`c`') for s in ran)
+
+
+@pytest.mark.parametrize(
+    ('column', 'rows'),
+    [
+        ('INTEGER[]', []),
+        ('STRUCT(x INTEGER)', []),
+        ('MAP(VARCHAR, INTEGER)', []),
+        ('STRUCT(x INTEGER)[]', ['[]', 'NULL']),
+        ('MAP(VARCHAR, INTEGER)', ['MAP {}', 'NULL']),
+    ],
+)
+def test_empty_nested_columns_load_on_each_warehouse(
+    column: str, rows: list
+) -> None:
+    # Review r1 P1-2: a nested column with no rows, or holding only empty
+    # values and NULLs, loads; it crashed building a null-typed mask.
+    duck = _duck(f'CREATE TABLE t (v {column})')
+    for row in rows:
+        duck.execute(f'INSERT INTO t VALUES ({row})')
+    for engine, namespace in (
+        ('databricks', DATABRICKS),
+        ('snowflake', SNOWFLAKE),
+    ):
+        ran: list[str] = []
+        databases.load(duck, engine, ran.append, namespace=namespace)
+        inserts = [s for s in ran if s.startswith('INSERT')]
+        assert len(inserts) == (1 if rows else 0), (engine, ran)
+        stored = databases.stored(duck, 't', engine)
+        assert stored.num_rows == len(rows)

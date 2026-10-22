@@ -1148,7 +1148,7 @@ def _stored_array(cells: list[Any], kind: Any, stored: Any) -> Any:
         for cell in cells:
             at += 0 if cell is None else len(cell)
             offsets.append(at)
-        mask = pa.array([cell is None for cell in cells])
+        mask = pa.array([cell is None for cell in cells], pa.bool_())
         return pa.ListArray.from_arrays(
             pa.array(offsets, pa.int32()), values, mask=mask
         ).cast(stored)
@@ -1161,7 +1161,7 @@ def _stored_array(cells: list[Any], kind: Any, stored: Any) -> Any:
             )
             for i, m in enumerate(kind)
         ]
-        mask = pa.array([cell is None for cell in cells])
+        mask = pa.array([cell is None for cell in cells], pa.bool_())
         return pa.StructArray.from_arrays(
             children, fields=list(stored), mask=mask
         )
@@ -1180,7 +1180,7 @@ def _stored_array(cells: list[Any], kind: Any, stored: Any) -> Any:
         for cell in cells:
             at += 0 if cell is None else len(cell)
             offsets.append(at)
-        mask = pa.array([cell is None for cell in cells])
+        mask = pa.array([cell is None for cell in cells], pa.bool_())
         return pa.MapArray.from_arrays(
             pa.array(offsets, pa.int32()), keys, items, mask=mask
         ).cast(stored)
