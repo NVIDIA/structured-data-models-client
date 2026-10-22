@@ -525,15 +525,24 @@ def _live_only(
     passed nor failed offline. A failure under no rule (a runner failure,
     a file's problem) still fails."""
     report.live_only.setdefault(key, code)
-    _reported_rules(report, since, f'live only, {code}: {why}')
+    _reported_rules(report, since, f'live only, {code}: {why}', LIVE_KEEPS)
 
 
-def _reported_rules(report: Report, since: int, why: str) -> None:
+#: The rules a live-only item is still held to: the case's inputs, its route
+#: and its reach, which the stand-in does not answer (T3.2 r1, Claude P2-3);
+#: a stale input or a wrong route fails as anywhere.
+LIVE_KEEPS = ('inputs', 'route', 'reach')
+
+
+def _reported_rules(
+    report: Report, since: int, why: str, keep: tuple[str, ...] = ()
+) -> None:
     r"""The failures under a rule since ``since`` reported as notes, each
-    saying ``why``; a failure under no rule still fails."""
+    saying ``why``, but those under a rule in ``keep``; a failure under no
+    rule still fails."""
     kept = []
     for rule, text in report.failures[since:]:
-        if rule is None:
+        if rule is None or rule in keep:
             kept.append((rule, text))
         else:
             report.notes.append(f'reported ({why}): {rule}: {text}')
@@ -1061,14 +1070,16 @@ def _core_agree(
     python: dict[str, Any],
     rust: dict[str, Any],
     stop: str | None = None,
+    host: str = 'rust-host',
 ) -> None:
-    r"""The kind and code rule: the two core runners on ``core`` fields.
+    r"""The kind and code rule: the two core runners on ``core`` fields
+    (python-core against ``host``, ``rust-host`` or ``java``; T3.2 r1).
     On a database line stopping at ``stop`` where one host went on past
     the operations both ran into that call or a later one
     (:func:`shared_operations`, T2.1e), the hosts are held to each other
     on the operations both ran, their fetches the shorter's, and not on
     the results of the operations one alone ran."""
-    where = f'{case["id"]}: python-core against rust-host'
+    where = f'{case["id"]}: python-core against {host}'
     shared = shared_operations(python, rust, stop)
     if shared is not None:
         _core_agree_shared(report, where, python['core'], rust['core'], shared)
@@ -1560,8 +1571,10 @@ def _host_fields(
         return
     # The rows as text (P2-T2.21-1): public.result_text, or a line's
     # result.text_digest, compared where both lines hold one; a line
-    # recorded before it holds none and is not held to it, and where the
-    # typed digest is excused that is named.
+    # recorded before it holds none and is not held to it, except where the
+    # typed digest is excused: there the text digest is all that holds the
+    # values, so a line without it fails until it is recorded again (T3.2
+    # r1, Claude P2-4).
     mine_result, theirs_result = mine['result'], theirs['result']
     texts = []
     for public, result in ((mine, mine_result), (theirs, theirs_result)):
@@ -1580,9 +1593,11 @@ def _host_fields(
     if None not in texts and texts[0] != texts[1]:
         report.fail(f'{where}: public.result/text_digest: differs', 'result')
     elif None in texts and 'public.result/digest' in excused:
-        report.note(
-            f'{where}: public.result/text_digest: not compared, one line '
-            'was recorded before it; record it again (P2-T2.21-1)'
+        report.fail(
+            f'{where}: public.result/text_digest: its typed digest is excused '
+            'and a line holds no text digest, so nothing holds its values; '
+            'record that line again (P2-T2.21-1)',
+            'result',
         )
     found = (
         _path_of(mine_result, theirs_result, 'public.result', excused)
@@ -2200,9 +2215,10 @@ def _core_payload(
     stop: str | None = None,
 ) -> None:
     r"""The calls the core wrote are the requests the reference sent, on
-    ``rust-host``, and the requests the endpoint received, on
+    ``rust-host`` and ``java`` (the hosts with no endpoint of their own;
+    T3.2 r1, Codex 5), and the requests the endpoint received, on
     ``python-core``, call by call, in order: the ``payload`` rule on the
-    core; on ``rust-host``, held to the reference only where it reached
+    core; on those hosts, held to the reference only where it reached
     ``predict`` when past its ``stop`` (:func:`past_stop`). One call is
     ``core.predicted.body``; several are ``core.predicted.calls``, every
     call's body in order (T2.1g)."""
@@ -2228,7 +2244,7 @@ def _core_payload(
                 'payload',
             )
     if (
-        who == 'rust-host'
+        who in UNOBSERVING
         and reference is not None
         and stop in (None, 'predict')
     ):
@@ -2244,7 +2260,7 @@ def _core_payload(
         )
         if found:
             report.fail(
-                f'{case["id"]}: rust-host against python-ref: {found}',
+                f'{case["id"]}: {who} against python-ref: {found}',
                 'payload',
             )
 
@@ -2316,6 +2332,23 @@ def counts(observation: dict[str, Any]) -> dict[str, int] | None:
 #: whose schema the read records, or Python rows, which have none.
 ARROW_READS = ('to_arrow_table', 'fetch_arrow_table', 'query_arrow')
 ROW_READS = ('fetchall', 'fetchmany', 'fetchone')
+#: The warehouse drivers' reads the recording mode records (run_python.py's
+#: captures; T3.2 r1, Codex 6): Databricks SQL's Arrow fetches, Snowflake's
+#: (a pandas read kept as the Arrow it converts from), a Spark DataFrame's
+#: Arrow and pandas reads, each with its Arrow schema; Spark's row reads and
+#: psycopg's stream and copy (Lakebase), which carry the rows and their
+#: names. None carries DuckDB's type names: a warehouse's driver
+#: description is in its own vocabulary, so the Arrow schema is the type
+#: evidence, and a row read's rows are its.
+WAREHOUSE_ARROW_READS = (
+    'fetchall_arrow',
+    'fetchmany_arrow',
+    'fetch_arrow_all',
+    'fetch_pandas_all',
+    'toArrow',
+    'toPandas',
+)
+WAREHOUSE_ROW_READS = ('collect', 'first', 'stream', 'copy')
 #: DuckDB's names of its types, as a Python driver's description gives
 #: them, and the Arrow type (pyarrow's spelling) DuckDB reads each as; a
 #: list is ``X[]`` and ``list<l: X>``, a decimal ``DECIMAL(p,s)`` and
@@ -2534,6 +2567,8 @@ def _evidence(report: Report, at: str, who: str, read: dict[str, Any]) -> bool:
     columns = len(read['values']['columns'])
     method = read['method']
     good = True
+    if method in WAREHOUSE_ARROW_READS + WAREHOUSE_ROW_READS:
+        return _warehouse_evidence(report, at, who, read, columns)
     if method not in ARROW_READS + ROW_READS:
         report.fail(f'{at}: {who} read it by {method!r}', 'sql.result')
         return False
@@ -2552,6 +2587,31 @@ def _evidence(report: Report, at: str, who: str, read: dict[str, Any]) -> bool:
         report.fail(f'{at}: {who} recorded no Arrow schema', 'sql.result')
         good = False
     return good
+
+
+def _warehouse_evidence(
+    report: Report, at: str, who: str, read: dict[str, Any], columns: int
+) -> bool:
+    r"""A warehouse driver's read carries its own evidence: an Arrow read
+    its Arrow schema, one field per column (none only for Snowflake's empty
+    answer, which reads no column), a row read its rows' names and digest;
+    DuckDB's type names are never asked of it."""
+    schema = read.get('schema')
+    if read['method'] in WAREHOUSE_ARROW_READS:
+        if schema is None and columns == 0 and read.get('rows') == 0:
+            return True
+        if not isinstance(schema, list) or len(schema) != columns:
+            report.fail(f'{at}: {who} recorded no Arrow schema', 'sql.result')
+            return False
+        return True
+    if schema is not None or read['values'].get('types') is not None:
+        report.fail(
+            f'{at}: {who}: a row read {read["method"]!r} with type evidence '
+            'it cannot have',
+            'sql.result',
+        )
+        return False
+    return True
 
 
 def _results(
@@ -3318,23 +3378,25 @@ def compare(
                 if who in PYTHON and cell not in (None, REFERENCE_CELL):
                     # H1: in a cell other than the reference's, the host
                     # fields against the reference are reported; python-core
-                    # against python-old gates them (below).
-                    since = len(report.failures)
+                    # against python-old gates them (below). Its own
+                    # marker: ``since`` marks the whole runner comparison,
+                    # which a live-only verdict reports (T3.2 r1, Codex 4).
+                    hosted = len(report.failures)
                     _host_fields(
                         report, case, who, seen, against, stop=earlier or stop
                     )
                     report.reported(
-                        since, f'cell {cell}, against the reference; H1'
+                        hosted, f'cell {cell}, against the reference; H1'
                     )
                 elif who in PYTHON:
-                    since = len(report.failures)
+                    hosted = len(report.failures)
                     _host_fields(
                         report, case, who, seen, against, stop=earlier or stop
                     )
                     if refused is not None:
                         # The warnings of a call refused by the approval.
                         report.demote(
-                            since,
+                            hosted,
                             keep=tuple(r for r in RULES if r != 'warnings'),
                         )
                 _sql(
@@ -3425,6 +3487,22 @@ def compare(
                 ),
             )
             _sql_core(report, case, python, rust, ordered, large, database)
+        java = observed.get('java', {}).get(case['id'])
+        if python is not None and java is not None:
+            # Java's host on the same core: the core fields agree as
+            # rust-host's do (T3.2 r1, Codex 5).
+            _core_agree(
+                report,
+                case,
+                python,
+                java,
+                None
+                if on_duckdb
+                else line_stop(
+                    effective.get(case['id'], {}).get('python-core'), ref
+                ),
+                host='java',
+            )
         if live_only:
             # The core runners' agreement on a live-only case is reported:
             # one side's answer there is the local engine's or none.

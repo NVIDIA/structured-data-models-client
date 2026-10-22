@@ -456,7 +456,8 @@ def test_an_excused_result_digest_still_holds_the_rows_as_text() -> None:
         _public('b' * 64, 'd' * 64),
     )
     assert report.failures and 'text_digest' in report.texts[0]
-    # A line recorded before the text digest: named, not compared.
+    # A line recorded before the text digest, its typed digest excused:
+    # nothing holds its values, so it fails until recorded again (r1, P2-4).
     later = COMPARE.Report({'result': 'gate'})
     later.more_exact = report.more_exact
     COMPARE._host_fields(
@@ -466,9 +467,8 @@ def test_an_excused_result_digest_still_holds_the_rows_as_text() -> None:
         _public('a' * 64, 'c' * 64),
         _public('b' * 64, None),
     )
-    assert later.failures == [] and any(
-        'record it again' in n for n in later.notes
-    )
+    assert [rule for rule, _ in later.failures] == ['result']
+    assert 'record that line again' in later.texts[0]
 
 
 def test_the_census_real_data_mode_counts_hits_and_needs_its_control(
