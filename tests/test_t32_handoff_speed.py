@@ -203,3 +203,24 @@ def test_a_push_while_the_package_s_handoff_runs_is_refused(
         cwd=repo, capture_output=True, text=True, timeout=60,
     )  # fmt: skip
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+def test_the_previous_round_builds_in_one_target_per_lane(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Kept across runs, so cargo rebuilds only what changed (T3.3's run
+    # rebuilt DuckDB's C++ in a fresh directory for ten minutes).
+    monkeypatch.setattr(HANDOFF, 'TARGETS', tmp_path)
+    lane = {
+        'SDM_LANE_ENV': '/mnt/localssd/cells/a/',
+        'CARGO_TARGET_DIR': '/t/run7',
+    }
+    for run in ('/t/run7', '/t/run8'):
+        env = HANDOFF.previous_cargo_env(
+            {**lane, 'CARGO_TARGET_DIR': run}, ROOT
+        )
+        assert env['CARGO_TARGET_DIR'] == str(tmp_path / 'a-previous')
+    given = {**lane, 'SDM_PREVIOUS_TARGET_DIR': '/t/kept'}
+    assert (
+        HANDOFF.previous_cargo_env(given, ROOT)['CARGO_TARGET_DIR'] == '/t/kept'
+    )

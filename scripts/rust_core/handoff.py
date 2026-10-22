@@ -680,8 +680,29 @@ def previous_cargo_env(
     previous tree built into the caller's target leaves artifacts newer
     than the candidate's sources, which the next build takes as fresh (a
     module the candidate adds then cannot be found)."""
+    return {**environ, 'CARGO_TARGET_DIR': previous_target(environ, root)}
+
+
+#: Where the lanes' build directories are (``CARGO_TARGET_DIR`` by agent).
+TARGETS = Path('/mnt/localssd/target')
+
+
+def previous_target(
+    environ: dict[str, str] | os._Environ[str], root: Path
+) -> str:
+    r"""The previous round's target directory: ``SDM_PREVIOUS_TARGET_DIR``,
+    else one per lane, ``/mnt/localssd/target/<lane>-previous`` for the lane
+    ``SDM_LANE_ENV`` names (``/mnt/localssd/cells/<lane>``), kept across
+    runs so cargo builds only what changed (a fresh one rebuilt DuckDB's
+    C++ for ten minutes, T3.3), else beside the caller's target."""
+    given = environ.get('SDM_PREVIOUS_TARGET_DIR')
+    if given:
+        return given
+    lane = Path(environ.get('SDM_LANE_ENV', '').rstrip('/')).name
+    if lane and TARGETS.is_dir():
+        return str(TARGETS / f'{lane}-previous')
     target = environ.get('CARGO_TARGET_DIR') or str(root / 'rust' / 'target')
-    return {**environ, 'CARGO_TARGET_DIR': target.rstrip('/') + '-previous'}
+    return target.rstrip('/') + '-previous'
 
 
 def step_fails_before(
