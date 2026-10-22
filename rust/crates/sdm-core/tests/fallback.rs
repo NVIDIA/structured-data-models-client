@@ -85,7 +85,9 @@ fn limits(max_rows: u64, max_bytes: u64) -> FallbackLimits {
 fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> ProviderChoice {
     ProviderChoice::Host {
         capabilities: ProviderCapabilities {
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: optional.iter().copied().collect::<BTreeSet<_>>(),
             max_keys_per_request: None,
             max_seed: u64::MAX,

@@ -32,7 +32,9 @@ fn provider_choices_round_trip() {
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {
-                derived_relations: false, neighbor_lookback: false, sample_rows: false,
+                derived_relations: false,
+                neighbor_lookback: false,
+                sample_rows: false,
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
                 max_keys_per_request: Some(10_000),
                 max_seed: u64::MAX,

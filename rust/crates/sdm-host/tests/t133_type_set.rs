@@ -776,7 +776,9 @@ fn table(received: &DataType) -> ArrowData {
 fn host_provider() -> ProviderChoice {
     ProviderChoice::Host {
         capabilities: ProviderCapabilities {
-            derived_relations: false, neighbor_lookback: false, sample_rows: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            sample_rows: false,
             optional: BTreeSet::from([OptionalRequest::Preview]),
             max_keys_per_request: None,
             max_seed: u64::MAX,

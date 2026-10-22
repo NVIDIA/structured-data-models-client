@@ -58,7 +58,7 @@ use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
     BATCH_COLUMN, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    Filter, KeySet, MATCHES_COLUMN, MARKED, NullOrder, OptionalRequest, ProviderCapabilities,
+    Filter, KeySet, MARKED, MATCHES_COLUMN, NullOrder, OptionalRequest, ProviderCapabilities,
     Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_UNIQUE, SqlParam, SqlStatement,
     TableColumn, TableKey, TextTimes, TieBreak, TieTerm, Window, refused, seed_integer,
 };
@@ -418,7 +418,9 @@ pub(crate) fn plan(request: &DataRequest, namespace: &[String]) -> Result<FetchP
 /// the column's own type, as the reference reads them.
 pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
     match request {
-        DataRequest::Describe { .. } | DataRequest::TimeBounds { .. } => ExpectedSchema::Discover {},
+        DataRequest::Describe { .. } | DataRequest::TimeBounds { .. } => {
+            ExpectedSchema::Discover {}
+        }
         _ => request.expected(),
     }
 }
@@ -448,27 +450,30 @@ fn describe(
                     "the namespace is read for no table",
                 ));
             }
-            ("SELECT current_catalog(), current_schema()".to_owned(), vec![])
+            (
+                "SELECT current_catalog(), current_schema()".to_owned(),
+                vec![],
+            )
         }
         // `Graph.from_databricks`'s listing, as it writes it, in the
         // namespace's catalog and schema.
         DescribePart::Tables if tables.is_empty() => {
-            let (catalog, schema) = match namespace {
-                [catalog, schema] => (format!("{}.", identifier(catalog)), schema.clone()),
-                _ => {
-                    return Err(not_taken(
-                        request,
-                        "tables",
-                        "the tables are listed in a namespace of a catalog and a schema",
-                    ));
-                }
-            };
             let pad = " ".repeat(20);
+            // Read in the source's current catalog and schema where the
+            // provider names none (a namespace of a catalog and a schema).
+            let (catalog, schema, params) = match namespace {
+                [catalog, schema] => (
+                    format!("{}.", identifier(catalog)),
+                    "?".to_owned(),
+                    vec![text_param(schema)],
+                ),
+                _ => (String::new(), "current_schema()".to_owned(), vec![]),
+            };
             (
                 format!(
-                    "\n{pad}SELECT table_name\n{pad}FROM {catalog}information_schema.tables\n{pad}WHERE table_schema = ?\n{pad}  AND table_type != 'METRIC_VIEW'\n{pad}"
+                    "\n{pad}SELECT table_name\n{pad}FROM {catalog}information_schema.tables\n{pad}WHERE table_schema = {schema}\n{pad}  AND table_type != 'METRIC_VIEW'\n{pad}"
                 ),
-                vec![text_param(&schema)],
+                params,
             )
         }
         // Whether the source holds each table named, as it would read the
@@ -648,7 +653,10 @@ const METRIC_VIEW_RULE: &str = "metric_view";
 /// the reference reads it); the canonical relation the catalog names the
 /// table by; a metric view refused by name, as the reference refuses one
 /// read as a table (`MetricViewAsTableError`).
-fn read_columns(request: &DataRequest, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
+fn read_columns(
+    request: &DataRequest,
+    batches: &[RecordBatch],
+) -> Result<CatalogAnswer, CoreError> {
     let mut found = Vec::new();
     for batch in batches {
         let names = text_at(batch, 0)?;
@@ -675,8 +683,7 @@ fn read_columns(request: &DataRequest, batches: &[RecordBatch]) -> Result<Catalo
             found.push(CatalogColumn {
                 name: value(&names, row).unwrap_or_default(),
                 declared_type: value(&types, row).unwrap_or_default(),
-                not_null: value(&nullable, row)
-                    .is_some_and(|n| n.trim().to_uppercase() == "NO"),
+                not_null: value(&nullable, row).is_some_and(|n| n.trim().to_uppercase() == "NO"),
                 primary_key: false,
                 key_nullable: false,
                 unique: false,
@@ -720,7 +727,10 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
     if ["float", "real", "double"].contains(&declared.as_str()) {
         return Some(Dtype::Float);
     }
-    if declared.starts_with("decimal") || declared.starts_with("numeric") || declared.starts_with("dec") {
+    if declared.starts_with("decimal")
+        || declared.starts_with("numeric")
+        || declared.starts_with("dec")
+    {
         let scale = declared
             .find('(')
             .zip(declared.find(')'))
@@ -741,7 +751,10 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
     if declared == "boolean" || declared == "bool" {
         return Some(Dtype::Bool);
     }
-    if declared.starts_with("string") || declared.starts_with("varchar") || declared.starts_with("char") {
+    if declared.starts_with("string")
+        || declared.starts_with("varchar")
+        || declared.starts_with("char")
+    {
         return Some(Dtype::String);
     }
     if declared.starts_with("binary") {
@@ -763,9 +776,18 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
             _ => Dtype::Unsupported,
         });
     }
-    if ["interval", "map", "struct", "variant", "object", "geography", "geometry", "void"]
-        .iter()
-        .any(|word| declared.contains(word))
+    if [
+        "interval",
+        "map",
+        "struct",
+        "variant",
+        "object",
+        "geography",
+        "geometry",
+        "void",
+    ]
+    .iter()
+    .any(|word| declared.contains(word))
     {
         return Some(Dtype::Unsupported);
     }
@@ -997,7 +1019,11 @@ pub(crate) fn percent_text(x: f64) -> String {
     }
     let at = usize::try_from(point.max(0)).unwrap_or(0);
     let text = if point <= 0 {
-        format!("0.{}{}", "0".repeat(usize::try_from(-point).unwrap_or(0)), digits)
+        format!(
+            "0.{}{}",
+            "0".repeat(usize::try_from(-point).unwrap_or(0)),
+            digits
+        )
     } else if point >= count {
         format!("{}{}.0", digits, "0".repeat(at - digits.len()))
     } else {
@@ -1017,9 +1043,7 @@ fn element_type(column_type: &ColumnType) -> &'static str {
             "bigint"
         }
         T::Decimal128 { scale: 0, .. } | T::Decimal256 { scale: 0, .. } => "bigint",
-        T::Float32 | T::Float64 | T::Decimal128 { .. } | T::Decimal256 { .. } => {
-            "double"
-        }
+        T::Float32 | T::Float64 | T::Decimal128 { .. } | T::Decimal256 { .. } => "double",
         _ => "string",
     }
 }
@@ -1107,14 +1131,18 @@ fn tmp_time(name: &str) -> String {
 
 /// One term of a neighbor order, its null order written only where it is
 /// not Databricks' own for the direction (first ascending, last
-/// descending); a time term orders the column as it is, as the reference's
-/// `_neighbor_order_by` does.
+/// descending); a time term orders the column as it is, with none, as the
+/// reference's `_neighbor_order_by` does.
 fn order_term(term: &TieTerm) -> String {
     let column = identifier(&term.column);
     let direction = if term.descending { " DESC" } else { "" };
-    let nulls = match (term.descending, term.nulls_last) {
-        (false, true) => " NULLS LAST",
-        (true, false) => " NULLS FIRST",
+    // A time term's column never holds a null in the rows it orders: the
+    // window that comes with it leaves them out (register ORD-2), so it is
+    // written as the reference writes it, with no null order.
+    let nulls = match (term.as_timestamp, term.descending, term.nulls_last) {
+        (true, _, _) => "",
+        (false, false, true) => " NULLS LAST",
+        (false, true, false) => " NULLS FIRST",
         _ => "",
     };
     format!("{column}{direction}{nulls}")
@@ -1302,7 +1330,10 @@ pub(crate) fn bound_keys(
                     _ => arrow_cast(column, &DataType::Utf8)?,
                 }
             } else {
-                let times = arrow_cast(column, &DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None))?;
+                let times = arrow_cast(
+                    column,
+                    &DataType::Timestamp(arrow_schema::TimeUnit::Nanosecond, None),
+                )?;
                 let times = times.as_primitive::<TimestampNanosecondType>();
                 Arc::new(
                     times
@@ -1535,7 +1566,10 @@ mod tests {
     #[test]
     fn a_wall_clock_is_written_to_the_second() {
         assert_eq!(wall_clock_text(0), "1970-01-01 00:00:00");
-        assert_eq!(wall_clock_text(1_709_251_199_999_999_999), "2024-02-29 23:59:59");
+        assert_eq!(
+            wall_clock_text(1_709_251_199_999_999_999),
+            "2024-02-29 23:59:59"
+        );
         assert_eq!(wall_clock_text(-1), "1969-12-31 23:59:59");
     }
 }

@@ -171,7 +171,9 @@ fn schema_and_name(
 /// What a Postgres source answers through this layer.
 pub(crate) fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
-        derived_relations: false, neighbor_lookback: false, sample_rows: false,
+        derived_relations: false,
+        neighbor_lookback: false,
+        sample_rows: false,
         optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
         max_keys_per_request: None,
         // `setseed` before `ORDER BY random()` repeats the draw on one
