@@ -25,7 +25,7 @@ use std::sync::Arc;
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::{CatalogAnswer, KeyKind};
-use sdm_contract::data::{DataLayer, DataRequest, DescribePart, Dialect, ProviderChoice, Relation};
+use sdm_contract::data::{DataLayer, DataRequest, DescribePart, ProviderChoice, Relation};
 use sdm_contract::ops::Dtype;
 use sdm_data::Data;
 use serde_json::Value;
@@ -34,10 +34,10 @@ use serde_json::Value;
 /// tests included.
 const CAPTURE: &str = include_str!("../../../../contract/fixtures/databricks/capture.json");
 
+/// The `databricks` dialect's choice, built from the contract's JSON so the
+/// test reads whatever optional fields the choice gains.
 fn databricks() -> ProviderChoice {
-    ProviderChoice::Sql {
-        dialect: Dialect::new("databricks"),
-    }
+    serde_json::from_str(r#"{"provider":"sql","dialect":"databricks"}"#).unwrap()
 }
 
 /// Every catalog statement of the capture the old client read, with the
@@ -92,9 +92,14 @@ fn describe(part: DescribePart, statement: &Value) -> DataRequest {
         .collect();
     let tables = match parameters.as_slice() {
         [_schema] => vec![],
-        [schema, table] => vec![Relation {
-            source: vec!["main".into(), (*schema).into(), (*table).into()],
-        }],
+        [schema, table] => {
+            // From the contract's JSON, so the relation reads whatever
+            // optional fields it gains (v28's columns and filter).
+            let relation: Relation =
+                serde_json::from_value(serde_json::json!({"source": ["main", schema, table]}))
+                    .unwrap();
+            vec![relation]
+        }
         other => panic!("unexpected parameters {other:?}"),
     };
     DataRequest::Describe { tables, part }
