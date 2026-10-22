@@ -365,3 +365,70 @@ def test_a_warehouse_schema_drops_only_what_it_loaded() -> None:
     ran.clear()
     schema.clear()
     assert ran == ['DROP TABLE IF EXISTS `main`.`sdm_test`.`c`']
+
+
+class _Target:
+    r"""The recording mode's WarehouseTarget, as run_python.py builds it."""
+
+    def __init__(self, connection, names, view=None) -> None:
+        self.connection = connection
+        self.names = names
+        self.view = view
+
+
+def test_a_leg_s_schema_holds_one_case_at_a_time_through_its_target() -> None:
+    ran: list[str] = []
+
+    class Cursor:
+        def execute(self, statement: str) -> None:
+            ran.append(statement)
+
+        def close(self) -> None:
+            pass
+
+    class Connection:
+        def cursor(self) -> Cursor:
+            return Cursor()
+
+    names = {'catalog': 'cat_t', 'schema': 'sch_t'}
+    databases.load(
+        _duck('CREATE TABLE a (i INTEGER)'),
+        'databricks-sql',
+        _Target(
+            Connection(),
+            names,
+            {'kind': 'metric_view', 'name': 'mv', 'yaml': 'version: 1.1'},
+        ),
+    )
+    assert ran[-1].startswith(
+        'CREATE OR REPLACE VIEW `cat_t`.`sch_t`.`mv` WITH METRICS'
+    )
+    ran.clear()
+    # The next case, on a new connection: the earlier case's view and
+    # table are dropped first, then its own table is loaded.
+    databases.load(
+        _duck('CREATE TABLE b (i INTEGER)'),
+        'databricks-sql',
+        _Target(Connection(), names),
+    )
+    assert ran[:2] == [
+        'DROP VIEW IF EXISTS `cat_t`.`sch_t`.`mv`',
+        'DROP TABLE IF EXISTS `cat_t`.`sch_t`.`a`',
+    ]
+    assert any(s.startswith('CREATE TABLE `cat_t`.`sch_t`.`b`') for s in ran)
+
+    class Spark:
+        def sql(self, statement: str):
+            ran.append(statement)
+            return self
+
+        def collect(self) -> list:
+            return []
+
+    ran.clear()
+    databases.load(
+        _duck('CREATE TABLE c (i INTEGER)'),
+        'databricks-spark',
+        _Target(Spark(), names),
+    )
+    assert any(s.startswith('CREATE TABLE `cat_t`.`sch_t`.`c`') for s in ran)
