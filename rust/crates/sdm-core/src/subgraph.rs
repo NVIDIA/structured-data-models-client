@@ -924,3 +924,21 @@ mod null_key_tests {
         assert_eq!(null_keys_beside_values(&ints, "k").unwrap(), None);
     }
 }
+
+#[cfg(test)]
+mod lookback_tests {
+    use super::lookback_seconds;
+
+    #[test]
+    fn the_look_back_is_the_reference_arithmetic() {
+        // `min(math.ceil(5 * n / freq), 5 years)`, `freq` the rows per
+        // referenced row over the span's seconds, at least one, as the
+        // reference's `_by_fkey` computes them.
+        assert_eq!(lookback_seconds(32, 1_000_000.0 / 10.0 / 86_400.0), 139);
+        assert_eq!(
+            lookback_seconds(32, 100.0 / 10.0 / (365.0 * 86_400.0)),
+            157_680_000
+        );
+        assert_eq!(lookback_seconds(5, 7.0 / 3.0 / 1.0), 11);
+    }
+}
