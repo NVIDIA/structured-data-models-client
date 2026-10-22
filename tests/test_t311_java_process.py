@@ -23,8 +23,9 @@ through.
 Like T3.0's handoff test, it needs ``SDM_TEST_CORE_PYTHON`` (an interpreter
 holding the candidate's client) and ``SDM_POSTGRES_TEST_DSN`` (the case runs
 on Postgres too, and the handoff stamps nothing without a server), and a
-JDK, and skips without them; CI's ``tooling (root)`` job has the first two.
-Held to failing by ``contract/tests/t311-pending.json`` until it passes.
+JDK; without them it has nothing to hold and returns. CI's ``tooling
+(root)`` job has the first two. Gating (``contract/tests/t311_gate.py``):
+while ``contract/tests/t311-pending.json`` names it, it must still fail.
 """
 
 from __future__ import annotations
@@ -37,12 +38,10 @@ import shutil
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PENDING_FILE = ROOT / 'contract/tests/t311-pending.json'
 SEEDED_CASE = 's0.accept.binary-classification'
 #: The Java leg named in the handoff's report (a word: the test's own
 #: temporary paths hold ``_java_``).
@@ -66,19 +65,26 @@ def _t30() -> ModuleType:
     return sys.modules[name]
 
 
-def _pending_names() -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))['pending'])
+def _module(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def pending(test: Any) -> Any:
-    """Holds ``test`` to failing while ``t311-pending.json`` lists it."""
-    if test.__name__ in _pending_names():
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.11: failing until implemented; once it passes, take '
-            'it out of contract/tests/t311-pending.json pending',
-        )(test)
-    return test
+G = _module('t311_gate', ROOT / 'contract/tests/t311_gate.py')
+
+
+def _ready() -> bool:
+    r"""What the handoff's Java leg needs is here: the core interpreter
+    (``SDM_TEST_CORE_PYTHON``), a Postgres server (the case runs there too)
+    and a JDK (``JAVA_HOME`` or ``java`` on ``PATH``)."""
+    return bool(
+        os.environ.get('SDM_TEST_CORE_PYTHON')
+        and os.environ.get('SDM_POSTGRES_TEST_DSN')
+        and (os.environ.get('JAVA_HOME') or shutil.which('java'))
+    )
 
 
 #: ``--python`` for the handoff: the core interpreter, which, when told to,
@@ -125,30 +131,22 @@ def _seeding_python(tmp_path: Path) -> Path:
 
 def _java() -> dict[str, str]:
     r"""What the Java leg needs from this environment, passed through to
-    the handoff: ``JAVA_HOME`` (or a ``java`` on ``PATH``) and
-    ``SDM_JAVA_JAR``."""
-    passed = {
+    the handoff: ``JAVA_HOME`` and ``SDM_JAVA_JAR``."""
+    return {
         key: os.environ[key]
         for key in ('JAVA_HOME', 'SDM_JAVA_JAR')
         if os.environ.get(key)
     }
-    if 'JAVA_HOME' not in passed and shutil.which('java') is None:
-        pytest.skip('the Java leg needs a JDK: JAVA_HOME or java on PATH')
-    return passed
 
 
-@pending
+@G.gated(_ready)
 @pytest.mark.parametrize('seeded', [True, False])
 def test_t311_a_java_only_difference_stops_the_handoff_stamp(
     tmp_path: Path, seeded: bool
 ) -> None:
     t30 = _t30()
-    core = t30._core_python()
-    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN', '')
-    if not dsn:
-        pytest.skip(
-            'the stamp needs SDM_POSTGRES_TEST_DSN: the case runs on Postgres'
-        )
+    core = os.environ['SDM_TEST_CORE_PYTHON']
+    dsn = os.environ['SDM_POSTGRES_TEST_DSN']
     java = _java()
     _, work, _ = t30._clone(tmp_path)
     sha = t30._commit(

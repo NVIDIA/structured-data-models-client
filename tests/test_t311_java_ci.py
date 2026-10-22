@@ -17,24 +17,25 @@ A job's name is read with its matrix expanded.
 ASSUMED until the implementer relays it: a load job's name holds ``load``
 and its ``(<jdk>, <platform>`` as the S0 jobs spell them.
 
-Each test named in ``contract/tests/t311-pending.json``'s ``pending`` failed
-when written and is held to failing (strict ``xfail``) until it passes.
+Gating (``contract/tests/t311_gate.py``): each test named in
+``contract/tests/t311-pending.json``'s ``pending`` failed when written and
+must still fail until the implementer takes it out; once it passes it
+fails, naming itself.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import itertools
-import json
 import re
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
-import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / '.github/workflows/ci.yml'
-PENDING_FILE = ROOT / 'contract/tests/t311-pending.json'
 #: The brief's Java S0 jobs: JDK, platform.
 S0_JOBS = (
     ('17', 'linux-x86_64'),
@@ -54,19 +55,17 @@ RUNNERS = {
 RUST = re.compile(r'rust-toolchain|rustup|\bcargo\b|maturin')
 
 
-def _pending_names() -> set[str]:
-    return set(json.loads(PENDING_FILE.read_text(encoding='utf-8'))['pending'])
+def _module(name: str, path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def pending(test: Any) -> Any:
-    """Holds ``test`` to failing while ``t311-pending.json`` lists it."""
-    if test.__name__ in _pending_names():
-        return pytest.mark.xfail(
-            strict=True,
-            reason='T3.11: failing until implemented; once it passes, take '
-            'it out of contract/tests/t311-pending.json pending',
-        )(test)
-    return test
+G = _module('t311_gate', ROOT / 'contract/tests/t311_gate.py')
+#: A test held by the gate.
+held = G.gated()
 
 
 def _combinations(
@@ -140,7 +139,7 @@ def _runs_on(job: dict[str, Any], values: dict[str, Any]) -> str:
     return str(label)
 
 
-@pending
+@held
 def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
     # Exit 1's CI line and exit 4's platforms: one java (<jdk>, <platform>,
     # s0) job each, on its platform's runner.
@@ -163,7 +162,7 @@ def test_t311_the_java_s0_jobs_run_on_each_jdk_and_platform() -> None:
     assert legs == {'s0'}, legs
 
 
-@pending
+@held
 def test_t311_the_jar_load_jobs_run_on_each_jdk_and_platform_without_rust() -> (
     None
 ):
