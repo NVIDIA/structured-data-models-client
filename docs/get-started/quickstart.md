@@ -148,6 +148,13 @@ with SDMClient.for_databricks_serving('kumo-relational') as client:
     result = client.predict(request, model=KumoRelational())
 ```
 
+A `kumo-tabular` endpoint is reached the same way, with `model=KumoTabular()`.
+The Databricks notebooks
+[`kumo_relational_quickstart`](https://github.com/NVIDIA/structured-data-models-client/blob/main/examples/databricks/kumo_relational_quickstart.ipynb) and
+[`kumo_tabular_quickstart`](https://github.com/NVIDIA/structured-data-models-client/blob/main/examples/databricks/kumo_tabular_quickstart.ipynb)
+deploy each model to a serving endpoint and ask it questions about the
+AdventureWorks sample data.
+
 This needs `pip install 'structured-data-models-client[databricks-serving]'`. A serving endpoint
 answers one request at a time, so `fit()` is refused there; `predict()` sends
 the context with every call.
