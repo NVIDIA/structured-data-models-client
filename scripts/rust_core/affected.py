@@ -64,6 +64,9 @@ BINDING = (
     KIT, '-m', 'pytest', '-q', '-p', 'no:cacheprovider',
     'rust/bindings/sdm-py/tests', '--native-build', 'test-ops',
 )  # fmt: skip
+#: The Java library's tests (T3.11): the native with the test-only
+#: operations, then ``mvn verify`` loading it, with the runtime flags.
+JAVA = ('python3', 'scripts/rust_core/java_build.py', 'verify')
 
 
 def cargo(crate: str) -> Suite:
@@ -109,6 +112,11 @@ MAP: tuple[tuple[str, tuple[Suite, ...]], ...] = (
     # The binding: its Python tests on the test-ops build, as CI's binding
     # job runs them (Codex r2).
     ('rust/bindings/sdm-py/**', (BINDING,)),
+    # The Java binding and library: the Java tests, which load the binding
+    # as it ships (T3.11); the contract runner's Java program too.
+    ('rust/bindings/sdm-jni/**', (JAVA,)),
+    ('java/**', (JAVA,)),
+    ('contract/runners/java/**', (JAVA,)),
     # Each Python package: its own tests, and the client's also the root
     # suites that drive it through the public routes.
     ('packages/*/**', ((*PYTEST, 'packages/{pkg}/tests'),)),

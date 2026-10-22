@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # The Rust core of sdm-client: the contract, the core and the host layer, the
-# dev-only test host, and the Python binding over them. The layout and rules
+# dev-only test host, and the Python and Java bindings over them. The layout and rules
 # are in docs/design/rust-core/phase-1/design.md.
 [workspace]
 resolver = "2"
-members = ["crates/*", "bindings/sdm-py"]
+members = ["crates/*", "bindings/sdm-py", "bindings/sdm-jni"]
 
 [workspace.package]
 # Released with the client at its version; a guard holds sdm-py's version
@@ -40,6 +40,10 @@ indexmap = { version = "2", features = ["serde"] }
 # so `tz-system` stays off.
 jiff = { version = "0.2.38", default-features = false, features = ["std", "tzdb-zoneinfo", "tzdb-bundle-always"] }
 jiff-tzdb = "0.1.9"
+# The Java binding's JNI layer, in sdm-jni alone (T3.11, design choice 10).
+jni = "0.22.4"
+# The facade tracing's `log` feature writes to; sdm-jni bridges it to SLF4J.
+log = "0.4"
 proptest = { version = "1", default-features = false, features = ["std"] }
 pyo3 = { version = "0.28", features = ["abi3-py310"] }
 # Bridges the `log` records tracing emits to Python's logging, in sdm-py

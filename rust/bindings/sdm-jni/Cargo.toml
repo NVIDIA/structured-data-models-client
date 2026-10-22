@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-jni"
+description = "The Java binding over sdm-host, the native library of com.nvidia.sdm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+# A JNI library leaves the JVM's symbols for the JVM that loads it to
+# provide, so it is tested as it ships, from Java (java/), never as a Rust
+# test binary.
+[lib]
+name = "sdm_jni"
+crate-type = ["cdylib"]
+test = false
+doctest = false
+
+[features]
+# Operations only tests reach; the shipped JAR leaves it off, and the Java
+# tests load a library built with it on.
+test-ops = ["sdm-host/test-ops", "sdm-contract/test-ops"]
+
+[dependencies]
+arrow-array = { workspace = true, features = ["ffi"] }
+arrow-schema = { workspace = true, features = ["ffi"] }
+jni.workspace = true
+log.workspace = true
+# Among first-party crates, sdm-host and, for types only, sdm-contract;
+# never sdm-core (decision E21).
+sdm-contract = { path = "../../crates/sdm-contract" }
+sdm-host = { path = "../../crates/sdm-host" }
+serde_json.workspace = true
+
+# Not the workspace lints: unsafe code is denied rather than forbidden, so
+# the sites JNI and the Arrow C Data interface need (the exported entries'
+# names, and the stream structs Java hands over by address) allow it
+# locally, each with its reason.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
