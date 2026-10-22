@@ -43,7 +43,6 @@
     "client.predict/ranking/databricks-spark",
     "client.predict/forecast/databricks-spark"
   ],
-  "seam": "nested",
   "cells": [
     "int64/primary-key",
     "int64/foreign-key",
