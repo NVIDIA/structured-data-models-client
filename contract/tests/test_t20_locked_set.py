@@ -19,9 +19,8 @@ file is the design's, T2.0a, not this package's):
 - seeded: one of its cases diagnostic at the checkpoint fails the half,
   naming exactly that case;
 - seeded: a half the file does not name (``2z``), and a half of a phase
-  with no locked-set file (``9a``: no Phase 9 is planned; Phase 2's and
-  Phase 3's files are their designs', T2.0a and T3.1) are usage errors
-  naming the half;
+  with no locked-set file (``3a``: Phase 3 has none; Phase 2's is the
+  design's, T2.0a) are usage errors naming the half;
 - Phase 1's ``1a`` and ``1b`` stay as they are: ``test_gate_modes.py``'s
   own tests hold them, unchanged.
 
@@ -187,8 +186,8 @@ def test_a_half_the_locked_set_does_not_name_is_a_usage_error(
 
 
 #: A phase with no locked-set file yet, and a half of it.
-NO_SET_PHASE = 9
-NO_SET_HALF = '9a'
+NO_SET_PHASE = 3
+NO_SET_HALF = '3a'
 
 
 def test_a_half_of_a_phase_without_its_locked_set_is_a_usage_error(
@@ -198,10 +197,9 @@ def test_a_half_of_a_phase_without_its_locked_set_is_a_usage_error(
     stubs: dict[str, Any],
 ) -> None:
     r"""Seeded: a half of a phase whose locked-set file does not exist
-    (Phase 9's: no such phase is planned) is refused naming the half: no
-    locked set, no locked checks. Written for Phase 2 until T2.0a landed
-    its file, then Phase 3 until T3.1 landed its (carried row P2-T2.0a-1);
-    Phase 9 keeps the premise true."""
+    (Phase 3's, before its design lands one) is refused naming the half:
+    no locked set, no locked checks. Written for Phase 2 until T2.0a
+    landed its file; Phase 3 keeps the premise true."""
     commit(stubbed)
     assert not (stubbed / LOCKED_SET(NO_SET_PHASE)).exists()
     done = run_locked(stubbed, stubs, observed, tmp_path, NO_SET_HALF)
