@@ -1285,7 +1285,9 @@ def said(warning: dict[str, Any]) -> str:
         # the reference joins (`table.column`).
         fields['columns'] = [
             f'{table}.{column}'
-            for table, column in zip(fields['tables'], fields['columns'])
+            for table, column in zip(
+                fields['tables'], fields['columns'], strict=True
+            )
         ]
     template = (templates or {}).get(fields.get('variant'))
     if template is None:
