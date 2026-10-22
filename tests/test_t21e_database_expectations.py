@@ -133,7 +133,15 @@ def test_a_database_line_is_held_to_the_reference_line_moved_by_its_entries() ->
         'outcome.error': None,
         'outcome.code': None,
     }
-    # A proposed entry moves nothing: the reference's line is the baseline.
+    # A proposed entry moves nothing: the reference's line is the baseline,
+    # for each core host (Java's among them from T3.2, design choice 10,
+    # observing what rust-host observes).
+    host = {
+        'outcome.result': 'refusal',
+        'outcome.stage': None,
+        'outcome.error': None,
+        'outcome.code': 'INVALID_REQUEST',
+    }
     assert found['y@postgres'] == {
         'python-core': {
             'outcome.result': 'refusal',
@@ -141,12 +149,8 @@ def test_a_database_line_is_held_to_the_reference_line_moved_by_its_entries() ->
             'outcome.error': 'StructuredDataError',
             'outcome.code': 'INVALID_REQUEST',
         },
-        'rust-host': {
-            'outcome.result': 'refusal',
-            'outcome.stage': None,
-            'outcome.error': None,
-            'outcome.code': 'INVALID_REQUEST',
-        },
+        'rust-host': host,
+        'java': host,
     }
     # DuckDB's line keeps its held baseline, and gets none where none is held.
     assert found['x'] == {'python-core': success}
