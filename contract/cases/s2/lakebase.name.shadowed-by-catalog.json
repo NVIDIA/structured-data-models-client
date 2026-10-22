@@ -1,0 +1,64 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.name.shadowed-by-catalog",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "client.predict/regression/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users RENAME TO pg_roles"
+    ],
+    "from_source": {
+      "tables": {
+        "users": "pg_roles",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "the old client reads current_schema() and qualifies every statement with it (PG/table.py:122-127, :146-153; RE/base/sql_sampler.py:80-83), so the table in the test schema is read, never pg_catalog.pg_roles, which an unqualified pg_roles resolves to first"
+  },
+  "why": "A one-part name that a pg_catalog relation shadows (P2-MID2-6): the reference answers it by qualifying the name with the schema it found.",
+  "source": "written by T3.7's test author from the reference at 43e55f4f"
+}

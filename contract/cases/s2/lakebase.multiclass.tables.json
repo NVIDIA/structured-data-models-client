@@ -1,0 +1,58 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.multiclass.tables",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "client.predict/multiclass/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "seam": "baseline",
+  "cells": [
+    "utf8/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT users.country FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ]
+    }
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict",
+    "today": "each one-part name is looked up under current_schema() (PG/table.py:122-127) in information_schema.columns joined to pg_class by schema and name (:159-184), and read qualified by that schema"
+  },
+  "why": "The tables mode on Lakebase with one-part names, and the multiclass kind on the leg.",
+  "source": "written by T3.7's test author from the reference at 43e55f4f"
+}
