@@ -169,6 +169,7 @@ fn pragma(
 /// What a SQLite source answers through this layer.
 pub(crate) fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
+        derived_relations: false, neighbor_lookback: false, sample_rows: false,
         optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
         max_keys_per_request: None,
         // The seeded draw of RS-2 repeats under a seed.
@@ -263,6 +264,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             columns,
             filters,
             key_dtype,
+            rows: _,
         } => {
             let order = draw_order(table, key, *key_dtype);
             let table = from(request, "table", table)?;
@@ -422,6 +424,7 @@ fn describe(
         )),
     };
     Ok(match part {
+        DescribePart::Namespace => return Err(crate::no_namespace(request)),
         DescribePart::Tables if tables.is_empty() => {
             "SELECT name FROM sqlite_master WHERE type='table'".to_owned()
         }
@@ -1010,6 +1013,7 @@ pub(crate) fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as c;
     match part {
+        DescribePart::Namespace => crate::read::host(part, batches),
         DescribePart::Tables => {
             let mut found = Vec::new();
             for batch in batches {
@@ -1052,6 +1056,7 @@ pub(crate) fn read(
                     .enumerate()
                     .map(
                         |(at, (name, declared_type, not_null, primary_key))| CatalogColumn {
+                            canonical: None,
                             name,
                             dtype: declared_dtype(&declared_type),
                             declared_type,

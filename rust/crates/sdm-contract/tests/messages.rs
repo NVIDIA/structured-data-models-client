@@ -32,6 +32,7 @@ fn provider_choices_round_trip() {
         },
         ProviderChoice::Host {
             capabilities: ProviderCapabilities {
+                derived_relations: false, neighbor_lookback: false, sample_rows: false,
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
                 max_keys_per_request: Some(10_000),
                 max_seed: u64::MAX,
@@ -272,6 +273,7 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
     use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
     for retryable in [true, false] {
         let error = CoreError::provider(&ProviderError {
+            refuses_expression: false,
             kind: ErrorKind::DataSource,
             retryable,
             sqlstate: Some("40001".into()),

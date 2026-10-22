@@ -177,6 +177,7 @@ impl Rows {
                 DescribePart::Columns => {
                     if let Some(name) = text(batch, c::NAME, row)? {
                         self.columns.push(CatalogColumn {
+                            canonical: None,
                             name,
                             declared_type: text(batch, c::TYPE, row)?.unwrap_or_default(),
                             not_null: flag(batch, c::NOT_NULL, row)?,
@@ -223,6 +224,9 @@ impl Rows {
                 DescribePart::IndexColumns => {
                     self.index_columns.push(text(batch, c::NAME, row)?);
                 }
+                // A host provider's namespace is read by the data layer
+                // (`sdm_data`'s host reader); this layer keeps none.
+                DescribePart::Namespace => {}
             }
         }
         Ok(())
@@ -236,6 +240,7 @@ impl Rows {
             DescribePart::ForeignKeys => CatalogAnswer::ForeignKeys(self.foreign_keys),
             DescribePart::Indexes => CatalogAnswer::Indexes(self.indexes),
             DescribePart::IndexColumns => CatalogAnswer::IndexColumns(self.index_columns),
+            DescribePart::Namespace => CatalogAnswer::Namespace(vec![]),
         }
     }
 }

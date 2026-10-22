@@ -171,6 +171,7 @@ fn schema_and_name(
 /// What a Postgres source answers through this layer.
 pub(crate) fn capabilities() -> ProviderCapabilities {
     ProviderCapabilities {
+        derived_relations: false, neighbor_lookback: false, sample_rows: false,
         optional: RENDERED.iter().copied().collect::<BTreeSet<_>>(),
         max_keys_per_request: None,
         // `setseed` before `ORDER BY random()` repeats the draw on one
@@ -255,6 +256,7 @@ pub(crate) fn plan(request: &DataRequest) -> Result<FetchPlan, CoreError> {
             // Given only to a layer sampling by the key's type (SQLite's,
             // `samples_by_key_dtype`), which this one is not.
             key_dtype: _,
+            rows: _,
         } => {
             let table = from(request, "table", table)?;
             let (seeded, text) = sample_entities(request, &table, key, *n, seed, columns, filters)?;
@@ -384,6 +386,7 @@ pub(crate) fn expected(request: &DataRequest) -> ExpectedSchema {
         _ => return request.expected(),
     };
     let fields = match part {
+        DescribePart::Namespace => return request.expected(),
         DescribePart::Tables => vec![field(k::TABLE_NAME, Utf8, false)],
         DescribePart::Columns => vec![
             field(k::COLUMN_NAME, Utf8, false),
@@ -428,6 +431,7 @@ pub(crate) fn read(
 ) -> Result<CatalogAnswer, CoreError> {
     use catalog as k;
     match part {
+        DescribePart::Namespace => crate::read::host(part, batches),
         DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
         DescribePart::Columns => {
             let mut found = Vec::new();
@@ -437,6 +441,7 @@ pub(crate) fn read(
                 let declared = crate::read::strings(batch, k::FORMAT_TYPE)?;
                 for row in 0..batch.num_rows() {
                     found.push(CatalogColumn {
+                        canonical: None,
                         name: crate::read::text(names, row).unwrap_or_default(),
                         declared_type: crate::read::text(declared, row).unwrap_or_default(),
                         not_null: crate::read::text(nullable, row).as_deref() == Some("NO"),
@@ -603,6 +608,7 @@ fn describe(
         )),
     };
     Ok(match part {
+        DescribePart::Namespace => return Err(crate::no_namespace(request)),
         // The reference's listing (`PostgresTable`'s, `information_schema`
         // the base tables of the current schema, by name), as it writes it
         // but for the schema, which it binds after reading

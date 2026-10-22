@@ -553,6 +553,7 @@ fn sqlite() -> ProviderChoice {
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
+        columns: Vec::new(), filter: None,
         source: parts.iter().map(|p| (*p).to_owned()).collect(),
     }
 }
